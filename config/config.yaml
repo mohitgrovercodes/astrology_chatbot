@@ -1,0 +1,121 @@
+# Astrology AI Chatbot - Configuration
+# This file contains non-sensitive configuration values
+# Sensitive values (API keys) should be in .env
+
+# ============================================
+# LLM Configuration
+# ============================================
+llm:
+  # Default provider and model (can be overridden by env vars)
+  default_provider: openai
+  default_model: gpt-4o-mini
+  
+  # Generation parameters
+  temperature: 0.3
+  max_tokens: 2048
+  
+  # Provider-specific model options
+  providers:
+    openai:
+      models:
+        - gpt-4o
+        - gpt-4o-mini
+        - gpt-4-turbo
+    google:
+      models:
+        - gemini-1.5-pro
+        - gemini-1.5-flash
+        - gemini-2.0-flash-exp
+    xai:
+      models:
+        - grok-2
+        - grok-2-mini
+    anthropic:
+      models:
+        - claude-sonnet-4-20250514
+        - claude-3-5-sonnet-20241022
+
+# ============================================
+# Embeddings Configuration (Fixed)
+# ============================================
+embeddings:
+  provider: openai
+  model: text-embedding-3-large
+  dimensions: 3072  # Use 1536 for cost optimization
+
+# ============================================
+# RAG Configuration
+# ============================================
+rag:
+  # Chunking parameters
+  chunk_size: 1000
+  chunk_overlap: 200
+  
+  # Retrieval parameters
+  top_k: 5
+  score_threshold: 0.7
+  
+  # Collection name in ChromaDB
+  collection_name: astrology_knowledge
+
+# ============================================
+# Safety Configuration
+# ============================================
+safety:
+  # Topics that trigger hard block
+  blocked_topics:
+    - death_prediction
+    - death_timing
+    - medical_diagnosis
+    - medical_treatment
+    - gambling_advice
+    - lottery_prediction
+    - legal_advice
+  
+  # Topics that trigger soft disclaimer
+  disclaimer_topics:
+    health:
+      message: "Please consult a qualified medical professional for health concerns."
+    finance:
+      message: "Please consult a qualified financial advisor for investment decisions."
+    relationships:
+      message: "Astrology offers insights but personal decisions should consider many factors."
+
+# ============================================
+# Astrology Configuration
+# ============================================
+astrology:
+  # Supported systems
+  systems:
+    - vedic
+    - western
+  
+  # Default system
+  default_system: vedic
+  
+  # Ayanamsa for Vedic calculations
+  ayanamsa: lahiri
+
+# ============================================
+# API Configuration
+# ============================================
+api:
+  title: "Astrology AI Chatbot API"
+  version: "1.0.0"
+  description: "Expert-level Astrology Chatbot supporting Vedic and Western Astrology"
+  
+  # Rate limiting (requests per minute)
+  rate_limit: 60
+  
+  # Request timeout (seconds)
+  timeout: 30
+
+# ============================================
+# Logging Configuration
+# ============================================
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  # Set to true to log to file
+  file_logging: false
+  log_file: "./logs/app.log"
