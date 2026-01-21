@@ -1,108 +1,74 @@
 # ============================================================================
-# ASTROLOGY AI CHATBOT - REQUIREMENTS
+# ASTROLOGY AI CHATBOT - MODERN COMPATIBLE STACK (JAN 2026)
+# Python: 3.10–3.11
 # ============================================================================
-# Version: 1.0
-# Python: 3.9+
-# Last Updated: 2025-01-20
 
 # ----------------------------------------------------------------------------
-# CORE DEPENDENCIES
+# CORE ASTROLOGY ENGINE
 # ----------------------------------------------------------------------------
-
-# Astrology Calculations
-pyswisseph==2.10.3.2        # Swiss Ephemeris for planetary calculations
-
-# Date/Time Utilities
-python-dateutil==2.8.2      # Date parsing and manipulation
-pytz==2024.1                # Timezone support
-
-# Data Validation & Serialization
-pydantic==2.5.3             # Data validation using Python type hints
-pydantic-settings==2.1.0    # Settings management with Pydantic
+pyswisseph==2.10.3.2
+python-dateutil==2.8.2
+pytz==2024.1
 
 # ----------------------------------------------------------------------------
-# LANGCHAIN ECOSYSTEM
+# PYDANTIC (Data Validation)
 # ----------------------------------------------------------------------------
-
-# Core LangChain
-langchain==0.1.4            # LangChain core framework
-langchain-core==0.1.16      # LangChain core abstractions
-langchain-community==0.0.17 # Community integrations
-
-# LLM Providers (Multi-provider support)
-langchain-openai==0.0.5     # OpenAI integration (GPT-4, embeddings)
-langchain-google-genai==0.0.6  # Google Gemini integration
-langchain-anthropic==0.0.4  # Anthropic Claude integration
-# langchain-xai==0.0.1      # xAI Grok (uncomment when available)
-
-# Vector Store
-langchain-chroma==0.1.0     # ChromaDB integration
-chromadb==0.4.22            # Vector database for RAG
+pydantic>=2.5.0,<3.0.0
+pydantic-settings>=2.1.0,<3.0.0
 
 # ----------------------------------------------------------------------------
-# ORCHESTRATION
+# LANGCHAIN ECOSYSTEM (Modern Compatible Stack)
 # ----------------------------------------------------------------------------
-
-langgraph==0.0.20           # State machine orchestration for complex workflows
+langchain>=0.3.0,<0.4.0
+langchain-core>=0.3.0,<0.4.0
+langchain-community>=0.3.0,<0.4.0
+langchain-google-genai>=2.0.0,<3.0.0
+langchain-chroma>=0.2.0,<0.3.0
+langgraph>=0.2.0,<0.3.0
+langchain-openai>=0.2.0,<0.3.0
 
 # ----------------------------------------------------------------------------
-# API & WEB
+# GEMINI SDK (Vision + Text)
 # ----------------------------------------------------------------------------
+google-generativeai>=0.8.3,<0.9.0
 
-fastapi==0.109.0            # Modern web framework for APIs
-uvicorn[standard]==0.27.0   # ASGI server
-pydantic[email]==2.5.3      # Email validation support
+# ----------------------------------------------------------------------------
+# VECTOR DATABASE
+# ----------------------------------------------------------------------------
+chromadb>=0.5.0,<0.6.0
+
+# ----------------------------------------------------------------------------
+# PDF & IMAGE PROCESSING (Vision Pipeline)
+# ----------------------------------------------------------------------------
+pdf2image>=1.17.0,<2.0.0
+Pillow>=10.3.0,<11.0.0
+
+# ----------------------------------------------------------------------------
+# DATA PROCESSING
+# ----------------------------------------------------------------------------
+pandas>=2.1.0,<3.0.0
+numpy>=2.0.0,<3.0.0
+
+# ----------------------------------------------------------------------------
+# API FRAMEWORK
+# ----------------------------------------------------------------------------
+fastapi>=0.109.0,<0.120.0
+uvicorn[standard]>=0.27.0,<0.35.0
 
 # ----------------------------------------------------------------------------
 # UTILITIES
 # ----------------------------------------------------------------------------
-
-# Configuration
-python-dotenv==1.0.0        # Environment variable management
-pyyaml==6.0.1               # YAML configuration files
-
-# Logging & Monitoring
-loguru==0.7.2               # Better logging (optional but recommended)
-
-# # Text Processing (for RAG)
-# pypdf==4.0.1                # PDF text extraction
-# beautifulsoup4==4.12.3      # HTML parsing (if scraping web sources)
-# lxml==5.1.0                 # XML/HTML parser
+python-dotenv>=1.0.0,<2.0.0
+pyyaml>=6.0.1,<7.0.0
+loguru>=0.7.2,<0.8.0
+httpx>=0.27.0,<0.30.0
 
 # ----------------------------------------------------------------------------
-# DEVELOPMENT & TESTING
+# DEV DEPENDENCIES
 # ----------------------------------------------------------------------------
-
-pytest==7.4.4               # Testing framework
-pytest-asyncio==0.21.1      # Async test support
-pytest-cov==4.1.0           # Coverage reporting
-black==24.1.1               # Code formatting
-ruff==0.1.14                # Fast linting
-mypy==1.8.0                 # Static type checking
-
-# ----------------------------------------------------------------------------
-# OPTIONAL ENHANCEMENTS
-# ----------------------------------------------------------------------------
-
-# ragas==0.1.0              # RAG evaluation metrics (Phase 8)
-# tiktoken==0.5.2           # Token counting for OpenAI models
-# numpy==1.26.3             # Scientific computing (if needed for calculations)
-# pandas==2.1.4             # Data manipulation (if needed for analysis)
-
-# ============================================================================
-# INSTALLATION INSTRUCTIONS
-# ============================================================================
-#
-# Windows (with venv):
-#   pip install -r requirements.txt
-#
-# Linux/Mac (with venv):
-#   pip install -r requirements.txt
-#
-# Linux (system-wide, use with caution):
-#   pip install --break-system-packages -r requirements.txt
-#
-# Verify installation:
-#   python -c "import pyswisseph, langchain, pydantic; print('✓ All imports successful')"
-#
-# ============================================================================
+pytest>=7.4.0,<8.0.0
+pytest-asyncio>=0.21.0,<0.25.0
+pytest-cov>=4.1.0,<5.0.0
+black>=24.1.0,<25.0.0
+ruff>=0.1.0,<0.8.0
+mypy>=1.8.0,<2.0.0

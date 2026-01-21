@@ -1,6 +1,6 @@
 # PROJECT STATUS — Astrology AI Chatbot
 
-> **Last Updated:** 2025-01-21  
+> **Last Updated:** 2026-01-21  
 > **Current Phase:** Phase 3 - RAG Pipeline  
 > **Overall Progress:** 25%
 
@@ -11,7 +11,7 @@
 ```
 Phase 1: Foundation         [██████████] 100% ✅ COMPLETE
 Phase 2: Engine Integration [██████████] 100% ✅ COMPLETE & VERIFIED
-Phase 3: RAG Pipeline       [░░░░░░░░░░] 0%   ← NEXT
+Phase 3: RAG Pipeline       [█░░░░░░░░░] 10%  ← IN PROGRESS (Dependencies Ready)
 Phase 4: LLM Integration    [░░░░░░░░░░] 0%
 Phase 5: Orchestration      [░░░░░░░░░░] 0%
 Phase 6: Safety             [░░░░░░░░░░] 0%
@@ -23,6 +23,31 @@ Phase 10: Deployment        [░░░░░░░░░░] 0%
 
 ---
 
+## Phase 3: RAG Pipeline — 🔧 IN PROGRESS
+
+### Latest: Dependencies Resolved (2026-01-21)
+
+**Vision LLM Extraction Pipeline** is now ready to use. All dependency conflicts between LangChain and Google Generative AI have been resolved.
+
+### Verified Package Versions
+
+| Package | Version | Status |
+|---------|---------|--------|
+| `langchain` | 0.3.27 | ✅ |
+| `langchain-google-genai` | 2.0.10 | ✅ |
+| `google-generativeai` | 0.8.6 | ✅ (Vision capable) |
+| `chromadb` | 0.5.23 | ✅ |
+| `pdf2image` | 1.17.0 | ✅ |
+| `Pillow` | 10.4.0 | ✅ |
+
+### Next Steps for Phase 3
+1. **Vision LLM Extraction** - Use `IMPLEMENTATION_GUIDE.md` to extract content from astrology PDFs
+2. **Chunking Strategy** - Implement domain-aware chunking for astrology texts
+3. **Vector Database** - Load extracted chunks into ChromaDB
+4. **Retrieval Testing** - Validate retrieval quality
+
+---
+
 ## Phase 2: Engine Integration — ✅ COMPLETE & VERIFIED
 
 ### Summary
@@ -30,10 +55,10 @@ All calculation engines are now fully integrated, tested, and working correctly 
 
 ### What Works (Verified 2025-01-21)
 
-**✅ All Dependencies Installed (13/13)**
+**✅ All Dependencies Installed**
 - pyswisseph, pytz, python-dateutil
 - pydantic, langchain, langchain-core
-- langchain-openai, langchain-community, langchain-anthropic
+- langchain-openai, langchain-community, langchain-google-genai
 - chromadb, langgraph, fastapi, python-dotenv, pyyaml
 
 **✅ All Imports Functional**
@@ -70,6 +95,48 @@ Testing calculation...
   Moon: Pisces
 
 ✅ ENGINE WORKING!
+```
+
+---
+
+## Issues Resolved (Session 2026-01-21) — Dependency Hell Fix
+
+### Problem: LangChain + Google Generative AI Version Conflict
+
+**Symptoms:**
+- `langchain-google-genai==0.0.6` required `google-generativeai~=0.3.x`
+- Vision features required `google-generativeai>=0.8.3`
+- These versions were incompatible
+
+**Root Cause:**
+The old `langchain-google-genai==0.0.6` (from Dec 2023) was designed for an older Google API. The Vision LLM extraction pipeline needed the newer `google-generativeai>=0.8.x` with completely different APIs.
+
+### Solution: Upgrade to Modern Compatible Stack
+
+| Package | Old Version | New Version |
+|---------|-------------|-------------|
+| `langchain` | 0.1.0 | >=0.3.0 |
+| `langchain-google-genai` | 0.0.6 | >=2.0.0 |
+| `langchain-community` | 0.0.13 | >=0.3.0 |
+| `langchain-chroma` | 0.1.0 | >=0.2.0 |
+| `chromadb` | 0.4.22 | >=0.5.0 |
+| `langgraph` | 0.0.20 | >=0.2.0 |
+| `numpy` | <2.0.0 | >=2.0.0 |
+
+### Additional Cleanup
+Removed conflicting legacy packages:
+- `langchain-anthropic` (required older langchain-core)
+- `langchain-classic` (required older langchain-core)
+- `langchain-xai` (required older langchain-core)
+- `langgraph-prebuilt` (required older langchain-core)
+
+### Verification
+```bash
+$ pip check
+No broken requirements found.
+
+$ python -c "import langchain; import langchain_google_genai; import google.generativeai; import chromadb; print('All packages work!')"
+All packages work!
 ```
 
 ---
@@ -263,6 +330,15 @@ retriever = vectorstore.as_retriever(
 - Import path fixes (5 files corrected)
 - Comprehensive testing and verification
 - **Result:** Phase 2 fully complete and working
+
+### Session 3 (2026-01-21)
+- **Dependency Hell Resolution**
+- Upgraded LangChain stack from 0.1.x → 0.3.x
+- Upgraded langchain-google-genai from 0.0.6 → 2.0.10
+- Upgraded google-generativeai to 0.8.6 (Vision capable)
+- Removed conflicting legacy packages
+- Verified all packages with `pip check`
+- **Result:** Vision LLM extraction pipeline ready for use
 
 ---
 
