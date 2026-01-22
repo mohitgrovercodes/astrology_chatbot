@@ -1,8 +1,8 @@
 # PROJECT STATUS — Astrology AI Chatbot
 
-> **Last Updated:** 2026-01-21  
+> **Last Updated:** 2026-01-22  
 > **Current Phase:** Phase 3 - RAG Pipeline  
-> **Overall Progress:** 25%
+> **Overall Progress:** 35%
 
 ---
 
@@ -11,7 +11,7 @@
 ```
 Phase 1: Foundation         [██████████] 100% ✅ COMPLETE
 Phase 2: Engine Integration [██████████] 100% ✅ COMPLETE & VERIFIED
-Phase 3: RAG Pipeline       [█░░░░░░░░░] 10%  ← IN PROGRESS (Dependencies Ready)
+Phase 3: RAG Pipeline       [████░░░░░░] 40%  ← IN PROGRESS (Extraction Ready)
 Phase 4: LLM Integration    [░░░░░░░░░░] 0%
 Phase 5: Orchestration      [░░░░░░░░░░] 0%
 Phase 6: Safety             [░░░░░░░░░░] 0%
@@ -23,28 +23,56 @@ Phase 10: Deployment        [░░░░░░░░░░] 0%
 
 ---
 
-## Phase 3: RAG Pipeline — 🔧 IN PROGRESS
+## Phase 3: RAG Pipeline — 🔧 IN PROGRESS (40%)
 
-### Latest: Dependencies Resolved (2026-01-21)
+### Latest: PDF Extraction Pipeline Ready (2026-01-22)
 
-**Vision LLM Extraction Pipeline** is now ready to use. All dependency conflicts between LangChain and Google Generative AI have been resolved.
+**Vision LLM system operational** with AI Studio API for batch PDF processing.
 
-### Verified Package Versions
+### ✅ Completed
 
-| Package | Version | Status |
-|---------|---------|--------|
-| `langchain` | 0.3.27 | ✅ |
-| `langchain-google-genai` | 2.0.10 | ✅ |
-| `google-generativeai` | 0.8.6 | ✅ (Vision capable) |
-| `chromadb` | 0.5.23 | ✅ |
-| `pdf2image` | 1.17.0 | ✅ |
-| `Pillow` | 10.4.0 | ✅ |
+1. **Dependency Resolution**
+   - Resolved LangChain + Gemini version conflicts
+   - Upgraded stack to modern compatible versions
+   - All packages verified working
+
+2. **API Setup & Verification**
+   - AI Studio API configured and tested
+   - Model: `gemini-flash-lite-latest` (cheapest option)
+   - Vision capabilities confirmed
+
+3. **PDF Extraction Pipeline**
+   - Created `tests/test_pdf_extraction.py`
+   - Single page and batch extraction
+   - Rate limiting (4.5s delays for 15 req/min limit)
+   - Automatic image conversion + text extraction
+
+### 📊 Extraction Capabilities
+
+| Metric | Value |
+|--------|-------|
+| Model | gemini-flash-lite-latest |
+| Rate Limit | 15 requests/min (AI Studio free tier) |
+| Processing Speed | ~12-13 pages/minute |
+| 1000 Pages | ~75-80 minutes |
+| Cost | Free |
+
+### 🔄 In Progress
+
+1. **Text Cleaning Pipeline** ← CURRENT
+   - Remove artifacts (page numbers, headers, footers)
+   - Fix line breaks in continuous text
+   - Handle page transitions
+   - Preserve Sanskrit text formatting
+   - Normalize whitespace and special characters
 
 ### Next Steps for Phase 3
-1. **Vision LLM Extraction** - Use `IMPLEMENTATION_GUIDE.md` to extract content from astrology PDFs
-2. **Chunking Strategy** - Implement domain-aware chunking for astrology texts
-3. **Vector Database** - Load extracted chunks into ChromaDB
-4. **Retrieval Testing** - Validate retrieval quality
+
+1. ✅ ~~Vision LLM Extraction~~ - COMPLETE
+2. 🔄 **Text Cleaning & Normalization** - IN PROGRESS
+3. **Chunking Strategy** - Implement domain-aware chunking for astrology texts
+4. **Vector Database** - Load extracted chunks into ChromaDB
+5. **Retrieval Testing** - Validate retrieval quality
 
 ---
 
