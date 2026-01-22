@@ -150,7 +150,7 @@ TEXT TO CLEAN:
             # Rule-based first
             cleaned_content = self.rule_based_clean(content)
             # LLM for refinement if needed
-           if self.use_llm and len(cleaned_content) > 100:
+        if self.use_llm and len(cleaned_content) > 100:
                 cleaned_content = self.llm_clean(cleaned_content)
         
         # Create cleaned version
