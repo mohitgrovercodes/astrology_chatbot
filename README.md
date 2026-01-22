@@ -1,133 +1,107 @@
-# Astrology AI Chatbot
+# RAG Preprocessing Pipeline
 
-An expert-level Astrology Chatbot supporting **Vedic and Western Astrology**, built with LangChain, LangGraph, and RAG.
+Complete text pre-processing pipeline for the Astrology AI Chatbot RAG system.
 
 ## Features
 
-- 🔮 **Birth Chart Calculations** - Accurate planetary positions using pyswisseph
-- 🌟 **Vedic & Western Astrology** - Support for both systems
-- 🤖 **AI-Powered Interpretations** - LLM + RAG for expert-level readings
-- 🔄 **Multi-Provider LLM Support** - OpenAI, Google, Anthropic, xAI
-- 🛡️ **Safety Guardrails** - Blocks harmful predictions
-- 🚀 **Production-Ready API** - FastAPI with async support
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────┐
-│                  Mobile App                      │
-└────────────────────┬────────────────────────────┘
-                     │ REST API
-┌────────────────────▼────────────────────────────┐
-│              FastAPI + Pydantic                  │
-└────────────────────┬────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────┐
-│           LangGraph Orchestration                │
-│  Intent → Safety → Router → Response Synthesis   │
-└───────┬─────────────────────────────┬───────────┘
-        │                             │
-┌───────▼───────┐           ┌─────────▼──────────┐
-│  Calculation  │           │   RAG Pipeline     │
-│    Engine     │           │  ChromaDB + OpenAI │
-│  (pyswisseph) │           │    Embeddings      │
-└───────────────┘           └────────────────────┘
-```
+- **6-Phase Pipeline**: From raw PDF extraction to embedding-ready chunks
+- **Sanskrit Support**: Unicode normalization for Devanagari text
+- **Cross-Page Analysis**: Automatic continuation detection
+- **Semantic Segmentation**: Verse-commentary unit extraction
+- **Entity Extraction**: Planets, houses, signs, nakshatras
+- **Metadata Enrichment**: Hypothetical questions, summaries
+- **OpenAI Integration**: text-embedding-3-large support
 
 ## Quick Start
 
-### 1. Clone and Setup
+### 1. Install Dependencies
 
 ```bash
-cd astro_chatbot
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
+pip install pydantic google-generativeai openai
 ```
 
-### 2. Configure Environment
+### 2. Set API Keys
 
 ```bash
-cp .env.example .env
-# Edit .env with your API keys
+# Optional: For enhanced analysis
+export GOOGLE_API_KEY="your-google-api-key"
+
+# Required: For embedding generation
+export OPENAI_API_KEY="your-openai-api-key"
 ```
 
-### 3. Run the API (after development is complete)
+### 3. Run Pipeline
 
 ```bash
-uvicorn src.api.main:app --reload
+# Full pipeline
+python src/rag/preprocessing/pipeline.py extracted/input.json --output-dir processed
+
+# With LLM enhancement
+python src/rag/preprocessing/pipeline.py input.json --use-llm --output-dir processed
+
+# Skip embedding (no API key needed)
+python src/rag/preprocessing/pipeline.py input.json --skip-embedding
 ```
 
-## Project Structure
+## Pipeline Phases
 
-```
-astro_chatbot/
-├── src/
-│   ├── api/            # FastAPI routes
-│   ├── engine/         # Astrology calculation engine wrapper
-│   ├── rag/            # Document ingestion & retrieval
-│   ├── orchestration/  # LangGraph workflow
-│   ├── safety/         # Content guardrails
-│   └── utils/          # Config, logging utilities
-├── data/
-│   ├── raw/            # Astrology texts for RAG
-│   └── vectordb/       # ChromaDB persistence
-├── config/
-│   └── config.yaml     # Application configuration
-├── tests/              # Unit and integration tests
-├── .env.example        # Environment template
-└── requirements.txt    # Dependencies
-```
+| Phase | Module | Description |
+|-------|--------|-------------|
+| 2 | `structural_cleaner.py` | Header/footer removal, Sanskrit normalization |
+| 3 | `page_analyzer.py` | Cross-page continuation detection |
+| 4 | `semantic_segmenter.py` | Verse-commentary unit extraction |
+| 5 | `chunk_enricher.py` | Entity extraction, question generation |
+| 6 | `embedder.py` | OpenAI embedding generation |
 
-## Configuration
+## Usage
 
-### LLM Providers
+### CLI Options
 
-The chatbot supports multiple LLM providers. Set your preferred provider in `.env`:
+```bash
+python src/rag/preprocessing/pipeline.py [INPUT] [OPTIONS]
 
-| Provider | Env Variable | Models |
-|----------|--------------|--------|
-| OpenAI | `OPENAI_API_KEY` | gpt-4o, gpt-4o-mini |
-| Google | `GOOGLE_API_KEY` | gemini-1.5-pro, gemini-1.5-flash |
-| Anthropic | `ANTHROPIC_API_KEY` | claude-sonnet-4-20250514 |
-| xAI | `XAI_API_KEY` | grok-2, grok-2-mini |
+Arguments:
+  INPUT                Input extracted JSON file
 
-### Embeddings
-
-Embeddings are fixed to OpenAI's `text-embedding-3-large` for consistency.
-
-## Development Phases
-
-- [x] Phase 1: Foundation (config, logging, LLM factory)
-- [ ] Phase 2: Engine Integration
-- [ ] Phase 3: RAG Pipeline
-- [ ] Phase 4: LLM Integration
-- [ ] Phase 5: LangGraph Orchestration
-- [ ] Phase 6: Safety & Guardrails
-- [ ] Phase 7: API Layer
-- [ ] Phase 8: Testing & Evaluation
-- [ ] Phase 9: Fine-Tuning
-- [ ] Phase 10: Deployment
-
-## Key Principles
-
-```
-CALCULATIONS = Deterministic (Python/pyswisseph, no LLM)
-INTERPRETATIONS = LLM + RAG (no hardcoded rules)
+Options:
+  -o, --output-dir     Directory for checkpoint files
+  -s, --source-book    Book name for metadata
+  -t, --tradition      "vedic" or "western" (default: vedic)
+  --use-llm           Enable LLM for enhanced analysis
+  --skip-embedding    Skip Phase 6 embedding
 ```
 
-## Safety
+### Sample Run
 
-The chatbot includes guardrails for:
-- ❌ Death timing predictions
-- ❌ Medical diagnosis/treatment
-- ❌ Gambling/lottery advice
-- ❌ Legal advice
+```
+Input: 5 pages
+Duration: 0.08 seconds
+Chunks: 10
+Tokens: 2,224
+Entities: 6 planets, 14 houses
+```
+
+## Output Format
+
+The pipeline generates:
+- `*_phase2_cleaned.json` - Cleaned pages
+- `*_phase3_linked.json` - With cross-page relationships  
+- `*_phase4_segmented.json` - Semantic units
+- `*_phase5_enriched.json` - Ready for embedding
+- `*_final.json` - Complete output with embeddings
+
+## Next Steps
+
+1. Choose VectorDB (Pinecone/Qdrant/Weaviate)
+2. Implement VectorDB ingestion
+3. Build retrieval interface
+4. Test RAG query quality
+
+## Documentation
+
+- [PROJECT_STATUS.md](PROJECT_STATUS.md) - Current project status
+- [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) - Development guide
 
 ## License
 
-[Your License Here]
-
-## Contributing
-
-[Your Contributing Guidelines Here]
+Internal project for astrology chatbot development.
