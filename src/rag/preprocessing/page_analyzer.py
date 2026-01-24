@@ -7,6 +7,7 @@ LLM-assisted analysis to detect cross-page continuations and semantic relationsh
 
 import re
 import json
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import os
@@ -58,41 +59,33 @@ class PageAnalyzer:
         self.is_vertex_ai = False
         
         if use_llm:
-            # Try Vertex AI first (GCP credits)
+            # Use LLMFactory for consistent model management
             try:
-                from langchain_google_vertexai import ChatVertexAI
-                project = os.environ.get("GOOGLE_CLOUD_PROJECT")
-                location = os.environ.get("VERTEX_AI_LOCATION", "us-central1")
+                # Add project root to path for imports
+                script_dir = Path(__file__).parent
+                project_root = script_dir.parent.parent.parent
+                sys.path.insert(0, str(project_root))
                 
-                if project:
-                    self.model = ChatVertexAI(
-                        model="gemini-2.5-flash",
-                        project=project,
-                        location=location,
-                        temperature=0.0,
-                    )
-                    self.is_vertex_ai = True
-                    print(f"[OK] Using Vertex AI (GCP) - Project: {project}, Location: {location}")
-                else:
-                    print("[WARN] GOOGLE_CLOUD_PROJECT not set, trying AI Studio")
-                    raise ValueError("No GCP project configured")
+                from src.llm.factory import create_llm
+                
+                # Create LLM using factory (automatically handles Vertex AI vs AI Studio)
+                self.model = create_llm(
+                    provider="google",
+                    model="gemini-2.5-flash",
+                    temperature=0.0,
+                )
+                
+                # Determine which provider was used
+                from langchain_google_vertexai import ChatVertexAI
+                self.is_vertex_ai = isinstance(self.model, ChatVertexAI)
+                
+                provider_name = "Vertex AI" if self.is_vertex_ai else "AI Studio"
+                print(f"[OK] Using {provider_name} via LLMFactory")
+                
             except Exception as e:
-                print(f"[INFO] Vertex AI init failed: {e}")
-                # Fallback to AI Studio
-                try:
-                    import google.generativeai as genai
-                    api_key = os.environ.get("GOOGLE_API_KEY")
-                    if api_key:
-                        genai.configure(api_key=api_key)
-                        self.model = genai.GenerativeModel('models/gemini-2.5-flash')
-                        self.is_vertex_ai = False
-                        print("[OK] Using AI Studio API (fallback)")
-                    else:
-                        print("[WARN] No API keys, using rule-based analysis only")
-                        self.use_llm = False
-                except ImportError:
-                    print("[WARN] google-generativeai not installed, using rule-based analysis only")
-                    self.use_llm = False
+                print(f"[WARN] LLM initialization failed: {e}")
+                print("[INFO] Using rule-based analysis only")
+                self.use_llm = False
     
     def detect_sentence_boundaries(self, content: str) -> Tuple[bool, bool]:
         """

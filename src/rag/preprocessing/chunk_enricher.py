@@ -12,8 +12,10 @@ Prepare semantic units for optimal embedding and retrieval by:
 import re
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Handle both relative and direct imports
 try:
@@ -86,55 +88,49 @@ class ChunkEnricher:
     # Approximate chars per token
     CHARS_PER_TOKEN = 4
     
-    def __init__(self, use_llm: bool = True, tradition: str = "vedic"):
+    def __init__(self, use_llm: bool = True, tradition: str = "vedic", parallel_workers: int = 10):
         """
         Initialize chunk enricher.
         
         Args:
             use_llm: Whether to use LLM for question generation and summaries
             tradition: "vedic" or "western"
+            parallel_workers: Number of parallel workers for enrichment (default: 10)
         """
         self.use_llm = use_llm
         self.tradition = tradition
+        self.parallel_workers = parallel_workers
         self.model = None
         self.is_vertex_ai = False
         
         if use_llm:
-            # Try Vertex AI first (GCP credits)
+            # Use LLMFactory for consistent model management
             try:
-                from langchain_google_vertexai import ChatVertexAI
-                project = os.environ.get("GOOGLE_CLOUD_PROJECT")
-                location = os.environ.get("VERTEX_AI_LOCATION", "us-central1")
+                # Add project root to path for imports
+                script_dir = Path(__file__).parent
+                project_root = script_dir.parent.parent.parent
+                sys.path.insert(0, str(project_root))
                 
-                if project:
-                    self.model = ChatVertexAI(
-                        model="gemini-2.5-flash",
-                        project=project,
-                        location=location,
-                        temperature=0.0,
-                    )
-                    self.is_vertex_ai = True
-                    print(f"[OK] Using Vertex AI (GCP) - Project: {project}, Location: {location}")
-                else:
-                    print("[WARN] GOOGLE_CLOUD_PROJECT not set, trying AI Studio")
-                    raise ValueError("No GCP project configured")
+                from src.llm.factory import create_llm
+                
+                # Create LLM using factory (automatically handles Vertex AI vs AI Studio)
+                self.model = create_llm(
+                    provider="google",
+                    model="gemini-2.5-flash",
+                    temperature=0.0,
+                )
+                
+                # Determine which provider was used
+                from langchain_google_vertexai import ChatVertexAI
+                self.is_vertex_ai = isinstance(self.model, ChatVertexAI)
+                
+                provider_name = "Vertex AI" if self.is_vertex_ai else "AI Studio"
+                print(f"[OK] Using {provider_name} via LLMFactory")
+                
             except Exception as e:
-                print(f"[INFO] Vertex AI init failed: {e}")
-                # Fallback to AI Studio
-                try:
-                    import google.generativeai as genai
-                    api_key = os.environ.get("GOOGLE_API_KEY")
-                    if api_key:
-                        genai.configure(api_key=api_key)
-                        self.model = genai.GenerativeModel('models/gemini-2.5-flash')
-                        self.is_vertex_ai = False
-                        print("[OK] Using AI Studio API (fallback)")
-                    else:
-                        print("[WARN] No API keys, using rule-based enrichment only")
-                        self.use_llm = False
-                except ImportError:
-                    print("[WARN] google-generativeai not installed, using rule-based enrichment only")
-                    self.use_llm = False
+                print(f"[WARN] LLM initialization failed: {e}")
+                print("[INFO] Using rule-based enrichment only")
+                self.use_llm = False
     
     def estimate_tokens(self, text: str) -> int:
         """Estimate token count from character count."""
@@ -407,29 +403,90 @@ Return ONLY the JSON array, no explanation."""
             embedding=None,  # Will be populated in Phase 6
         )
     
-    def enrich_document(self, semantic_doc: SemanticDocument) -> EnrichedDocument:
+    def enrich_document(self, semantic_doc: SemanticDocument, use_parallel: bool = True) -> EnrichedDocument:
         """
-        Enrich all units in a document.
+        Enrich all units in a document with optional parallel processing.
         
         Args:
             semantic_doc: Semantic document from Phase 4
+            use_parallel: Whether to use parallel processing (default: True)
             
         Returns:
             EnrichedDocument ready for embedding
         """
-        chunks = []
-        total_tokens = 0
+        if use_parallel and self.parallel_workers > 1:
+            # Parallel processing for significant speedup
+            chunks = self._enrich_parallel(semantic_doc.units)
+        else:
+            # Sequential processing
+            chunks = [self.enrich_unit(unit) for unit in semantic_doc.units]
         
-        for unit in semantic_doc.units:
-            chunk = self.enrich_unit(unit)
-            chunks.append(chunk)
-            total_tokens += chunk.token_count
+        total_tokens = sum(chunk.token_count for chunk in chunks)
         
         return EnrichedDocument(
             chunks=chunks,
             source_file=semantic_doc.source_file,
             total_tokens=total_tokens,
         )
+    
+    def _enrich_parallel(self, units: List[SemanticUnit]) -> List[EnrichedChunk]:
+        """
+        Enrich units in parallel using ThreadPoolExecutor.
+        
+        Args:
+            units: List of semantic units to enrich
+            
+        Returns:
+            List of enriched chunks (order preserved)
+        """
+        print(f"  [PARALLEL] Processing {len(units)} units with {self.parallel_workers} workers...")
+        
+        chunks = [None] * len(units)  # Pre-allocate to preserve order
+        
+        with ThreadPoolExecutor(max_workers=self.parallel_workers) as executor:
+            # Submit all enrichment tasks
+            future_to_index = {
+                executor.submit(self.enrich_unit, unit): i 
+                for i, unit in enumerate(units)
+            }
+            
+            # Collect results as they complete
+            completed = 0
+            for future in as_completed(future_to_index):
+                index = future_to_index[future]
+                try:
+                    chunks[index] = future.result()
+                    completed += 1
+                    if completed % 10 == 0:  # Progress indicator
+                        print(f"  [PROGRESS] {completed}/{len(units)} chunks enriched")
+                except Exception as e:
+                    print(f"  [ERROR] Failed to enrich unit {index}: {e}")
+                    # Create a minimal fallback chunk
+                    unit = units[index]
+                    chunks[index] = EnrichedChunk(
+                        chunk_id=f"{unit.unit_id}-chunk",
+                        unit_id=unit.unit_id,
+                        text_for_embedding=unit.combined_text,
+                        token_count=self.estimate_tokens(unit.combined_text),
+                        display_text=unit.combined_text,
+                        verse_sanskrit=unit.verse.sanskrit if unit.verse else None,
+                        metadata=ChunkMetadata(
+                            source_book=unit.source_book or "Unknown",
+                            chapter=unit.chapter,
+                            section=unit.section,
+                            verse_number=unit.verse.number if unit.verse else None,
+                            tradition=self.tradition,
+                            entities=AstrologicalEntities(),
+                        ),
+                        hypothetical_questions=[],
+                        summary="",
+                        related_chunks=[],
+                        source_pages=unit.source_pages,
+                        embedding=None,
+                    )
+        
+        print(f"  [COMPLETE] All {len(units)} chunks enriched")
+        return chunks
     
     def process_file(
         self,
