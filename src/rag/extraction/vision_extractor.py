@@ -236,46 +236,71 @@ class VisionExtractor:
     
     def _call_gemini(self, prompt: str, image: Image.Image, retry_count: int = 0) -> str:
         """
-        Call Gemini API with retry logic.
+        Call Gemini API with optimized retry logic.
         
         Args:
-            prompt: The extraction prompt
-            image: PIL Image to process
+            prompt: Prompt text
+            image: PIL Image
             retry_count: Current retry attempt
             
         Returns:
-            Raw response text from Gemini
+            Response text from Gemini
         """
+        # Apply rate limiting
         self._rate_limit()
         
         try:
-            response = self.model.generate_content([prompt, image])
+            # Generate content
+            response = self.model.generate_content(
+                [prompt, image],
+                request_options={"timeout": 120}  # 2 minute timeout
+            )
             
-            # Log cost if tracking is available
-            if self.cost_tracker:
-                try:
-                    self.cost_tracker.log_from_response(
-                        response,
-                        operation="vision_extraction",
-                        metadata={"retry_count": retry_count}
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to log cost: {e}")
+            # Track cost if available
+            if self.cost_tracker and hasattr(response, 'usage_metadata'):
+                self.cost_tracker.log_api_call(
+                    model_name=self.config.model_name,
+                    model_type="vision",
+                    input_tokens=response.usage_metadata.prompt_token_count,
+                    output_tokens=response.usage_metadata.candidates_token_count,
+                )
             
             # Check if response was blocked
             if response.prompt_feedback.block_reason:
                 logger.warning(f"Response blocked: {response.prompt_feedback.block_reason}")
-                return '{"error": "Response blocked by safety filters"}'
+                # Don't retry blocked responses - they'll keep getting blocked
+                return '{"error": "Response blocked by safety filters", "extraction_quality": "poor", "issues": ["safety_filter_block"]}'
             
             return response.text
             
         except Exception as e:
-            logger.error(f"Gemini API error (attempt {retry_count + 1}): {e}")
+            error_str = str(e).lower()
             
+            # Categorize errors - only retry transient errors
+            is_retryable = any([
+                "timeout" in error_str,
+                "rate limit" in error_str,
+                "503" in error_str,
+                "429" in error_str,
+                "connection" in error_str,
+                "temporary" in error_str,
+            ])
+            
+            # Don't retry non-transient errors (saves API calls)
+            if not is_retryable:
+                logger.error(f"Non-retryable error: {e}")
+                raise RuntimeError(f"Gemini API error (non-retryable): {e}")
+            
+            # Check retry limit for transient errors
             if retry_count < self.config.max_retries:
-                time.sleep(self.config.retry_delay * (retry_count + 1))
+                # Exponential backoff: 5s, 10s, 20s
+                wait_time = self.config.retry_delay * (2 ** retry_count)
+                logger.warning(f"Retryable error (attempt {retry_count + 1}): {e}")
+                logger.info(f"Waiting {wait_time}s before retry...")
+                time.sleep(wait_time)
                 return self._call_gemini(prompt, image, retry_count + 1)
             else:
+                logger.error(f"Max retries ({self.config.max_retries}) exceeded")
                 raise RuntimeError(f"Failed after {self.config.max_retries} retries: {e}")
     
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
@@ -403,13 +428,18 @@ class VisionExtractor:
         # Step 3: Parse confidence from extraction result
         confidence_metadata = self._parse_confidence(extraction_result)
         
+        # Check if extraction has errors (blocked, failed, etc.)
+        has_errors = extraction_result.get("error") or "safety_filter_block" in extraction_result.get("issues", [])
+        
         # Step 4: Check if we need to retry with upgraded model
+        # Don't retry if: has errors, already used upgrade model, or confidence is acceptable
         retry_metadata = None
         if (
             self.config.enable_auto_upgrade 
             and confidence_metadata 
             and confidence_metadata.overall_score < self.config.confidence_threshold
             and used_model != self.config.upgrade_model
+            and not has_errors  # NEW: Skip retry for error responses (saves API calls)
         ):
             logger.warning(
                 f"Page {page_num}: Low confidence {confidence_metadata.overall_score:.2f}, "
