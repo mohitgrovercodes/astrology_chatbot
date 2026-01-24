@@ -66,7 +66,7 @@ class PageAnalyzer:
                 
                 if project:
                     self.model = ChatVertexAI(
-                        model="gemini-2.0-flash-exp",
+                        model="gemini-2.5-flash",
                         project=project,
                         location=location,
                         temperature=0.0,
@@ -84,7 +84,7 @@ class PageAnalyzer:
                     api_key = os.environ.get("GOOGLE_API_KEY")
                     if api_key:
                         genai.configure(api_key=api_key)
-                        self.model = genai.GenerativeModel('models/gemini-2.0-flash-exp')
+                        self.model = genai.GenerativeModel('models/gemini-2.5-flash')
                         self.is_vertex_ai = False
                         print("[OK] Using AI Studio API (fallback)")
                     else:

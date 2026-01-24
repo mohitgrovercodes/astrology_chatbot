@@ -41,7 +41,7 @@ class LLMFactory:
     
     Supports:
     - OpenAI (gpt-4o, gpt-4o-mini, gpt-4-turbo)
-    - Google (gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash-exp)
+    - Google (gemini-1.5-pro, gemini-1.5-flash, gemini-2.5-flash)
     - xAI (grok-2, grok-2-mini)
     - Anthropic (claude-sonnet-4, claude-3-5-sonnet)
     
@@ -296,7 +296,7 @@ def create_openai_llm(
 
 
 def create_google_llm(
-    model: str = "gemini-1.5-flash",
+    model: str = "gemini-2.5-flash",
     temperature: float = 0.3,
     **kwargs
 ) -> ChatGoogleGenerativeAI:

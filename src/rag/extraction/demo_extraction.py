@@ -201,7 +201,7 @@ config = PipelineConfig(
     book_title="Brihat Parasara Hora Shastra",
     astrology_system="vedic",
     pdf_dpi=200,
-    gemini_model="gemini-1.5-pro",
+    gemini_model="gemini-2.5-flash",
 )
 
 # Initialize pipeline

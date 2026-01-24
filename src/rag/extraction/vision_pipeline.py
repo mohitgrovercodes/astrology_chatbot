@@ -45,7 +45,7 @@ class PipelineConfig:
     pdf_dpi: int = 200  # DPI for PDF to image conversion
     
     # Gemini Settings
-    gemini_model: str = "gemini-1.5-pro"
+    gemini_model: str = "gemini-2.5-flash"
     temperature: float = 0.1
     max_output_tokens: int = 8192
     

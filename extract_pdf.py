@@ -36,7 +36,7 @@ class PDFExtractor:
             raise ValueError("GOOGLE_API_KEY not set in .env file")
         
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('models/gemini-flash-lite-latest')
+        self.model = genai.GenerativeModel('models/gemini-2.5-flash')
         
         
         self.extraction_prompt = """

@@ -16,7 +16,12 @@ from typing import Optional
 
 # Add parent directories to path for imports
 script_dir = Path(__file__).parent
+project_root = script_dir.parent.parent.parent
 sys.path.insert(0, str(script_dir))
+sys.path.insert(0, str(project_root))
+
+# Import Vision Pipeline
+from src.rag.extraction.vision_pipeline import VisionPipeline, PipelineConfig
 
 # Import all phase modules
 from schemas import ExtractedPage, CleanedDocument, LinkedDocument, SemanticDocument, EnrichedDocument
@@ -70,6 +75,44 @@ class PreprocessingPipeline:
             return output_path
         return None
     
+    def run_phase1_extraction(self, input_pdf: str, output_dir: Optional[str] = None) -> str:
+        """Run Phase 1: PDF Extraction using Vision Pipeline."""
+        print("\n" + "=" * 60)
+        print("PHASE 1: EXTRACTION (Vision LLM)")
+        print("=" * 60)
+        
+        pdf_path = Path(input_pdf)
+        if not output_dir:
+            output_dir = str(pdf_path.parent / "extracted")
+            
+        print(f"  Input PDF: {pdf_path.name}")
+        print(f"  Output Dir: {output_dir}")
+        
+        config = PipelineConfig(
+            output_dir=output_dir,
+            gemini_model="gemini-2.5-flash",  # Standardized model
+            book_title=self.source_book,
+            save_raw_responses=True
+        )
+        
+        vision_pipeline = VisionPipeline(config)
+        
+        # Process PDF
+        result = vision_pipeline.process_pdf(
+            pdf_path=str(pdf_path),
+            book_title=self.source_book
+        )
+        
+        # Return path to the extraction JSON
+        extraction_json = Path(output_dir) / f"{pdf_path.stem}_extraction.json"
+        
+        if not extraction_json.exists():
+             # Fallback if naming differs
+             extraction_json = Path(output_dir) / "extraction_output" / f"{pdf_path.stem}_extraction.json"
+        
+        print(f"  Extraction complete: {extraction_json}")
+        return str(extraction_json)
+
     def run_phase2(self, input_file: str) -> CleanedDocument:
         """Run Phase 2: Structural Cleaning."""
         print("\n" + "=" * 60)
@@ -199,10 +242,10 @@ class PreprocessingPipeline:
         skip_embedding: bool = False,
     ) -> EnrichedDocument:
         """
-        Run the complete pipeline from Phase 2 to Phase 6.
+        Run the complete pipeline from Phase 1/2 to Phase 6.
         
         Args:
-            input_file: Path to extracted JSON (Phase 1 output)
+            input_file: Path to input file (PDF for Phase 1, or JSON for Phase 2)
             skip_embedding: Skip Phase 6 embedding
             
         Returns:
@@ -219,8 +262,15 @@ class PreprocessingPipeline:
         print(f"Use LLM: {self.use_llm}")
         print(f"Started: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
         
+        # Phase 1: Extraction (if input is PDF)
+        current_input = input_file
+        if input_file.lower().endswith('.pdf'):
+            # Determine output directory for extraction
+            extract_dir = self.output_dir if self.output_dir else None
+            current_input = self.run_phase1_extraction(input_file, str(extract_dir) if extract_dir else None)
+        
         # Phase 2
-        cleaned_doc = self.run_phase2(input_file)
+        cleaned_doc = self.run_phase2(current_input)
         
         # Phase 3
         linked_doc = self.run_phase3(cleaned_doc)
@@ -260,7 +310,7 @@ Examples:
         """
     )
     
-    parser.add_argument("input", help="Input extracted JSON file (Phase 1 output)")
+    parser.add_argument("input", help="Input file (PDF or JSON)")
     parser.add_argument("-o", "--output-dir", help="Directory for intermediate outputs")
     parser.add_argument("-s", "--source-book", default="Brihat Parasara Hora Shastra",
                        help="Name of the source book")

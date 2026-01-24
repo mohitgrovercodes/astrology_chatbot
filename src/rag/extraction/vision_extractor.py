@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ExtractionConfig:
     """Configuration for the Vision Extractor"""
-    model_name: str = "gemini-1.5-pro"
+    model_name: str = "gemini-2.5-flash"
     temperature: float = 0.1  # Low temperature for accurate extraction
     max_output_tokens: int = 8192
     top_p: float = 0.95
