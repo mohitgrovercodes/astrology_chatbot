@@ -1,8 +1,8 @@
 # PROJECT STATUS — Astrology AI Chatbot
 
-> **Last Updated:** 2026-01-22  
-> **Current Phase:** Phase 3 - RAG Pipeline  
-> **Overall Progress:** 75%
+> **Last Updated:** 2026-01-24  
+> **Current Phase:** Phase 3 - RAG Pipeline + Cost Tracking  
+> **Overall Progress:** 78%
 
 ---
 
@@ -11,7 +11,7 @@
 ```
 Phase 1: Foundation         [██████████] 100% ✅ COMPLETE
 Phase 2: Engine Integration [██████████] 100% ✅ COMPLETE & VERIFIED
-Phase 3: RAG Pipeline       [███████░░░] 75%  ← IN PROGRESS (Preprocessing Complete)
+Phase 3: RAG Pipeline       [███████░░░] 78%  ← IN PROGRESS (Preprocessing + Cost Tracking Complete)
 Phase 4: LLM Integration    [░░░░░░░░░░] 0%
 Phase 5: Orchestration      [░░░░░░░░░░] 0%
 Phase 6: Safety             [░░░░░░░░░░] 0%
@@ -19,15 +19,17 @@ Phase 7: API Layer          [░░░░░░░░░░] 0%
 Phase 8: Testing            [░░░░░░░░░░] 0%
 Phase 9: Fine-Tuning        [░░░░░░░░░░] 0%
 Phase 10: Deployment        [░░░░░░░░░░] 0%
+
+Utilities: Cost Tracking    [██████████] 100% ✅ COMPLETE
 ```
 
 ---
 
-## Phase 3: RAG Pipeline — 🔧 IN PROGRESS (75%)
+## Phase 3: RAG Pipeline — 🔧 IN PROGRESS (78%)
 
-### Latest: Text Pre-Processing Pipeline Complete (2026-01-22)
+### Latest: Cost Tracking System Complete (2026-01-24)
 
-**Complete 6-phase preprocessing pipeline** from raw PDF extraction to embedding-ready chunks with rich metadata.
+**Comprehensive cost logging system** for all LLM and embedding API usage with SQLite storage, automatic tracking, and CLI reporting.
 
 ### ✅ Completed
 
@@ -69,6 +71,15 @@ Phase 10: Deployment        [░░░░░░░░░░] 0%
    - Rate limiting
    - 3072-dimension embeddings
 
+7. **Cost Tracking System** ✨ NEW
+   - Automatic cost logging for all LLM/embedding API calls
+   - SQLite database (detailed + aggregate tracking)
+   - LangChain callback integration for LLM Factory
+   - Wrapper integration for Vision Extractor and Embedder
+   - CLI reporting tool with filtering and CSV export
+   - Accurate cost calculations for Gemini and OpenAI models
+   - Thread-safe for parallel processing
+
 ### 📊 Pipeline Capabilities
 
 | Metric | Value |
@@ -90,6 +101,11 @@ src/rag/preprocessing/
 ├── chunk_enricher.py     # Phase 5: Enrichment
 ├── embedder.py          # Phase 6: Embedding
 └── pipeline.py          # Orchestration CLI
+
+src/utils/
+├── cost_logger.py       # Core cost tracking with SQLite
+├── cost_tracking.py     # Callbacks, decorators, wrappers
+└── cost_report.py       # CLI reporting tool
 ```
 
 ### 🔄 Next Steps for Phase 3
@@ -165,6 +181,19 @@ python src/rag/preprocessing/pipeline.py input.json --skip-embedding
 
 ## Session History
 
+### Session 4 (2026-01-24)
+- **Cost Tracking System Implementation**
+- Created comprehensive cost logger with SQLite storage
+- Implemented dual tracking (detailed per-call + daily summaries)
+- Integrated automatic cost tracking into:
+  - LLM Factory (LangChain callbacks)
+  - Vision Extractor (wrappers)
+  - Embedder (wrappers)
+  - Chunk Enricher (via LLM Factory)
+- Built CLI reporting tool with filtering and CSV export
+- Created complete test suite and documentation
+- **Result:** Full cost visibility for all API usage
+
 ### Session 3 (2026-01-22)
 - **Text Preprocessing Pipeline Implementation**
 - Created 6 preprocessing modules (structural_cleaner, page_analyzer, semantic_segmenter, chunk_enricher, embedder, pipeline)
@@ -200,6 +229,12 @@ python src/rag/preprocessing/pipeline.py extracted/sample_bphs_pages.json --outp
 ### Test Calculation Engines
 ```bash
 python test_simple.py
+```
+
+### View API Costs
+```bash
+python -m src.utils.cost_report --today
+python -m src.utils.cost_report --month --export costs.csv
 ```
 
 ### Required API Keys

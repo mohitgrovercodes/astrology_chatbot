@@ -42,6 +42,14 @@ from extraction_schemas import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Import cost tracking
+try:
+    from src.utils.cost_tracking import CostTrackingWrapper
+    COST_TRACKING_AVAILABLE = True
+except ImportError:
+    COST_TRACKING_AVAILABLE = False
+    logger.warning("Cost tracking not available")
+
 
 @dataclass
 class ExtractionConfig:
@@ -101,6 +109,15 @@ class VisionExtractor:
         self._last_request_time = 0
         self._request_count = 0
         
+        # Cost tracking
+        if COST_TRACKING_AVAILABLE:
+            self.cost_tracker = CostTrackingWrapper(
+                model_name=self.config.model_name,
+                model_type="vision"
+            )
+        else:
+            self.cost_tracker = None
+        
         logger.info(f"VisionExtractor initialized with model: {self.config.model_name}")
     
     def _setup_credentials(self, credentials_path: str = None):
@@ -153,6 +170,17 @@ class VisionExtractor:
         
         try:
             response = self.model.generate_content([prompt, image])
+            
+            # Log cost if tracking is available
+            if self.cost_tracker:
+                try:
+                    self.cost_tracker.log_from_response(
+                        response,
+                        operation="vision_extraction",
+                        metadata={"retry_count": retry_count}
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to log cost: {e}")
             
             # Check if response was blocked
             if response.prompt_feedback.block_reason:

@@ -8,6 +8,7 @@ This module provides a factory pattern to create LLM instances from multiple pro
 - Anthropic (Claude Sonnet)
 
 All LLMs are created using LangChain abstractions for consistency.
+Automatic cost tracking is enabled for all LLM instances.
 """
 
 from typing import Optional, Dict, Any, List
@@ -26,6 +27,7 @@ except ImportError:
 
 from src.utils.config import get_config
 from src.utils.logger import get_logger
+from src.utils.cost_tracking import CostTrackerCallback
 
 
 logger = get_logger(__name__)
@@ -155,8 +157,24 @@ class LLMFactory:
         # Create and return LLM instance
         try:
             llm = llm_class(**llm_kwargs)
+            
+            # Add cost tracking callback
+            cost_callback = CostTrackerCallback(
+                provider=provider,
+                model=model,
+                operation="llm_generation",
+                metadata={"factory": True}
+            )
+            
+            # Attach callback to LLM
+            if hasattr(llm, 'callbacks'):
+                if llm.callbacks is None:
+                    llm.callbacks = [cost_callback]
+                else:
+                    llm.callbacks.append(cost_callback)
+            
             logger.info(
-                f"Created LLM: provider={provider}, model={model}, "
+                f"Created LLM with cost tracking: provider={provider}, model={model}, "
                 f"temperature={temperature}, max_tokens={max_tokens}"
             )
             return llm

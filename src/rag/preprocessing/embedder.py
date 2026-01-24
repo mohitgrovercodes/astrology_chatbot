@@ -44,6 +44,17 @@ class Embedder:
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         self.client = None
         
+        # Initialize cost tracking
+        try:
+            from src.utils.cost_tracking import CostTrackingWrapper
+            self.cost_tracker = CostTrackingWrapper(
+                model_name=self.MODEL,
+                model_type="embedding"
+            )
+        except ImportError:
+            print("[WARN] Cost tracking not available")
+            self.cost_tracker = None
+        
         if self.api_key:
             try:
                 from openai import OpenAI
@@ -84,6 +95,17 @@ class Embedder:
                 # Extract embeddings in order
                 batch_embeddings = [item.embedding for item in response.data]
                 all_embeddings.extend(batch_embeddings)
+                
+                # Log cost if tracking is available
+                if self.cost_tracker and hasattr(response, 'usage'):
+                    try:
+                        self.cost_tracker.log_from_response(
+                            response,
+                            operation="embedding",
+                            metadata={"batch_num": i//self.BATCH_SIZE + 1, "batch_size": len(batch)}
+                        )
+                    except Exception as e:
+                        print(f"[WARN] Failed to log embedding cost: {e}")
                 
                 print(f"[OK] Embedded batch {i//self.BATCH_SIZE + 1}/{(len(texts) + self.BATCH_SIZE - 1)//self.BATCH_SIZE}")
                 
