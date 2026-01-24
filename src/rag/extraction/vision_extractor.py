@@ -87,6 +87,11 @@ class ExtractionConfig:
     max_workers: int = 5  # Number of concurrent extraction workers
     enable_parallel: bool = True  # Enable parallel processing for batch extraction
     
+    # Checkpoint settings
+    enable_checkpoints: bool = True  # Save progress checkpoints
+    checkpoint_interval: int = 10  # Save checkpoint every N pages
+    checkpoint_dir: str = "./extraction_checkpoints"  # Directory for checkpoint files
+    
     # Output settings
     save_raw_responses: bool = True
     output_dir: str = "./extraction_output"
@@ -787,6 +792,98 @@ class BatchExtractor:
     
     def __init__(self, extractor: VisionExtractor):
         self.extractor = extractor
+        self.checkpoint_dir = Path(extractor.config.checkpoint_dir)
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    
+    def _get_checkpoint_path(self, book_title: str, start_page: int, total_pages: int) -> Path:
+        """Generate checkpoint file path."""
+        safe_title = "".join(c for c in (book_title or "unknown") if c.isalnum() or c in (' ', '-', '_')).strip()
+        safe_title = safe_title.replace(' ', '_')[:50]  # Limit length
+        filename = f"{safe_title}_p{start_page}-{start_page + total_pages - 1}_checkpoint.json"
+        return self.checkpoint_dir / filename
+    
+    def _save_checkpoint(
+        self, 
+        checkpoint_path: Path, 
+        pages: List[ExtractedPage], 
+        stats: Dict,
+        book_title: str,
+        start_page: int
+    ):
+        """Save extraction checkpoint to disk."""
+        try:
+            checkpoint_data = {
+                "book_title": book_title,
+                "start_page": start_page,
+                "total_pages_expected": stats["total_pages"],
+                "pages_completed": len(pages),
+                "stats": stats,
+                "pages": [
+                    {
+                        "page_number": p.metadata.page_number,
+                        "page_type": p.metadata.page_type.value,
+                        "extraction_confidence": p.extraction_confidence,
+                        "content_blocks_count": len(p.content_blocks),
+                        # Store full page data for resume
+                        "metadata": p.metadata.dict(),
+                        "content_blocks": [b.dict() for b in p.content_blocks],
+                        "raw_text": p.raw_text,
+                        "extraction_notes": p.extraction_notes,
+                        "confidence": p.confidence.dict() if p.confidence else None,
+                        "retry_metadata": p.retry_metadata.dict() if p.retry_metadata else None,
+                    }
+                    for p in pages
+                ],
+                "timestamp": time.time(),
+            }
+            
+            with open(checkpoint_path, 'w', encoding='utf-8') as f:
+                json.dump(checkpoint_data, f, ensure_ascii=False, indent=2)
+            
+            logger.info(f"💾 Checkpoint saved: {len(pages)}/{stats['total_pages']} pages")
+            
+        except Exception as e:
+            logger.warning(f"Failed to save checkpoint: {e}")
+    
+    def _load_checkpoint(self, checkpoint_path: Path) -> Optional[Dict]:
+        """Load extraction checkpoint from disk."""
+        if not checkpoint_path.exists():
+            return None
+        
+        try:
+            with open(checkpoint_path, 'r', encoding='utf-8') as f:
+                checkpoint_data = json.load(f)
+            
+            logger.info(f"📂 Checkpoint found: {checkpoint_data['pages_completed']}/{checkpoint_data['total_pages_expected']} pages completed")
+            return checkpoint_data
+            
+        except Exception as e:
+            logger.warning(f"Failed to load checkpoint: {e}")
+            return None
+    
+    def _reconstruct_page(self, page_data: Dict) -> ExtractedPage:
+        """Reconstruct ExtractedPage from checkpoint data."""
+        from .extraction_schemas import PageMetadata, ContentBlock, ConfidenceMetadata, RetryMetadata
+        
+        # Reconstruct metadata
+        metadata = PageMetadata(**page_data["metadata"])
+        
+        # Reconstruct content blocks
+        content_blocks = [ContentBlock(**b) for b in page_data["content_blocks"]]
+        
+        # Reconstruct confidence and retry metadata
+        confidence = ConfidenceMetadata(**page_data["confidence"]) if page_data.get("confidence") else None
+        retry_metadata = RetryMetadata(**page_data["retry_metadata"]) if page_data.get("retry_metadata") else None
+        
+        return ExtractedPage(
+            metadata=metadata,
+            content_blocks=content_blocks,
+            raw_text=page_data.get("raw_text", ""),
+            extraction_confidence=page_data.get("extraction_confidence", 0.7),
+            extraction_notes=page_data.get("extraction_notes"),
+            confidence=confidence,
+            retry_metadata=retry_metadata,
+        )
     
     def extract_pages(
         self,
@@ -794,6 +891,7 @@ class BatchExtractor:
         book_title: str = None,
         start_page: int = 1,
         progress_callback: callable = None,
+        resume_from_checkpoint: bool = True,  # NEW: Enable checkpoint resume
     ) -> ExtractionResult:
         """
         Extract content from multiple page images.
@@ -803,10 +901,12 @@ class BatchExtractor:
             book_title: Book title for metadata
             start_page: Starting page number
             progress_callback: Optional callback for progress updates
+            resume_from_checkpoint: If True, resume from saved checkpoint if available
             
         Returns:
             ExtractionResult with all pages
         """
+        # Initialize stats
         pages = []
         stats = {
             "total_pages": len(images),
@@ -820,6 +920,28 @@ class BatchExtractor:
             "low_confidence_pages": [],
         }
         
+        # Check for existing checkpoint
+        checkpoint_path = None
+        checkpoint_data = None
+        skip_pages = set()
+        
+        if self.extractor.config.enable_checkpoints and resume_from_checkpoint:
+            checkpoint_path = self._get_checkpoint_path(book_title, start_page, len(images))
+            checkpoint_data = self._load_checkpoint(checkpoint_path)
+            
+            if checkpoint_data:
+                logger.info(f"🔄 Resuming from checkpoint...")
+                
+                # Reconstruct already-processed pages
+                for page_data in checkpoint_data["pages"]:
+                    page = self._reconstruct_page(page_data)
+                    pages.append(page)
+                    skip_pages.add(page.metadata.page_number)
+                    self._update_stats(stats, page, page.metadata.page_number)
+                
+                logger.info(f"✓ Loaded {len(pages)} pages from checkpoint")
+                logger.info(f"⏭️  Skipping pages: {sorted(skip_pages)}")
+        
         # Determine if we should use parallel processing
         use_parallel = (
             self.extractor.config.enable_parallel 
@@ -829,11 +951,14 @@ class BatchExtractor:
         
         if use_parallel:
             logger.info(f"Using parallel processing with {self.extractor.config.max_workers} workers")
-            pages = self._extract_parallel(images, book_title, start_page, stats, progress_callback)
+            new_pages = self._extract_parallel(images, book_title, start_page, stats, progress_callback, skip_pages)
         else:
             logger.info("Using sequential processing")
-            pages = self._extract_sequential(images, book_title, start_page, stats, progress_callback)
+            new_pages = self._extract_sequential(images, book_title, start_page, stats, progress_callback, skip_pages)
         
+        # Combine pages from checkpoint and new extractions
+        pages.extend(new_pages)
+
         # Calculate summary statistics
         if stats["confidence_scores"]:
             stats["avg_confidence"] = sum(stats["confidence_scores"]) / len(stats["confidence_scores"])
@@ -863,13 +988,21 @@ class BatchExtractor:
         book_title: str,
         start_page: int,
         stats: Dict,
-        progress_callback: callable = None
+        progress_callback: callable = None,
+        skip_pages: set = None
     ) -> List[ExtractedPage]:
-        """Extract pages sequentially (original method)."""
+        """Extract pages sequentially with checkpoint support."""
         pages = []
+        skip_pages = skip_pages or set()
+        checkpoint_path = self._get_checkpoint_path(book_title, start_page, len(images))
         
         for i, image in enumerate(images):
             page_num = start_page + i
+            
+            # Skip already-processed pages from checkpoint
+            if page_num in skip_pages:
+                logger.info(f"⏭️ Skipping page {page_num} (from checkpoint)")
+                continue
             
             try:
                 logger.info(f"Extracting page {page_num} ({i+1}/{len(images)})...")
@@ -882,6 +1015,13 @@ class BatchExtractor:
                 
                 pages.append(extracted_page)
                 self._update_stats(stats, extracted_page, page_num)
+                
+                # Save checkpoint periodically
+                if (
+                    self.extractor.config.enable_checkpoints 
+                    and len(pages) % self.extractor.config.checkpoint_interval == 0
+                ):
+                    self._save_checkpoint(checkpoint_path, pages, stats, book_title, start_page)
                 
                 if progress_callback:
                     progress_callback(i + 1, len(images), page_num)
@@ -899,16 +1039,23 @@ class BatchExtractor:
         book_title: str,
         start_page: int,
         stats: Dict,
-        progress_callback: callable = None
+        progress_callback: callable = None,
+        skip_pages: set = None
     ) -> List[ExtractedPage]:
-        """Extract pages in parallel using ThreadPoolExecutor."""
+        """Extract pages in parallel with checkpoint support."""
         pages = [None] * len(images)  # Pre-allocate to maintain order
+        skip_pages = skip_pages or set()
         completed = 0
         
         def extract_single(index_and_image):
             """Extract a single page - used for parallel execution."""
             i, image = index_and_image
             page_num = start_page + i
+            
+            # Skip already-processed pages from checkpoint
+            if page_num in skip_pages:
+                logger.info(f"⏭️ Skipping page {page_num} (from checkpoint)")
+                return i, None, None  # Return None to indicate skip
             
             try:
                 logger.info(f"Extracting page {page_num} ({i+1}/{len(images)})...")
