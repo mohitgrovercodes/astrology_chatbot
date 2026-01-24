@@ -36,7 +36,9 @@ class PDFExtractor:
             raise ValueError("GOOGLE_API_KEY not set in .env file")
         
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('models/gemini-2.5-flash')
+        # Using flash-lite for cost-effective extraction
+        # If quality is poor, can manually retry with gemini-2.5-pro
+        self.model = genai.GenerativeModel('models/gemini-flash-lite-latest')
         
         
         self.extraction_prompt = """
@@ -110,7 +112,7 @@ Now extract all text from this page following these rules precisely.
             print(f"  → Converting page {page_num} to image...")
             images = convert_from_path(
                 pdf_path, 
-                dpi=200, 
+                dpi=250, 
                 first_page=page_num, 
                 last_page=page_num
             )
@@ -178,7 +180,7 @@ Now extract all text from this page following these rules precisely.
         # Optionally save image
         if save_image:
             print(f"[1/2] Converting page to image...")
-            images = convert_from_path(pdf_path, dpi=200, first_page=page_num, last_page=page_num)
+            images = convert_from_path(pdf_path, dpi=250, first_page=page_num, last_page=page_num)
             image_path = self.output_dir / f"page_{page_num}.png"
             images[0].save(image_path)
             print(f"  ✓ Saved: {image_path}")

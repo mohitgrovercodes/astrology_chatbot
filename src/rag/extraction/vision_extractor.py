@@ -9,14 +9,15 @@ import base64
 import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import google.generativeai as genai
 from PIL import Image
 import numpy as np
 
-from extraction_prompts import (
+from .extraction_prompts import (
     SYSTEM_PROMPT,
     PAGE_CLASSIFICATION_PROMPT,
     TEXT_EXTRACTION_PROMPT,
@@ -27,7 +28,7 @@ from extraction_prompts import (
     TOPIC_CLASSIFICATION_PROMPT,
     get_prompt_for_page_type,
 )
-from extraction_schemas import (
+from .extraction_schemas import (
     PageType,
     ExtractedPage,
     PageMetadata,
@@ -36,6 +37,8 @@ from extraction_schemas import (
     ExtractedTable,
     VerseBlock,
     ExtractionResult,
+    ConfidenceMetadata,
+    RetryMetadata,
 )
 
 # Configure logging
@@ -53,8 +56,21 @@ except ImportError:
 
 @dataclass
 class ExtractionConfig:
-    """Configuration for the Vision Extractor"""
-    model_name: str = "gemini-2.5-flash"
+    """Configuration for VisionExtractor."""
+    # Model configuration - Two-tier strategy
+    primary_model: str = "models/gemini-flash-lite-latest"  # Cost-effective for initial extraction
+    upgrade_model: str = "models/gemini-2.5-pro"  # Higher quality for low-confidence pages
+    confidence_threshold: float = 0.8  # Retry with upgrade_model if confidence < this
+    enable_auto_upgrade: bool = True  # Enable automatic model upgrading
+    
+    # Legacy model name (for backwards compatibility)
+    model_name: str = field(default="", init=False)
+    
+    def __post_init__(self):
+        # Set model_name to primary_model for backwards compatibility
+        if not self.model_name:
+            self.model_name = self.primary_model
+    
     temperature: float = 0.1  # Low temperature for accurate extraction
     max_output_tokens: int = 8192
     top_p: float = 0.95
@@ -66,6 +82,10 @@ class ExtractionConfig:
     # Retry settings
     max_retries: int = 3
     retry_delay: float = 5.0
+    
+    # Parallel processing settings
+    max_workers: int = 5  # Number of concurrent extraction workers
+    enable_parallel: bool = True  # Enable parallel processing for batch extraction
     
     # Output settings
     save_raw_responses: bool = True
@@ -153,6 +173,66 @@ class VisionExtractor:
         if isinstance(image, Image.Image):
             return image
         return Image.fromarray(image)
+    
+    def _create_model(self, model_name: str) -> genai.GenerativeModel:
+        """Create a GenerativeModel instance with the specified model name.
+        
+        Args:
+            model_name: Name of the model (e.g., 'models/gemini-flash-lite-latest')
+            
+        Returns:
+            Configured GenerativeModel instance
+        """
+        return genai.GenerativeModel(
+            model_name=model_name,
+            generation_config=genai.GenerationConfig(
+                temperature=self.config.temperature,
+                max_output_tokens=self.config.max_output_tokens,
+                top_p=self.config.top_p,
+            ),
+            system_instruction=SYSTEM_PROMPT,
+        )
+    
+    def _parse_confidence(self, extraction_result: Dict[str, Any]) -> Optional[ConfidenceMetadata]:
+        """Parse confidence metadata from extraction result.
+        
+        Args:
+            extraction_result: JSON response from LLM extraction
+            
+        Returns:
+            ConfidenceMetadata if confidence data present, else None
+        """
+        confidence_data = extraction_result.get("confidence")
+        
+        if not confidence_data:
+            # Fallback: derive from legacy extraction_quality field
+            quality = extraction_result.get("extraction_quality", "fair")
+            quality_map = {"good": 0.9, "fair": 0.7, "poor": 0.5}
+            return ConfidenceMetadata(
+                overall_score=quality_map.get(quality, 0.7),
+                criteria={},
+                reasoning=f"Derived from extraction_quality: {quality}",
+                flags=["legacy_quality_only"]
+            )
+        
+        try:
+            score = float(confidence_data.get("overall_score", 0.7))
+            
+            # Only include reasoning if confidence is low (< 0.8)
+            # This saves storage and focuses debugging on problem pages
+            reasoning = None
+            if score < 0.8:
+                reasoning = confidence_data.get("reasoning")
+            
+            return ConfidenceMetadata(
+                overall_score=score,
+                criteria=confidence_data.get("criteria", {}),
+                reasoning=reasoning,
+                flags=confidence_data.get("flags", [])
+            )
+        except (TypeError, ValueError) as e:
+            logger.warning(f"Failed to parse confidence data: {e}")
+            return None
     
     def _call_gemini(self, prompt: str, image: Image.Image, retry_count: int = 0) -> str:
         """
@@ -291,7 +371,10 @@ class VisionExtractor:
         force_type: PageType = None,
     ) -> ExtractedPage:
         """
-        Extract content from a single page image.
+        Extract content from a single page image with two-tier model strategy.
+        
+        Uses gemini-flash-lite-latest first (cost-effective), then retries with
+        gemini-2.5-pro if confidence score is below threshold.
         
         Args:
             image: Page image as numpy array
@@ -301,7 +384,7 @@ class VisionExtractor:
             force_type: Force a specific page type (skip classification)
             
         Returns:
-            ExtractedPage with structured content
+            ExtractedPage with structured content and confidence metadata
         """
         logger.info(f"Processing page {page_num}...")
         
@@ -312,20 +395,60 @@ class VisionExtractor:
         else:
             page_type, classification = self.classify_page(image)
         
-        # Step 2: Extract content based on type
-        extraction_map = {
-            PageType.TEXT_HEAVY: self.extract_text_page,
-            PageType.TABLE_HEAVY: self.extract_table_page,
-            PageType.MIXED: self.extract_mixed_page,
-            PageType.CHART: self.extract_chart,
-            PageType.TITLE: self.extract_text_page,
-            PageType.INDEX: self.extract_text_page,
-        }
+        # Step 2: Extract content with primary model (cost-effective)
+        extraction_result, used_model = self._extract_with_two_tier(
+            image, page_type, page_num
+        )
         
-        extractor = extraction_map.get(page_type, self.extract_mixed_page)
-        extraction_result = extractor(image)
+        # Step 3: Parse confidence from extraction result
+        confidence_metadata = self._parse_confidence(extraction_result)
         
-        # Step 3: Build structured output
+        # Step 4: Check if we need to retry with upgraded model
+        retry_metadata = None
+        if (
+            self.config.enable_auto_upgrade 
+            and confidence_metadata 
+            and confidence_metadata.overall_score < self.config.confidence_threshold
+            and used_model != self.config.upgrade_model
+        ):
+            logger.warning(
+                f"Page {page_num}: Low confidence {confidence_metadata.overall_score:.2f}, "
+                f"retrying with {self.config.upgrade_model}"
+            )
+            
+            initial_confidence = confidence_metadata.overall_score
+            
+            # Retry with upgraded model
+            extraction_result, used_model = self._extract_with_two_tier(
+                image, page_type, page_num, use_upgrade_model=True
+            )
+            
+            # Re-parse confidence from upgraded extraction
+            confidence_metadata = self._parse_confidence(extraction_result)
+            
+            # Create retry metadata
+            retry_metadata = RetryMetadata(
+                initial_model=self.config.primary_model,
+                retry_model=self.config.upgrade_model,
+                initial_confidence=initial_confidence,
+                retry_reason=f"Confidence below threshold ({self.config.confidence_threshold})",
+                retry_count=1
+            )
+            
+            # Log improvement
+            if confidence_metadata:
+                logger.info(
+                    f"✓ Page {page_num} upgraded: confidence improved "
+                    f"{initial_confidence:.2f} → {confidence_metadata.overall_score:.2f}"
+                )
+        else:
+            # No retry needed
+            retry_metadata = RetryMetadata(
+                initial_model=used_model,
+                retry_count=0
+            )
+        
+        # Step 5: Build structured output
         metadata = PageMetadata(
             page_number=page_num,
             book_title=book_title or classification.get("book_title"),
@@ -346,25 +469,79 @@ class VisionExtractor:
         if not raw_text:
             raw_text = self._extract_raw_text(extraction_result)
         
-        # Build extraction quality assessment
-        quality = extraction_result.get("extraction_quality", "fair")
-        confidence_map = {"good": 0.9, "fair": 0.7, "poor": 0.5}
-        confidence = confidence_map.get(quality, 0.7)
+        # Build extraction quality assessment (legacy field)
+        extraction_confidence = confidence_metadata.overall_score if confidence_metadata else 0.7
         
         extracted_page = ExtractedPage(
             metadata=metadata,
             content_blocks=content_blocks,
             raw_text=raw_text,
-            extraction_confidence=confidence,
+            extraction_confidence=extraction_confidence,
             extraction_notes="; ".join(extraction_result.get("issues", [])),
+            confidence=confidence_metadata,
+            retry_metadata=retry_metadata,
         )
         
         # Save raw response if configured
         if self.config.save_raw_responses:
             self._save_raw_response(page_num, extraction_result)
         
-        logger.info(f"Page {page_num} extracted: {len(content_blocks)} content blocks")
+        logger.info(
+            f"Page {page_num} extracted: {len(content_blocks)} content blocks, "
+            f"confidence: {extraction_confidence:.2f}, model: {used_model}"
+        )
         return extracted_page
+    
+    def _extract_with_two_tier(
+        self,
+        image: np.ndarray,
+        page_type: PageType,
+        page_num: int,
+        use_upgrade_model: bool = False
+    ) -> tuple[Dict[str, Any], str]:
+        """
+        Extract content using specified model tier.
+        
+        Args:
+            image: Page image
+            page_type: Classified page type
+            page_num: Page number for logging
+            use_upgrade_model: If True, use upgrade model instead of primary
+            
+        Returns:
+            Tuple of (extraction_result dict, model_name used)
+        """
+        # Select model
+        model_name = (
+            self.config.upgrade_model if use_upgrade_model 
+            else self.config.primary_model
+        )
+        
+        # Temporarily switch model
+        original_model = self.model
+        self.model = self._create_model(model_name)
+        
+        try:
+            logger.debug(f"Extracting page {page_num} with model: {model_name}")
+            
+            # Use existing extraction methods based on page type
+            extraction_map = {
+                PageType.TEXT_HEAVY: self.extract_text_page,
+                PageType.TABLE_HEAVY: self.extract_table_page,
+                PageType.MIXED: self.extract_mixed_page,
+                PageType.CHART: self.extract_chart,
+                PageType.TITLE: self.extract_text_page,
+                PageType.INDEX: self.extract_text_page,
+            }
+            
+            extractor = extraction_map.get(page_type, self.extract_mixed_page)
+            extraction_result = extractor(image)
+            
+            return extraction_result, model_name
+            
+        finally:
+            # Restore original model
+            self.model = original_model
     
     def _build_content_blocks(
         self, 
@@ -525,6 +702,52 @@ class VisionExtractor:
         # Use text-only model for this (no image needed)
         response = self.model.generate_content(prompt)
         return self._parse_json_response(response.text)
+    
+    def get_extraction_summary(self, pages: list) -> Dict[str, Any]:
+        """
+        Generate summary statistics for a batch of extracted pages.
+        
+        Args:
+            pages: List of ExtractedPage objects
+            
+        Returns:
+            Summary dict with confidence and upgrade statistics
+        """
+        if not pages:
+            return {"total_pages": 0}
+        
+        confidences = []
+        upgrades = []
+        
+        for page in pages:
+            if page.confidence:
+                confidences.append(page.confidence.overall_score)
+            elif page.extraction_confidence:
+                confidences.append(page.extraction_confidence)
+            
+            if page.retry_metadata and page.retry_metadata.retry_count > 0:
+                upgrades.append(page)
+        
+        summary = {
+            "total_pages": len(pages),
+            "avg_confidence": sum(confidences) / len(confidences) if confidences else None,
+            "min_confidence": min(confidences) if confidences else None,
+            "max_confidence": max(confidences) if confidences else None,
+            "low_confidence_count": sum(1 for c in confidences if c < 0.8),
+            "upgrade_count": len(upgrades),
+            "upgrade_rate": f"{len(upgrades) / len(pages) * 100:.1f}%" if pages else "0%",
+        }
+        
+        # Estimate cost savings
+        if pages:
+            non_upgraded = len(pages) - len(upgrades)
+            # Assume flash-lite is ~10x cheaper than pro
+            cost_all_pro = len(pages)  # 100% cost
+            actual_cost = (non_upgraded * 0.1) + (len(upgrades) * 1.1)  # flash + retry
+            savings = ((cost_all_pro - actual_cost) / cost_all_pro * 100) if len(pages) > 0 else 0
+            summary["estimated_cost_savings"] = f"{savings:.1f}%"
+        
+        return summary
 
 
 class BatchExtractor:
@@ -561,7 +784,59 @@ class BatchExtractor:
             "failed": 0,
             "page_types": {},
             "total_content_blocks": 0,
+            # Confidence tracking
+            "confidence_scores": [],
+            "upgrades": 0,
+            "low_confidence_pages": [],
         }
+        
+        # Determine if we should use parallel processing
+        use_parallel = (
+            self.extractor.config.enable_parallel 
+            and len(images) > 1 
+            and self.extractor.config.max_workers > 1
+        )
+        
+        if use_parallel:
+            logger.info(f"Using parallel processing with {self.extractor.config.max_workers} workers")
+            pages = self._extract_parallel(images, book_title, start_page, stats, progress_callback)
+        else:
+            logger.info("Using sequential processing")
+            pages = self._extract_sequential(images, book_title, start_page, stats, progress_callback)
+        
+        # Calculate summary statistics
+        if stats["confidence_scores"]:
+            stats["avg_confidence"] = sum(stats["confidence_scores"]) / len(stats["confidence_scores"])
+            stats["min_confidence"] = min(stats["confidence_scores"])
+            stats["upgrade_rate"] = f"{stats['upgrades'] / len(images) * 100:.1f}%"
+        
+        # Log summary
+        logger.info(f"\n{'='*60}")
+        logger.info("EXTRACTION SUMMARY")
+        logger.info(f"{'='*60}")
+        logger.info(f"  Pages: {stats['successful']}/{stats['total_pages']} successful")
+        if stats.get("avg_confidence"):
+            logger.info(f"  Avg Confidence: {stats['avg_confidence']:.2f}")
+            logger.info(f"  Upgrades: {stats['upgrades']} ({stats['upgrade_rate']})")
+        logger.info(f"{'='*60}\n")
+        
+        return ExtractionResult(
+            source_file=book_title or "unknown",
+            total_pages=len(images),
+            pages=pages,
+            extraction_stats=stats,
+        )
+    
+    def _extract_sequential(
+        self,
+        images: List,
+        book_title: str,
+        start_page: int,
+        stats: Dict,
+        progress_callback: callable = None
+    ) -> List[ExtractedPage]:
+        """Extract pages sequentially (original method)."""
+        pages = []
         
         for i, image in enumerate(images):
             page_num = start_page + i
@@ -576,12 +851,7 @@ class BatchExtractor:
                 )
                 
                 pages.append(extracted_page)
-                stats["successful"] += 1
-                stats["total_content_blocks"] += len(extracted_page.content_blocks)
-                
-                # Track page types
-                page_type = extracted_page.metadata.page_type.value
-                stats["page_types"][page_type] = stats["page_types"].get(page_type, 0) + 1
+                self._update_stats(stats, extracted_page, page_num)
                 
                 if progress_callback:
                     progress_callback(i + 1, len(images), page_num)
@@ -589,26 +859,100 @@ class BatchExtractor:
             except Exception as e:
                 logger.error(f"Failed to extract page {page_num}: {e}")
                 stats["failed"] += 1
-                
-                # Create a minimal failed page entry
-                failed_page = ExtractedPage(
-                    metadata=PageMetadata(
-                        page_number=page_num,
-                        page_type=PageType.MIXED,
-                    ),
-                    content_blocks=[],
-                    raw_text="",
-                    extraction_confidence=0.0,
-                    extraction_notes=f"Extraction failed: {str(e)}",
-                )
-                pages.append(failed_page)
+                pages.append(self._create_failed_page(page_num, e))
         
-        return ExtractionResult(
-            source_file=book_title or "unknown",
-            total_pages=len(images),
-            pages=pages,
-            extraction_stats=stats,
+        return pages
+    
+    def _extract_parallel(
+        self,
+        images: List,
+        book_title: str,
+        start_page: int,
+        stats: Dict,
+        progress_callback: callable = None
+    ) -> List[ExtractedPage]:
+        """Extract pages in parallel using ThreadPoolExecutor."""
+        pages = [None] * len(images)  # Pre-allocate to maintain order
+        completed = 0
+        
+        def extract_single(index_and_image):
+            """Extract a single page - used for parallel execution."""
+            i, image = index_and_image
+            page_num = start_page + i
+            
+            try:
+                logger.info(f"Extracting page {page_num} ({i+1}/{len(images)})...")
+                
+                extracted_page = self.extractor.extract_page(
+                    image=image,
+                    page_num=page_num,
+                    book_title=book_title,
+                )
+                
+                return i, extracted_page, None
+                
+            except Exception as e:
+                logger.error(f"Failed to extract page {page_num}: {e}")
+                return i, None, e
+        
+        # Execute extractions in parallel
+        with ThreadPoolExecutor(max_workers=self.extractor.config.max_workers) as executor:
+            # Submit all tasks
+            future_to_index = {
+                executor.submit(extract_single, (i, img)): i 
+                for i, img in enumerate(images)
+            }
+            
+            # Process completed tasks
+            for future in as_completed(future_to_index):
+                i, extracted_page, error = future.result()
+                page_num = start_page + i
+                completed += 1
+                
+                if extracted_page:
+                    pages[i] = extracted_page
+                    self._update_stats(stats, extracted_page, page_num)
+                else:
+                    stats["failed"] += 1
+                    pages[i] = self._create_failed_page(page_num, error)
+                
+                if progress_callback:
+                    progress_callback(completed, len(images), page_num)
+        
+        return pages
+    
+    def _update_stats(self, stats: Dict, page: ExtractedPage, page_num: int):
+        """Update statistics with page data."""
+        stats["successful"] += 1
+        stats["total_content_blocks"] += len(page.content_blocks)
+        
+        # Track page types
+        page_type = page.metadata.page_type.value
+        stats["page_types"][page_type] = stats["page_types"].get(page_type, 0) + 1
+        
+        # Track confidence
+        if page.confidence:
+            stats["confidence_scores"].append(page.confidence.overall_score)
+            if page.confidence.overall_score < 0.8:
+                stats["low_confidence_pages"].append(page_num)
+        
+        # Track upgrades
+        if page.retry_metadata and page.retry_metadata.retry_count > 0:
+            stats["upgrades"] += 1
+    
+    def _create_failed_page(self, page_num: int, error: Exception) -> ExtractedPage:
+        """Create a failed page entry."""
+        return ExtractedPage(
+            metadata=PageMetadata(
+                page_number=page_num,
+                page_type=PageType.MIXED,
+            ),
+            content_blocks=[],
+            raw_text="",
+            extraction_confidence=0.0,
+            extraction_notes=f"Extraction failed: {str(error)}",
         )
+
 
 
 if __name__ == "__main__":

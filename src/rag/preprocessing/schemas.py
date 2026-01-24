@@ -22,6 +22,32 @@ class PageType(str, Enum):
     TITLE_PAGE = "title_page"
 
 
+class ConfidenceMetadata(BaseModel):
+    """Metadata about LLM confidence in generated output."""
+    overall_score: float = Field(..., ge=0.0, le=1.0, description="Overall confidence score")
+    criteria: Dict[str, float] = Field(
+        default_factory=dict,
+        description="Breakdown by criteria (e.g., image_quality, text_clarity)"
+    )
+    reasoning: Optional[str] = Field(None, description="Explanation of confidence score")
+    flags: List[str] = Field(
+        default_factory=list,
+        description="Quality flags (e.g., 'low_ocr_quality', 'partial_page')"
+    )
+
+
+class RetryMetadata(BaseModel):
+    """Track extraction retries with upgraded models."""
+    initial_model: str = Field(..., description="Model used for initial extraction")
+    retry_model: Optional[str] = Field(None, description="Model used for retry (if any)")
+    initial_confidence: Optional[float] = Field(
+        None,
+        description="Confidence score from initial extraction"
+    )
+    retry_reason: Optional[str] = Field(None, description="Reason for retry")
+    retry_count: int = Field(default=0, description="Number of retries performed")
+
+
 class ExtractedPage(BaseModel):
     """
     Schema for raw extracted page from Vision LLM (Phase 1 output).
@@ -35,6 +61,16 @@ class ExtractedPage(BaseModel):
     verses: List[str] = Field(default_factory=list, description="Extracted Sanskrit verses")
     verse_numbers: List[str] = Field(default_factory=list, description="Verse numbers found")
     tables: List[Dict[str, Any]] = Field(default_factory=list)
+    
+    # Quality tracking
+    confidence: Optional[ConfidenceMetadata] = Field(
+        None,
+        description="Confidence score for extraction quality"
+    )
+    retry_metadata: Optional[RetryMetadata] = Field(
+        None,
+        description="Metadata about extraction retries and model upgrades"
+    )
     
     class Config:
         use_enum_values = True

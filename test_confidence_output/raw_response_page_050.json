@@ -1,0 +1,169 @@
+{
+  "page_number": 39,
+  "chapter_title": "Brihat Parasara Hora Shastra",
+  "content_blocks": [
+    {
+      "sequence": 1,
+      "type": "prose",
+      "content": {
+        "english_text": "shown in the table that follows:"
+      },
+      "topic": "Introduction to table"
+    },
+    {
+      "sequence": 2,
+      "type": "table",
+      "content": {
+        "table_title": null,
+        "table_type": "Permanent Planetary Relationships (Friend, Enemy, Neutral)",
+        "headers": [
+          "Planet",
+          "Friends",
+          "Enemies",
+          "Neutrals"
+        ],
+        "rows": [
+          [
+            "Sun",
+            "Moon, Mars, Jupiter",
+            "Venus Saturn",
+            "Mercury"
+          ],
+          [
+            "Moon",
+            "Sun, Mercury",
+            "—",
+            "Mars, Jupiter, Venus, Saturn"
+          ],
+          [
+            "Mars",
+            "Sun, Moon, Jupiter",
+            "Mercury",
+            "Venus, Saturn"
+          ],
+          [
+            "Mercury",
+            "Sun, Venus",
+            "Moon",
+            "Mars, Jupiter Saturn"
+          ],
+          [
+            "Jupiter",
+            "Sun, Moon, Mars",
+            "Mercury Venus",
+            "Saturn"
+          ],
+          [
+            "Venus",
+            "Mercury, Saturn",
+            "Moon, Sun",
+            "Mars Jupiter"
+          ],
+          [
+            "Saturn",
+            "Mercury Venus",
+            "Sun, Moon, Mars",
+            "Jupiter"
+          ]
+        ],
+        "markdown": "| Planet | Friends | Enemies | Neutrals |\n|---|---|---|---|\n| Sun | Moon, Mars, Jupiter | Venus Saturn | Mercury |\n| Moon | Sun, Mercury | — | Mars, Jupiter, Venus, Saturn |\n| Mars | Sun, Moon, Jupiter | Mercury | Venus, Saturn |\n| Mercury | Sun, Venus | Moon | Mars, Jupiter Saturn |\n| Jupiter | Sun, Moon, Mars | Mercury Venus | Saturn |\n| Venus | Mercury, Saturn | Moon, Sun | Mars Jupiter |\n| Saturn | Mercury Venus | Sun, Moon, Mars | Jupiter |"
+      },
+      "topic": "Permanent Planetary Relationships"
+    },
+    {
+      "sequence": 3,
+      "type": "prose",
+      "content": {
+        "english_text": "The relationship of Rahu and Ketu is as follows:\nRahu : Jupiter, Venus and Saturn are Rahu's friends. The Sun, the Moon and Mars are his enemies while Mercury is his neutral.\nKetu : Mars, Venus and Saturn are Ketu's friends. The Sun, the Moon are his enemies while Mercury and Jupiter are his neutrals. But there are differences of opinion about their relationship."
+      },
+      "topic": "Rahu and Ketu Relationships"
+    },
+    {
+      "sequence": 4,
+      "type": "shloka",
+      "content": {
+        "verse_number": "56",
+        "sanskrit_text": "दशस्वभाव्य सहज स्वाभ्यस्ते तत्काले मित्राणि यान्ति रिपौऽन्यत्र संस्थितः ।। ५६ ।।",
+        "english_text": null
+      },
+      "topic": "Verse on Temporary Relationships"
+    },
+    {
+      "sequence": 5,
+      "type": "translation",
+      "content": {
+        "english_text": "Temporary Relationship or Horoscopic Relationships : The planets Sun etc. situated in the 10th, 4th, 11th, 3rd, 2nd or the 12th from another are mutual friends (or friends to that planet). If they are situated in other than these places they act as his enemies."
+      },
+      "topic": "Explanation of Temporary Relationships"
+    },
+    {
+      "sequence": 6,
+      "type": "notes",
+      "content": {
+        "english_text": "Notes : According to this formula the relationship of the planets (of temporary nature) will be different. Here is a table for this relationship."
+      },
+      "topic": "Notes on Temporary Relationship Table"
+    },
+    {
+      "sequence": 7,
+      "type": "table",
+      "content": {
+        "table_title": "Temporary (Tatkalika) Relationship or friendship",
+        "table_type": "Temporary Planetary Relationships",
+        "headers": [
+          "Planets",
+          "Sun",
+          "Moon",
+          "Mars",
+          "Mercury",
+          "Jupiter",
+          "Venus",
+          "Saturn",
+          "Rahu",
+          "Ketu"
+        ],
+        "rows": [
+          [
+            "FRIEND",
+            "Mars, Jupiter",
+            "Rahu",
+            "Sun Mercury Venus Saturn Ketu",
+            "Sun Moon Jupiter",
+            "Sun Mercury Venus Saturn Ketu",
+            "Mars Jupiter",
+            "Mars Jupiter Rahu",
+            "Moon Saturn",
+            "Mars Jupiter"
+          ],
+          [
+            "ENEMY",
+            "Moon, Mercury Venus Saturn Rahu Ketu",
+            "Sun Mercury Mars Jupiter Venus Saturn Ketu",
+            "Moon Jupiter Rahu",
+            "Mercury Venus Saturn Rahu Ketu",
+            "Moon Mars Rahu",
+            "Sun Moon Mercury Saturn Ketu",
+            "Sun Moon Mercury Venus Ketu",
+            "Sun Mars Mercury Jupiter Venus Ketu",
+            "Sun Moon Mercury Venus Saturn Rahu"
+          ]
+        ],
+        "markdown": "| Planets | Sun | Moon | Mars | Mercury | Jupiter | Venus | Saturn | Rahu | Ketu |\n|---|---|---|---|---|---|---|---|---|---|\n| FRIEND | Mars, Jupiter | Rahu | Sun Mercury Venus Saturn Ketu | Sun Moon Jupiter | Sun Mercury Venus Saturn Ketu | Mars Jupiter | Mars Jupiter Rahu | Moon Saturn | Mars Jupiter |\n| ENEMY | Moon, Mercury Venus Saturn Rahu Ketu | Sun Mercury Mars Jupiter Venus Saturn Ketu | Moon Jupiter Rahu | Mercury Venus Saturn Rahu Ketu | Moon Mars Rahu | Sun Moon Mercury Saturn Ketu | Sun Moon Mercury Venus Ketu | Sun Mars Mercury Jupiter Venus Ketu | Sun Moon Mercury Venus Saturn Rahu |"
+      },
+      "topic": "Temporary Planetary Relationships Table"
+    }
+  ],
+  "raw_text": "Brihat Parasara Hora Shastra 39\nshown in the table that follows:\nPlanet\nFriends\nEnemies\nNeutrals\nSun\nMoon, Mars, Jupiter\nVenus Saturn\nMercury\nMoon\nSun, Mercury\n—\nMars, Jupiter, Venus.\nSaturn\nMars\nSun, Moon, Jupiter\nMercury\nVenus, Saturn\nMercury\nSun, Venus\nMoon\nMars, Jupiter Saturn\nJupiter\nSun, Moon, Mars\nMercury Venus\nSaturn\nVenus\nMercury, Saturn\nMoon, Sun\nMars Jupiter\nSaturn\nMercury Venus\nSun, Moon, Mars\nJupiter\nThe relationship of Rahu and Ketu is as follows:\nRahu : Jupiter, Venus and Saturn are Rahu's friends. The Sun, the Moon and Mars are his enemies while Mercury is his neutral.\nKetu : Mars, Venus and Saturn are Ketu's friends. The Sun, the Moon are his enemies while Mercury and Jupiter are his neutrals. But there are differences of opinion about their relationship.\nदशस्वभाव्य सहज स्वाभ्यस्ते परस्पम् ।\nतत्काले मित्राणि यान्ति रिपौऽन्यत्र संस्थितः ।। ५६ ।।\n56. Temporary Relationship or Horoscopic Relationships : The planets Sun etc. situated in the 10th, 4th, 11th, 3rd, 2nd or the 12th\nfrom another are mutual friends (or friends to that planet). If they\nare situated in other than these places they act as his enemies.\nNotes : According to this formula the relationship of the\nplanets (of temporary nature) will be different. Here is a table for this\nrelationship.\nTemporary (Tatkalika) Relationship or friendship\nPlanets\nSun\nMoon\nMars\nMercury\nJupiter\nVenus\nSaturn\nRahu\nKetu\nFRIEND\nMars, Jupiter\nRahu\nSun Mercury Venus Saturn Ketu\nSun Moon Jupiter\nSun Mercury Venus Saturn Ketu\nMars Jupiter\nMars Jupiter Rahu\nMoon Saturn\nMars Jupiter\nENEMY\nMoon, Mercury Venus Saturn Rahu Ketu\nSun Mercury Mars Jupiter Venus Saturn Ketu\nMoon Jupiter Rahu\nMercury Venus Saturn Rahu Ketu\nMoon Mars Rahu\nSun Moon Mercury Saturn Ketu\nSun Moon Mercury Venus Ketu\nSun Mars Mercury Jupiter Venus Ketu\nSun Moon Mercury Venus Saturn Rahu",
+  "extraction_quality": "good",
+  "issues": [],
+  "confidence": {
+    "overall_score": 0.95,
+    "criteria": {
+      "image_quality": 0.95,
+      "text_clarity": 0.95,
+      "layout_detection": 0.95
+    },
+    "reasoning": "The structure (tables interspersed with prose/shlokas) was clearly detected. Devanagari script was transcribed accurately. Table data extraction is complete and structured.",
+    "flags": []
+  }
+}

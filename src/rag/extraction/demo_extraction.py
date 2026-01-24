@@ -200,7 +200,7 @@ config = PipelineConfig(
     output_dir="./bphs_extraction",
     book_title="Brihat Parasara Hora Shastra",
     astrology_system="vedic",
-    pdf_dpi=200,
+    pdf_dpi=250,
     gemini_model="gemini-2.5-flash",
 )
 

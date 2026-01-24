@@ -21,8 +21,8 @@ import numpy as np
 from pdf2image import convert_from_path
 from PIL import Image
 
-from vision_extractor import VisionExtractor, BatchExtractor, ExtractionConfig
-from extraction_schemas import (
+from .vision_extractor import VisionExtractor, BatchExtractor, ExtractionConfig
+from .extraction_schemas import (
     PageType,
     ExtractedPage,
     ExtractionResult,
@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 class PipelineConfig:
     """Configuration for the Vision Pipeline"""
     # PDF Processing
-    pdf_dpi: int = 200  # DPI for PDF to image conversion
+    pdf_dpi: int = 250  # DPI for PDF to image conversion
     
     # Gemini Settings
     gemini_model: str = "gemini-2.5-flash"
@@ -537,7 +537,7 @@ def main():
     parser.add_argument("--end", type=int, help="End page (1-indexed)")
     parser.add_argument("--title", help="Book title")
     parser.add_argument("--output", default="./extraction_output", help="Output directory")
-    parser.add_argument("--dpi", type=int, default=200, help="PDF rendering DPI")
+    parser.add_argument("--dpi", type=int, default=250, help="PDF rendering DPI")
     parser.add_argument("--api-key", help="Google API key (or set GOOGLE_API_KEY env)")
     
     args = parser.parse_args()

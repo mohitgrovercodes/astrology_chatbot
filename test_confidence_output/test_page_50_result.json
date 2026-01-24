@@ -1,0 +1,24 @@
+{
+  "page_number": 50,
+  "page_type": "mixed",
+  "content_blocks_count": 7,
+  "extraction_confidence": 0.95,
+  "confidence": {
+    "overall_score": 0.95,
+    "criteria": {
+      "image_quality": 0.95,
+      "text_clarity": 0.95,
+      "layout_detection": 0.95
+    },
+    "reasoning": "The structure (tables interspersed with prose/shlokas) was clearly detected. Devanagari script was transcribed accurately. Table data extraction is complete and structured.",
+    "flags": []
+  },
+  "retry_metadata": {
+    "initial_model": "models/gemini-flash-lite-latest",
+    "retry_model": null,
+    "initial_confidence": null,
+    "retry_reason": null,
+    "retry_count": 0
+  },
+  "sample_content": "Brihat Parasara Hora Shastra 39\nshown in the table that follows:\nPlanet\nFriends\nEnemies\nNeutrals\nSun\nMoon, Mars, Jupiter\nVenus Saturn\nMercury\nMoon\nSun, Mercury\n—\nMars, Jupiter, Venus.\nSaturn\nMars\nSun, Moon, Jupiter\nMercury\nVenus, Saturn\nMercury\nSun, Venus\nMoon\nMars, Jupiter Saturn\nJupiter\nSun, Moon, Mars\nMercury Venus\nSaturn\nVenus\nMercury, Saturn\nMoon, Sun\nMars Jupiter\nSaturn\nMercury Venus\nSun, Moon, Mars\nJupiter\nThe relationship of Rahu and Ketu is as follows:\nRahu : Jupiter, Venus and Saturn a"
+}

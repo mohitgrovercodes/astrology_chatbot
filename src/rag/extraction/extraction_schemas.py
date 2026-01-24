@@ -87,6 +87,32 @@ class PageMetadata(BaseModel):
     )
 
 
+class ConfidenceMetadata(BaseModel):
+    """Metadata about LLM confidence in generated output."""
+    overall_score: float = Field(..., ge=0.0, le=1.0, description="Overall confidence score")
+    criteria: Dict[str, float] = Field(
+        default_factory=dict,
+        description="Breakdown by criteria (e.g., image_quality, text_clarity, layout_detection)"
+    )
+    reasoning: Optional[str] = Field(None, description="Explanation of confidence score")
+    flags: List[str] = Field(
+        default_factory=list,
+        description="Quality flags (e.g., 'low_ocr_quality', 'partial_page', 'blur')"
+    )
+
+
+class RetryMetadata(BaseModel):
+    """Track extraction retries with upgraded models."""
+    initial_model: str = Field(..., description="Model used for initial extraction")
+    retry_model: Optional[str] = Field(None, description="Model used for retry (if any)")
+    initial_confidence: Optional[float] = Field(
+        None,
+        description="Confidence score from initial extraction"
+    )
+    retry_reason: Optional[str] = Field(None, description="Reason for retry")
+    retry_count: int = Field(default=0, description="Number of retries performed")
+
+
 class ExtractedPage(BaseModel):
     """Complete extraction result for a single page"""
     metadata: PageMetadata = Field(description="Page metadata")
@@ -99,6 +125,16 @@ class ExtractedPage(BaseModel):
         description="Confidence in extraction quality (0-1)"
     )
     extraction_notes: Optional[str] = Field(None, description="Notes about extraction quality/issues")
+    
+    # Quality tracking (new fields)
+    confidence: Optional[ConfidenceMetadata] = Field(
+        None,
+        description="Detailed confidence breakdown for extraction quality"
+    )
+    retry_metadata: Optional[RetryMetadata] = Field(
+        None,
+        description="Metadata about extraction retries and model upgrades"
+    )
 
 
 class RAGChunk(BaseModel):
