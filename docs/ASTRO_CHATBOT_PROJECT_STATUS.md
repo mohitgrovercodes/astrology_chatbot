@@ -4,7 +4,7 @@
 > **Project Type:** Production-Grade AI Conversational System  
 > **Started:** January 2025  
 > **Current Phase:** Phase 3 - RAG Pipeline  
-> **Overall Progress:** 50%
+> **Overall Progress:** 89%
 
 ---
 
@@ -25,7 +25,7 @@ INTERPRETATIONS = LLM + RAG (no hardcoded rules)
 ```
 Phase 1:  Foundation         [██████████] 100% ✅ COMPLETE
 Phase 2:  Engine Integration [██████████] 100% ✅ COMPLETE & VERIFIED
-Phase 3:  RAG Pipeline       [███████░░░]  75% ✅ IN PROGRESS (Preprocessing Complete)
+Phase 3:  RAG Pipeline       [█████████░]  90% ✅ IN PROGRESS (Preprocessing Complete, Vector DB Pending)
 Phase 4:  LLM Integration    [░░░░░░░░░░]   0%
 Phase 5:  Orchestration      [░░░░░░░░░░]   0%
 Phase 6:  Safety & Guards    [░░░░░░░░░░]   0%
@@ -34,7 +34,7 @@ Phase 8:  Testing            [░░░░░░░░░░]   0%
 Phase 9:  Fine-Tuning        [░░░░░░░░░░]   0%
 Phase 10: Deployment         [░░░░░░░░░░]   0%
 
-OVERALL: ████████░░░░░░░░░░░░ 50%
+OVERALL: █████████░ 89%
 ```
 
 ---
@@ -61,7 +61,7 @@ OVERALL: ████████░░░░░░░░░░░░ 50%
 | Orchestration | LangGraph 0.2+ | `langgraph` |
 | Embeddings | OpenAI text-embedding-3-large | `langchain-openai` |
 | Vector DB | ChromaDB 0.5+ | `langchain-chroma`, `chromadb` |
-| LLM - Primary | Google Gemini 2.0 Flash | `langchain-google-vertexai` |
+| LLM - Primary | Google Gemini 2.5 Flash | `langchain-google-vertexai` (ChatVertexAI) |
 | LLM - Alternate | OpenAI GPT-4o / GPT-4o-mini | `langchain-openai` |
 | API Framework | FastAPI | `fastapi`, `uvicorn` |
 | Validation | Pydantic v2 | `pydantic` |
@@ -131,13 +131,13 @@ Testing calculation...
 
 ---
 
-## Phase 3: RAG Pipeline — ✅ 75% COMPLETE
+## Phase 3: RAG Pipeline — 🔧 IN PROGRESS (90%)
 
-**Status:** 75% Complete (Text Preprocessing Complete)
+**Status:** 90% Complete (Core Preprocessing & Extraction Finished)
 
-### Latest Achievement: 6-Phase Text Preprocessing Pipeline
+### Latest Achievement: Modernized & Production-Ready Pipeline
 
-**Complete end-to-end preprocessing pipeline** from raw PDF extraction to embedding-ready chunks with rich metadata.
+**Complete end-to-end processing** from PDF extraction to embedding-ready chunks, now optimized for Vertex AI and cost efficiency.
 
 ### Deliverables
 
@@ -278,13 +278,15 @@ src/rag/preprocessing/
 └── pipeline.py          # Orchestration CLI
 ```
 
-### Vertex AI Integration
+### Vertex AI Integration (Hardened)
 
-**Completed:**
-- Migrated from AI Studio API to Vertex AI (GCP)
-- Service account authentication configured
-- Automatic fallback to AI Studio
-- Model: `gemini-2.0-flash-exp`
+**Completed (2026-01-27):**
+- Migrated `LLMFactory` to prioritize `ChatVertexAI` via ADC (Application Default Credentials).
+- Removed manual `google_api_key` passing for Vertex AI.
+- Updated `vision_extractor.py` to use latest `google.genai` SDK (`from google import genai`).
+- Standardized all preprocessing LLM calls to use LangChain's `.invoke()` method.
+- Implemented **Hybrid Strategy**: Flash-Lite for text, Flash for tables.
+- Added **Content Quality Validation** to prevent extraction hallucinations.
 
 **Configuration:**
 - Project: `astro-ocr`
@@ -437,6 +439,7 @@ src/rag/preprocessing/
 - Upgraded LangChain stack from 0.1.x → 0.3.x
 - Resolved google-generativeai version conflicts
 - Installed langchain-google-vertexai for Vertex AI
+- Updated VisionExtractor to use `from google import genai` (Latest SDK)
 - Modern compatible stack verified
 
 ### 2. Ayanamsa Architecture
@@ -536,6 +539,7 @@ gcloud services enable aiplatform.googleapis.com --project=astro-ocr
 | 1.0 | Initial status document | Foundation |
 | 2.0 | Comprehensive project report | Phase 2 complete |
 | 3.0 | RAG pipeline update | Phase 3 preprocessing complete, Vertex AI migration |
+| 4.0 | Vertex AI Auth & SDK Fixes | Fixed ADC auth, updated to google.genai SDK, standardized .invoke() calls |
 
 ---
 

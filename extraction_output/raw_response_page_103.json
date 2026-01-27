@@ -1,0 +1,109 @@
+{
+  "metadata": {
+    "page_number": 103,
+    "book_title": "BrihatParasaraHoraSastra",
+    "chapter_title": "Special Ascendants",
+    "chapter_number": null,
+    "section_title": null,
+    "page_type": "mixed",
+    "has_tables": false,
+    "has_charts": false,
+    "languages_present": [
+      "english",
+      "sanskrit"
+    ],
+    "astrology_system": "vedic"
+  },
+  "content_blocks": [
+    {
+      "content_type": "shloka",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Hora Lagna Calculation Method"
+      },
+      "table_data": null,
+      "sequence_order": 1
+    },
+    {
+      "content_type": "translation",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Hora Lagna Definition and Calculation"
+      },
+      "table_data": null,
+      "sequence_order": 2
+    },
+    {
+      "content_type": "prose",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 3
+    },
+    {
+      "content_type": "shloka",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Ghati Lagna Calculation Method"
+      },
+      "table_data": null,
+      "sequence_order": 4
+    },
+    {
+      "content_type": "translation",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Ghati Lagna Definition and Calculation"
+      },
+      "table_data": null,
+      "sequence_order": 5
+    },
+    {
+      "content_type": "prose",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 6
+    }
+  ],
+  "raw_text": "92\nSpecial Ascendants\nइष्टघट्यादिकं द्विघ्नं पञ्चाप्तं भादिकं च यत् ।\nयोज्यमौदयिके भानौ होरालग्नं स्फुटं हि तत् ।।५ ।।\n4-5. The HORA LAGNA: Similarly O Brahmin, that Lagna which repeats itself every 2 1/2 ghatis, from the sunrise (to the time of the Birth) is spoken of by the name of Hora Lagna. Therefore, the ghatis, palas etc., of the Ishta Kaala are multiplied by 2 and the product is divided by 5 and the quotient therefrom is added to the longitude of the Sun at the time of sunrise. The resultant is the Spashta Hora Lagna.\nExample: Suppose the Ishta Kaala is 16 ghatis and 30 Palas.\nThen as per formula (16 - 30) x 2 / 5\n33 - 00 / 5 = 6⁰-18'\nIt is added to the longitude of the Sun at sunrise\n07 - 20⁰ - 35' - 40\"\n+ 00 - 06⁰ - 18' - 00\"\n07 - 26⁰ - 53' - 40\"\nTherefore, the Hora Lagna is 07 - 26⁰ - 53' - 40\"\nकथयामि घटीलग्नं श्रृणु त्वं द्विजसत्तम ! ।\nसूर्योदयात् समारभ्य जन्मकालावधि क्रमात् ॥६ ॥\nएकैकघटिकामानात् लग्नं यद्याति भादिकम् ।\nतदेव घटिकालग्नं कथितं नारदादिभिः ॥७ ॥\nराशयस्तु घटीतुल्याः पलार्धप्रमितांशकाः ।\nयोज्यमौदयिके भानौ घटीलग्नं स्फुटं हि तत् ॥८ ॥\n6 - 8. GHATI LAGNA: O excellent of the Brahmins; listen to me, I narrate to you of Ghati Lagna. The Lagna which passes as one ghatika beginning from the sunrise and arriving gradually to the time of birth, has been spoken of by Narada and other Sages as Ghatika Lagna. Therefore, consider the number of ghatis passed equal to the Rashis (or Ghatika Lagnas). The half of the Palas or the palas divided by 2 are the degrees. The Rashis and degrees so arrived are to be added to the longitude of the Sun at sunrise and that will be the spashta Ghati Lagna (Clear Ghati Ascendant).\nExample : In the example given above to know the Hora",
+  "extraction_confidence": 0.95,
+  "extraction_notes": "The example for Ghati Lagna is cut off at the bottom of the page.",
+  "confidence": {
+    "overall_score": 0.95,
+    "criteria": {
+      "image_quality": 0.95,
+      "text_clarity": 0.95,
+      "layout_detection": 0.95
+    },
+    "reasoning": null,
+    "flags": []
+  },
+  "retry_metadata": {
+    "initial_model": "gemini-2.5-flash-lite",
+    "retry_model": "gemini-2.5-pro",
+    "initial_confidence": 0.4,
+    "retry_reason": "Confidence below threshold (0.9)",
+    "retry_count": 1
+  }
+}

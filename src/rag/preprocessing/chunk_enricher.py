@@ -4,7 +4,6 @@ Phase 5: Chunk Enrichment
 
 Prepare semantic units for optimal embedding and retrieval by:
 - Constructing embedding-optimized text
-- Generating hypothetical questions
 - Extracting astrological entities
 - Creating summaries
 """
@@ -39,6 +38,13 @@ except ImportError:
         UnitType,
     )
 
+try:
+    from src.llm.factory import create_llm
+except ImportError:
+    try:
+        from ...llm.factory import create_llm
+    except ImportError:
+        create_llm = None
 
 class ChunkEnricher:
     """
@@ -89,47 +95,31 @@ class ChunkEnricher:
     CHARS_PER_TOKEN = 4
     
     def __init__(self, use_llm: bool = True, tradition: str = "vedic", parallel_workers: int = 10):
-        """
-        Initialize chunk enricher.
-        
-        Args:
-            use_llm: Whether to use LLM for question generation and summaries
-            tradition: "vedic" or "western"
-            parallel_workers: Number of parallel workers for enrichment (default: 10)
-        """
         self.use_llm = use_llm
         self.tradition = tradition
         self.parallel_workers = parallel_workers
-        self.model = None
-        self.is_vertex_ai = False
         
         if use_llm:
-            # Use LLMFactory for consistent model management
             try:
-                # Add project root to path for imports
-                script_dir = Path(__file__).parent
-                project_root = script_dir.parent.parent.parent
-                sys.path.insert(0, str(project_root))
-                
-                from src.llm.factory import create_llm
-                
-                # Create LLM using factory (automatically handles Vertex AI vs AI Studio)
+                # Create LLM using factory with rate limiting
                 self.model = create_llm(
-                    provider="google",
-                    model="gemini-2.5-flash",
-                    temperature=0.0,
-                )
+                provider="google",
+                model="gemini-2.5-flash",
+                temperature=0.0,
+                use_rate_limiting=True,
+                rate_limit_delay=1.5
+            )
                 
                 # Determine which provider was used
                 from langchain_google_vertexai import ChatVertexAI
                 self.is_vertex_ai = isinstance(self.model, ChatVertexAI)
                 
                 provider_name = "Vertex AI" if self.is_vertex_ai else "AI Studio"
-                print(f"[OK] Using {provider_name} via LLMFactory")
+                print(f"[âœ…] Using {provider_name} via LLMFactory with rate limiting")
                 
             except Exception as e:
                 print(f"[WARN] LLM initialization failed: {e}")
-                print("[INFO] Using rule-based enrichment only")
+                print("[INFO] Using rule-based analysis only")
                 self.use_llm = False
     
     def estimate_tokens(self, text: str) -> int:
@@ -217,106 +207,40 @@ TEXT:
 
 Return ONLY the summary, no explanation."""
 
-        try:
-            # Different API calls for Vertex AI vs AI Studio
-            if self.is_vertex_ai:
-                # Vertex AI (LangChain ChatVertexAI)
+        # Retry logic with exponential backoff
+        max_retries = 3
+        base_delay = 2.0
+        
+        for attempt in range(max_retries):
+            try:
+                # Different API calls for Vertex AI vs AI Studio
+                # LangChain invoke (works for all providers from factory)
                 response = self.model.invoke(prompt)
-                text = response.content.strip()
-            else:
-                # AI Studio (google.generativeai)
-                response = self.model.generate_content(prompt)
-                text = response.text.strip()
-            return text
-        except Exception as e:
-            print(f"[WARN] LLM summary failed: {e}")
-            return self.generate_summary_rule_based(unit)
-    
-    def generate_questions_rule_based(self, unit: SemanticUnit, entities: AstrologicalEntities) -> List[str]:
-        """
-        Generate hypothetical questions using rule-based templates.
-        
-        Args:
-            unit: Semantic unit
-            entities: Extracted entities
-            
-        Returns:
-            List of question strings
-        """
-        questions = []
-        
-        # Planet in house questions
-        for planet in entities.planets[:2]:
-            for house in entities.houses[:2]:
-                questions.append(f"What happens when {planet} is in the {house}?")
-                questions.append(f"What are the effects of {planet} in {house}?")
-        
-        # General topic questions
-        if unit.chapter:
-            chapter_topic = unit.chapter.split(':')[-1].strip() if ':' in unit.chapter else unit.chapter
-            questions.append(f"What does the text say about {chapter_topic}?")
-        
-        # Verse-specific questions
-        if unit.verse:
-            questions.append(f"What is the meaning of verse {unit.verse.number}?")
-        
-        # Concept questions
-        for concept in entities.concepts[:2]:
-            questions.append(f"How does this affect {concept}?")
-        
-        return questions[:5]  # Limit to 5 questions
-    
-    def generate_questions_llm(self, unit: SemanticUnit) -> List[str]:
-        """
-        Generate questions using LLM.
-        
-        Args:
-            unit: Semantic unit
-            
-        Returns:
-            List of question strings
-        """
-        if not self.model:
-            entities = self.extract_entities(unit.combined_text)
-            return self.generate_questions_rule_based(unit, entities)
-        
-        prompt = f"""Given this astrology text, generate 3-5 questions a user might ask that this text answers.
-
-TEXT:
-{unit.combined_text[:1500]}
-
-Return questions as a JSON array of strings. Example: ["Question 1?", "Question 2?"]
-Return ONLY the JSON array, no explanation."""
-
-        try:
-            # Different API calls for Vertex AI vs AI Studio
-            if self.is_vertex_ai:
-                # Vertex AI (LangChain ChatVertexAI)
-                response = self.model.invoke(prompt)
-                text = response.content.strip()
-            else:
-                # AI Studio (google.generativeai)
-                response = self.model.generate_content(prompt)
-                text = response.text.strip()
-            
-            # Extract JSON array
-            if text.startswith('```'):
-                text = text.split('```')[1]
-                if text.startswith('json'):
-                    text = text[4:]
-            
-            questions = json.loads(text)
-            return questions[:5]
-        except Exception as e:
-            print(f"[WARN] LLM question generation failed: {e}")
-            entities = self.extract_entities(unit.combined_text)
-            return self.generate_questions_rule_based(unit, entities)
+                text = response.content.strip() if hasattr(response, 'content') else str(response)
+                return text
+                
+            except Exception as e:
+                is_last_attempt = (attempt == max_retries - 1)
+                
+                # Check for rate limits (429)
+                if "429" in str(e):
+                    wait_time = base_delay * (2 ** attempt)
+                    print(f"  [WARN] Rate limit hit. Waiting {wait_time}s... (Attempt {attempt+1}/{max_retries})")
+                    import time
+                    time.sleep(wait_time)
+                else:
+                    print(f"  [WARN] LLM summary failed (Attempt {attempt+1}/{max_retries}): {e}")
+                
+                if is_last_attempt:
+                    # If strict mode is preferred, we return an empty string or raise error
+                    # But returning empty string is safer than crashing the whole enrichment
+                    print(f"  [ERROR] Failed to generate summary for unit. Returning empty string.")
+                    return ""
     
     def construct_embedding_text(
         self, 
         unit: SemanticUnit, 
-        summary: str,
-        questions: List[str]
+        summary: str
     ) -> str:
         """
         Construct optimized text for embedding.
@@ -324,7 +248,6 @@ Return ONLY the JSON array, no explanation."""
         Args:
             unit: Semantic unit
             summary: Generated summary
-            questions: Generated questions
             
         Returns:
             Optimized embedding text
@@ -343,10 +266,6 @@ Return ONLY the JSON array, no explanation."""
         
         # 3. Main content
         parts.append(unit.combined_text)
-        
-        # 4. Hypothetical questions (HyDE-style boost)
-        if questions:
-            parts.append("Related questions: " + " | ".join(questions[:3]))
         
         return "\n\n".join(parts)
     
@@ -369,14 +288,8 @@ Return ONLY the JSON array, no explanation."""
         else:
             summary = self.generate_summary_rule_based(unit)
         
-        # Generate questions
-        if self.use_llm:
-            questions = self.generate_questions_llm(unit)
-        else:
-            questions = self.generate_questions_rule_based(unit, entities)
-        
         # Construct embedding text
-        embedding_text = self.construct_embedding_text(unit, summary, questions)
+        embedding_text = self.construct_embedding_text(unit, summary)
         
         # Build metadata
         metadata = ChunkMetadata(
@@ -396,7 +309,7 @@ Return ONLY the JSON array, no explanation."""
             display_text=unit.combined_text,
             verse_sanskrit=unit.verse.sanskrit if unit.verse else None,
             metadata=metadata,
-            hypothetical_questions=questions,
+            hypothetical_questions=[],
             summary=summary,
             related_chunks=[f"{uid}-chunk" for uid in unit.related_units],
             source_pages=unit.source_pages,
@@ -574,7 +487,6 @@ def test_with_sample():
         print(f"  Tokens: {chunk.token_count}")
         summary_display = (chunk.summary[:100] if chunk.summary else 'N/A').encode('ascii', 'replace').decode('ascii')
         print(f"  Summary: {summary_display}...")
-        print(f"  Questions: {chunk.hypothetical_questions[:2]}")
         print(f"  Planets: {chunk.metadata.entities.planets}")
         print(f"  Houses: {chunk.metadata.entities.houses}")
     

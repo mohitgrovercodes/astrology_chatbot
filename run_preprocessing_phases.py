@@ -40,6 +40,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run Preprocessing Phases 2-5")
     parser.add_argument("--input", "-i", type=str, help="Input JSON file path", default=None)
     parser.add_argument("--output", "-o", type=str, help="Output directory", default="./preprocessing_output")
+    parser.add_argument("--use-llm", action="store_true", help="Enable LLM for cleaning and enrichment")
     args = parser.parse_args()
     
     # Configuration
@@ -91,8 +92,8 @@ def main():
     pipeline = PreprocessingPipeline(
         source_book="Brihat Parasara Hora Sastra",
         tradition="vedic",
-        use_llm=True,  # Enable LLM for enrichment
-        use_llm_cleaning=True, # Enable LLM for structural cleaning (Phase 2)
+        use_llm=args.use_llm,  # Enable LLM for enrichment
+        use_llm_cleaning=args.use_llm, # Enable LLM for structural cleaning (Phase 2)
         output_dir=output_dir
     )
     print("[OK] Pipeline initialized")

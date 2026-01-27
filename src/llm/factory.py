@@ -1,43 +1,109 @@
 """
 LLM Factory for Astrology AI Chatbot.
 
-This module provides a factory pattern to create LLM instances from multiple providers:
-- OpenAI (GPT-4o, GPT-4o-mini)
-- Google (Gemini 2.5 Pro, Flash)
-- xAI (Grok-2, Grok-2-mini)
-- Anthropic (Claude Sonnet)
-
-All LLMs are created using LangChain abstractions for consistency.
-Automatic cost tracking is enabled for all LLM instances.
+VERTEX AI ONLY - No OpenAI, No AI Studio
+Includes built-in rate limiting to prevent 429 errors.
 """
 
-from typing import Optional, Dict, Any, List
+import os
+import time
+from typing import Optional, List
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_openai import ChatOpenAI
-from langchain_openai import ChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
 
-# Optional imports
+# Vertex AI only
 try:
-    from langchain_anthropic import ChatAnthropic
-    ANTHROPIC_AVAILABLE = True
+    from langchain_google_vertexai import ChatVertexAI
+    import vertexai
+    VERTEX_AI_AVAILABLE = True
 except ImportError:
-    ANTHROPIC_AVAILABLE = False
+    VERTEX_AI_AVAILABLE = False
+    raise ImportError("Vertex AI not available. Install: pip install google-cloud-aiplatform langchain-google-vertexai")
 
-# Note: langchain-xai requires installation of langchain-xai package
-# If not available, it will be handled gracefully
+# Config and utilities
 try:
-    from langchain_xai import ChatXAI
-    XAI_AVAILABLE = True
+    from src.utils.config import get_config
+    from src.utils.logger import get_logger
+    from src.utils.cost_tracking import CostTrackerCallback
+    logger = get_logger(__name__)
+    CONFIG_AVAILABLE = True
+    COST_TRACKING_AVAILABLE = True
 except ImportError:
-    XAI_AVAILABLE = False
+    import logging
+    logger = logging.getLogger(__name__)
+    CONFIG_AVAILABLE = False
+    COST_TRACKING_AVAILABLE = False
 
-from src.utils.config import get_config
-from src.utils.logger import get_logger
-from src.utils.cost_tracking import CostTrackerCallback
+
+# ============================================
+# Vertex AI Initialization
+# ============================================
+
+_VERTEX_INITIALIZED = False
+
+def initialize_vertex_ai(project_id: str = "445806945384", location: str = "us-central1"):
+    """Initialize Vertex AI globally."""
+    global _VERTEX_INITIALIZED
+    
+    if _VERTEX_INITIALIZED:
+        return
+    
+    try:
+        vertexai.init(project=project_id, location=location)
+        _VERTEX_INITIALIZED = True
+        logger.info(f"✅ Vertex AI initialized: project={project_id}, location={location}")
+    except Exception as e:
+        logger.error(f"Failed to initialize Vertex AI: {e}")
+        raise
 
 
-logger = get_logger(__name__)
+# ============================================
+# Rate-Limited LLM Wrapper
+# ============================================
+
+class RateLimitedLLM:
+    """Wrapper for LLM with rate limiting to prevent 429 errors."""
+    
+    def __init__(self, llm: BaseChatModel, min_delay: float = 1.5, max_retries: int = 3, base_backoff: float = 2.0):
+        self.llm = llm
+        self.min_delay = min_delay
+        self.max_retries = max_retries
+        self.base_backoff = base_backoff
+        self._last_call_time = 0
+    
+    def _wait_if_needed(self):
+        """Enforce minimum delay between calls."""
+        current_time = time.time()
+        elapsed = current_time - self._last_call_time
+        
+        if elapsed < self.min_delay:
+            time.sleep(self.min_delay - elapsed)
+        
+        self._last_call_time = time.time()
+    
+    def invoke(self, *args, **kwargs):
+        """Invoke LLM with rate limiting and retry logic."""
+        for attempt in range(self.max_retries):
+            try:
+                self._wait_if_needed()
+                return self.llm.invoke(*args, **kwargs)
+                
+            except Exception as e:
+                error_str = str(e).lower()
+                is_rate_limit = any(["429" in error_str, "rate limit" in error_str, 
+                                    "resource exhausted" in error_str, "quota" in error_str])
+                
+                if is_rate_limit and attempt < self.max_retries - 1:
+                    wait_time = self.base_backoff * (2 ** attempt)
+                    logger.warning(f"Rate limit hit. Waiting {wait_time}s... (Attempt {attempt+1}/{self.max_retries})")
+                    time.sleep(wait_time)
+                else:
+                    raise
+        
+        raise RuntimeError(f"Failed after {self.max_retries} retries")
+    
+    def __getattr__(self, name):
+        """Delegate to underlying LLM."""
+        return getattr(self.llm, name)
 
 
 # ============================================
@@ -45,30 +111,7 @@ logger = get_logger(__name__)
 # ============================================
 
 class LLMFactory:
-    """
-    Factory class for creating LLM instances from multiple providers.
-    
-    Supports:
-    - OpenAI (gpt-4o, gpt-4o-mini, gpt-4-turbo)
-    - Google (gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite)
-    - xAI (grok-2, grok-2-mini)
-    - Anthropic (claude-sonnet-4, claude-3-5-sonnet)
-    
-    Uses configuration from config.yaml and .env for defaults and API keys.
-    """
-    
-    # Mapping of provider names to LangChain classes
-    PROVIDER_MAP = {
-        "openai": ChatOpenAI,
-        "google": ChatGoogleGenerativeAI,
-    }
-    
-    if ANTHROPIC_AVAILABLE:
-        PROVIDER_MAP["anthropic"] = ChatAnthropic
-    
-    # Add xAI if available
-    if XAI_AVAILABLE:
-        PROVIDER_MAP["xai"] = ChatXAI
+    """Factory for creating Vertex AI LLM instances only."""
     
     @classmethod
     def create(
@@ -77,330 +120,90 @@ class LLMFactory:
         model: Optional[str] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
-        api_key: Optional[str] = None,
+        use_rate_limiting: bool = True,
+        rate_limit_delay: float = 1.5,
         **kwargs
     ) -> BaseChatModel:
         """
-        Create an LLM instance.
+        Create a Vertex AI LLM instance.
         
         Args:
-            provider: Provider name (openai, google, xai, anthropic)
-                     If None, uses default from config
-            model: Model name (e.g., gpt-4o-mini)
-                  If None, uses default from config
-            temperature: Sampling temperature (0.0 to 1.0)
-                       If None, uses default from config
-            max_tokens: Maximum tokens in response
-                      If None, uses default from config
-            api_key: API key for the provider
-                    If None, loads from environment
-            **kwargs: Additional provider-specific parameters
+            provider: Ignored (always uses google/vertex)
+            model: Gemini model name (default: gemini-2.5-flash)
+            temperature: Sampling temperature
+            max_tokens: Max output tokens
+            use_rate_limiting: Enable rate limiting (default: True)
+            rate_limit_delay: Minimum seconds between requests
         
         Returns:
-            LangChain BaseChatModel instance
-        
-        Raises:
-            ValueError: If provider is not supported or API key is missing
-        
-        Example:
-            >>> # Use defaults from config
-            >>> llm = LLMFactory.create()
-            
-            >>> # Use specific provider and model
-            >>> llm = LLMFactory.create(provider="google", model="gemini-2.5-pro")
-            
-            >>> # Override temperature
-            >>> llm = LLMFactory.create(temperature=0.7)
+            ChatVertexAI instance (wrapped with rate limiter)
         """
-        config = get_config()
+        # Get config or use defaults
+        if CONFIG_AVAILABLE:
+            config = get_config()
+            model = model or config.llm.default_model
+            temperature = temperature if temperature is not None else config.llm.temperature
+            max_tokens = max_tokens or config.llm.max_tokens
+        else:
+            model = model or "gemini-2.5-flash"
+            temperature = temperature if temperature is not None else 0.3
+            max_tokens = max_tokens or 2048
         
-        # Use defaults from config if not provided
-        if provider is None:
-            provider = config.llm.default_provider
-        if model is None:
-            model = config.llm.default_model
-        if temperature is None:
-            temperature = config.llm.temperature
-        if max_tokens is None:
-            max_tokens = config.llm.max_tokens
+        # Initialize Vertex AI
+        if not _VERTEX_INITIALIZED:
+            initialize_vertex_ai()
         
-        # Validate provider
-        provider = provider.lower()
-        if provider not in cls.PROVIDER_MAP:
-            available = list(cls.PROVIDER_MAP.keys())
-            raise ValueError(
-                f"Unsupported provider: {provider}. "
-                f"Available providers: {available}"
-            )
-        
-        # Get API key
-        if api_key is None:
-            api_key = config.get_api_key(provider)
-            if not api_key:
-                raise ValueError(
-                    f"API key for provider '{provider}' not found. "
-                    f"Please set {provider.upper()}_API_KEY in your .env file."
-                )
-        
-        # Get LangChain class for provider
-        llm_class = cls.PROVIDER_MAP[provider]
-        
-        # Build kwargs for LLM
-        llm_kwargs = {
-            "model": model,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
+        # Create Vertex AI LLM
+        logger.info(f"Creating Vertex AI LLM: model={model}")
+        llm = ChatVertexAI(
+            model_name=model,
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+            project="445806945384",
+            location="us-central1",
             **kwargs
-        }
+        )
         
-        # Add API key with provider-specific parameter name
-        if provider == "openai":
-            llm_kwargs["api_key"] = api_key
-        elif provider == "google":
-            llm_kwargs["google_api_key"] = api_key
-        elif provider == "xai":
-            llm_kwargs["xai_api_key"] = api_key
-        elif provider == "anthropic":
-            llm_kwargs["anthropic_api_key"] = api_key
-        
-        # Create and return LLM instance
-        try:
-            llm = llm_class(**llm_kwargs)
-            
-            # Add cost tracking callback
+        # Add cost tracking
+        if COST_TRACKING_AVAILABLE:
             cost_callback = CostTrackerCallback(
-                provider=provider,
-                model=model,
-                operation="llm_generation",
-                metadata={"factory": True}
+                provider="google", model=model, operation="llm_generation", metadata={"factory": True}
             )
-            
-            # Attach callback to LLM
             if hasattr(llm, 'callbacks'):
-                if llm.callbacks is None:
-                    llm.callbacks = [cost_callback]
-                else:
-                    llm.callbacks.append(cost_callback)
-            
-            logger.info(
-                f"Created LLM with cost tracking: provider={provider}, model={model}, "
-                f"temperature={temperature}, max_tokens={max_tokens}"
-            )
-            return llm
-        except Exception as e:
-            logger.error(f"Failed to create LLM: {e}")
-            raise
+                llm.callbacks = [cost_callback] if llm.callbacks is None else llm.callbacks + [cost_callback]
+        
+        logger.info(f"✅ Created Vertex AI LLM: model={model}, temperature={temperature}, max_tokens={max_tokens}")
+        
+        # Wrap with rate limiter
+        if use_rate_limiting:
+            logger.info(f"✅ Rate limiting enabled: {rate_limit_delay}s delay")
+            return RateLimitedLLM(llm, min_delay=rate_limit_delay, max_retries=3, base_backoff=2.0)
+        
+        return llm
     
     @classmethod
     def create_default(cls) -> BaseChatModel:
-        """
-        Create an LLM using default configuration.
-        
-        Returns:
-            LangChain BaseChatModel instance with default settings
-        
-        Example:
-            >>> llm = LLMFactory.create_default()
-        """
+        """Create LLM with defaults (Gemini 2.5 Flash)."""
         return cls.create()
     
     @classmethod
     def get_available_providers(cls) -> List[str]:
-        """
-        Get list of available providers with configured API keys.
-        
-        Returns:
-            List of provider names
-        
-        Example:
-            >>> providers = LLMFactory.get_available_providers()
-            >>> print(providers)
-            ['openai', 'google']
-        """
-        config = get_config()
-        return config.get_available_providers()
-    
-    @classmethod
-    def get_supported_models(cls, provider: str) -> List[str]:
-        """
-        Get list of supported models for a provider.
-        
-        Args:
-            provider: Provider name
-        
-        Returns:
-            List of model names
-        
-        Raises:
-            ValueError: If provider is not supported
-        
-        Example:
-            >>> models = LLMFactory.get_supported_models("openai")
-            >>> print(models)
-            ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo']
-        """
-        config = get_config()
-        provider = provider.lower()
-        
-        if provider not in config.llm.providers:
-            raise ValueError(f"Unknown provider: {provider}")
-        
-        # Access the provider config and get models
-        provider_config = config.llm.providers[provider]
-        return provider_config.models
+        """Get list of available providers (always returns ['google'])."""
+        return ["google"]
 
 
 # ============================================
 # Convenience Functions
 # ============================================
 
-def create_llm(
-    provider: Optional[str] = None,
-    model: Optional[str] = None,
-    **kwargs
-) -> BaseChatModel:
-    """
-    Convenience function to create an LLM instance.
-    
-    This is a shorthand for LLMFactory.create().
-    
-    Args:
-        provider: Provider name (if None, uses default)
-        model: Model name (if None, uses default)
-        **kwargs: Additional parameters
-    
-    Returns:
-        LangChain BaseChatModel instance
-    
-    Example:
-        >>> from src.llm.factory import create_llm
-        >>> llm = create_llm()
-        >>> llm = create_llm(provider="google", temperature=0.5)
-    """
+def create_llm(provider: Optional[str] = None, model: Optional[str] = None, **kwargs) -> BaseChatModel:
+    """Create a Vertex AI LLM instance."""
     return LLMFactory.create(provider=provider, model=model, **kwargs)
 
 
 def create_default_llm() -> BaseChatModel:
-    """
-    Create an LLM with default configuration.
-    
-    Returns:
-        LangChain BaseChatModel instance
-    
-    Example:
-        >>> from src.llm.factory import create_default_llm
-        >>> llm = create_default_llm()
-    """
+    """Create default LLM (Gemini 2.5 Flash on Vertex AI)."""
     return LLMFactory.create_default()
-
-
-# ============================================
-# Provider-Specific Helpers
-# ============================================
-
-def create_openai_llm(
-    model: str = "gpt-4o-mini",
-    temperature: float = 0.3,
-    **kwargs
-) -> ChatOpenAI:
-    """
-    Create an OpenAI LLM instance.
-    
-    Args:
-        model: OpenAI model name
-        temperature: Sampling temperature
-        **kwargs: Additional parameters
-    
-    Returns:
-        ChatOpenAI instance
-    """
-    return LLMFactory.create(
-        provider="openai",
-        model=model,
-        temperature=temperature,
-        **kwargs
-    )
-
-
-def create_google_llm(
-    model: str = "gemini-2.5-flash",
-    temperature: float = 0.3,
-    **kwargs
-) -> ChatGoogleGenerativeAI:
-    """
-    Create a Google Gemini LLM instance.
-    
-    Args:
-        model: Gemini model name
-        temperature: Sampling temperature
-        **kwargs: Additional parameters
-    
-    Returns:
-        ChatGoogleGenerativeAI instance
-    """
-    return LLMFactory.create(
-        provider="google",
-        model=model,
-        temperature=temperature,
-        **kwargs
-    )
-
-
-def create_anthropic_llm(
-    model: str = "claude-sonnet-4-20250514",
-    temperature: float = 0.3,
-    **kwargs
-) -> ChatAnthropic:
-    """
-    Create an Anthropic Claude LLM instance.
-    
-    Args:
-        model: Claude model name
-        temperature: Sampling temperature
-        **kwargs: Additional parameters
-    
-    Returns:
-        ChatAnthropic instance
-    """
-    return LLMFactory.create(
-        provider="anthropic",
-        model=model,
-        temperature=temperature,
-        **kwargs
-    )
-
-
-def create_xai_llm(
-    model: str = "grok-2-mini",
-    temperature: float = 0.3,
-    **kwargs
-):
-    """
-    Create an xAI Grok LLM instance.
-    
-    Args:
-        model: Grok model name
-        temperature: Sampling temperature
-        **kwargs: Additional parameters
-    
-    Returns:
-        ChatXAI instance
-    
-    Raises:
-        ImportError: If langchain-xai is not installed
-    """
-    if not XAI_AVAILABLE:
-        raise ImportError(
-            "langchain-xai is not installed. "
-            "Install it with: pip install langchain-xai"
-        )
-    
-    return LLMFactory.create(
-        provider="xai",
-        model=model,
-        temperature=temperature,
-        **kwargs
-    )
 
 
 # ============================================
@@ -408,61 +211,40 @@ def create_xai_llm(
 # ============================================
 
 if __name__ == "__main__":
-    """
-    Test LLM factory functionality.
-    
-    Run: python -m src.llm.factory
-    """
     import sys
     
     print("=" * 60)
-    print("LLM FACTORY TEST")
+    print("LLM FACTORY TEST (Vertex AI Only)")
     print("=" * 60)
     print()
     
-    # Check available providers
     print("Available Providers:")
     available = LLMFactory.get_available_providers()
     for provider in available:
         print(f"  ✅ {provider}")
     print()
     
-    if not available:
-        print("❌ No providers configured! Please set API keys in .env")
-        sys.exit(1)
-    
-    # Test creating default LLM
-    print("Creating default LLM...")
+    print("Creating default LLM (Gemini 2.5 Flash on Vertex AI)...")
     try:
         llm = create_default_llm()
-        print(f"✅ Created: {type(llm).__name__}")
-        print(f"   Model: {llm.model_name if hasattr(llm, 'model_name') else 'N/A'}")
+        
+        if isinstance(llm, RateLimitedLLM):
+            actual_llm = llm.llm
+            print(f"✅ Created: RateLimitedLLM wrapping {type(actual_llm).__name__}")
+        else:
+            print(f"✅ Created: {type(llm).__name__}")
         print()
+        
+        print("Testing invoke...")
+        response = llm.invoke("Say 'Hello' in one word")
+        print(f"Response: {response.content}")
+        print()
+        
     except Exception as e:
         print(f"❌ Failed: {e}")
-        print()
-    
-    # Test creating LLMs for each available provider
-    for provider in available:
-        print(f"Testing {provider}...")
-        try:
-            # Get supported models
-            models = LLMFactory.get_supported_models(provider)
-            print(f"  Supported models: {', '.join(models)}")
-            
-            # Create LLM with first model
-            llm = create_llm(provider=provider, model=models[0])
-            print(f"  ✅ Created: {type(llm).__name__}")
-            
-            # Test a simple invoke
-            response = llm.invoke("Say 'Hello' in one word")
-            print(f"  Test response: {response.content[:50]}")
-            print()
-            
-        except Exception as e:
-            print(f"  ❌ Failed: {e}")
-            print()
+        import traceback
+        traceback.print_exc()
     
     print("=" * 60)
-    print("✅ LLM Factory test complete!")
+    print("✅ Test complete!")
     print("=" * 60)

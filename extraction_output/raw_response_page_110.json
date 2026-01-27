@@ -1,0 +1,267 @@
+{
+  "metadata": {
+    "page_number": 110,
+    "book_title": "BrihatParasaraHoraSastra",
+    "chapter_title": "Chaturthamsha Chakra",
+    "chapter_number": 9,
+    "section_title": null,
+    "page_type": "mixed",
+    "has_tables": true,
+    "has_charts": false,
+    "languages_present": [
+      "english",
+      "sanskrit"
+    ],
+    "astrology_system": "vedic"
+  },
+  "content_blocks": [
+    {
+      "content_type": "prose",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 1
+    },
+    {
+      "content_type": "heading",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 2
+    },
+    {
+      "content_type": "table",
+      "text": "",
+      "verse_data": null,
+      "table_data": {
+        "title": "Speculum Of Decanates",
+        "headers": [
+          "Lord\nस्वामी",
+          "Sign\nराशि",
+          "ARI\nमेष",
+          "TAU\nबृषभ",
+          "GEM\nमिथुन",
+          "CAN\nकर्क",
+          "LEO\nसिंह",
+          "VIR\nकन्या",
+          "LIB\nतुला",
+          "SCO\nवृश्चिक",
+          "SAG\nधनु",
+          "CAP\nमकर",
+          "AQA\nकुम्भ",
+          "PIS\nमीन"
+        ],
+        "rows": [
+          [
+            "NAR\nनारद",
+            "10º",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10",
+            "11",
+            "12"
+          ],
+          [
+            "AGU\nआगस्त्य",
+            "20º",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10",
+            "11",
+            "12",
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          [
+            "DUR\nदुर्वासा",
+            "30º",
+            "9",
+            "10",
+            "11",
+            "12",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8"
+          ]
+        ],
+        "markdown": "| Lord<br>स्वामी | Sign<br>राशि | ARI<br>मेष | TAU<br>बृषभ | GEM<br>मिथुन | CAN<br>कर्क | LEO<br>सिंह | VIR<br>कन्या | LIB<br>तुला | SCO<br>वृश्चिक | SAG<br>धनु | CAP<br>मकर | AQA<br>कुम्भ | PIS<br>मीन |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n| NAR<br>नारद | 10º | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |\n| AGU<br>आगस्त्य | 20º | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 1 | 2 | 3 | 4 |\n| DUR<br>दुर्वासा | 30º | 9 | 10 | 11 | 12 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |",
+        "context": null,
+        "table_type": "divisional_chart_lords"
+      },
+      "sequence_order": 3
+    },
+    {
+      "content_type": "shloka",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Chaturthamsha Lords and Deities"
+      },
+      "table_data": null,
+      "sequence_order": 4
+    },
+    {
+      "content_type": "translation",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Chaturthamsha Lords and Deities"
+      },
+      "table_data": null,
+      "sequence_order": 5
+    },
+    {
+      "content_type": "notes",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 6
+    },
+    {
+      "content_type": "heading",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 7
+    },
+    {
+      "content_type": "table",
+      "text": "",
+      "verse_data": null,
+      "table_data": {
+        "title": "Speculum Of Chaturthamshas",
+        "headers": [
+          "Lord\nस्वामी",
+          "Sign.\nराशि",
+          "ARI\nमेष",
+          "TAU\nबृषभ",
+          "GEM\nमिथुन",
+          "CAN\nकर्क",
+          "LEO\nसिंह",
+          "VIR\nकन्या",
+          "LIB\nतुला",
+          "SCO\nवृश्चिक",
+          "SAG\nधनु",
+          "CAP\nमकर",
+          "AQA\nकुम्भ",
+          "PIS\nमीन"
+        ],
+        "rows": [
+          [
+            "SAN\nसनक",
+            "7º-30'",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10",
+            "11",
+            "12"
+          ],
+          [
+            "SAN\nसनन्दन",
+            "15º",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10",
+            "11",
+            "12",
+            "1",
+            "2",
+            "3"
+          ],
+          [
+            "KUM\nकुमार",
+            "22º-30'",
+            "7",
+            "8",
+            "9",
+            "10",
+            "11",
+            "12",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6"
+          ],
+          [
+            "SAN\nसनातन",
+            "30º-00'",
+            "10",
+            "11",
+            "12",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9"
+          ]
+        ],
+        "markdown": "| Lord<br>स्वामी | Sign.<br>राशि | ARI<br>मेष | TAU<br>बृषभ | GEM<br>मिथुन | CAN<br>कर्क | LEO<br>सिंह | VIR<br>कन्या | LIB<br>तुला | SCO<br>वृश्चिक | SAG<br>धनु | CAP<br>मकर | AQA<br>कुम्भ | PIS<br>मीन |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n| SAN<br>सनक | 7º-30' | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |\n| SAN<br>सनन्दन | 15º | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 1 | 2 | 3 |\n| KUM<br>कुमार | 22º-30' | 7 | 8 | 9 | 10 | 11 | 12 | 1 | 2 | 3 | 4 | 5 | 6 |\n| SAN<br>सनातन | 30º-00' | 10 | 11 | 12 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |",
+        "context": null,
+        "table_type": "divisional_chart_lords"
+      },
+      "sequence_order": 8
+    }
+  ],
+  "raw_text": "Brihat Parasara Hora Shastra\n99\nand Dual signs are respectively Narada, Augusta and Durvasha.\nExample: Suppose the Ascendant is 8-12-27' - 51\". This\nis the House of Jupiter. The sign is Sagittarius. There is the Second\nDecanate in it. Therefore, it is the Decanate of Aries, the 5th sign\nfrom Sagittarius.\nDrekkana Chakra\nSpeculum Of Decanates\nLord Sign ARI TAU GEM CAN LEO VIR LIB SCO SAG CAP AQAPIS\nस्वामी\nगशि मेष\nबृषभ मिथुन कर्क सिंह\nकन्या तुला वृश्चिक धनु मकर\nकुम्भ मीन\nNAR\n100\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11 12\nनारद\nAGU 20° 5\n6\n7\n8\n9\n10\n11\n12\n1\n2\n3\n4\nआगस्त्य\nDUR\n300 9 10\n11\n12\n1\n2\n3\n4\n5\n6\n7\n8\nदुर्वासा\nस्वर्धादिकेन्द्रपतयस्तुर्याशेशाः\nक्रियादिषु ।\nसनकश्व सनन्दश्च\nकुमारश्च\nसनातनः ।।९ ।।\n9. Chaturthamsha: In the signs Aries etc., the Lords of\nchaturthamshas are the Lords of the First, Fourth, Seventh and\nTenth Signs and the deities of these are respectively Sanaka,\nSanandana, Sanat Kumar and Sanatana.\nNotes: Chaturthamsha is the 1/4th part of a sign: It is of 70\nand 30' kalas. The first chaturthamsha is ruled by the Lord of its own\nsign, the second one by that of the 4th, the third one by that of the\n7th and the last one by that of the 10th.\nChaturthamsha Chakra\nSpeculum Of Chaturthamshas\nLord Sign. ARI TAU GEM CAN LEO\nस्वामी राशि मेष बृषभ मिथुन कर्क सिंह\nVIR LIB SCO SAG CAP AQA PIS\nकन्या\nतुला वृश्चिक धनु मकर कुम्भ मीन\nSAN\n70-300\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11 12\nसनक\nSAN 15°\n4\n5\n6\n7\n8\n9\n10\n11\n12\n1\n2\n3\nसनदेन\nKUM 22°-30 7\n8\n9\n10\n11\n12\n1\n2\n3\n4\n5\n6\nकुमार\nSAN 30°-00 10\n11\n12\n1\n2\n3\n4\n5\n6\n7\n8\n9\nसनातन",
+  "extraction_confidence": 0.96,
+  "extraction_notes": "Corrected OCR error in Drekkana table header: 'गशि' to 'राशि'.; Corrected OCR error in Chaturthamsha table row: 'सनदेन' to 'सनन्दन'.; Corrected OCR misreadings of degree symbols (e.g., '100' to '10º', '70-300' to '7º-30'').",
+  "confidence": {
+    "overall_score": 0.96,
+    "criteria": {
+      "image_quality": 0.95,
+      "text_clarity": 0.98,
+      "layout_detection": 0.95
+    },
+    "reasoning": null,
+    "flags": []
+  },
+  "retry_metadata": {
+    "initial_model": "gemini-2.5-flash-lite",
+    "retry_model": "gemini-2.5-pro",
+    "initial_confidence": 0.4,
+    "retry_reason": "Confidence below threshold (0.9)",
+    "retry_count": 1
+  }
+}

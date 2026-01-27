@@ -30,6 +30,13 @@ except ImportError:
         PageType,
     )
 
+try:
+    from src.llm.factory import create_llm
+except ImportError:
+    try:
+        from ...llm.factory import create_llm
+    except ImportError:
+        create_llm = None
 
 class PageAnalyzer:
     """
@@ -59,20 +66,14 @@ class PageAnalyzer:
         self.is_vertex_ai = False
         
         if use_llm:
-            # Use LLMFactory for consistent model management
             try:
-                # Add project root to path for imports
-                script_dir = Path(__file__).parent
-                project_root = script_dir.parent.parent.parent
-                sys.path.insert(0, str(project_root))
-                
-                from src.llm.factory import create_llm
-                
-                # Create LLM using factory (automatically handles Vertex AI vs AI Studio)
+                # Create LLM using factory with rate limiting
                 self.model = create_llm(
                     provider="google",
                     model="gemini-2.5-flash",
                     temperature=0.0,
+                    use_rate_limiting=True,
+                    rate_limit_delay=1.5
                 )
                 
                 # Determine which provider was used
@@ -80,7 +81,7 @@ class PageAnalyzer:
                 self.is_vertex_ai = isinstance(self.model, ChatVertexAI)
                 
                 provider_name = "Vertex AI" if self.is_vertex_ai else "AI Studio"
-                print(f"[OK] Using {provider_name} via LLMFactory")
+                print(f"[âœ…] Using {provider_name} via LLMFactory with rate limiting")
                 
             except Exception as e:
                 print(f"[WARN] LLM initialization failed: {e}")
@@ -299,15 +300,10 @@ Answer these questions in JSON format:
 Return ONLY the JSON, no explanation."""
 
         try:
-            # Different API calls for Vertex AI vs AI Studio
-            if self.is_vertex_ai:
-                # Vertex AI (LangChain ChatVertexAI)
-                response = self.model.invoke(prompt)
-                text = response.content.strip()
-            else:
-                # AI Studio (google.generativeai)
-                response = self.model.generate_content(prompt)
-                text = response.text.strip()
+            # Use LangChain invoke
+            response = self.model.invoke(prompt)
+            # Handle response content safely
+            text = response.content if hasattr(response, 'content') else str(response)
             
             # Extract JSON from response
             if text.startswith('```'):

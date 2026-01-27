@@ -2,7 +2,7 @@
 
 > **Last Updated:** 2026-01-27  
 > **Current Phase:** Phase 3 - RAG Pipeline (Vision Extraction Production-Ready)  
-> **Overall Progress:** 88%
+> **Overall Progress:** 89%
 
 ---
 
@@ -11,7 +11,7 @@
 ```
 Phase 1: Foundation         [██████████] 100% ✅ COMPLETE
 Phase 2: Engine Integration [██████████] 100% ✅ COMPLETE & VERIFIED
-Phase 3: RAG Pipeline       [█████████░] 88%  ← IN PROGRESS (Vision Extraction Production-Ready)
+Phase 3: RAG Pipeline       [█████████░] 90% ← IN PROGRESS (Preprocessing Complete, Vector DB Pending)
 Phase 4: LLM Integration    [░░░░░░░░░░] 0%
 Phase 5: Orchestration      [░░░░░░░░░░] 0%
 Phase 6: Safety             [░░░░░░░░░░] 0%
@@ -25,7 +25,7 @@ Utilities: Cost Tracking    [██████████] 100% ✅ COMPLETE
 
 ---
 
-## Phase 3: RAG Pipeline — 🔧 IN PROGRESS (88%)
+## Phase 3: RAG Pipeline — 🔧 IN PROGRESS (90%)
 
 ### Latest: Production-Grade Vision Extraction (2026-01-27)
 
@@ -235,6 +235,15 @@ python src/rag/preprocessing/pipeline.py input.json --skip-embedding
 ---
 
 ## Session History
+
+### Session 6 (2026-01-27)
+- **Vertex AI & Authentication Hardening**
+- Migrated `LLMFactory` to prioritize `ChatVertexAI` via ADC (Application Default Credentials).
+- Removed manual `google_api_key` passing for Vertex AI.
+- Updated `vision_extractor.py` to use latest `google.genai` SDK (`from google import genai`).
+- Standardized all preprocessing LLM calls to use LangChain's `.invoke()` method, fixing `AttributeError`.
+- Created detailed handoff for transition to Claude.
+- **Result:** Fully standardized Google/Vertex AI integration, auth fixed, ready for scale.
 
 ### Session 5 (2026-01-24 Evening)
 - **Vision Extraction Optimization**

@@ -16,9 +16,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Filter warnings from deprecated google.generativeai
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, module="google.generativeai")
-import google.generativeai as genai
+from google import genai
 from PIL import Image
 import numpy as np
+
+# Set Google Application Credentials
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'google_credentials.json'
 
 # Vertex AI imports
 try:
@@ -101,14 +104,14 @@ class ExtractionConfig:
     
     # Rate limiting
     requests_per_minute: int = 10
-    delay_between_requests: float = 2.0  # seconds
+    delay_between_requests: float = 3.5  # Increased from 2.0 to prevent 429 errors
     
     # Retry settings
     max_retries: int = 3
     retry_delay: float = 5.0
     
     # Parallel processing settings
-    max_workers: int = 5  # Number of concurrent extraction workers
+    max_workers: int = 4  # Number of concurrent extraction workers (reduced from 5)
     enable_parallel: bool = True  # Enable parallel processing for batch extraction
     
     # Checkpoint settings

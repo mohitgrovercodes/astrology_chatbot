@@ -57,7 +57,7 @@ def main():
     parser.add_argument("pdf_path", help="Path to PDF file")
     parser.add_argument("--start", type=int, default=1, help="Start page")
     parser.add_argument("--end", type=int, default=10, help="End page")
-    parser.add_argument("--workers", type=int, default=5, help="Number of parallel workers")
+    parser.add_argument("--workers", type=int, default=4, help="Number of parallel workers")
     parser.add_argument("--output", default="./extraction_output", help="Output directory")
     
     args = parser.parse_args()

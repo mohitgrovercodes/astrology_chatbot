@@ -1,0 +1,46 @@
+{
+  "metadata": {
+    "page_number": 100,
+    "book_title": "BrihatParasaraHoraSastra",
+    "chapter_title": null,
+    "chapter_number": null,
+    "section_title": null,
+    "page_type": "text_heavy",
+    "has_tables": false,
+    "has_charts": false,
+    "languages_present": [
+      "english",
+      "sanskrit"
+    ],
+    "astrology_system": "vedic"
+  },
+  "content_blocks": [
+    {
+      "content_type": "prose",
+      "text": "That is, the use of these two lagnas is quite separate in this\nworld. The Bhavimbiya Ascendant is fruitful in the prediction of\nauspicious actions like birth, journey, marriage etc., while it is well\nknown that the Bhavratiya Ascendant, is to be used in finding out\nthe time of Eclipses etc., for the rise of the constellations or\nasterisms sends their rays on the earth, and these rays have their\ninfluence (auspicious or inauspicious) on time and human beings.\nTherefore the Sages have instructed to use the 'भविम्बीय लग्न'\n(Bhavimbiya Ascendant) in the prediction of invisible effects like\njourney, marriage etc., and to use the 'भवृतीय लग्न' (बिन्दु रूप)\nBhavratiya Asc. in minutely knowing the ग्रास-स्पर्श मोक्षादि or full\nEclipse, touch and release in an Eclipse; thus the knowledge of\nvisible effects is obtained by using the locally ascertained स्पष्ट 'भवृत्तीय\nलग्न' (Position of Bhavratiya Asc.) When the Bhavratiya sthana Bindu\n(or the points of the sphere of the Ecliptic) rise in their respective\nhorizons there is not the rising of all of them simultaneously. At the\ntime of the rise of the place Bhavrata the asterisms due to their\nrespective latitudes either remain above or below the horizon. In a\nplace above 24 latitude all the asterisms have always the above-\nsaid position; because at least some latitudes of the asterisms (नक्षत्रों)\nare obtained. In the horizons of all those living on the earth there is\nalways the rise of the 12 constellations or asterisms as signs\n(Bhavimbiya Rashis), but there is not the rise of the 12 spheres as\nsigns (Bhavratiya Rashis) because in the heavens the position of\nthe Ecliptic (क्रान्तिवृत्त) is from east to west and therefore, due to the\nmovement of the Zodiac from east to west there is not the rise of all\nthe 12 spheres as signs on the Eciptic. But the position of the\nconstellations or asterisms as signs is from south to north, that is,\nthey (the constellations or asterisms as signs), Bhavimbiya rashis\nare spread with their full body from the North to the south pole (from\nUttar Kadamba to Dakshina Kadamba), therefore, due to the\nmovement of the Zodiac from East to West there is always the rise\nof the 12 constellations or asterisms as signs (Bhavimbiya Rashis)\nin the horizons of all those living on the earth. There is the rise of\nonly 10 spheres as signs (Bhavratiya Rashis) at some place, at other\nit is 8, at other 6, at other 4, at other 2 and at other it is only 1 (one).",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 1
+    }
+  ],
+  "raw_text": "Brihat Parasara Hora Shastra\n89\nThat is, the use of these two lagnas is quite separate in this\nworld. The Bhavimbiya Ascendant is fruitful in the prediction of\nauspicious actions like birth, journey, marriage etc., while it is well\nknown that the Bhavratiya Ascendant, is to be used in finding out\nthe time of Eclipses etc., for the rise of the constellations or\nasterisms sends their rays on the earth, and these rays have their\ninfluence (auspicious or inauspicious) on time and human beings.\nTherefore the Sages have instructed to use the 'भविम्बीय लग्न'\n(Bhavimbiya Ascendant) in the prediction of invisible effects like\njourney, marriage etc., and to use the 'भवृतीय लग्न' (बिन्दु रूप)\nBhavratiya Asc. in minutely knowing the ग्रास-स्पर्श मोक्षादि or full\nEclipse, touch and release in an Eclipse; thus the knowledge of\nvisible effects is obtained by using the locally ascertained स्पष्ट 'भवृत्तीय\nलग्न' (Position of Bhavratiya Asc.) When the Bhavratiya sthana Bindu\n(or the points of the sphere of the Ecliptic) rise in their respective\nhorizons there is not the rising of all of them simultaneously. At the\ntime of the rise of the place Bhavrata the asterisms due to their\nrespective latitudes either remain above or below the horizon. In a\nplace above 24 latitude all the asterisms have always the above-\nsaid position; because at least some latitudes of the asterisms (नक्षत्रों)\nare obtained. In the horizons of all those living on the earth there is\nalways the rise of the 12 constellations or asterisms as signs\n(Bhavimbiya Rashis), but there is not the rise of the 12 spheres as\nsigns (Bhavratiya Rashis) because in the heavens the position of\nthe Ecliptic (क्रान्तिवृत्त) is from east to west and therefore, due to the\nmovement of the Zodiac from east to west there is not the rise of all\nthe 12 spheres as signs on the Eciptic. But the position of the\nconstellations or asterisms as signs is from south to north, that is,\nthey (the constellations or asterisms as signs), Bhavimbiya rashis\nare spread with their full body from the North to the south pole (from\nUttar Kadamba to Dakshina Kadamba), therefore, due to the\nmovement of the Zodiac from East to West there is always the rise\nof the 12 constellations or asterisms as signs (Bhavimbiya Rashis)\nin the horizons of all those living on the earth. There is the rise of\nonly 10 spheres as signs (Bhavratiya Rashis) at some place, at other\nit is 8, at other 6, at other 4, at other 2 and at other it is only 1 (one).",
+  "extraction_confidence": 0.98,
+  "extraction_notes": "",
+  "confidence": {
+    "overall_score": 0.98,
+    "criteria": {
+      "image_quality": 0.99,
+      "text_clarity": 0.97,
+      "layout_detection": 0.98
+    },
+    "reasoning": null,
+    "flags": []
+  },
+  "retry_metadata": {
+    "initial_model": "gemini-2.5-flash-lite",
+    "retry_model": null,
+    "initial_confidence": null,
+    "retry_reason": null,
+    "retry_count": 0
+  }
+}

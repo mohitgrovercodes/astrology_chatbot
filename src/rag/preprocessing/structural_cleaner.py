@@ -127,18 +127,19 @@ Return ONLY a valid JSON object:
         self.llm_client = None
         
         if use_llm and LLMFactory:
-            # Initialize cheap cleaning model
-            self.llm_client = LLMFactory.get_model("gemini-1.5-flash") # Use Flash for speed/cost
-            print("[INFO] LLM Cleaning Enabled (gemini-1.5-flash)")
-        """
-        Initialize structural cleaner.
-        
-        Args:
-            min_header_frequency: Minimum times a string must appear across pages
-                                  to be considered a running header
-        """
-        self.min_header_frequency = min_header_frequency
-        self.detected_headers: List[str] = []
+            try:
+                # Initialize LLM using the factory with rate limiting
+                self.llm_client = LLMFactory.create(
+                    provider="google",
+                    model="gemini-2.5-flash",
+                    temperature=0.0,
+                    use_rate_limiting=True,  # Enable built-in rate limiting
+                    rate_limit_delay=1.5      # 1.5s minimum between requests
+                )
+                print("[âœ…] LLM Cleaning Enabled (gemini-2.5-flash with rate limiting)")
+            except Exception as e:
+                print(f"[WARN] Failed to initialize LLM for cleaning: {e}")
+                self.use_llm = False
     
     def detect_global_headers(self, pages: List[ExtractedPage]) -> List[str]:
         """
@@ -515,10 +516,11 @@ Return ONLY a valid JSON object:
             
         try:
             prompt = self.CLEANING_PROMPT.format(content=original_content[:30000]) # Safety limit
-            response = self.llm_client.generate_content(prompt)
-            
-            # Parse JSON
-            text = response.text.replace('```json', '').replace('```', '').strip()
+            # Use LangChain invoke
+            response = self.llm_client.invoke(prompt)
+            # Handle response content safely
+            text = response.content if hasattr(response, 'content') else str(response)
+            text = text.replace('```json', '').replace('```', '').strip()
             result = json.loads(text)
             clean_content = result.get("clean_content", "")
             changes = result.get("changes_made", [])
