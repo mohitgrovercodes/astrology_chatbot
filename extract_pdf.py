@@ -38,7 +38,7 @@ class PDFExtractor:
         genai.configure(api_key=api_key)
         # Using flash-lite for cost-effective extraction
         # If quality is poor, can manually retry with gemini-2.5-pro
-        self.model = genai.GenerativeModel('models/gemini-flash-lite-latest')
+        self.model = genai.GenerativeModel('gemini-2.5-flash-lite')
         
         
         self.extraction_prompt = """

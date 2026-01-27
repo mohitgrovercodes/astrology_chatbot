@@ -4,7 +4,7 @@ These schemas define the RAG-ready format for astrology texts.
 """
 
 from typing import List, Optional, Dict, Any, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 
 
@@ -45,7 +45,15 @@ class ExtractedTable(BaseModel):
     """Structured representation of a table"""
     title: Optional[str] = Field(None, description="Table title/caption if present")
     headers: List[str] = Field(default_factory=list, description="Column headers")
-    rows: List[List[str]] = Field(default_factory=list, description="Table rows as list of lists")
+    rows: List[List[Optional[str]]] = Field(default_factory=list, description="Table rows as list of lists")
+    
+    @field_validator('rows')
+    @classmethod
+    def clean_rows(cls, v: List[List[Optional[str]]]) -> List[List[str]]:
+        """Convert None values to empty strings."""
+        if not v:
+            return v
+        return [[(cell or "") for cell in row] for row in v]
     markdown: str = Field(description="Markdown representation of the table")
     context: Optional[str] = Field(None, description="Surrounding context explaining the table")
     table_type: Optional[str] = Field(None, description="Type of table (e.g., planetary_friendships, exaltation_degrees)")
@@ -56,7 +64,7 @@ class VerseBlock(BaseModel):
     verse_number: Optional[str] = Field(None, description="Verse number (e.g., '13-14', '॥९५॥')")
     sanskrit_text: str = Field(description="Original Sanskrit/Hindi verse in Devanagari")
     transliteration: Optional[str] = Field(None, description="Romanized transliteration if available")
-    translation: str = Field(description="English translation")
+    translation: Optional[str] = Field(None, description="English translation")
     notes: Optional[str] = Field(None, description="Additional notes or commentary")
     topic: Optional[str] = Field(None, description="Topic of this verse (e.g., 'Virgo described', 'Jupiter Mahadasha')")
 

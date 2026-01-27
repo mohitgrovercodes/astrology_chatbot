@@ -3,7 +3,7 @@ LLM Factory for Astrology AI Chatbot.
 
 This module provides a factory pattern to create LLM instances from multiple providers:
 - OpenAI (GPT-4o, GPT-4o-mini)
-- Google (Gemini 1.5 Pro, Flash)
+- Google (Gemini 2.5 Pro, Flash)
 - xAI (Grok-2, Grok-2-mini)
 - Anthropic (Claude Sonnet)
 
@@ -43,7 +43,7 @@ class LLMFactory:
     
     Supports:
     - OpenAI (gpt-4o, gpt-4o-mini, gpt-4-turbo)
-    - Google (gemini-1.5-pro, gemini-1.5-flash, gemini-2.5-flash)
+    - Google (gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite)
     - xAI (grok-2, grok-2-mini)
     - Anthropic (claude-sonnet-4, claude-3-5-sonnet)
     
@@ -98,7 +98,7 @@ class LLMFactory:
             >>> llm = LLMFactory.create()
             
             >>> # Use specific provider and model
-            >>> llm = LLMFactory.create(provider="google", model="gemini-1.5-pro")
+            >>> llm = LLMFactory.create(provider="google", model="gemini-2.5-pro")
             
             >>> # Override temperature
             >>> llm = LLMFactory.create(temperature=0.7)

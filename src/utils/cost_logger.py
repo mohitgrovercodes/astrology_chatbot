@@ -51,30 +51,31 @@ class ModelPricing:
 
 # Pricing as of January 2026
 PRICING_TABLE = {
-    # Google Gemini Models
+    # Gemini 2.5 Models (Pricing as of Jan 2026)
+    "gemini-2.5-pro": ModelPricing(
+        model_name="gemini-2.5-pro",
+        model_type=ModelType.LLM,
+        input_price_per_1k=0.00125,    
+        output_price_per_1k=0.01000,   
+        context_window=2_000_000,
+        notes="Standard tier pricing"
+    ),
     "gemini-2.5-flash": ModelPricing(
         model_name="gemini-2.5-flash",
         model_type=ModelType.LLM,
-        input_price_per_1k=0.00001875,  # $0.01875 per 1M tokens
-        output_price_per_1k=0.000075,   # $0.075 per 1M tokens
-        context_window=128_000,
-        notes="128K context pricing tier"
-    ),
-    "gemini-1.5-pro": ModelPricing(
-        model_name="gemini-1.5-pro",
-        model_type=ModelType.LLM,
-        input_price_per_1k=0.00125,
-        output_price_per_1k=0.005,
-        context_window=2_000_000,
-        notes="Up to 128K context"
-    ),
-    "gemini-1.5-flash": ModelPricing(
-        model_name="gemini-1.5-flash",
-        model_type=ModelType.LLM,
-        input_price_per_1k=0.000075,
-        output_price_per_1k=0.0003,
+        input_price_per_1k=0.00030,   
+        output_price_per_1k=0.00250,   
         context_window=1_000_000,
     ),
+    "gemini-2.5-flash-lite": ModelPricing(
+        model_name="gemini-2.5-flash-lite",
+        model_type=ModelType.LLM,
+        input_price_per_1k=0.00010, 
+        output_price_per_1k=0.00040,
+        context_window=1_000_000,
+        notes="Flash-Lite Preview pricing"
+    ),
+    
     
     # OpenAI Embedding Models
     "text-embedding-3-large": ModelPricing(
@@ -90,14 +91,6 @@ PRICING_TABLE = {
         input_price_per_1k=0.00002,
         output_price_per_1k=0.0,
         context_window=8191,
-    ),
-    "text-embedding-ada-002": ModelPricing(
-        model_name="text-embedding-ada-002",
-        model_type=ModelType.EMBEDDING,
-        input_price_per_1k=0.0001,
-        output_price_per_1k=0.0,
-        context_window=8191,
-        notes="Legacy model"
     ),
 }
 

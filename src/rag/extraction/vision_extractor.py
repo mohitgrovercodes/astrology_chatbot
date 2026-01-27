@@ -13,9 +13,20 @@ from dataclasses import dataclass, field
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# Filter warnings from deprecated google.generativeai
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning, module="google.generativeai")
 import google.generativeai as genai
 from PIL import Image
 import numpy as np
+
+# Vertex AI imports
+try:
+    import vertexai
+    from vertexai.generative_models import GenerativeModel, Part, FinishReason
+    VERTEX_AI_AVAILABLE = True
+except ImportError:
+    VERTEX_AI_AVAILABLE = False
 
 from .extraction_prompts import (
     SYSTEM_PROMPT,
@@ -57,11 +68,23 @@ except ImportError:
 @dataclass
 class ExtractionConfig:
     """Configuration for VisionExtractor."""
-    # Model configuration - Two-tier strategy
-    primary_model: str = "models/gemini-flash-lite-latest"  # Cost-effective for initial extraction
-    upgrade_model: str = "models/gemini-2.5-pro"  # Higher quality for low-confidence pages
-    confidence_threshold: float = 0.8  # Retry with upgrade_model if confidence < this
+    # Model configuration - Hybrid strategy with two-tier fallback
+    primary_model: str = "gemini-2.5-flash-lite"  # Cost-effective for initial extraction
+    upgrade_model: str = "gemini-2.5-pro"        # Higher quality for low-confidence pages
+    confidence_threshold: float = 0.90 # Retry with upgrade_model if confidence < this
     enable_auto_upgrade: bool = True  # Enable automatic model upgrading
+    
+    # Hybrid Strategy: Use different models based on page type
+    enable_hybrid_strategy: bool = True  # Use Flash-Lite for text_heavy, Flash for table_heavy
+    hybrid_table_model: str = "gemini-2.5-flash"  # Model for table-heavy pages
+    
+    # Content Quality Validation
+    enable_content_validation: bool = True  # Validate content blocks and adjust confidence
+    
+    # GCP Vertex AI Configuration
+    use_vertex_ai: bool = False  # Enable to use Vertex AI instead of AI Studio
+    project_id: Optional[str] = None
+    location: Optional[str] = "us-central1"
     
     # Legacy model name (for backwards compatibility)
     model_name: str = field(default="", init=False)
@@ -70,7 +93,8 @@ class ExtractionConfig:
         # Set model_name to primary_model for backwards compatibility
         if not self.model_name:
             self.model_name = self.primary_model
-    
+            
+    # Generation settings
     temperature: float = 0.1  # Low temperature for accurate extraction
     max_output_tokens: int = 8192
     top_p: float = 0.95
@@ -112,19 +136,11 @@ class VisionExtractor:
         """
         self.config = config or ExtractionConfig()
         
-        # Configure Google AI
+        # Configure Google AI (either Vertex or AI Studio)
         self._setup_credentials(credentials_path)
         
         # Initialize the model
-        self.model = genai.GenerativeModel(
-            model_name=self.config.model_name,
-            generation_config=genai.GenerationConfig(
-                temperature=self.config.temperature,
-                max_output_tokens=self.config.max_output_tokens,
-                top_p=self.config.top_p,
-            ),
-            system_instruction=SYSTEM_PROMPT,
-        )
+        self.model = self._create_model(self.config.model_name)
         
         # Create output directory
         self.output_dir = Path(self.config.output_dir)
@@ -137,28 +153,56 @@ class VisionExtractor:
         # Cost tracking
         if COST_TRACKING_AVAILABLE:
             self.cost_tracker = CostTrackingWrapper(
-                model_name=self.config.model_name,
+                model_name=self.config.primary_model,
                 model_type="vision"
             )
+            # Log provider type
+            provider = "vertex_ai" if self.config.use_vertex_ai else "ai_studio"
+            logger.info(f"Cost logging authorized for provider: {provider}")
         else:
             self.cost_tracker = None
         
         logger.info(f"VisionExtractor initialized with model: {self.config.model_name}")
     
     def _setup_credentials(self, credentials_path: str = None):
-        """Set up Google AI credentials."""
+        """Set up Google AI credentials (Vertex AI or AI Studio)."""
         if credentials_path:
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
-        
-        # Get API key from environment
-        api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-        
-        if api_key:
-            genai.configure(api_key=api_key)
-            logger.info("Configured Gemini with API key")
+            
+        if self.config.use_vertex_ai:
+            if not VERTEX_AI_AVAILABLE:
+                raise ImportError(
+                    "Vertex AI is requested but 'google-cloud-aiplatform' is not installed. "
+                    "Install it with: pip install google-cloud-aiplatform"
+                )
+            
+            # Check for Project ID
+            project_id = self.config.project_id
+            
+            # Try to get from credentials file if not provided
+            if not project_id and os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+                try:
+                    with open(os.environ["GOOGLE_APPLICATION_CREDENTIALS"], 'r') as f:
+                        creds = json.load(f)
+                        project_id = creds.get("project_id")
+                except Exception as e:
+                    logger.warning(f"Could not read project_id from credentials file: {e}")
+            
+            if not project_id:
+                raise ValueError("project_id must be provided for Vertex AI")
+                
+            logger.info(f"Initializing Vertex AI (project={project_id}, location={self.config.location})")
+            vertexai.init(project=project_id, location=self.config.location)
+            
         else:
-            # Try to use application default credentials
-            logger.info("Using application default credentials for Gemini")
+            # Fallback to AI Studio (original behavior)
+            api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+            
+            if api_key:
+                genai.configure(api_key=api_key)
+                logger.info("Configured Gemini with API key (AI Studio)")
+            else:
+                logger.info("Using application default credentials for Gemini")
     
     def _rate_limit(self):
         """Apply rate limiting between requests."""
@@ -179,24 +223,30 @@ class VisionExtractor:
             return image
         return Image.fromarray(image)
     
-    def _create_model(self, model_name: str) -> genai.GenerativeModel:
-        """Create a GenerativeModel instance with the specified model name.
-        
-        Args:
-            model_name: Name of the model (e.g., 'models/gemini-flash-lite-latest')
-            
-        Returns:
-            Configured GenerativeModel instance
-        """
-        return genai.GenerativeModel(
-            model_name=model_name,
-            generation_config=genai.GenerationConfig(
-                temperature=self.config.temperature,
-                max_output_tokens=self.config.max_output_tokens,
-                top_p=self.config.top_p,
-            ),
-            system_instruction=SYSTEM_PROMPT,
-        )
+    def _create_model(self, model_name: str):
+        """Create a GenerativeModel instance (Vertex AI or AI Studio)."""
+        # Clean model name for Vertex AI (remove 'models/' prefix if present)
+        if self.config.use_vertex_ai:
+            vertex_model_name = model_name.replace("models/", "")
+            return GenerativeModel(
+                model_name=vertex_model_name,
+                generation_config={
+                    "temperature": self.config.temperature,
+                    "max_output_tokens": self.config.max_output_tokens,
+                    "top_p": self.config.top_p,
+                },
+                system_instruction=[SYSTEM_PROMPT]
+            )
+        else:
+            return genai.GenerativeModel(
+                model_name=model_name,
+                generation_config=genai.GenerationConfig(
+                    temperature=self.config.temperature,
+                    max_output_tokens=self.config.max_output_tokens,
+                    top_p=self.config.top_p,
+                ),
+                system_instruction=SYSTEM_PROMPT,
+            )
     
     def _parse_confidence(self, extraction_result: Dict[str, Any]) -> Optional[ConfidenceMetadata]:
         """Parse confidence metadata from extraction result.
@@ -223,10 +273,11 @@ class VisionExtractor:
         try:
             score = float(confidence_data.get("overall_score", 0.7))
             
-            # Only include reasoning if confidence is low (< 0.8)
+            # Only include reasoning if confidence is low (< threshold)
             # This saves storage and focuses debugging on problem pages
             reasoning = None
-            if score < 0.8:
+            threshold = getattr(self.config, "confidence_threshold", 0.9)
+            if score < threshold:
                 reasoning = confidence_data.get("reasoning")
             
             return ConfidenceMetadata(
@@ -239,9 +290,108 @@ class VisionExtractor:
             logger.warning(f"Failed to parse confidence data: {e}")
             return None
     
+    def _validate_content_quality(
+        self, 
+        extraction_result: Dict[str, Any], 
+        confidence_metadata: Optional[ConfidenceMetadata]
+    ) -> Optional[ConfidenceMetadata]:
+        """
+        Validate content quality and adjust confidence if needed.
+        Detects empty blocks and prevents false-positive high confidence scores.
+        
+        Args:
+            extraction_result: JSON response from LLM
+            confidence_metadata: Parsed confidence metadata
+            
+        Returns:
+            Updated ConfidenceMetadata with adjusted score if validation fails
+        """
+        if not self.config.enable_content_validation or not confidence_metadata:
+            return confidence_metadata
+        
+        # Check for empty content blocks
+        content_blocks = extraction_result.get("content_blocks", [])
+        
+        if not content_blocks:
+            # No blocks at all - critical failure
+            logger.warning("Content validation failed: No content blocks found")
+            return ConfidenceMetadata(
+                overall_score=0.2,
+                criteria=confidence_metadata.criteria if confidence_metadata else {},
+                reasoning="VALIDATION OVERRIDE: No content blocks extracted",
+                flags=["empty_extraction", "validation_override"]
+            )
+        
+        # Count empty blocks
+        empty_blocks = 0
+        total_text_length = 0
+        
+        for block in content_blocks:
+            # Check various text fields
+            text = (
+                block.get("text", "") or 
+                block.get("english_text", "") or 
+                block.get("sanskrit_text", "")
+            )
+            
+            # For table blocks, check if table data exists
+            if block.get("type") == "table":
+                table_content = block.get("content", {})
+                if table_content.get("rows") or table_content.get("markdown"):
+                    # Table has data, count as non-empty
+                    total_text_length += 100  # Arbitrary weight for tables
+                    continue
+            
+            text_len = len(text.strip())
+            total_text_length += text_len
+            
+            if text_len == 0:
+                empty_blocks += 1
+        
+        # Calculate empty ratio
+        empty_ratio = empty_blocks / len(content_blocks) if content_blocks else 1.0
+        
+        # Override confidence if too many empty blocks
+        if empty_ratio > 0.5:  # More than 50% empty
+            logger.warning(
+                f"Content validation failed: {empty_blocks}/{len(content_blocks)} blocks empty "
+                f"({empty_ratio*100:.1f}%)"
+            )
+            
+            # Severely penalize confidence
+            adjusted_score = min(confidence_metadata.overall_score, 0.4)
+            
+            return ConfidenceMetadata(
+                overall_score=adjusted_score,
+                criteria=confidence_metadata.criteria,
+                reasoning=f"VALIDATION OVERRIDE: {empty_ratio*100:.0f}% empty blocks. " + 
+                         (confidence_metadata.reasoning or ""),
+                flags=confidence_metadata.flags + ["high_empty_ratio", "validation_override"]
+            )
+        
+        # Check for suspiciously low total text
+        if total_text_length < 100 and confidence_metadata.overall_score > 0.7:
+            logger.warning(
+                f"Content validation warning: Only {total_text_length} chars extracted "
+                f"but confidence is {confidence_metadata.overall_score:.2f}"
+            )
+            
+            adjusted_score = min(confidence_metadata.overall_score, 0.6)
+            
+            return ConfidenceMetadata(
+                overall_score=adjusted_score,
+                criteria=confidence_metadata.criteria,
+                reasoning=f"VALIDATION OVERRIDE: Low text volume ({total_text_length} chars). " +
+                         (confidence_metadata.reasoning or ""),
+                flags=confidence_metadata.flags + ["low_text_volume", "validation_override"]
+            )
+        
+        # Validation passed
+        return confidence_metadata
+    
     def _call_gemini(self, prompt: str, image: Image.Image, retry_count: int = 0) -> str:
         """
-        Call Gemini API with optimized retry logic.
+        Call Gemini API (Vertex AI or AI Studio) with optimized retry logic.
         
         Args:
             prompt: Prompt text
@@ -255,26 +405,46 @@ class VisionExtractor:
         self._rate_limit()
         
         try:
-            # Generate content
-            response = self.model.generate_content(
-                [prompt, image],
-                request_options={"timeout": 120}  # 2 minute timeout
-            )
+            # Prepare content
+            if self.config.use_vertex_ai:
+                # Vertex AI requires Part objects for images
+                import io
+                from vertexai.generative_models import Part
+                
+                # Convert PIL to bytes
+                img_byte_arr = io.BytesIO()
+                # Ensure we're saving as JPEG
+                image.save(img_byte_arr, format='JPEG')
+                img_bytes = img_byte_arr.getvalue()
+                
+                image_part = Part.from_data(img_bytes, mime_type="image/jpeg")
+                content = [prompt, image_part]
+                
+                # Vertex AI call
+                response = self.model.generate_content(content)
+            else:
+                # AI Studio accepts PIL images directly
+                content = [prompt, image]
+                
+                # AI Studio call
+                response = self.model.generate_content(
+                    content,
+                    request_options={"timeout": 120}  # 2 minute timeout
+                )
             
             # Track cost if available
             if self.cost_tracker and hasattr(response, 'usage_metadata'):
-                self.cost_tracker.log_api_call(
-                    model_name=self.config.model_name,
-                    model_type="vision",
+                self.cost_tracker.log_manual(
                     input_tokens=response.usage_metadata.prompt_token_count,
                     output_tokens=response.usage_metadata.candidates_token_count,
+                    operation="vision_extraction"
                 )
             
-            # Check if response was blocked
-            if response.prompt_feedback.block_reason:
-                logger.warning(f"Response blocked: {response.prompt_feedback.block_reason}")
-                # Don't retry blocked responses - they'll keep getting blocked
-                return '{"error": "Response blocked by safety filters", "extraction_quality": "poor", "issues": ["safety_filter_block"]}'
+            # Check for block reasons (handling library differences)
+            if hasattr(response, 'prompt_feedback') and response.prompt_feedback:
+                if hasattr(response.prompt_feedback, 'block_reason') and response.prompt_feedback.block_reason:
+                    logger.warning(f"Response blocked: {response.prompt_feedback.block_reason}")
+                    return '{"error": "Response blocked by safety filters", "extraction_quality": "poor", "issues": ["safety_filter_block"]}'
             
             return response.text
             
@@ -289,6 +459,8 @@ class VisionExtractor:
                 "429" in error_str,
                 "connection" in error_str,
                 "temporary" in error_str,
+                "quota" in error_str, # Quota exceeded might be retryable after backoff
+                "resource exhausted" in error_str, 
             ])
             
             # Don't retry non-transient errors (saves API calls)
@@ -433,6 +605,9 @@ class VisionExtractor:
         # Step 3: Parse confidence from extraction result
         confidence_metadata = self._parse_confidence(extraction_result)
         
+        # Step 3.5: Validate content quality and adjust confidence if needed
+        confidence_metadata = self._validate_content_quality(extraction_result, confidence_metadata)
+        
         # Check if extraction has errors (blocked, failed, etc.)
         has_errors = extraction_result.get("error") or "safety_filter_block" in extraction_result.get("issues", [])
         
@@ -535,7 +710,12 @@ class VisionExtractor:
         use_upgrade_model: bool = False
     ) -> tuple[Dict[str, Any], str]:
         """
-        Extract content using specified model tier.
+        Extract content using hybrid strategy or two-tier model selection.
+        
+        Hybrid Strategy:
+        - Use Flash-Lite for text_heavy pages (faster, prose-based)
+        - Use Flash for mixed/table_heavy pages (better table structure)
+        - Fall back to Pro model if confidence is low
         
         Args:
             image: Page image
@@ -546,11 +726,23 @@ class VisionExtractor:
         Returns:
             Tuple of (extraction_result dict, model_name used)
         """
-        # Select model
-        model_name = (
-            self.config.upgrade_model if use_upgrade_model 
-            else self.config.primary_model
-        )
+        # Select model based on hybrid strategy or tier
+        if use_upgrade_model:
+            # Upgrade model takes precedence
+            model_name = self.config.upgrade_model
+        elif self.config.enable_hybrid_strategy:
+            # Hybrid strategy: choose model based on page type
+            if page_type in [PageType.TABLE_HEAVY, PageType.MIXED]:
+                # Use Flash for better table structure
+                model_name = self.config.hybrid_table_model
+                logger.debug(f"Hybrid strategy: Using {model_name} for {page_type.value} page")
+            else:
+                # Use Flash-Lite for text-heavy pages (faster)
+                model_name = self.config.primary_model
+                logger.debug(f"Hybrid strategy: Using {model_name} for {page_type.value} page")
+        else:
+            # Standard two-tier: always use primary unless upgrading
+            model_name = self.config.primary_model
         
         # Temporarily switch model
         original_model = self.model

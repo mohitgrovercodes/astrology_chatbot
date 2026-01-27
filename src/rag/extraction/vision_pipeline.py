@@ -92,14 +92,21 @@ class VisionPipeline:
         self.output_dir = Path(self.config.output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Initialize the Vision Extractor
+        # Initialize the Vision Extractor with two-tier configuration
         extractor_config = ExtractionConfig(
-            model_name=self.config.gemini_model,
+            primary_model=self.config.gemini_model,  # Use configured model as primary
+            upgrade_model="models/gemini-2.5-pro",   # Pro model for upgrades
+            confidence_threshold=0.8,                # Upgrade if confidence < 0.8
+            enable_auto_upgrade=True,                # Enable two-tier strategy
             temperature=self.config.temperature,
             max_output_tokens=self.config.max_output_tokens,
             delay_between_requests=self.config.delay_between_requests,
             save_raw_responses=self.config.save_raw_responses,
             output_dir=str(self.output_dir / "raw_responses"),
+            enable_parallel=True,                    # Enable parallel processing
+            max_workers=5,                           # 5 concurrent workers
+            enable_checkpoints=True,                 # Enable checkpointing
+            checkpoint_interval=10,                  # Save every 10 pages
         )
         
         self.extractor = VisionExtractor(extractor_config)
