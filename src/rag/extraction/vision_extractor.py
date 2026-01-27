@@ -369,6 +369,47 @@ class VisionExtractor:
                 flags=confidence_metadata.flags + ["high_empty_ratio", "validation_override"]
             )
         
+        # Check for garbage/replacement characters
+        garbage_chars = 0
+        replacement_char = "\ufffd"  # unicode replacement character
+        
+        combined_text = ""
+        for block in content_blocks:
+            text = (block.get("text", "") or block.get("english_text", "") or block.get("sanskrit_text", ""))
+            combined_text += text
+            garbage_chars += text.count(replacement_char)
+            
+        # Check for high density of garbage (allow some replacement chars, but not many)
+        if len(combined_text) > 20:
+            # Check for replacement character density
+            garbage_ratio = garbage_chars / len(combined_text)
+            if garbage_ratio > 0.15:  # RELAXED: > 15% replacement chars is definitely bad
+                logger.warning(
+                    f"Content validation failed: High garbage density ({garbage_ratio*100:.1f}%)"
+                )
+                return ConfidenceMetadata(
+                    overall_score=0.1,  # Force retry
+                    criteria=confidence_metadata.criteria,
+                    reasoning=f"VALIDATION OVERRIDE: High garbage density detected ({garbage_ratio*100:.1f}%)",
+                    flags=confidence_metadata.flags + ["garbage_detected", "validation_override"]
+                )
+                
+            # Check for specific garbage patterns often seen in bad OCR
+            # e.g., " .  < " sequences
+            # NOTE: Use explicit patterns, avoid empty strings or common whitespace
+            garbage_patterns = [" . <", ". <", "< .", " .  <"]
+            pattern_matches = sum(combined_text.count(p) for p in garbage_patterns)
+            if pattern_matches > 5:  # Strict threshold for specific garbage
+                 logger.warning(
+                    f"Content validation failed: High count of garbage patterns ({pattern_matches})"
+                )
+                 return ConfidenceMetadata(
+                    overall_score=0.1,  # Force retry
+                    criteria=confidence_metadata.criteria,
+                    reasoning=f"VALIDATION OVERRIDE: detected {pattern_matches} garbage patterns",
+                    flags=confidence_metadata.flags + ["garbage_patterns_detected", "validation_override"]
+                )
+
         # Check for suspiciously low total text
         if total_text_length < 100 and confidence_metadata.overall_score > 0.7:
             logger.warning(
@@ -659,6 +700,37 @@ class VisionExtractor:
             )
         
         # Step 5: Build structured output
+        extracted_page = self._create_extracted_page_object(
+            page_num, extraction_result, page_type, used_model,
+            classification, book_title, chapter_title, confidence_metadata,
+            retry_metadata
+        )
+        
+        # Save final formatted response (Consolidated)
+        if self.config.save_raw_responses:
+            # Save as the definitive JSON for this page
+            self._save_formatted_json(page_num, extracted_page, suffix="")
+        
+        logger.info(
+            f"Page {page_num} extracted: {len(extracted_page.content_blocks)} content blocks, "
+            f"confidence: {extracted_page.extraction_confidence:.2f}, model: {used_model}"
+        )
+        return extracted_page
+
+    def _create_extracted_page_object(
+        self,
+        page_num: int,
+        extraction_result: Dict[str, Any],
+        page_type: PageType,
+        used_model: str,
+        classification: Dict[str, Any],
+        book_title: Optional[str] = None,
+        chapter_title: Optional[str] = None,
+        confidence_metadata: Optional[ConfidenceMetadata] = None,
+        retry_metadata: Optional[RetryMetadata] = None
+    ) -> ExtractedPage:
+        """Helper to build the ExtractedPage object."""
+        
         metadata = PageMetadata(
             page_number=page_num,
             book_title=book_title or classification.get("book_title"),
@@ -668,7 +740,7 @@ class VisionExtractor:
             has_tables=classification.get("has_tables", False) or "tables" in extraction_result,
             has_charts=classification.get("has_charts", False),
             languages_present=["english", "sanskrit"] if classification.get("has_sanskrit") else ["english"],
-            astrology_system="vedic",  # Default for BPHS
+            astrology_system="vedic",
         )
         
         # Convert extraction result to content blocks
@@ -679,10 +751,10 @@ class VisionExtractor:
         if not raw_text:
             raw_text = self._extract_raw_text(extraction_result)
         
-        # Build extraction quality assessment (legacy field)
+        # Build extraction quality assessment
         extraction_confidence = confidence_metadata.overall_score if confidence_metadata else 0.7
         
-        extracted_page = ExtractedPage(
+        return ExtractedPage(
             metadata=metadata,
             content_blocks=content_blocks,
             raw_text=raw_text,
@@ -691,16 +763,14 @@ class VisionExtractor:
             confidence=confidence_metadata,
             retry_metadata=retry_metadata,
         )
-        
-        # Save raw response if configured
-        if self.config.save_raw_responses:
-            self._save_raw_response(page_num, extraction_result)
-        
-        logger.info(
-            f"Page {page_num} extracted: {len(content_blocks)} content blocks, "
-            f"confidence: {extraction_confidence:.2f}, model: {used_model}"
-        )
-        return extracted_page
+
+    def _save_formatted_json(self, page_num: int, page_obj: ExtractedPage, suffix: str = ""):
+        """Save the formatted ExtractedPage object as JSON."""
+        output_path = self.output_dir / f"raw_response_page_{page_num:03d}{suffix}.json"
+        with open(output_path, "w", encoding="utf-8") as f:
+            # Use model_dump if using Pydantic v2
+            data = page_obj.model_dump() if hasattr(page_obj, 'model_dump') else page_obj.dict()
+            json.dump(data, f, ensure_ascii=False, indent=2)
     
     def _extract_with_two_tier(
         self,
@@ -726,23 +796,17 @@ class VisionExtractor:
         Returns:
             Tuple of (extraction_result dict, model_name used)
         """
-        # Select model based on hybrid strategy or tier
+        # Select model based on page type (Strict Rule)
         if use_upgrade_model:
-            # Upgrade model takes precedence
             model_name = self.config.upgrade_model
-        elif self.config.enable_hybrid_strategy:
-            # Hybrid strategy: choose model based on page type
-            if page_type in [PageType.TABLE_HEAVY, PageType.MIXED]:
-                # Use Flash for better table structure
-                model_name = self.config.hybrid_table_model
-                logger.debug(f"Hybrid strategy: Using {model_name} for {page_type.value} page")
-            else:
-                # Use Flash-Lite for text-heavy pages (faster)
-                model_name = self.config.primary_model
-                logger.debug(f"Hybrid strategy: Using {model_name} for {page_type.value} page")
+        elif page_type in [PageType.TABLE_HEAVY, PageType.MIXED, PageType.CHART]:
+            # Use Flash for better table/structure understanding
+            model_name = self.config.hybrid_table_model
+            logger.info(f"[HYBRID] Strict Rule: Using {model_name} for {page_type.value} page")
         else:
-            # Standard two-tier: always use primary unless upgrading
+            # Use Flash-Lite for text-heavy pages (cost optimized)
             model_name = self.config.primary_model
+            logger.info(f"[HYBRID] Strict Rule: Using {model_name} for {page_type.value} page")
         
         # Temporarily switch model
         original_model = self.model
@@ -908,9 +972,9 @@ class VisionExtractor:
         
         return "\n\n".join(texts)
     
-    def _save_raw_response(self, page_num: int, result: Dict[str, Any]):
+    def _save_raw_response(self, page_num: int, result: Dict[str, Any], suffix: str = ""):
         """Save raw extraction response for debugging."""
-        output_path = self.output_dir / f"raw_response_page_{page_num:03d}.json"
+        output_path = self.output_dir / f"raw_response_page_{page_num:03d}{suffix}.json"
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
     

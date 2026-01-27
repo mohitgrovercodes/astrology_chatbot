@@ -27,14 +27,68 @@ except ImportError:
         CleanedPage,
         CleanedDocument,
         PageType,
+        PageType,
     )
 
+# Try importing LLM Factory (lazy import inside init to avoid circular deps if possible, but safe here)
+try:
+    from ..llm.factory import LLMFactory
+except ImportError:
+    try:
+        from src.rag.llm.factory import LLMFactory
+    except ImportError:
+        LLMFactory = None
 
 class StructuralCleaner:
     """
     Rule-based structural cleaning for extracted PDF content.
-    No LLM calls - purely deterministic transformations.
+    Rule-based structural cleaning for extracted PDF content.
+    Optionally supports LLM-based cleaning for higher quality.
     """
+    
+    CLEANING_PROMPT = """You are an expert editor for classical Sanskrit-English texts.
+Your task is to CLEAN the following extracted text page from a PDF.
+
+INPUT CONTENT:
+{content}
+
+INSTRUCTIONS:
+1. Remove running headers/footers (e.g., page numbers like "108", "Chapter 7").
+2. Merge broken lines (e.g., hyphenated words split across lines).
+3. Fix sentence breaks where a sentence is split by a newline incorrectly.
+4. Normalize Sanskrit diacritics if they look corrupted (e.g., " . <" garbage).
+5. Do NOT rewrite, summarize, or change the meaning. Keep the exact wording otherwise.
+6. If the page is empty or just garbage, return empty string.
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON object:
+{{
+  "clean_content": "The cleaned text string...",
+  "changes_made": ["list", "of", "changes"]
+}}
+"""
+    
+    CLEANING_PROMPT = """You are an expert editor for classical Sanskrit-English texts.
+Your task is to CLEAN the following extracted text page from a PDF.
+
+INPUT CONTENT:
+{content}
+
+INSTRUCTIONS:
+1. Remove running headers/footers (e.g., page numbers like "108", "Chapter 7").
+2. Merge broken lines (e.g., hyphenated words split across lines).
+3. Fix sentence breaks where a sentence is split by a newline incorrectly.
+4. Normalize Sanskrit diacritics if they look corrupted (e.g., " . <" garbage).
+5. Do NOT rewrite, summarize, or change the meaning. Keep the exact wording otherwise.
+6. If the page is empty or just garbage, return empty string.
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON object:
+{{
+  "clean_content": "The cleaned text string...",
+  "changes_made": ["list", "of", "changes"]
+}}
+"""
     
     # Common book headers/footers to detect
     COMMON_HEADER_PATTERNS = [
@@ -57,7 +111,25 @@ class StructuralCleaner:
         (r'(\d+)\s*।', r'\1॥'),  # Single danda after number to double
     ]
     
-    def __init__(self, min_header_frequency: int = 2):
+    
+    
+    def __init__(self, min_header_frequency: int = 2, use_llm: bool = False):
+        """
+        Initialize structural cleaner.
+        
+        Args:
+            min_header_frequency: Minimum times a string must appear across pages
+            use_llm: Whether to use LLM for cleaning (slower but better)
+        """
+        self.min_header_frequency = min_header_frequency
+        self.use_llm = use_llm
+        self.detected_headers: List[str] = []
+        self.llm_client = None
+        
+        if use_llm and LLMFactory:
+            # Initialize cheap cleaning model
+            self.llm_client = LLMFactory.get_model("gemini-1.5-flash") # Use Flash for speed/cost
+            print("[INFO] LLM Cleaning Enabled (gemini-1.5-flash)")
         """
         Initialize structural cleaner.
         
@@ -428,7 +500,51 @@ class StructuralCleaner:
             detected_headers=removed_headers,
             title_was_header=was_header,
         )
-    
+
+    def clean_page_llm(self, page: ExtractedPage) -> CleanedPage:
+        """
+        Clean page using LLM (slower but higher quality).
+        """
+        if not self.llm_client:
+            print("[WARN] LLM client not initialized, falling back to regex")
+            return self.clean_page(page)
+            
+        original_content = page.content
+        if not original_content.strip():
+            return self.clean_page(page) # fast track empty pages
+            
+        try:
+            prompt = self.CLEANING_PROMPT.format(content=original_content[:30000]) # Safety limit
+            response = self.llm_client.generate_content(prompt)
+            
+            # Parse JSON
+            text = response.text.replace('```json', '').replace('```', '').strip()
+            result = json.loads(text)
+            clean_content = result.get("clean_content", "")
+            changes = result.get("changes_made", [])
+            
+            # Fallback if LLM failed to produce content
+            if not clean_content and original_content:
+                clean_content = original_content
+                
+            return CleanedPage(
+                page_number=page.page_number,
+                page_type=page.page_type,
+                title=page.title, 
+                content=clean_content,
+                original_content=original_content,
+                has_sanskrit=page.has_sanskrit,
+                verses=page.verses, # Keep original verse extraction for now
+                verse_numbers=page.verse_numbers,
+                tables=page.tables,
+                cleaning_applied=["llm_cleaning"] + changes,
+                detected_headers=[],
+                title_was_header=False,
+            )
+            
+        except Exception as e:
+            print(f"[ERROR] LLM Cleaning failed for page {page.page_number}: {e}")
+            return self.clean_page(page) # Fallback to regex    
     def clean_document(
         self, 
         pages: List[ExtractedPage],
@@ -448,10 +564,18 @@ class StructuralCleaner:
         global_headers = self.detect_global_headers(pages)
         
         # Second pass: clean each page
-        cleaned_pages = [
-            self.clean_page(page, global_headers)
-            for page in pages
-        ]
+        # Second pass: clean each page
+        if self.use_llm:
+            print(f"[INFO] Cleaning {len(pages)} pages using LLM...")
+            cleaned_pages = []
+            for page in pages:
+                print(f"  > Cleaning Page {page.page_number}...")
+                cleaned_pages.append(self.clean_page_llm(page))
+        else:
+            cleaned_pages = [
+                self.clean_page(page, global_headers)
+                for page in pages
+            ]
         
         return CleanedDocument(
             pages=cleaned_pages,

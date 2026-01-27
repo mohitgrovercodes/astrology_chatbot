@@ -1,107 +1,65 @@
-# RAG Preprocessing Pipeline
+# Astrology AI ChatBot - RAG Pipeline
 
-Complete text pre-processing pipeline for the Astrology AI Chatbot RAG system.
+A production-grade extraction and text pre-processing pipeline for building an expert Astrology AI system.
 
-## Features
+## 🌟 Project Overview
 
-- **6-Phase Pipeline**: From raw PDF extraction to embedding-ready chunks
-- **Sanskrit Support**: Unicode normalization for Devanagari text
-- **Cross-Page Analysis**: Automatic continuation detection
-- **Semantic Segmentation**: Verse-commentary unit extraction
-- **Entity Extraction**: Planets, houses, signs, nakshatras
-- **Metadata Enrichment**: Hypothetical questions, summaries
-- **OpenAI Integration**: text-embedding-3-large support
+This system processes classical astrology texts (Vedic & Western) from raw PDF images into enriched, Rerank-ready semantic chunks for a RAG (Retrieval-Augmented Generation) system.
 
-## Quick Start
+### Key Capabilities
+- **Hierarchical Extraction**: Uses Gemini Vision (Flash-Lite/Flash/Pro) for precise layout-aware extraction of shlokas, translations, and complex astrological tables.
+- **Strict Two-Tier Logic**: Uses Flash-Lite for text, Flash for tables, and auto-upgrades to Pro for validation failures.
+- **Multi-Phase Preprocessing**: Structural cleaning (whitespace, Sanskrit normalization), cross-page linking, and semantic segmentation.
+- **Metadata Enrichment**: Automatically generates astrological entities (planets, houses, signs) and hypothetical questions for each chunk.
 
-### 1. Install Dependencies
+## 📂 Project Structure
+
+```text
+├── batch_extract.py           # Production entry point for PDF extraction
+├── extract_pdf.py             # Interactive wrapper for single-page testing
+├── run_preprocessing_phases.py # Entry point for cleaning & enrichment (Phases 2-5)
+├── src/
+│   ├── rag/
+│   │   ├── extraction/        # Vision extraction core (prompts, schemas, logic)
+│   │   └── preprocessing/     # Cleaning, analysis, and segmentation modules
+│   ├── llm/                   # Centralized LLM Factory (Gemini/OpenAI/xAI)
+│   └── utils/                 # Config, Logging, and Cost Tracking
+└── config/                    # YAML configuration for models and thresholds
+```
+
+## 🚀 Quick Start
+
+### 1. Installation
 
 ```bash
-pip install pydantic google-generativeai openai
+# Install dependencies
+pip install pydantic google-generativeai openai pillow numpy pdf2image
 ```
 
-### 2. Set API Keys
+### 2. Extraction (Phase 1)
+Extract raw text and structures from PDF:
 
 ```bash
-# Optional: For enhanced analysis
-export GOOGLE_API_KEY="your-google-api-key"
+# Batch extraction
+python batch_extract.py data/raw/book.pdf --start 100 --end 110 --workers 5
 
-# Required: For embedding generation
-export OPENAI_API_KEY="your-openai-api-key"
+# Interactive/Single-page testing
+python extract_pdf.py
 ```
 
-### 3. Run Pipeline
+### 3. Preprocessing (Phases 2-5)
+Clean, link, and enrich the extracted data:
 
 ```bash
-# Full pipeline
-python src/rag/preprocessing/pipeline.py extracted/input.json --output-dir processed
-
-# With LLM enhancement
-python src/rag/preprocessing/pipeline.py input.json --use-llm --output-dir processed
-
-# Skip embedding (no API key needed)
-python src/rag/preprocessing/pipeline.py input.json --skip-embedding
+# Process a single batch or page
+python run_preprocessing_phases.py --input extraction_output/raw_response_page_110.json
 ```
 
-## Pipeline Phases
+## 🛠️ Developer Tools
 
-| Phase | Module | Description |
-|-------|--------|-------------|
-| 2 | `structural_cleaner.py` | Header/footer removal, Sanskrit normalization |
-| 3 | `page_analyzer.py` | Cross-page continuation detection |
-| 4 | `semantic_segmenter.py` | Verse-commentary unit extraction |
-| 5 | `chunk_enricher.py` | Entity extraction, question generation |
-| 6 | `embedder.py` | OpenAI embedding generation |
+- **Cost Tracking**: Automatic SQLite-based tracking of token usage and API costs in `logs/cost_tracker.db`.
+- **Hybrid Routing**: The system automatically selects the cheapest capable model and upgrades to Pro only when extraction quality is low.
+- **Schema Compatibility**: Preprocessing automatically handles the "Rich" nested JSON output from the Vision system.
 
-## Usage
-
-### CLI Options
-
-```bash
-python src/rag/preprocessing/pipeline.py [INPUT] [OPTIONS]
-
-Arguments:
-  INPUT                Input extracted JSON file
-
-Options:
-  -o, --output-dir     Directory for checkpoint files
-  -s, --source-book    Book name for metadata
-  -t, --tradition      "vedic" or "western" (default: vedic)
-  --use-llm           Enable LLM for enhanced analysis
-  --skip-embedding    Skip Phase 6 embedding
-```
-
-### Sample Run
-
-```
-Input: 5 pages
-Duration: 0.08 seconds
-Chunks: 10
-Tokens: 2,224
-Entities: 6 planets, 14 houses
-```
-
-## Output Format
-
-The pipeline generates:
-- `*_phase2_cleaned.json` - Cleaned pages
-- `*_phase3_linked.json` - With cross-page relationships  
-- `*_phase4_segmented.json` - Semantic units
-- `*_phase5_enriched.json` - Ready for embedding
-- `*_final.json` - Complete output with embeddings
-
-## Next Steps
-
-1. Choose VectorDB (Pinecone/Qdrant/Weaviate)
-2. Implement VectorDB ingestion
-3. Build retrieval interface
-4. Test RAG query quality
-
-## Documentation
-
-- [PROJECT_STATUS.md](PROJECT_STATUS.md) - Current project status
-- [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) - Development guide
-
-## License
-
-Internal project for astrology chatbot development.
+## 📄 License
+Internal project for expert Astrology AI system development.

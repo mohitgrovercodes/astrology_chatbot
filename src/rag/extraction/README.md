@@ -106,43 +106,30 @@ The pipeline generates multiple output files:
 
 ```python
 @dataclass
-class PipelineConfig:
-    # PDF Processing
-    pdf_dpi: int = 200
+class ExtractionConfig:
+    # Model Strategy
+    primary_model: str = "gemini-2.5-flash-lite"  # default for text_heavy
+    table_model: str = "gemini-2.5-flash"        # default for tables/mixed
+    upgrade_model: str = "gemini-2.5-pro"        # for retries
     
-    # Gemini Settings
-    gemini_model: str = "gemini-1.5-pro"  # or "gemini-1.5-flash" for lower cost
-    temperature: float = 0.1
-    max_output_tokens: int = 8192
-    
-    # Rate Limiting (Gemini has quotas)
-    delay_between_requests: float = 3.0  # seconds
+    # Thresholds
+    confidence_threshold: float = 0.8
+    delay_between_requests: float = 2.0
     
     # Output
     output_dir: str = "./extraction_output"
     save_raw_responses: bool = True
-    save_page_images: bool = False
-    
-    # RAG Chunking
-    max_chunk_size: int = 1500  # approximate tokens
-    
-    # Book Metadata
-    book_title: str = "Unknown Book"
-    astrology_system: str = "vedic"  # "vedic", "western", "both"
 ```
 
 ## File Structure
 
 ```
 rag_extraction/
-├── __init__.py              # Package exports
 ├── vision_pipeline.py       # Main pipeline orchestration
-├── vision_extractor.py      # Gemini Vision extraction logic
-├── extraction_prompts.py    # Specialized prompts for astrology texts
+├── vision_extractor.py      # Core logic (Two-tier, retries, validation)
+├── extraction_prompts.py    # Astrology-specific Vision LLM prompts
 ├── extraction_schemas.py    # Pydantic models for structured output
-├── demo_extraction.py       # Usage examples and demos
-├── requirements.txt         # Dependencies
-└── README.md               # This file
+└── README.md
 ```
 
 ## Integration with Existing Pipeline

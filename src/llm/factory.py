@@ -14,8 +14,15 @@ Automatic cost tracking is enabled for all LLM instances.
 from typing import Optional, Dict, Any, List
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_anthropic import ChatAnthropic
+
+# Optional imports
+try:
+    from langchain_anthropic import ChatAnthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
 
 # Note: langchain-xai requires installation of langchain-xai package
 # If not available, it will be handled gracefully
@@ -54,8 +61,10 @@ class LLMFactory:
     PROVIDER_MAP = {
         "openai": ChatOpenAI,
         "google": ChatGoogleGenerativeAI,
-        "anthropic": ChatAnthropic,
     }
+    
+    if ANTHROPIC_AVAILABLE:
+        PROVIDER_MAP["anthropic"] = ChatAnthropic
     
     # Add xAI if available
     if XAI_AVAILABLE:

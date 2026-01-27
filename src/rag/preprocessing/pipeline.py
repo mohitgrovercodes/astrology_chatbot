@@ -42,6 +42,7 @@ class PreprocessingPipeline:
         source_book: str = "Unknown Source",
         tradition: str = "vedic",
         use_llm: bool = False,
+        use_llm_cleaning: bool = False,
         output_dir: Optional[str] = None,
     ):
         """
@@ -51,15 +52,17 @@ class PreprocessingPipeline:
             source_book: Name of the source book
             tradition: "vedic" or "western"
             use_llm: Whether to use LLM for analysis/enrichment
+            use_llm_cleaning: Whether to use LLM for Phase 2 cleaning
             output_dir: Directory for intermediate outputs
         """
         self.source_book = source_book
         self.tradition = tradition
         self.use_llm = use_llm
+        self.use_llm_cleaning = use_llm_cleaning
         self.output_dir = Path(output_dir) if output_dir else None
         
         # Initialize phase processors
-        self.cleaner = StructuralCleaner()
+        self.cleaner = StructuralCleaner(use_llm=use_llm_cleaning)
         self.analyzer = PageAnalyzer(use_llm=use_llm)
         self.segmenter = SemanticSegmenter(source_book=source_book)
         self.enricher = ChunkEnricher(use_llm=use_llm, tradition=tradition)
@@ -126,9 +129,17 @@ class PreprocessingPipeline:
             data = json.load(f)
         
         if isinstance(data, list):
-            pages = [ExtractedPage(**page) for page in data]
+            pages = []
+            for item in data:
+                if isinstance(item, dict) and "metadata" in item and "content_blocks" in item:
+                    pages.append(self._convert_rich_to_simple_page(item))
+                else:
+                    pages.append(ExtractedPage(**item))
         else:
-            pages = [ExtractedPage(**data)]
+            if isinstance(data, dict) and "metadata" in data and "content_blocks" in data:
+                pages = [self._convert_rich_to_simple_page(data)]
+            else:
+                pages = [ExtractedPage(**data)]
         
         print(f"  Input: {len(pages)} pages")
         
@@ -142,6 +153,53 @@ class PreprocessingPipeline:
         
         return cleaned_doc
     
+    def _convert_rich_to_simple_page(self, rich_data: dict) -> ExtractedPage:
+        """
+        Convert from the rich VisionExtractor schema to the simple Preprocessing schema.
+        Handles field mapping and PageType translation.
+        """
+        metadata = rich_data.get("metadata", {})
+        
+        # 1. Map PageType
+        # Rich: text_heavy, table_heavy, mixed, chart, title, index
+        # Simple: text, table, mixed, title_page
+        rich_type = metadata.get("page_type")
+        if rich_type == "text_heavy":
+            simple_type = "text"
+        elif rich_type == "table_heavy":
+            simple_type = "table"
+        elif rich_type == "title":
+            simple_type = "title_page"
+        elif rich_type in ["mixed", "chart", "index"]:
+            simple_type = "mixed" # Fallback
+        else:
+            simple_type = "mixed"
+
+        # 2. Extract content (use raw_text or join blocks)
+        content = rich_data.get("raw_text")
+        if not content and "content_blocks" in rich_data:
+            content = "\n\n".join([b.get("text", "") for b in rich_data["content_blocks"]])
+        
+        # 3. Extract tables
+        tables = []
+        for b in rich_data.get("content_blocks", []):
+            if b.get("content_type") == "table" and b.get("table_data"):
+                tables.append(b["table_data"])
+
+        # 4. Build flattened object
+        return ExtractedPage(
+            page_number=metadata.get("page_number", 0),
+            page_type=simple_type,
+            title=metadata.get("chapter_title"),
+            content=content or "",
+            has_sanskrit="sanskrit" in "".join(metadata.get("languages_present", [])).lower(),
+            verses=[], # Simple schema doesn't strictly require these at start
+            verse_numbers=[],
+            tables=tables,
+            confidence=rich_data.get("confidence"),
+            retry_metadata=rich_data.get("retry_metadata")
+        )
+
     def run_phase3(self, cleaned_doc: CleanedDocument) -> LinkedDocument:
         """Run Phase 3: Cross-Page Analysis."""
         print("\n" + "=" * 60)
