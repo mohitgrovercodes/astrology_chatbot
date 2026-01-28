@@ -56,7 +56,7 @@ class Embedder:
             config = get_config()
             self.model = model or config.embeddings.model
             self.dimensions = config.embeddings.dimensions
-            self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
+            self.api_key = api_key or config.get_api_key('openai')
         else:
             self.model = model or "text-embedding-3-large"
             self.dimensions = 3072

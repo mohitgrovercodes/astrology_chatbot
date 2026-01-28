@@ -244,6 +244,13 @@ class AstrologyRetriever:
 
 if __name__ == "__main__":
     import argparse
+    import sys
+    
+    # Ensure UTF-8 output even on Windows terminals
+    if sys.platform == "win32":
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+        
     parser = argparse.ArgumentParser()
     parser.add_argument("query", nargs="?")
     parser.add_argument("--hybrid", action="store_true")

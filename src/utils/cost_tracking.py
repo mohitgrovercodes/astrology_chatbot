@@ -273,7 +273,7 @@ class CostTrackingWrapper:
                 # OpenAI API format
                 if hasattr(response.usage, "prompt_tokens"):
                     input_tokens = response.usage.prompt_tokens
-                    output_tokens = response.usage.completion_tokens
+                    output_tokens = getattr(response.usage, "completion_tokens", 0)
                 else:
                     # Embedding format
                     input_tokens = response.usage.total_tokens
