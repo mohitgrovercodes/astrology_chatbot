@@ -59,6 +59,8 @@ Examples:
         db_path: str = "data/vectordb",
         llm_provider: str = "google",
         llm_model: Optional[str] = None,
+        use_reranker: bool = False,
+        reranker_method: str = "cohere",
     ):
         """Initialize chatbot."""
         print("Initializing Astrology AI Chatbot...")
@@ -68,6 +70,8 @@ Examples:
             db_path=db_path,
             llm_provider=llm_provider,
             llm_model=llm_model,
+            use_reranker=use_reranker,
+            reranker_method=reranker_method,
         )
         
         self.conversation_history: List[Dict[str, str]] = []
@@ -261,6 +265,17 @@ def main():
         "--model",
         help="LLM model to use (auto-selected if not specified)"
     )
+    parser.add_argument(
+        "--rerank",
+        action="store_true",
+        help="Enable reranking for better precision"
+    )
+    parser.add_argument(
+        "--reranker-method",
+        default="cohere",
+        choices=["cohere", "cross-encoder"],
+        help="Reranker method (cohere or cross-encoder)"
+    )
     
     args = parser.parse_args()
     
@@ -270,6 +285,8 @@ def main():
         db_path=args.db_path,
         llm_provider=args.provider,
         llm_model=args.model,
+        use_reranker=args.rerank,
+        reranker_method=args.reranker_method,
     )
     
     chatbot.run()

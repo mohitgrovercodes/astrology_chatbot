@@ -12,6 +12,8 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import chromadb
 from chromadb.config import Settings
+from rank_bm25 import BM25Okapi
+import numpy as np
 
 # Import embedder for query embedding
 import sys
@@ -90,6 +92,12 @@ class AstrologyRetriever:
         self.embedder = embedder or Embedder()
         if not self.embedder.client:
             print("[WARN] No OpenAI API key. Retrieval will not work.")
+        
+        # Initialize BM25 index for hybrid search
+        self.bm25_index = None
+        self.bm25_documents = []
+        self.bm25_ids = []
+        self._build_bm25_index()
     
     def retrieve(
         self,
@@ -148,6 +156,183 @@ class AstrologyRetriever:
                 ))
         
         return chunks
+    
+    def _build_bm25_index(self):
+        """Build BM25 index for keyword search."""
+        try:
+            # Get all documents from collection
+            all_docs = self.collection.get(include=["documents", "metadatas"])
+            
+            if all_docs and all_docs['documents']:
+                self.bm25_documents = all_docs['documents']
+                self.bm25_ids = all_docs['ids']
+                
+                # Tokenize documents (simple whitespace tokenization)
+                tokenized_docs = [doc.lower().split() for doc in self.bm25_documents]
+                
+                # Build BM25 index
+                self.bm25_index = BM25Okapi(tokenized_docs)
+                print(f"[OK] Built BM25 index with {len(self.bm25_documents)} documents")
+        except Exception as e:
+            print(f"[WARN] Failed to build BM25 index: {e}")
+    
+    def retrieve_hybrid(
+        self,
+        query: str,
+        top_k: int = 5,
+        filters: Optional[Dict[str, Any]] = None,
+        semantic_weight: float = 0.7,
+    ) -> List[RetrievedChunk]:
+        """
+        Hybrid retrieval combining semantic and keyword (BM25) search.
+        
+        Args:
+            query: User question
+            top_k: Number of chunks to retrieve
+            filters: Metadata filters
+            semantic_weight: Weight for semantic search (1-semantic_weight for BM25)
+            
+        Returns:
+            List of RetrievedChunk objects
+        """
+        # Get semantic results
+        semantic_results = self.retrieve(query, top_k=top_k * 2, filters=filters)
+        
+        # Get BM25 results if index is available
+        bm25_results = []
+        if self.bm25_index:
+            tokenized_query = query.lower().split()
+            bm25_scores = self.bm25_index.get_scores(tokenized_query)
+            
+            # Get top-k BM25 results
+            top_indices = np.argsort(bm25_scores)[::-1][:top_k * 2]
+            
+            for idx in top_indices:
+                if bm25_scores[idx] > 0:  # Only include non-zero scores
+                    chunk_id = self.bm25_ids[idx]
+                    # Get full chunk data
+                    result = self.collection.get(
+                        ids=[chunk_id],
+                        include=["documents", "metadatas"]
+                    )
+                    if result and result['ids']:
+                        metadata = result['metadatas'][0]
+                        bm25_results.append(RetrievedChunk(
+                            chunk_id=chunk_id,
+                            text=result['documents'][0],
+                            display_text=metadata.get('display_text', result['documents'][0]),
+                            verse_sanskrit=metadata.get('verse_sanskrit'),
+                            score=float(bm25_scores[idx]),
+                            metadata=metadata,
+                        ))
+        
+        # Combine using Reciprocal Rank Fusion (RRF)
+        combined_scores = {}
+        k = 60  # RRF constant
+        
+        # Add semantic scores
+        for rank, chunk in enumerate(semantic_results, 1):
+            combined_scores[chunk.chunk_id] = combined_scores.get(chunk.chunk_id, 0) + \
+                semantic_weight / (k + rank)
+        
+        # Add BM25 scores
+        for rank, chunk in enumerate(bm25_results, 1):
+            combined_scores[chunk.chunk_id] = combined_scores.get(chunk.chunk_id, 0) + \
+                (1 - semantic_weight) / (k + rank)
+        
+        # Sort by combined score and get top-k
+        sorted_ids = sorted(combined_scores.keys(), key=lambda x: combined_scores[x], reverse=True)[:top_k]
+        
+        # Build final results
+        final_results = []
+        all_chunks = {c.chunk_id: c for c in semantic_results + bm25_results}
+        
+        for chunk_id in sorted_ids:
+            if chunk_id in all_chunks:
+                chunk = all_chunks[chunk_id]
+                # Update score to combined score
+                chunk.score = combined_scores[chunk_id]
+                final_results.append(chunk)
+        
+        return final_results
+    
+    def retrieve_with_advanced_hyde(
+        self,
+        query: str,
+        top_k: int = 5,
+        filters: Optional[Dict[str, Any]] = None,
+        llm = None,
+    ) -> List[RetrievedChunk]:
+        """
+        Advanced HyDE retrieval with hypothetical document generation.
+        
+        Uses LLM to generate a hypothetical answer, then searches for
+        chunks similar to that answer.
+        
+        Args:
+            query: User question
+            top_k: Number of chunks to retrieve
+            filters: Metadata filters
+            llm: Optional LLM for generating hypothetical documents
+            
+        Returns:
+            List of RetrievedChunk objects
+        """
+        if not llm:
+            # Fall back to standard HyDE
+            return self.retrieve_with_hyde(query, top_k, filters)
+        
+        try:
+            # Generate hypothetical answer
+            hyde_prompt = f"""Generate a brief, factual answer to this astrology question based on classical Vedic texts:
+
+Question: {query}
+
+Answer (2-3 sentences):"""
+            
+            response = llm.invoke(hyde_prompt)
+            hypothetical_doc = response.content
+            
+            print(f"[HYDE] Generated hypothetical document ({len(hypothetical_doc)} chars)")
+            
+            # Embed hypothetical document
+            hyde_embedding = self.embedder.embed_texts([hypothetical_doc])[0]
+            
+            # Search using hypothetical document embedding
+            where_clause = self._build_where_clause(filters) if filters else None
+            
+            results = self.collection.query(
+                query_embeddings=[hyde_embedding],
+                n_results=top_k,
+                where=where_clause,
+                include=["documents", "metadatas", "distances"]
+            )
+            
+            # Convert to RetrievedChunk objects
+            chunks = []
+            if results and results['ids'] and results['ids'][0]:
+                for i in range(len(results['ids'][0])):
+                    chunk_id = results['ids'][0][i]
+                    document = results['documents'][0][i]
+                    metadata = results['metadatas'][0][i]
+                    distance = results['distances'][0][i]
+                    score = 1 - distance
+                    
+                    chunks.append(RetrievedChunk(
+                        chunk_id=chunk_id,
+                        text=document,
+                        display_text=metadata.get('display_text', document),
+                        verse_sanskrit=metadata.get('verse_sanskrit'),
+                        score=score,
+                        metadata=metadata,
+                    ))
+            
+            return chunks
+            
+        except Exception as e:
+            print(f"[ERROR] Advanced HyDE failed: {e}")
+            # Fall back to standard retrieval
+            return self.retrieve(query, top_k, filters)
     
     def retrieve_with_hyde(
         self,
@@ -312,6 +497,7 @@ def main():
     parser.add_argument("--filter-planet", help="Filter by planet (e.g., Mars)")
     parser.add_argument("--filter-house", help="Filter by house (e.g., 5)")
     parser.add_argument("--hyde", action="store_true", help="Use HyDE retrieval")
+    parser.add_argument("--hybrid", action="store_true", help="Use hybrid search (semantic + BM25)")
     parser.add_argument("--expand", action="store_true", help="Expand context with related chunks")
     parser.add_argument("--info", action="store_true", help="Show collection info")
     
@@ -349,7 +535,9 @@ def main():
         print(f"[FILTERS] {filters}")
     print()
     
-    if args.hyde:
+    if args.hybrid:
+        chunks = retriever.retrieve_hybrid(args.query, top_k=args.top_k, filters=filters)
+    elif args.hyde:
         chunks = retriever.retrieve_with_hyde(args.query, top_k=args.top_k, filters=filters)
     else:
         chunks = retriever.retrieve(args.query, top_k=args.top_k, filters=filters)

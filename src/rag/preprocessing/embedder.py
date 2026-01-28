@@ -68,13 +68,15 @@ class Embedder:
         else:
             print("[WARN] OPENAI_API_KEY not set. Embeddings will be skipped.")
     
-    def embed_texts(self, texts: List[str], delay: float = 0.5) -> List[List[float]]:
+    
+    def embed_texts(self, texts: List[str], delay: float = 0.5, max_retries: int = 3) -> List[List[float]]:
         """
-        Generate embeddings for a list of texts.
+        Generate embeddings for a list of texts with robust retry logic.
         
         Args:
             texts: List of text strings to embed
             delay: Delay between batches (for rate limiting)
+            max_retries: Maximum retry attempts per batch
             
         Returns:
             List of embedding vectors
@@ -84,40 +86,67 @@ class Embedder:
             return [[0.0] * self.DIMENSIONS for _ in texts]
         
         all_embeddings = []
+        current_batch_size = self.BATCH_SIZE
         
-        for i in range(0, len(texts), self.BATCH_SIZE):
-            batch = texts[i:i + self.BATCH_SIZE]
+        for i in range(0, len(texts), current_batch_size):
+            batch = texts[i:i + current_batch_size]
             
-            try:
-                response = self.client.embeddings.create(
-                    model=self.MODEL,
-                    input=batch,
-                    dimensions=self.DIMENSIONS,
-                )
-                
-                # Extract embeddings in order
-                batch_embeddings = [item.embedding for item in response.data]
-                all_embeddings.extend(batch_embeddings)
-                
-                # Log cost if tracking is available
-                if self.cost_tracker and hasattr(response, 'usage'):
-                    try:
-                        self.cost_tracker.log_from_response(
-                            response,
-                            operation="embedding",
-                            metadata={"batch_num": i//self.BATCH_SIZE + 1, "batch_size": len(batch)}
-                        )
-                    except Exception as e:
-                        print(f"[WARN] Failed to log embedding cost: {e}")
-                
-                print(f"[OK] Embedded batch {i//self.BATCH_SIZE + 1}/{(len(texts) + self.BATCH_SIZE - 1)//self.BATCH_SIZE}")
-                
-                # Rate limiting delay
-                if i + self.BATCH_SIZE < len(texts):
-                    time.sleep(delay)
+            # Retry logic with exponential backoff
+            for attempt in range(max_retries):
+                try:
+                    response = self.client.embeddings.create(
+                        model=self.MODEL,
+                        input=batch,
+                        dimensions=self.DIMENSIONS,
+                    )
                     
-            except Exception as e:
-                print(f"[ERROR] Embedding batch failed: {e}")
+                    # Extract embeddings in order
+                    batch_embeddings = [item.embedding for item in response.data]
+                    all_embeddings.extend(batch_embeddings)
+                    
+                    # Log cost if tracking is available
+                    if self.cost_tracker and hasattr(response, 'usage'):
+                        try:
+                            self.cost_tracker.log_from_response(
+                                response,
+                                operation="embedding",
+                                metadata={"batch_num": i//current_batch_size + 1, "batch_size": len(batch)}
+                            )
+                        except Exception as e:
+                            print(f"[WARN] Failed to log embedding cost: {e}")
+                    
+                    print(f"[OK] Embedded batch {i//current_batch_size + 1}/{(len(texts) + current_batch_size - 1)//current_batch_size}")
+                    
+                    # Rate limiting delay
+                    if i + current_batch_size < len(texts):
+                        time.sleep(delay)
+                    
+                    break  # Success, exit retry loop
+                    
+                except Exception as e:
+                    error_str = str(e).lower()
+                    is_rate_limit = any([
+                        "429" in error_str,
+                        "rate limit" in error_str,
+                        "quota" in error_str,
+                        "resource exhausted" in error_str
+                    ])
+                    
+                    if is_rate_limit and attempt < max_retries - 1:
+                        # Exponential backoff
+                        wait_time = (2 ** attempt) * 2
+                        print(f"[WARN] Rate limit hit. Waiting {wait_time}s... (Attempt {attempt+1}/{max_retries})")
+                        time.sleep(wait_time)
+                        
+                        # Reduce batch size on retry
+                        if current_batch_size > 10:
+                            current_batch_size = current_batch_size // 2
+                            print(f"[INFO] Reducing batch size to {current_batch_size}")
+                    else:
+                        print(f"[ERROR] Embedding batch failed after {max_retries} attempts: {e}")
+                        # Return zero vectors for failed batch
+                        all_embeddings.extend([[0.0] * self.DIMENSIONS for _ in batch])
+                        break
                 # Return zero vectors for failed batch
                 all_embeddings.extend([[0.0] * self.DIMENSIONS for _ in batch])
         

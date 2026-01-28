@@ -19,6 +19,7 @@ sys.path.insert(0, str(project_root))
 
 from src.rag.retriever import AstrologyRetriever, RetrievedChunk
 from src.llm.factory import create_llm
+from src.rag.reranker import Reranker
 
 
 @dataclass
@@ -77,6 +78,8 @@ Always be respectful of the sacred nature of Vedic astrology."""
         llm_model: Optional[str] = None,
         temperature: float = 0.3,
         retriever: Optional[AstrologyRetriever] = None,
+        use_reranker: bool = False,
+        reranker_method: str = "cohere",
     ):
         """
         Initialize RAG engine.
@@ -88,6 +91,8 @@ Always be respectful of the sacred nature of Vedic astrology."""
             llm_model: LLM model name (auto-selected if None)
             temperature: LLM temperature
             retriever: Optional pre-initialized retriever
+            use_reranker: Enable reranking for better precision
+            reranker_method: 'cohere' or 'cross-encoder'
         """
         # Initialize retriever
         self.retriever = retriever or AstrologyRetriever(
@@ -105,7 +110,52 @@ Always be respectful of the sacred nature of Vedic astrology."""
             use_rate_limiting=True,
         )
         
+        # Initialize reranker if requested
+        self.reranker = None
+        if use_reranker:
+            try:
+                self.reranker = Reranker(method=reranker_method)
+                print(f"[OK] Reranker enabled: {reranker_method}")
+            except Exception as e:
+                print(f"[WARN] Reranker initialization failed: {e}")
+        
         print(f"[OK] RAG Engine ready")
+    
+    def _expand_query(self, query: str) -> List[str]:
+        """
+        Expand query into multiple variations for better retrieval.
+        
+        Args:
+            query: Original user query
+            
+        Returns:
+            List of query variations (including original)
+        """
+        queries = [query]
+        
+        # Simple synonym expansion for common astrological terms
+        synonyms = {
+            "house": ["bhava"],
+            "planet": ["graha"],
+            "sign": ["rashi", "zodiac sign"],
+            "effect": ["result", "signification", "indication"],
+            "mars": ["mangal", "kuja"],
+            "jupiter": ["guru", "brihaspati"],
+            "saturn": ["shani"],
+            "venus": ["shukra"],
+            "mercury": ["budha"],
+        }
+        
+        query_lower = query.lower()
+        for term, syns in synonyms.items():
+            if term in query_lower:
+                for syn in syns[:1]:  # Use first synonym only
+                    expanded = query.lower().replace(term, syn)
+                    if expanded != query.lower():
+                        queries.append(expanded)
+                        break
+        
+        return queries[:3]  # Max 3 query variations
     
     def answer_question(
         self,
@@ -132,13 +182,37 @@ Always be respectful of the sacred nature of Vedic astrology."""
         """
         print(f"\n[QUERY] {query}")
         
-        # Retrieve relevant chunks
-        if use_hyde:
-            chunks = self.retriever.retrieve_with_hyde(query, top_k=top_k, filters=filters)
-        else:
-            chunks = self.retriever.retrieve(query, top_k=top_k, filters=filters)
+        # Expand query for better recall
+        query_variations = self._expand_query(query)
+        if len(query_variations) > 1:
+            print(f"[EXPANSION] Generated {len(query_variations)} query variations")
         
-        print(f"[RETRIEVAL] Found {len(chunks)} chunks")
+        # Retrieve relevant chunks using hybrid search
+        all_chunks = []
+        for q in query_variations:
+            if use_hyde:
+                chunks = self.retriever.retrieve_with_hyde(q, top_k=top_k, filters=filters)
+            else:
+                # Use hybrid search by default for better quality
+                chunks = self.retriever.retrieve_hybrid(q, top_k=top_k, filters=filters)
+            all_chunks.extend(chunks)
+        
+        # Deduplicate and sort by score
+        seen_ids = set()
+        unique_chunks = []
+        for chunk in sorted(all_chunks, key=lambda x: x.score, reverse=True):
+            if chunk.chunk_id not in seen_ids:
+                seen_ids.add(chunk.chunk_id)
+                unique_chunks.append(chunk)
+                if len(unique_chunks) >= top_k:
+                    break
+        
+        chunks = unique_chunks
+        print(f"[RETRIEVAL] Found {len(chunks)} unique chunks")
+        
+        # Rerank if enabled
+        if self.reranker and len(chunks) > 1:
+            chunks = self.reranker.rerank(query, chunks, top_k=top_k)
         
         # Expand context
         if expand_context and chunks:
@@ -249,6 +323,8 @@ def main():
     parser.add_argument("--model", default="gemini-2.0-flash-exp", help="LLM model")
     parser.add_argument("--hyde", action="store_true", help="Use HyDE retrieval")
     parser.add_argument("--no-expand", action="store_true", help="Don't expand context")
+    parser.add_argument("--rerank", action="store_true", help="Enable reranking")
+    parser.add_argument("--reranker-method", default="cohere", choices=["cohere", "cross-encoder"], help="Reranker method")
     parser.add_argument("--filter-planet", help="Filter by planet")
     parser.add_argument("--filter-house", help="Filter by house")
     
@@ -270,6 +346,8 @@ def main():
     engine = RAGEngine(
         collection_name=args.collection,
         llm_model=args.model,
+        use_reranker=args.rerank,
+        reranker_method=args.reranker_method,
     )
     
     # Get answer

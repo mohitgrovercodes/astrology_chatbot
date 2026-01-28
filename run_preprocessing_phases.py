@@ -90,7 +90,7 @@ def main():
     # Initialize pipeline
     print("[INIT] Initializing preprocessing pipeline...")
     pipeline = PreprocessingPipeline(
-        source_book="Brihat Parasara Hora Sastra",
+        source_book="Jataka Parijata Vol 1 By Vaidyanatha Dikshita",
         tradition="vedic",
         use_llm=args.use_llm,  # Enable LLM for enrichment
         use_llm_cleaning=args.use_llm, # Enable LLM for structural cleaning (Phase 2)
