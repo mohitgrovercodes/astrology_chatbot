@@ -1,0 +1,152 @@
+{
+  "metadata": {
+    "page_number": 50,
+    "book_title": "Jataka_Parijat_Vol_1by_Vaidyanatha_Dikshita_pages_removed",
+    "chapter_title": null,
+    "chapter_number": null,
+    "section_title": null,
+    "page_type": "mixed",
+    "has_tables": true,
+    "has_charts": false,
+    "languages_present": [
+      "english",
+      "sanskrit"
+    ],
+    "astrology_system": "vedic"
+  },
+  "content_blocks": [
+    {
+      "content_type": "heading",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 1
+    },
+    {
+      "content_type": "prose",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 2
+    },
+    {
+      "content_type": "table",
+      "text": "",
+      "verse_data": null,
+      "table_data": {
+        "title": "List of Upagrahas for the Nine Planets",
+        "headers": [
+          "Planet",
+          "Upagraha (Sanskrit)",
+          "Upagraha (English)"
+        ],
+        "rows": [
+          [
+            "The Sun's",
+            "(काल)",
+            "Kala"
+          ],
+          [
+            "Moon's",
+            "(परिधि)",
+            "Paridhi"
+          ],
+          [
+            "Mars'",
+            "(धूम)",
+            "Dhuma"
+          ],
+          [
+            "Mercury's",
+            "(अर्द्धप्रहर)",
+            "Ardhaprahara"
+          ],
+          [
+            "Jupiter's",
+            "(यमकण्टक)",
+            "Yamakantaka"
+          ],
+          [
+            "Venus'",
+            "(कोदण्ड or इन्द्रचाप or कार्मुक)",
+            "Kodanda"
+          ],
+          [
+            "Saturn's",
+            "(मान्दि or गुळिक)",
+            "Mandi"
+          ],
+          [
+            "Rahu's",
+            "(पात or व्यतीपात)",
+            "Pata"
+          ],
+          [
+            "Ketu's",
+            "(उपकेतु)",
+            "Upaketu"
+          ]
+        ],
+        "markdown": "| Planet    | Upagraha (Sanskrit)              | Upagraha (English) |\n|-----------|----------------------------------|--------------------|\n| The Sun's | (काल)                            | Kala               |\n| Moon's    | (परिधि)                           | Paridhi            |\n| Mars'     | (धूम)                             | Dhuma              |\n| Mercury's | (अर्द्धप्रहर)                      | Ardhaprahara       |\n| Jupiter's | (यमकण्टक)                         | Yamakantaka        |\n| Venus'    | (कोदण्ड or इन्द्रचाप or कार्मुक) | Kodanda            |\n| Saturn's  | (मान्दि or गुळिक)                | Mandi              |\n| Rahu's    | (पात or व्यतीपात)                | Pata               |\n| Ketu's    | (उपकेतु)                          | Upaketu            |",
+        "context": null,
+        "table_type": "planetary_upagrahas"
+      },
+      "sequence_order": 3
+    },
+    {
+      "content_type": "prose",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 4
+    },
+    {
+      "content_type": "shloka",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Calculation of Upagrahas from Phaladeepika"
+      },
+      "table_data": null,
+      "sequence_order": 5
+    },
+    {
+      "content_type": "shloka",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Calculation of Upagrahas from Parashara"
+      },
+      "table_data": null,
+      "sequence_order": 6
+    }
+  ],
+  "raw_text": "46\nबातकपारिजाते\nNOTES.\nThere are nine Upagrahas for the nine planets.\nThe Sun's Upagraha is (काल) Kala\nAdh. II\nMoon's\n\"\n\"\n\"\nMars'\nMercury's,,\n\"\n\".\n(परिधि)\n(धूम)\n\"\n(अर्द्धप्रहर)\nParidhi\n\"\n\"\nJupiter's\n\"\n\"\nVenus'\n\"\n29\n\"\n(यमकण्टक)\nDhuma\nArdhaprahara\nYamakantaka\n(कोदण्ड or इन्द्रचाप or कार्मुक) Kodanda\nSaturn's\n\"\n\"\n(मान्दि or गुळिक) Mandi\nRahu's\n\"\n\"\nKetu's\n\"\n\"\n\"\n(पात or व्यतीपात) Pata\n(उपकेतु) Upaketu\n:\nFor finding their several positions on any particular day\nAstrologers have certain conventions which are epitomised in the\nfollowing quotations:-\n(१) फलदीपिका.\ni\nघरं रुद्रदास्यं घटं नित्यतानं स्वनिर्मान्दिनाख्यः क्रमोणार्क वारात् ।\nअहर्मानवृद्धिक्षयौ तत्र कार्यों निशार्या तु वारेश्वरात्पञ्चमाद्याः ॥\nदिव्याघटीनित्यतनुः खनीनां चन्द्रे रुरुस्थाद्यमकण्टकस्थ ।\nअर्धप्रहारस्य भटानटेन स्तनौखनीचन्द्रखरौजयशः ॥\nकालस्य फेनं तरुरुद्रादिष्यं वम्यो नटस्तरनुसूर्यवारात् ।\nएर्षा समं मान्दिवदेव तत्प्त्तन्नाख्याः स्फुटं लभवदत्र साध्यम् ॥\nधूमो वेदगृहैस्त्रयोदशभिरप्यशैः समेते रवौ\nस्यात्तस्मिन् व्यतिपातको विगलिते चक्रादयास्मिन् ब्युते ।\nबाहुनैः परिषेष इन्द्रधनुरित्यास्मन् च्युते मण्डलात्\nअस्पष्टयंशयुते ऽत्र केतुर्थ तत्रैकक्षेयुक्तो रविः ॥\n(२) परापार\nनखलिप्ताधिके धूमे कृतिलिप्ताविहीनकाः\nकेतौ कार्या गुरोर्वाक्यादृक्षपादावसानकाः ॥\nचत्वारो राशयो भानौ युक्तभागास्त्रयोदश ।\nधूमो नाम महादोषः सर्वकर्मविनाशकः ।॥\nधूमो मण्डलतः शुद्धो व्यतीपातोत्र दोषदः ।\nसषक्षेत्र व्यतीपाते परिवेषस्तु दोषक्कृत् ॥\n:",
+  "extraction_confidence": 0.95,
+  "extraction_notes": "Corrected OCR error in heading: 'परापार' to 'पराशर'.; Corrected OCR error in Phaladeepika shloka: 'तत्प्त्तन्नाख्याः' to 'तत्पत्तनाख्याः'.; Corrected OCR error in Phaladeepika shloka: 'ब्युते' to 'च्युते'.; Corrected OCR error in Phaladeepika shloka: 'केतुर्थ' to 'केतुरथ'.; Corrected OCR error in Parashara shloka: 'सषक्षेत्र' to 'सषड्क्षेत्रे'.",
+  "confidence": {
+    "overall_score": 0.95,
+    "criteria": {
+      "image_quality": 0.9,
+      "text_clarity": 0.95,
+      "layout_detection": 0.95
+    },
+    "reasoning": null,
+    "flags": []
+  },
+  "retry_metadata": {
+    "initial_model": "gemini-2.5-flash-lite",
+    "retry_model": "gemini-2.5-pro",
+    "initial_confidence": 0.4,
+    "retry_reason": "Confidence below threshold (0.9)",
+    "retry_count": 1
+  }
+}

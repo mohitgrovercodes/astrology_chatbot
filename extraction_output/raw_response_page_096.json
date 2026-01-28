@@ -1,0 +1,375 @@
+{
+  "metadata": {
+    "page_number": 96,
+    "book_title": "Jataka_Parijat_Vol_1by_Vaidyanatha_Dikshita_pages_removed",
+    "chapter_title": null,
+    "chapter_number": null,
+    "section_title": null,
+    "page_type": "text_heavy",
+    "has_tables": false,
+    "has_charts": false,
+    "languages_present": [
+      "english",
+      "sanskrit"
+    ],
+    "astrology_system": "vedic"
+  },
+  "content_blocks": [
+    {
+      "content_type": "heading",
+      "text": "Aan. 11",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 1
+    },
+    {
+      "content_type": "shloka",
+      "text": "अभ्ये द्वादश भावाश्च प्रोक्तव्यास्ते प्रयक्षतः ।\n\n",
+      "verse_data": {
+        "verse_number": "1",
+        "sanskrit_text": "अभ्ये द्वादश भावाश्च प्रोक्तव्यास्ते प्रयक्षतः ।",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Introduction to twelve conditions of planets"
+      },
+      "table_data": null,
+      "sequence_order": 2
+    },
+    {
+      "content_type": "shloka",
+      "text": "गुहायां च बलं बुद्धा फर्क वक्ष्ये यथाक्रमम् ॥\n\n",
+      "verse_data": {
+        "verse_number": "2",
+        "sanskrit_text": "गुहायां च बलं बुद्धा फर्क वक्ष्ये यथाक्रमम् ॥",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Introduction to twelve conditions of planets"
+      },
+      "table_data": null,
+      "sequence_order": 3
+    },
+    {
+      "content_type": "shloka",
+      "text": "शयन चोपवेश च नेत्रपाणि प्रकाशनम् ।\n\n",
+      "verse_data": {
+        "verse_number": "3",
+        "sanskrit_text": "शयन चोपवेश च नेत्रपाणि प्रकाशनम् ।",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Listing of planetary conditions"
+      },
+      "table_data": null,
+      "sequence_order": 4
+    },
+    {
+      "content_type": "shloka",
+      "text": "गमनेच्छा च गमनं सभायां वसतिस्तथा ॥\n\n",
+      "verse_data": {
+        "verse_number": "4",
+        "sanskrit_text": "गमनेच्छा च गमनं सभायां वसतिस्तथा ॥",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Listing of planetary conditions"
+      },
+      "table_data": null,
+      "sequence_order": 5
+    },
+    {
+      "content_type": "shloka",
+      "text": "आगमो भोजनं चैव मृत्यलिप्सा च कौतुकम् ।\n\n",
+      "verse_data": {
+        "verse_number": "5",
+        "sanskrit_text": "आगमो भोजनं चैव मृत्यलिप्सा च कौतुकम् ।",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Listing of planetary conditions"
+      },
+      "table_data": null,
+      "sequence_order": 6
+    },
+    {
+      "content_type": "shloka",
+      "text": "निद्रा गुद्दाणां चेष्टा च कथिताः पूर्वसूरिभिः ॥\n\n",
+      "verse_data": {
+        "verse_number": "6",
+        "sanskrit_text": "निद्रा गुद्दाणां चेष्टा च कथिताः पूर्वसूरिभिः ॥",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Listing of planetary conditions"
+      },
+      "table_data": null,
+      "sequence_order": 7
+    },
+    {
+      "content_type": "shloka",
+      "text": "यस्मिनृते भवेत् खेटस्तेन तं परिपूरयेत् ।\n\n",
+      "verse_data": {
+        "verse_number": "7",
+        "sanskrit_text": "यस्मिनृते भवेत् खेटस्तेन तं परिपूरयेत् ।",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Method for calculating planetary strength"
+      },
+      "table_data": null,
+      "sequence_order": 8
+    },
+    {
+      "content_type": "shloka",
+      "text": "पुनरंशेन सपूर्व स्वनक्षत्रं नियोजयेत् ॥\n\n",
+      "verse_data": {
+        "verse_number": "8",
+        "sanskrit_text": "पुनरंशेन सपूर्व स्वनक्षत्रं नियोजयेत् ॥",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Method for calculating planetary strength"
+      },
+      "table_data": null,
+      "sequence_order": 9
+    },
+    {
+      "content_type": "shloka",
+      "text": "यातदण्ड तथा लग्नमेककृित्य सदा बुधैः ।\n\n",
+      "verse_data": {
+        "verse_number": "9",
+        "sanskrit_text": "यातदण्ड तथा लग्नमेककृित्य सदा बुधैः ।",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Method for calculating planetary strength"
+      },
+      "table_data": null,
+      "sequence_order": 10
+    },
+    {
+      "content_type": "shloka",
+      "text": "रविणा हरते भागं शेष कार्ये नियोजयेत् ॥\n\n",
+      "verse_data": {
+        "verse_number": "10",
+        "sanskrit_text": "रविणा हरते भागं शेष कार्ये नियोजयेत् ॥",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Method for calculating planetary strength"
+      },
+      "table_data": null,
+      "sequence_order": 11
+    },
+    {
+      "content_type": "shloka",
+      "text": "माक्षणिकदशाक्रमेण पुनः पूरणमाचरेत् ।\n\n",
+      "verse_data": {
+        "verse_number": "11",
+        "sanskrit_text": "माक्षणिकदशाक्रमेण पुनः पूरणमाचरेत् ।",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Method for calculating planetary strength"
+      },
+      "table_data": null,
+      "sequence_order": 12
+    },
+    {
+      "content_type": "shloka",
+      "text": "नामाक्षरेण संयुक्त हर्त्तव्यं रविणा ततः ॥\n\n",
+      "verse_data": {
+        "verse_number": "12",
+        "sanskrit_text": "नामाक्षरेण संयुक्त हर्त्तव्यं रविणा ततः ॥",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Method for calculating planetary strength"
+      },
+      "table_data": null,
+      "sequence_order": 13
+    },
+    {
+      "content_type": "shloka",
+      "text": "रवौ पञ्च तथा देयं चन्द्रे दद्याद्वयं तथा ।\n\n",
+      "verse_data": {
+        "verse_number": "13",
+        "sanskrit_text": "रवौ पञ्च तथा देयं चन्द्रे दद्याद्वयं तथा ।",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Planetary strength allocation"
+      },
+      "table_data": null,
+      "sequence_order": 14
+    },
+    {
+      "content_type": "shloka",
+      "text": "कुजे द्वयं च संयुक्तं बुधे सोणि नियोजयेत् ॥\n\n",
+      "verse_data": {
+        "verse_number": "14",
+        "sanskrit_text": "कुजे द्वयं च संयुक्तं बुधे सोणि नियोजयेत् ॥",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Planetary strength allocation"
+      },
+      "table_data": null,
+      "sequence_order": 15
+    },
+    {
+      "content_type": "shloka",
+      "text": "गुरौ बाणाः प्रदेयाश्च श्रयं दद्याच भार्गवे ।\n\n",
+      "verse_data": {
+        "verse_number": "15",
+        "sanskrit_text": "गुरौ बाणाः प्रदेयाश्च श्रयं दद्याच भार्गवे ।",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Planetary strength allocation"
+      },
+      "table_data": null,
+      "sequence_order": 16
+    },
+    {
+      "content_type": "shloka",
+      "text": "शनैौ तयमथो देयं राहौ दद्याच्चतुष्टयम् ।\n\n",
+      "verse_data": {
+        "verse_number": "16",
+        "sanskrit_text": "शनैौ तयमथो देयं राहौ दद्याच्चतुष्टयम् ।",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Planetary strength allocation"
+      },
+      "table_data": null,
+      "sequence_order": 17
+    },
+    {
+      "content_type": "shloka",
+      "text": "शेषं हृतं च रामेण गृहाणां त्रिविधं भवेत् ।\n\n",
+      "verse_data": {
+        "verse_number": "17",
+        "sanskrit_text": "शेषं हृतं च रामेण गृहाणां त्रिविधं भवेत् ।",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Planetary strength allocation"
+      },
+      "table_data": null,
+      "sequence_order": 18
+    },
+    {
+      "content_type": "shloka",
+      "text": "दृष्टिश्चेष्टा विचेष्टा च कथिता मुनिपुंगवैः ॥\n\n",
+      "verse_data": {
+        "verse_number": "18",
+        "sanskrit_text": "दृष्टिश्चेष्टा विचेष्टा च कथिता मुनिपुंगवैः ॥",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Types of planetary influence"
+      },
+      "table_data": null,
+      "sequence_order": 19
+    },
+    {
+      "content_type": "shloka",
+      "text": "षष्ठौ स्वल्पफलं शेये चेष्टायां विपुलं फलम् ।\n\n",
+      "verse_data": {
+        "verse_number": "19",
+        "sanskrit_text": "षष्ठौ स्वल्पफलं शेये चेष्टायां विपुलं फलम् ।",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Effect of planetary actions"
+      },
+      "table_data": null,
+      "sequence_order": 20
+    },
+    {
+      "content_type": "shloka",
+      "text": "विचेष्टायां फलं न स्यादेवं दृष्टिफलं विदुः ॥\n\n",
+      "verse_data": {
+        "verse_number": "20",
+        "sanskrit_text": "विचेष्टायां फलं न स्यादेवं दृष्टिफलं विदुः ॥",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Effect of planetary actions"
+      },
+      "table_data": null,
+      "sequence_order": 21
+    },
+    {
+      "content_type": "shloka",
+      "text": "शुभाशुभं गृहाणां च समीक्ष्याथ बलाबलम् ।\n\n",
+      "verse_data": {
+        "verse_number": "21",
+        "sanskrit_text": "शुभाशुभं गृहाणां च समीक्ष्याथ बलाबलम् ।",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Assessing planetary strength and effects"
+      },
+      "table_data": null,
+      "sequence_order": 22
+    },
+    {
+      "content_type": "shloka",
+      "text": "तुङ्गस्थाने विशेषेण वलं शेयं तथा बुधैः ॥\n\n",
+      "verse_data": {
+        "verse_number": "22",
+        "sanskrit_text": "तुङ्गस्थाने विशेषेण वलं शेयं तथा बुधैः ॥",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Assessing planetary strength and effects"
+      },
+      "table_data": null,
+      "sequence_order": 23
+    },
+    {
+      "content_type": "translation",
+      "text": "There are twelve other conditions of planets which have also\nto be specially noticed. They in their order are (1) Sayana शयन\n(lying down), (2) Upavesa उपवेश (sitting), (3) Nethrapani नेखपाणि\n(with the hand on the eye), (4) Prakasana प्रकाशन (making bright or\nirradiating) (5) Gamanechcha गमनेच्छा (desire to go), (6) Gamana गमन\n(going), (7) Sabhayam Vasati सभायां वसति (dwelling or being in an\nassembly), (8) Agama आगन (coming), (9) भोजन (eating), (10) Nrutya-\nlipsa नृत्यलिप्सा (desire to dance) (11) Kauthuka कौतुक (delight, joy,\npleasure) and (12) Nidra निद्रा (sleep).",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "There are twelve other conditions of planets which have also\nto be specially noticed. They in their order are (1) Sayana शयन\n(lying down), (2) Upavesa उपवेश (sitting), (3) Nethrapani नेखपाणि\n(with the hand on the eye), (4) Prakasana प्रकाशन (making bright or\nirradiating) (5) Gamanechcha गमनेच्छा (desire to go), (6) Gamana गमन\n(going), (7) Sabhayam Vasati सभायां वसति (dwelling or being in an\nassembly), (8) Agama आगन (coming), (9) भोजन (eating), (10) Nrutya-\nlipsa नृत्यलिप्सा (desire to dance) (11) Kauthuka कौतुक (delight, joy,\npleasure) and (12) Nidra निद्रा (sleep).",
+        "notes": null,
+        "topic": "Translation of planetary conditions"
+      },
+      "table_data": null,
+      "sequence_order": 24
+    },
+    {
+      "content_type": "prose",
+      "text": "To find the particular अवस्था of any planet, the following is\nthe method to be adopted:-",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 25
+    }
+  ],
+  "raw_text": "92\nबालकारजाज\nAn. 11\nअभ्ये द्वादश भावाश्च प्रोक्तव्यास्ते प्रयक्षतः ।\nगुहायां च बलं बुद्धा फर्क वक्ष्ये यथाक्रमम् ॥\nशयन चोपवेश च नेत्रपाणि प्रकाशनम् ।\nगमनेच्छा च गमनं सभायां वसतिस्तथा ॥\nआगमो भोजनं चैव मृत्यलिप्सा च कौतुकम् ।\nनिद्रा गुद्दाणां चेष्टा च कथिताः पूर्वसूरिभिः ॥\nयस्मिनृते भवेत् खेटस्तेन तं परिपूरयेत् ।\nपुनरंशेन सपूर्व स्वनक्षत्रं नियोजयेत् ॥\nयातदण्ड तथा लग्नमेककृित्य सदा बुधैः ।\nरविणा हरते भागं शेष कार्ये नियोजयेत् ॥\nमाक्षणिकदशाक्रमेण पुनः पूरणमाचरेत् ।\nनामाक्षरेण संयुक्त हर्त्तव्यं रविणा ततः ॥\nरवौ पञ्च तथा देयं चन्द्रे दद्याद्वयं तथा ।\nकुजे द्वयं च संयुक्तं बुधे सोणि नियोजयेत् ॥\nगुरौ बाणाः प्रदेयाश्च श्रयं दद्याच भार्गवे ।\nशनैौ तयमथो देयं राहौ दद्याच्चतुष्टयम् ।\nशेषं हृतं च रामेण गृहाणां त्रिविधं भवेत् ।\nदृष्टिश्चेष्टा विचेष्टा च कथिता मुनिपुंगवैः ॥\nषष्ठौ स्वल्पफलं शेये चेष्टायां विपुलं फलम् ।\nविचेष्टायां फलं न स्यादेवं दृष्टिफलं विदुः ॥\nशुभाशुभं गृहाणां च समीक्ष्याथ बलाबलम् ।\nतुङ्गस्थाने विशेषेण वलं शेयं तथा बुधैः ॥\nThere are twelve other conditions of planets which have also\nto be specially noticed. They in their order are (1) Sayana शयन\n(lying down), (2) Upavesa उपवेश (sitting), (3) Nethrapani नेखपाणि\n(with the hand on the eye), (4) Prakasana प्रकाशन (making bright or\nirradiating) (5) Gamanechcha गमनेच्छा (desire to go), (6) Gamana गमन\n(going), (7) Sabhayam Vasati सभायां वसति (dwelling or being in an\nassembly), (8) Agama आगन (coming), (9) भोजन (eating), (10) Nrutya-\nlipsa नृत्यलिप्सा (desire to dance) (11) Kauthuka कौतुक (delight, joy,\npleasure) and (12) Nidra निद्रा (sleep).\nTo find the particular अवस्था of any planet, the following is\nthe method to be adopted:-",
+  "extraction_confidence": 0.97,
+  "extraction_notes": "",
+  "confidence": {
+    "overall_score": 0.97,
+    "criteria": {
+      "image_quality": 0.98,
+      "text_clarity": 0.96,
+      "layout_detection": 0.97
+    },
+    "reasoning": null,
+    "flags": []
+  },
+  "retry_metadata": {
+    "initial_model": "gemini-2.5-flash-lite",
+    "retry_model": null,
+    "initial_confidence": null,
+    "retry_reason": null,
+    "retry_count": 0
+  }
+}

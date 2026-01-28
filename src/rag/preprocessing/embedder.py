@@ -8,8 +8,11 @@ Generate embeddings using OpenAI text-embedding-3-large model.
 import os
 import json
 import time
+import argparse
 from pathlib import Path
 from typing import List, Optional
+from dotenv import load_dotenv
+load_dotenv()
 
 # Handle both relative and direct imports
 try:
@@ -209,4 +212,39 @@ def test_embedder():
 
 
 if __name__ == "__main__":
-    test_embedder()
+    def main():
+        """CLI entry point."""
+        parser = argparse.ArgumentParser(
+            description="Phase 6: Embedding - Generate embeddings using OpenAI text-embedding-3-large."
+        )
+        parser.add_argument(
+            "input_file", 
+            nargs="?", 
+            help="Path to enriched JSON file from Phase 5"
+        )
+        parser.add_argument(
+            "--output", 
+            "-o", 
+            help="Optional output path"
+        )
+        parser.add_argument(
+            "--test", 
+            action="store_true", 
+            help="Run simple test with dummy data"
+        )
+        
+        args = parser.parse_args()
+        
+        if args.test:
+            test_embedder()
+            return
+
+        if not args.input_file:
+            parser.print_help()
+            print("\n[ERROR] input_file argument is required unless --test is specified.")
+            return
+
+        embedder = Embedder()
+        embedder.process_file(args.input_file, args.output)
+
+    main()

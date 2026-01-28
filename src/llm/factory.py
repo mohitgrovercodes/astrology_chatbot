@@ -1,7 +1,7 @@
 """
 LLM Factory for Astrology AI Chatbot.
 
-VERTEX AI ONLY - No OpenAI, No AI Studio
+Supports both Vertex AI (Gemini) and OpenAI.
 Includes built-in rate limiting to prevent 429 errors.
 """
 
@@ -10,14 +10,20 @@ import time
 from typing import Optional, List
 from langchain_core.language_models.chat_models import BaseChatModel
 
-# Vertex AI only
+# Vertex AI
 try:
     from langchain_google_vertexai import ChatVertexAI
     import vertexai
     VERTEX_AI_AVAILABLE = True
 except ImportError:
     VERTEX_AI_AVAILABLE = False
-    raise ImportError("Vertex AI not available. Install: pip install google-cloud-aiplatform langchain-google-vertexai")
+
+# OpenAI
+try:
+    from langchain_openai import ChatOpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
 
 # Config and utilities
 try:
@@ -111,7 +117,7 @@ class RateLimitedLLM:
 # ============================================
 
 class LLMFactory:
-    """Factory for creating Vertex AI LLM instances only."""
+    """Factory for creating LLM instances (Vertex AI or OpenAI)."""
     
     @classmethod
     def create(
@@ -125,44 +131,76 @@ class LLMFactory:
         **kwargs
     ) -> BaseChatModel:
         """
-        Create a Vertex AI LLM instance.
+        Create an LLM instance.
         
         Args:
-            provider: Ignored (always uses google/vertex)
-            model: Gemini model name (default: gemini-2.5-flash)
+            provider: 'google' or 'openai' (default: google)
+            model: Model name (default: gemini-2.5-flash for google, gpt-4o-mini for openai)
             temperature: Sampling temperature
             max_tokens: Max output tokens
             use_rate_limiting: Enable rate limiting (default: True)
             rate_limit_delay: Minimum seconds between requests
         
         Returns:
-            ChatVertexAI instance (wrapped with rate limiter)
+            LLM instance (wrapped with rate limiter)
         """
+        # Determine provider
+        provider = (provider or "google").lower()
+        
         # Get config or use defaults
         if CONFIG_AVAILABLE:
             config = get_config()
-            model = model or config.llm.default_model
+            if not model:
+                model = config.llm.default_model if provider == "google" else "gpt-4o-mini"
             temperature = temperature if temperature is not None else config.llm.temperature
             max_tokens = max_tokens or config.llm.max_tokens
         else:
-            model = model or "gemini-2.5-flash"
+            if not model:
+                model = "gemini-2.5-flash" if provider == "google" else "gpt-4o-mini"
             temperature = temperature if temperature is not None else 0.3
             max_tokens = max_tokens or 2048
         
-        # Initialize Vertex AI
-        if not _VERTEX_INITIALIZED:
-            initialize_vertex_ai()
+        # Create LLM based on provider
+        if provider == "google" or provider == "vertex":
+            if not VERTEX_AI_AVAILABLE:
+                raise ImportError("Vertex AI not available. Install: pip install google-cloud-aiplatform langchain-google-vertexai")
+            
+            # Initialize Vertex AI
+            if not _VERTEX_INITIALIZED:
+                initialize_vertex_ai()
+            
+            # Create Vertex AI LLM
+            logger.info(f"Creating Vertex AI LLM: model={model}")
+            llm = ChatVertexAI(
+                model_name=model,
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+                project="445806945384",
+                location="us-central1",
+                **kwargs
+            )
         
-        # Create Vertex AI LLM
-        logger.info(f"Creating Vertex AI LLM: model={model}")
-        llm = ChatVertexAI(
-            model_name=model,
-            temperature=temperature,
-            max_output_tokens=max_tokens,
-            project="445806945384",
-            location="us-central1",
-            **kwargs
-        )
+        elif provider == "openai":
+            if not OPENAI_AVAILABLE:
+                raise ImportError("OpenAI not available. Install: pip install langchain-openai")
+            
+            # Get API key
+            api_key = kwargs.pop("api_key", None) or os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY not found in environment or kwargs")
+            
+            # Create OpenAI LLM
+            logger.info(f"Creating OpenAI LLM: model={model}")
+            llm = ChatOpenAI(
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                api_key=api_key,
+                **kwargs
+            )
+        
+        else:
+            raise ValueError(f"Unknown provider: {provider}. Use 'google' or 'openai'")
         
         # Add cost tracking
         if COST_TRACKING_AVAILABLE:
@@ -188,8 +226,13 @@ class LLMFactory:
     
     @classmethod
     def get_available_providers(cls) -> List[str]:
-        """Get list of available providers (always returns ['google'])."""
-        return ["google"]
+        """Get list of available providers."""
+        providers = []
+        if VERTEX_AI_AVAILABLE:
+            providers.append("google")
+        if OPENAI_AVAILABLE:
+            providers.append("openai")
+        return providers
 
 
 # ============================================

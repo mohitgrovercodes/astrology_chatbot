@@ -1,0 +1,219 @@
+{
+  "metadata": {
+    "page_number": 79,
+    "book_title": "Jataka_Parijat_Vol_1by_Vaidyanatha_Dikshita_pages_removed",
+    "chapter_title": "द्वितीयोऽध्यायः",
+    "chapter_number": null,
+    "section_title": null,
+    "page_type": "mixed",
+    "has_tables": false,
+    "has_charts": false,
+    "languages_present": [
+      "english",
+      "sanskrit"
+    ],
+    "astrology_system": "vedic"
+  },
+  "content_blocks": [
+    {
+      "content_type": "heading",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 1
+    },
+    {
+      "content_type": "shloka",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Planetary Significators (Karakas) for Life Events"
+      },
+      "table_data": null,
+      "sequence_order": 2
+    },
+    {
+      "content_type": "translation",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Translation of Planetary Significators"
+      },
+      "table_data": null,
+      "sequence_order": 3
+    },
+    {
+      "content_type": "shloka",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Significators (Karakas) for the 12 Houses (Bhavas)"
+      },
+      "table_data": null,
+      "sequence_order": 4
+    },
+    {
+      "content_type": "translation",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Translation of Bhava Karakas"
+      },
+      "table_data": null,
+      "sequence_order": 5
+    },
+    {
+      "content_type": "table",
+      "text": "",
+      "verse_data": null,
+      "table_data": {
+        "title": "Karakas of the Bhavas (derived from Shloka 51)",
+        "headers": [
+          "Bhava (House)",
+          "Karaka(s) (Significator(s))"
+        ],
+        "rows": [
+          [
+            "1",
+            "The Sun"
+          ],
+          [
+            "2",
+            "Jupiter"
+          ],
+          [
+            "3",
+            "Mars"
+          ],
+          [
+            "4",
+            "The Moon and Mercury"
+          ],
+          [
+            "5",
+            "Jupiter"
+          ],
+          [
+            "6",
+            "Saturn and Mars"
+          ],
+          [
+            "7",
+            "Venus"
+          ],
+          [
+            "8",
+            "Saturn"
+          ],
+          [
+            "9",
+            "The Sun and Jupiter"
+          ],
+          [
+            "10",
+            "Jupiter, the Sun, Mercury and Saturn"
+          ],
+          [
+            "11",
+            "Jupiter"
+          ],
+          [
+            "12",
+            "Saturn"
+          ]
+        ],
+        "markdown": "| Bhava (House) | Karaka(s) (Significator(s))              |\n|---------------|------------------------------------------|\n| 1             | The Sun                                  |\n| 2             | Jupiter                                  |\n| 3             | Mars                                     |\n| 4             | The Moon and Mercury                     |\n| 5             | Jupiter                                  |\n| 6             | Saturn and Mars                          |\n| 7             | Venus                                    |\n| 8             | Saturn                                   |\n| 9             | The Sun and Jupiter                      |\n| 10            | Jupiter, the Sun, Mercury and Saturn     |\n| 11            | Jupiter                                  |\n| 12            | Saturn                                   |",
+        "context": null,
+        "table_type": "bhava_karakas"
+      },
+      "sequence_order": 6
+    },
+    {
+      "content_type": "notes",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 7
+    },
+    {
+      "content_type": "shloka",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Quoted Shloka from Parashara on Bhava Karakas"
+      },
+      "table_data": null,
+      "sequence_order": 8
+    },
+    {
+      "content_type": "shloka",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Harmful and Beneficial Planetary Placements"
+      },
+      "table_data": null,
+      "sequence_order": 9
+    },
+    {
+      "content_type": "translation",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Translation of Harmful Planetary Placements"
+      },
+      "table_data": null,
+      "sequence_order": 10
+    }
+  ],
+  "raw_text": "Sl. 50-52\nद्वितीयोऽध्यायः\n75\nआयुर्जीवन मृत्युकारणविपत्संपत्प्रदाता शनिः\nसर्वेणैव पितामहं तु शिखिना मातामहं चिन्तयेत् ॥५०॥\nStoka. 50. One ought to conjecture about one's\nown genius, wealth, physical development, sons and\nknowledge by referring to Jupiter. Information regarding\none's wife, vehicles, ornaments, love affairs and\npleasures is to be sought through Venus. It is Saturn\nthat settles a person's period of life, livelihood, the\ncause of death, his adversity and prosperity. One\nought to guess about one's paternal grand father through\nRahu and about the maternal grandfather through Ketu.\nधुमणिरमरमन्त्री भूसुतः सोमसौम्यौ\nगुरुरिनतनथारौ भार्गवो भानुपुत्रः ।\nदिनकरदित्रिजेज्यौ जीवभानुज्ञर्मदाः\nसुरगुरुरिनखूनुः कारकाः स्युर्विलग्नात् ॥ ५१ ॥\nSloka. 51, The Karakas of the Bhavas beginning\nwith the Lagna or the rising sign are (1) The Sun\n(2) Jupiter (3) Mars (4) The Moon and Mercury (5) Ju\npiter (6) Saturn and Mars (7) Venus (8) Saturn (9) The\nSun and Jupiter (10) Jupiter, the Sun, Mercury and\nSaturn (11) Jupiter and (12) Saturn.\ncf. पराशर\nसूर्यो गुरुः कुजः सोमो गुरुभौमः सितः शनिः ।\nगुरुश्चन्द्रसुतो जीवो मन्दश्च भात्रकारकाः ॥\nकामावनीनन्दनराशियाताः सितेन्दुपुत्रामरवन्धमानाः ।\nअरिष्टदास्तेऽखिलजातकेषु सदाष्टमस्थः शनिरिष्टिदः स्यात् ॥५२॥\nSloka. 52. Venus, Mercury and Jupiter when\nthey occupy respectively the 7th, the 4th and the 5th\nhouses from the Lagna are indeed harmful in all horo-",
+  "extraction_confidence": 0.95,
+  "extraction_notes": "The English translation for Shloka 52 is incomplete. The text on the page cuts off.; The visible translation for Shloka 52 does not include the meaning of the last part of the Sanskrit verse: 'सदाष्टमस्थः शनिरिष्टिदः स्यात्' (Saturn in the 8th house is always beneficial).",
+  "confidence": {
+    "overall_score": 0.95,
+    "criteria": {
+      "image_quality": 0.9,
+      "text_clarity": 0.95,
+      "layout_detection": 1.0
+    },
+    "reasoning": null,
+    "flags": [
+      "incomplete_content"
+    ]
+  },
+  "retry_metadata": {
+    "initial_model": "gemini-2.5-flash-lite",
+    "retry_model": "gemini-2.5-pro",
+    "initial_confidence": 0.4,
+    "retry_reason": "Confidence below threshold (0.9)",
+    "retry_count": 1
+  }
+}

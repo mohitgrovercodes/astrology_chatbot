@@ -30,6 +30,7 @@ from page_analyzer import PageAnalyzer
 from semantic_segmenter import SemanticSegmenter
 from chunk_enricher import ChunkEnricher
 from embedder import Embedder
+from vector_db_builder import VectorDBBuilder
 
 
 class PreprocessingPipeline:
@@ -67,6 +68,7 @@ class PreprocessingPipeline:
         self.segmenter = SemanticSegmenter(source_book=source_book)
         self.enricher = ChunkEnricher(use_llm=use_llm, tradition=tradition)
         self.embedder = Embedder()
+        self.vector_db_builder = VectorDBBuilder()
     
     def _save_checkpoint(self, data, phase_name: str, input_path: Path):
         """Save intermediate output."""
@@ -294,17 +296,65 @@ class PreprocessingPipeline:
         
         return embedded_doc
     
+    def run_phase7(
+        self,
+        embedded_doc: EnrichedDocument,
+        collection_name: Optional[str] = None,
+        reset_collection: bool = False,
+    ) -> dict:
+        """
+        Run Phase 7: Vector Database Creation.
+        
+        Args:
+            embedded_doc: Document with embeddings from Phase 6
+            collection_name: ChromaDB collection name (default: from source_book)
+            reset_collection: Clear existing collection before inserting
+            
+        Returns:
+            Statistics dictionary
+        """
+        print("\n" + "=" * 60)
+        print("PHASE 7: VECTOR DATABASE CREATION")
+        print("=" * 60)
+        
+        # Determine collection name
+        if not collection_name and embedded_doc.chunks:
+            source_book = embedded_doc.chunks[0].metadata.source_book
+            collection_name = source_book.lower().replace(" ", "_").replace("-", "_")
+        elif not collection_name:
+            collection_name = "astrology_default"
+        
+        # Create collection
+        self.vector_db_builder.create_collection(collection_name, reset=reset_collection)
+        
+        # Insert chunks
+        inserted = self.vector_db_builder.insert_chunks(embedded_doc)
+        
+        # Get stats
+        stats = self.vector_db_builder.get_collection_stats()
+        stats["inserted_this_run"] = inserted
+        
+        print(f"  Collection: {collection_name}")
+        print(f"  Inserted: {inserted} chunks")
+        print(f"  Total size: {stats.get('total_chunks', 0)}")
+        
+        return stats
+    
     def run_full_pipeline(
         self,
         input_file: str,
         skip_embedding: bool = False,
+        skip_vectordb: bool = False,
+        reset_collection: bool = False,
     ) -> EnrichedDocument:
         """
-        Run the complete pipeline from Phase 1/2 to Phase 6.
+        Run the complete pipeline from Phase 1/2 to Phase 7.
         
         Args:
             input_file: Path to input file (PDF for Phase 1, or JSON for Phase 2)
             skip_embedding: Skip Phase 6 embedding
+            skip_vectordb: Skip Phase 7 vector database creation
+            reset_collection: Clear existing collection before inserting
             
         Returns:
             Final EnrichedDocument
@@ -342,6 +392,14 @@ class PreprocessingPipeline:
         # Phase 6
         final_doc = self.run_phase6(enriched_doc, skip_embedding)
         
+        # Phase 7
+        if not skip_vectordb and not skip_embedding:
+            self.run_phase7(final_doc, reset_collection=reset_collection)
+        elif skip_vectordb:
+            print("\n[SKIP] Phase 7: Vector DB creation skipped (--skip-vectordb flag)")
+        elif skip_embedding:
+            print("\n[SKIP] Phase 7: Vector DB creation skipped (no embeddings)")
+        
         # Summary
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
@@ -378,6 +436,10 @@ Examples:
                        help="Use LLM for enhanced analysis")
     parser.add_argument("--skip-embedding", action="store_true",
                        help="Skip Phase 6 embedding")
+    parser.add_argument("--skip-vectordb", action="store_true",
+                       help="Skip Phase 7 vector database creation")
+    parser.add_argument("--reset-collection", action="store_true",
+                       help="Clear existing collection before inserting")
     
     args = parser.parse_args()
     
@@ -396,6 +458,8 @@ Examples:
     result = pipeline.run_full_pipeline(
         args.input,
         skip_embedding=args.skip_embedding,
+        skip_vectordb=args.skip_vectordb,
+        reset_collection=args.reset_collection,
     )
     
     # Save final output

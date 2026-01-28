@@ -1,0 +1,109 @@
+{
+  "metadata": {
+    "page_number": 59,
+    "book_title": "Jataka_Parijat_Vol_1by_Vaidyanatha_Dikshita_pages_removed",
+    "chapter_title": "द्वितीयोऽध्यायः",
+    "chapter_number": null,
+    "section_title": null,
+    "page_type": "mixed",
+    "has_tables": false,
+    "has_charts": false,
+    "languages_present": [
+      "english",
+      "sanskrit"
+    ],
+    "astrology_system": "vedic"
+  },
+  "content_blocks": [
+    {
+      "content_type": "heading",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 1
+    },
+    {
+      "content_type": "prose",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 2
+    },
+    {
+      "content_type": "prose",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 3
+    },
+    {
+      "content_type": "shloka",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Planetary Gemstones and Metals"
+      },
+      "table_data": null,
+      "sequence_order": 4
+    },
+    {
+      "content_type": "prose",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 5
+    },
+    {
+      "content_type": "shloka",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Planetary Gemstones (Sanskrit)"
+      },
+      "table_data": null,
+      "sequence_order": 6
+    },
+    {
+      "content_type": "translation",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Planetary Gemstones (English)"
+      },
+      "table_data": null,
+      "sequence_order": 7
+    }
+  ],
+  "raw_text": "81. 21\nद्वितीयोऽध्यायः\n55\n(Kartikeya), Vishnu, Indra, Indrani, and Brahma are the\npresiding deities of the planets from the Sun in their\norder.\n८१ जातकरणमाला\nतास्रं स्याम्मणिहेममिश्रितमतो रोप्यं तु मुक्तायसी\nप्रश्ने जन्मनि वा बलाधिकतरालाभाधिकं चिन्तयेत् ।\nअत्र स्वगृहे स्थितगुरोः सुवर्णमपि वेदितव्यम् ॥ एतदुक्तं बादरायणेन\nअर्कस्य तास्रं मणयो हिमांशाभौंमस्य हेमेन्दुसुतस्य शुक्तिः ।\nजीवस्य रौप्यं स्वगृहे स्थितस्य तस्यैव हेमोशनसश्च मुक्ता ॥\nसीक्ष्णांशुदेहप्रभवस्य ससि कृष्णायसं च प्रवदान्त तज्ज्ञाः ।\nप्रयोजने च सूतिकागृहे बलवानहधातुमता वाच्या तच्छुभदशायां तहष्यलाभः\nअधाशुभदशायां तदृन्यहानिज्ञेया । Vide also Adhyaya XVIII-s1. 19. For\nthe deities of the several planets ०१. यवनेश्वर\nदेवा गृहाणां जलवीहविष्णुप्रजापति स्क्रन्दमहेन्द्रदेव्यः ।\nचन्द्रार्कचान्य कंज भौमजी वशुक्रांश्च यज्ञेषु यजेत शश्वत् ॥\nतथा चौरनामानयने बलबमहोक्तदेवतापर्यायनाम वक्तव्यः । तथा यात्रा-\nयो गृहदेवतां संपूज्य तद्दिशं यायात् ।\nमाणिक्यं दिननायकस्य विमलं मुक्ताफलं शीतगो-\nमहियस्य च विद्रुमं मरकतं सौम्यस्य गारुत्मतम् ।\nदेवेज्यस्य च पुष्परागमसुराचार्यस्य वज्र शने-\nनलिं निर्मलनन्ययोश्च गदिते गोमेदवैडूर्यके ॥ २१ ॥\nSloku. 21. The ruby is the Sun's precious stone:\na pure spotless pearl that of the Moon. Coral belongs\nto Mars. Mercury's precious stone is the emerald\nshaped like the bird Garuda. Topaz belongs to Jupiter.\nVenus owns diamond. Saturn's gem is the stainless\nsapphire. Agate and the lapislazuli or turkois are said\nto belong to the remaining planets Rahu and Ketu\nrespectively.",
+  "extraction_confidence": 0.95,
+  "extraction_notes": "",
+  "confidence": {
+    "overall_score": 0.95,
+    "criteria": {
+      "image_quality": 0.9,
+      "text_clarity": 0.95,
+      "layout_detection": 0.95
+    },
+    "reasoning": null,
+    "flags": []
+  },
+  "retry_metadata": {
+    "initial_model": "gemini-2.5-flash-lite",
+    "retry_model": "gemini-2.5-pro",
+    "initial_confidence": 0.4,
+    "retry_reason": "Confidence below threshold (0.9)",
+    "retry_count": 1
+  }
+}

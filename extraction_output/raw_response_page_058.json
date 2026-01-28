@@ -1,0 +1,123 @@
+{
+  "metadata": {
+    "page_number": 58,
+    "book_title": "Jataka_Parijat_Vol_1by_Vaidyanatha_Dikshita_pages_removed",
+    "chapter_title": null,
+    "chapter_number": 11,
+    "section_title": null,
+    "page_type": "mixed",
+    "has_tables": false,
+    "has_charts": false,
+    "languages_present": [
+      "english",
+      "sanskrit"
+    ],
+    "astrology_system": "vedic"
+  },
+  "content_blocks": [
+    {
+      "content_type": "prose",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 1
+    },
+    {
+      "content_type": "shloka",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Planetary colors"
+      },
+      "table_data": null,
+      "sequence_order": 2
+    },
+    {
+      "content_type": "translation",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Planetary colors"
+      },
+      "table_data": null,
+      "sequence_order": 3
+    },
+    {
+      "content_type": "notes",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 4
+    },
+    {
+      "content_type": "notes",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 5
+    },
+    {
+      "content_type": "prose",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 6
+    },
+    {
+      "content_type": "shloka",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Planetary substances and presiding deities"
+      },
+      "table_data": null,
+      "sequence_order": 7
+    },
+    {
+      "content_type": "translation",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Planetary substances and presiding deities"
+      },
+      "table_data": null,
+      "sequence_order": 8
+    }
+  ],
+  "raw_text": "34\nजातकपारिजाते\nAdh. II\nश्रीवस्त्र माव्यगन्धैर्विलसति पुरुषः सदा विततकीर्त्तिः ।\nदैयितः सर्वजनस्य च शक्ताख्ये भवति विख्यातः ॥\nदुःखैर्थाधिमिरारिभिः प्रपीड्यते पीडिताख्ये तु ।\nदेशादेशं विचरति बन्धुवियोगाभिसन्तप्तः ।\nबहुसाधनोऽपि राजा प्रध्वस्तबलः प्रपीडितो रिपुणा ॥\nनाशमुपयाति विजितो भीत दैन्यं परं प्राप्तः ।\nस्वस्थानपरिभ्रष्ठः क्लिष्टो मलिनः प्रयाति परदेशम् ॥\nविध्वस्तबलो विकले रिपुबलसंचकितचित्तश्म।\nश्रीभरणदुःखतप्तः समस्तधननाशकलुषितमनस्कः ।\nन जहाति शोकभारं कथमपि खलसंज्ञिते पुरुषः ॥\nवर्णास्ताम्रसितारक्तहारतापीतकर्बुराः ।\nकृष्णकान्तिरिनादीनां नष्टादौ च प्रकीर्तिताः ॥ १९ ॥\nSloka. 19. Red, white, reddish, green, yellowish,\nvariegated and black are the colours of the planets from\nthe Sun onwards. The same colours are declared to\nbelong to them in queries regarding lost articles, etc.\nef. गुणाकर\nताम्रः श्वेत शोणनीलातिपीतः चित्रः कृष्णश्चेति सूर्यादिवर्णाः ।\nAlso सूर्यजातक\nताम्रः शुभ्राणि रक्तानां तथा हरितपीतयोः ।\nविचित्वासितयोः सूत मन्मुखाः स्वामिनः स्मृताः ॥\nप्रयोजन तु जन्मयात्राप्रश्नादौ बलिष्ठग्रहवर्णद्रव्यलाभः । अम्यथा हानिकराः\nमहदौष्टये तत्तद्वर्णपुष्पर्दिक्स्वामिपूजा कार्येति\nद्रव्याणि ताम्रमणिकांचनमुक्तिरौप्य-\nमुक्तान्ययश्च दिननाथमुखग्रहाणां ।\nवन्द्यंबुषण्मुखहरीन्द्रशचीविरिंच-\nमुख्या दिवाकरमुखादधिदेवाताः स्युः । २० ॥\nSloka. 20 The substances ascribed to the planets\nfrom the Sun onwards are copper, gems, gold, alloy of\nmetals, silver, pearls and iron. Fire, water, Kumara",
+  "extraction_confidence": 0.95,
+  "extraction_notes": "Translation for Shloka 20 is cut off at the page end.",
+  "confidence": {
+    "overall_score": 0.95,
+    "criteria": {
+      "image_quality": 0.95,
+      "text_clarity": 0.95,
+      "layout_detection": 0.95
+    },
+    "reasoning": null,
+    "flags": []
+  },
+  "retry_metadata": {
+    "initial_model": "gemini-2.5-flash-lite",
+    "retry_model": "gemini-2.5-pro",
+    "initial_confidence": 0.4,
+    "retry_reason": "Confidence below threshold (0.9)",
+    "retry_count": 1
+  }
+}

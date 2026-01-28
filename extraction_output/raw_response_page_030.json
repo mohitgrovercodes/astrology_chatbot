@@ -1,0 +1,165 @@
+{
+  "metadata": {
+    "page_number": 30,
+    "book_title": "Jataka_Parijat_Vol_1by_Vaidyanatha_Dikshita_pages_removed",
+    "chapter_title": null,
+    "chapter_number": 1,
+    "section_title": null,
+    "page_type": "mixed",
+    "has_tables": false,
+    "has_charts": false,
+    "languages_present": [
+      "english",
+      "sanskrit"
+    ],
+    "astrology_system": "vedic"
+  },
+  "content_blocks": [
+    {
+      "content_type": "prose",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 1
+    },
+    {
+      "content_type": "shloka",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Trimsamsa Rulers and Degrees"
+      },
+      "table_data": null,
+      "sequence_order": 2
+    },
+    {
+      "content_type": "translation",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Translation of Shloka 37 on Trimsamsa"
+      },
+      "table_data": null,
+      "sequence_order": 3
+    },
+    {
+      "content_type": "table",
+      "text": "",
+      "verse_data": null,
+      "table_data": {
+        "title": "Trimsamsa Rulers in Odd Signs (Oja Rashi)",
+        "headers": [
+          "Degrees",
+          "Extent",
+          "Ruler (Graha)"
+        ],
+        "rows": [
+          [
+            "0° - 5°",
+            "5°",
+            "Mars (Kuja)"
+          ],
+          [
+            "5° - 10°",
+            "5°",
+            "Saturn (Sani)"
+          ],
+          [
+            "10° - 18°",
+            "8°",
+            "Jupiter (Guru)"
+          ],
+          [
+            "18° - 25°",
+            "7°",
+            "Mercury (Budha)"
+          ],
+          [
+            "25° - 30°",
+            "5°",
+            "Venus (Sukra)"
+          ]
+        ],
+        "markdown": "| Degrees   | Extent | Ruler (Graha)   |\n|-----------|--------|-----------------|\n| 0° - 5°   | 5°     | Mars (Kuja)     |\n| 5° - 10°  | 5°     | Saturn (Sani)   |\n| 10° - 18° | 8°     | Jupiter (Guru)  |\n| 18° - 25° | 7°     | Mercury (Budha) |\n| 25° - 30° | 5°     | Venus (Sukra)   |",
+        "context": null,
+        "table_type": "trimsamsa_rulers"
+      },
+      "sequence_order": 4
+    },
+    {
+      "content_type": "table",
+      "text": "",
+      "verse_data": null,
+      "table_data": {
+        "title": "Trimsamsa Rulers in Even Signs (Yugma Rashi)",
+        "headers": [
+          "Degrees",
+          "Extent",
+          "Ruler (Graha)"
+        ],
+        "rows": [
+          [
+            "0° - 5°",
+            "5°",
+            "Venus (Sukra)"
+          ],
+          [
+            "5° - 10°",
+            "5°",
+            "Mercury (Budha)"
+          ],
+          [
+            "10° - 18°",
+            "8°",
+            "Jupiter (Guru)"
+          ],
+          [
+            "18° - 25°",
+            "7°",
+            "Saturn (Sani)"
+          ],
+          [
+            "25° - 30°",
+            "5°",
+            "Mars (Kuja)"
+          ]
+        ],
+        "markdown": "| Degrees   | Extent | Ruler (Graha)   |\n|-----------|--------|-----------------|\n| 0° - 5°   | 5°     | Venus (Sukra)   |\n| 5° - 10°  | 5°     | Mercury (Budha) |\n| 10° - 18° | 8°     | Jupiter (Guru)  |\n| 18° - 25° | 7°     | Saturn (Sani)   |\n| 25° - 30° | 5°     | Mars (Kuja)     |",
+        "context": null,
+        "table_type": "trimsamsa_rulers"
+      },
+      "sequence_order": 5
+    }
+  ],
+  "raw_text": "26\nआसकपारिजाते\nAdh I\nBut this interpretation presents certain difficulties. Apart\nfrom syntactical objections, the compound Virinchi Saurisadivaka-\nraha (विरिश्चिशौौरशिदिवाकराः) will not bear ainumerical interpretation\nas neither the Phaladeepika (फलदीपिका) nor the Sarwarttha Chinta-\nmani (सर्वार्थचिन्तामणिः), nor even Parasara (पराशर) varies the names of\nthe divinities into those of any other denomination .g. Nanda (नन्द),\nDik (दिक), and the like, as they could have done if they had the\nArnavadi Sankhya (अर्णवादिसंख्या) in view. If numbers were in their\nmind, one or other of our ancient authors would have ordinary\nSankhya Vachaka Subanthaha (संख्यावाचकसुबन्ताः). It is unfortunate\nthat Balabhadra (बलभद्र), such a copious author in other respects,\ndoes not so much as even mention the Shodasainsa (षोडशांश) in his\nHoraratna (होरारल). Had he chosen to introduce the topic, it would\nhave put an end to all trouble.\nThe word Vilagne' (विलग्ने) in the second half of the sloka\nshould be read with Oje (ओजे) in first line also. Vilagne विलप्ने)\ncan only mean the 'rising sign'. The verse as a whole considers the\npossibility of a 'rising sign' being 'positive, or negative, or male\nor female, as they are termed in Western Astrology. The lines\nquoted above from Parasara (पराशर) tend to confirm this view and\nthe interpretation as given in the translation is almost near the\nmark. But Phaladeepika (फलदीपिका) and Sarwarttha Chintamani\n(सर्वार्थचिन्तमणि) interpret the allocation of the Shodasamsa (पोडशांश)\nrulerships diflerently. On that account, the language of Jataka-\nparijata (जातकपारिजात) cannot be forced to bear a meaning which its\nauthor did not evidently intend. Jatakaparijata (जातकपारिजात) and\nParasara (पराशर go a good way together as regards Shodasamsa\n(षोडशांश) rulerships.\nआरार्किजीवशशिनन्दनशुक्रभागा-\nस्त्वोजे समीरपत्रनाष्टकरौलबाणाः ।\nयुग्मे समीरगिरिपश्नगपञ्चवाणा-\nत्रिशांशकाः सितविदार्यशनिक्षमाजाः ॥ ३७ ॥\nSloka 37. The Thrimasmsas (विंशांश) or degrees, i.e.\noth portions allotted in an odd sign to Kuja, Sani.\nGuru, Budha and Sukra are respectively 5, 5, 8, 7 and 5.",
+  "extraction_confidence": 0.95,
+  "extraction_notes": "The translation for Shloka 37 is incomplete as it is cut off at the bottom of the page.; The book appears to contain a typo in the translation of Shloka 37, using 'Thrimasmsas (विंशांश)' which means '20th division', instead of the correct 'Trimsamsas (त्रिंशांश)' which means '30th division' and is the topic of the shloka.; The Sanskrit number words in Shloka 37 appear non-standard or mis-transcribed in the source text, but the degree values given in the translation are standard and have been used for the derived tables.",
+  "confidence": {
+    "overall_score": 0.95,
+    "criteria": {
+      "image_quality": 0.9,
+      "text_clarity": 0.9,
+      "layout_detection": 1.0
+    },
+    "reasoning": null,
+    "flags": [
+      "INCOMPLETE_CONTENT",
+      "POTENTIAL_SOURCE_ERROR"
+    ]
+  },
+  "retry_metadata": {
+    "initial_model": "gemini-2.5-flash-lite",
+    "retry_model": "gemini-2.5-pro",
+    "initial_confidence": 0.4,
+    "retry_reason": "Confidence below threshold (0.9)",
+    "retry_count": 1
+  }
+}

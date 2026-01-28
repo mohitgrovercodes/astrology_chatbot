@@ -1,0 +1,88 @@
+{
+  "metadata": {
+    "page_number": 1,
+    "book_title": "Jataka_Parijat_Vol_1by_Vaidyanatha_Dikshita_pages_removed",
+    "chapter_title": "PREFACE",
+    "chapter_number": null,
+    "section_title": null,
+    "page_type": "text_heavy",
+    "has_tables": false,
+    "has_charts": false,
+    "languages_present": [
+      "english",
+      "sanskrit"
+    ],
+    "astrology_system": "vedic"
+  },
+  "content_blocks": [
+    {
+      "content_type": "prose",
+      "text": "It is a matter of great pleasure that the publication of the\nsecond edition of JATAKA PARIJATA, the monumental\nwork of Sri Vaidyanatha Dikshita with the excellent notes of\nthe Late V. Subramanya Sastri has been possible by God's\ngrace and the same is being placed before the public. This is\nan exact reprint of the edition that was brought out by Shri\nSastri in the year 1932. No words of introduction are required\nas the works of Sh. Sastri are all masterpieces by themselves.\nand have rightly earned the fame that is their due. The earlier\nedition was long out of print and there was an ever growing\ndemand for this book and the present edition is intended to\nfulfill this long-felt demand.",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 1
+    },
+    {
+      "content_type": "prose",
+      "text": "The importance of this work Jataka Parijata cannot be\nexagerated. It is a basic text book of Hindu Astrology, studied\nalmost in all parts of the country by students and scholars\nalike. It is a book invariably prescribed for study in almost\nall oriental examinations on Jyotisha. As a classical text book\nof Hindu Astrology it ranks next perhaps only to Brihat Jata-\nka... The fact remains that Brihat Jataka is too brief and\ndifficult and that was why works like Horasara, Saravali etc.\nwere written with a view to supply all that is obscure, hidden\nand missing therein. Among these works is none that\ncan excel Jataka Parijata in providing a detailed knowledge\nabout all the essential aspects like Ayurdaya, yogas, Bhava-\nphala, Vimshottari, Ashtakvarga, Stri Jataka, Kalachakra\nDasha etc. The work has been translated in most of the regional\nlanguages like Malayalam, Hindi etc and is held in high\nesteem by astrologers as a book of great authority throughout\nthe country",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 2
+    },
+    {
+      "content_type": "shloka",
+      "text": "त्रिस्कन्धं ज्योतिषं होरा गणितं संहितेति च ॥\n\n",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "त्रिस्कन्धं ज्योतिषं होरा गणितं संहितेति च ॥",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Three divisions of Jyotisha"
+      },
+      "table_data": null,
+      "sequence_order": 3
+    },
+    {
+      "content_type": "translation",
+      "text": "(Parasa a)",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "(Parasa a)",
+        "notes": null,
+        "topic": "Attribution"
+      },
+      "table_data": null,
+      "sequence_order": 4
+    },
+    {
+      "content_type": "prose",
+      "text": "The science of Jyotisha, according to tradition is divided\ninto three parts-Hora (predictive), Ganitha (Mathematical)\nand Samhita (Miscellaneous) Predictive. Astrology was origi-",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 5
+    }
+  ],
+  "raw_text": "PREFACE\nIt is a matter of great pleasure that the publication of the\nsecond edition of JATAKA PARIJATA, the monumental\nwork of Sri Vaidyanatha Dikshita with the excellent notes of\nthe Late V. Subramanya Sastri has been possible by God's\ngrace and the same is being placed before the public. This is\nan exact reprint of the edition that was brought out by Shri\nSastri in the year 1932. No words of introduction are required\nas the works of Sh. Sastri are all masterpieces by themselves.\nand have rightly earned the fame that is their due. The earlier\nedition was long out of print and there was an ever growing\ndemand for this book and the present edition is intended to\nfulfill this long-felt demand.\nThe importance of this work Jataka Parijata cannot be\nexagerated. It is a basic text book of Hindu Astrology, studied\nalmost in all parts of the country by students and scholars\nalike. It is a book invariably prescribed for study in almost\nall oriental examinations on Jyotisha. As a classical text book\nof Hindu Astrology it ranks next perhaps only to Brihat Jata-\nka... The fact remains that Brihat Jataka is too brief and\ndifficult and that was why works like Horasara, Saravali etc.\nwere written with a view to supply all that is obscure, hidden\nand missing therein. Among these works is none that\ncan excel Jataka Parijata in providing a detailed knowledge\nabout all the essential aspects like Ayurdaya, yogas, Bhava-\nphala, Vimshottari, Ashtakvarga, Stri Jataka, Kalachakra\nDasha etc. The work has been translated in most of the regional\nlanguages like Malayalam, Hindi etc and is held in high\nesteem by astrologers as a book of great authority throughout\nthe country\nत्रिस्कन्धं ज्योतिषं होरा गणितं संहितेति च ॥\n(Parasa a)\nThe science of Jyotisha, according to tradition is divided\ninto three parts-Hora (predictive), Ganitha (Mathematical)\nand Samhita (Miscellaneous) Predictive. Astrology was origi-",
+  "extraction_confidence": 0.97,
+  "extraction_notes": "",
+  "confidence": {
+    "overall_score": 0.97,
+    "criteria": {
+      "image_quality": 0.98,
+      "text_clarity": 0.96,
+      "layout_detection": 0.97
+    },
+    "reasoning": null,
+    "flags": []
+  },
+  "retry_metadata": {
+    "initial_model": "gemini-2.5-flash-lite",
+    "retry_model": null,
+    "initial_confidence": null,
+    "retry_reason": null,
+    "retry_count": 0
+  }
+}

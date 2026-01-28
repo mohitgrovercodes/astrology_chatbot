@@ -1,0 +1,308 @@
+{
+  "metadata": {
+    "page_number": 32,
+    "book_title": "Jataka_Parijat_Vol_1by_Vaidyanatha_Dikshita_pages_removed",
+    "chapter_title": "Demoniacal and divine portions",
+    "chapter_number": 1,
+    "section_title": null,
+    "page_type": "mixed",
+    "has_tables": true,
+    "has_charts": false,
+    "languages_present": [
+      "english",
+      "sanskrit"
+    ],
+    "astrology_system": "vedic"
+  },
+  "content_blocks": [
+    {
+      "content_type": "prose",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 1
+    },
+    {
+      "content_type": "table",
+      "text": "",
+      "verse_data": null,
+      "table_data": {
+        "title": "Designations of Shashtyamsas",
+        "headers": [
+          "Odd Sign (Serial)",
+          "Names of Shashtyamsas",
+          "Even Sign (Value)",
+          "Odd Sign (Serial)",
+          "Names of Shashtyamsas",
+          "Even Sign (Value)"
+        ],
+        "rows": [
+          [
+            "1",
+            "Ghoramsa",
+            "60",
+            "31",
+            "Mrityukaramsa",
+            "30"
+          ],
+          [
+            "2",
+            "Rakshasamsa",
+            "59",
+            "32",
+            "Kalamsa",
+            "29"
+          ],
+          [
+            "3",
+            "Devamsa",
+            "58",
+            "33",
+            "Davagniamsa",
+            "28"
+          ],
+          [
+            "4",
+            "Kuberamsa",
+            "57",
+            "34",
+            "Ghoramsa",
+            "27"
+          ],
+          [
+            "5",
+            "Yakshavalyamsa",
+            "56",
+            "35",
+            "Yamamsa Amayamsa",
+            "26"
+          ],
+          [
+            "6",
+            "Kinnaramsa",
+            "55",
+            "36",
+            "Kantakamsa",
+            "25"
+          ],
+          [
+            "7",
+            "Bhrashtamsa",
+            "54",
+            "37",
+            "Sudhamsa",
+            "24"
+          ],
+          [
+            "8",
+            "Kulaghnama",
+            "53",
+            "38",
+            "Amrutamsa",
+            "23"
+          ],
+          [
+            "9",
+            "Garalamsa",
+            "52",
+            "39",
+            "Purnachandramsa",
+            "22"
+          ],
+          [
+            "10",
+            "Agnyamsa",
+            "51",
+            "40",
+            "Vishapradigdhamsa",
+            "21"
+          ],
+          [
+            "11",
+            "Mayamsa",
+            "50",
+            "41",
+            "Kulanasamsa",
+            "20"
+          ],
+          [
+            "12",
+            "Prethapurisamsa",
+            "49",
+            "42",
+            "Vamsakshayamsa",
+            "19"
+          ],
+          [
+            "13",
+            "Apampathyamsa",
+            "48",
+            "43",
+            "Uthpathakamsa",
+            "18"
+          ],
+          [
+            "14",
+            "Devaganesamsa",
+            "47",
+            "44",
+            "Kalamsa",
+            "17"
+          ],
+          [
+            "15",
+            "Kalamsa",
+            "46",
+            "45",
+            "Saumyamsa",
+            "16"
+          ],
+          [
+            "16",
+            "Sarpamsa",
+            "45",
+            "46",
+            "Mridvamsa",
+            "15"
+          ],
+          [
+            "17",
+            "Amruthamsa",
+            "44",
+            "47",
+            "Seethalamsa",
+            "14"
+          ],
+          [
+            "18",
+            "Chandramsa",
+            "43",
+            "48",
+            "Damshtrakaralamsa",
+            "13"
+          ],
+          [
+            "19",
+            "Mridwamsa",
+            "42",
+            "49",
+            "Indumukhamsa",
+            "12"
+          ],
+          [
+            "20",
+            "Komalamsa",
+            "41",
+            "50",
+            "Pravinamsa",
+            "11"
+          ],
+          [
+            "21",
+            "Padmabhanvamsa",
+            "40",
+            "51",
+            "Kalagniamsa",
+            "10"
+          ],
+          [
+            "22",
+            "Vishnuamsa",
+            "39",
+            "52",
+            "Dandayudhamsa",
+            "9"
+          ],
+          [
+            "23",
+            "Brahmamsa",
+            "38",
+            "53",
+            "Nirmalamsa",
+            "8"
+          ],
+          [
+            "24",
+            "Maheswaramsa",
+            "37",
+            "54",
+            "Subhakaramsa",
+            "7"
+          ],
+          [
+            "25",
+            "Devamsa",
+            "36",
+            "55",
+            "Kruramsa",
+            "6"
+          ],
+          [
+            "26",
+            "Ardramsa",
+            "35",
+            "56",
+            "Seethalamsa",
+            "5"
+          ],
+          [
+            "27",
+            "Kalinasamsa",
+            "34",
+            "57",
+            "Sudhamsa",
+            "4"
+          ],
+          [
+            "28",
+            "Kshitiswaramsa",
+            "33",
+            "58",
+            "Payodhyamsa",
+            "3"
+          ],
+          [
+            "29",
+            "Kamalakaramsa",
+            "32",
+            "59",
+            "Bhramanamsa",
+            "2"
+          ],
+          [
+            "30",
+            "Gulikamsa",
+            "31",
+            "60",
+            "Indurekhamsa",
+            "1"
+          ]
+        ],
+        "markdown": "| Odd Sign (Serial) | Names of Shashtyamsas | Even Sign (Value) | Odd Sign (Serial) | Names of Shashtyamsas | Even Sign (Value) |\n|---|---|---|---|---|---|\n| 1 | Ghoramsa | 60 | 31 | Mrityukaramsa | 30 |\n| 2 | Rakshasamsa | 59 | 32 | Kalamsa | 29 |\n| 3 | Devamsa | 58 | 33 | Davagniamsa | 28 |\n| 4 | Kuberamsa | 57 | 34 | Ghoramsa | 27 |\n| 5 | Yakshavalyamsa | 56 | 35 | Yamamsa Amayamsa | 26 |\n| 6 | Kinnaramsa | 55 | 36 | Kantakamsa | 25 |\n| 7 | Bhrashtamsa | 54 | 37 | Sudhamsa | 24 |\n| 8 | Kulaghnama | 53 | 38 | Amrutamsa | 23 |\n| 9 | Garalamsa | 52 | 39 | Purnachandramsa | 22 |\n| 10 | Agnyamsa | 51 | 40 | Vishapradigdhamsa | 21 |\n| 11 | Mayamsa | 50 | 41 | Kulanasamsa | 20 |\n| 12 | Prethapurisamsa | 49 | 42 | Vamsakshayamsa | 19 |\n| 13 | Apampathyamsa | 48 | 43 | Uthpathakamsa | 18 |\n| 14 | Devaganesamsa | 47 | 44 | Kalamsa | 17 |\n| 15 | Kalamsa | 46 | 45 | Saumyamsa | 16 |\n| 16 | Sarpamsa | 45 | 46 | Mridvamsa | 15 |\n| 17 | Amruthamsa | 44 | 47 | Seethalamsa | 14 |\n| 18 | Chandramsa | 43 | 48 | Damshtrakaralamsa | 13 |\n| 19 | Mridwamsa | 42 | 49 | Indumukhamsa | 12 |\n| 20 | Komalamsa | 41 | 50 | Pravinamsa | 11 |\n| 21 | Padmabhanvamsa | 40 | 51 | Kalagniamsa | 10 |\n| 22 | Vishnuamsa | 39 | 52 | Dandayudhamsa | 9 |\n| 23 | Brahmamsa | 38 | 53 | Nirmalamsa | 8 |\n| 24 | Maheswaramsa | 37 | 54 | Subhakaramsa | 7 |\n| 25 | Devamsa | 36 | 55 | Kruramsa | 6 |\n| 26 | Ardramsa | 35 | 56 | Seethalamsa | 5 |\n| 27 | Kalinasamsa | 34 | 57 | Sudhamsa | 4 |\n| 28 | Kshitiswaramsa | 33 | 58 | Payodhyamsa | 3 |\n| 29 | Kamalakaramsa | 32 | 59 | Bhramanamsa | 2 |\n| 30 | Gulikamsa | 31 | 60 | Indurekhamsa | 1 |",
+        "context": null,
+        "table_type": "shashtyamsha_names"
+      },
+      "sequence_order": 2
+    }
+  ],
+  "raw_text": "28\nबातकपारिजाते\nAdh. I\nSlokas 38-43. Demoniacal and divine portions\n(enumerated in these slokas) whereof the first is Ghor-\namsa rule the Shashtyamsas or with parts in an odd (sign.\nPropitious and unpropitious portions reckoned from\nIndurekha in the inverse order govern the oth parts in\nan even sign. The following are the designations of the\nseveral Shashtyamsas:-\nOdd\nNames of\nEven Odd\nNames of\nEve\nSign\nShashtyamsas\nSign Sign\nShashtyamsas\nSign\n1 Ghoramsa\n60\n31 Mrityukaramsa\n3C\n\"\n2 Rakshasamsa\n১৯\n59\n32 Kalamsa\n29\n....\n3 Devamsa\n58\n33 Davagniamsa\n....\n28\n4 Kuberamsa\n57\n14.\n34 Ghoramsa\n....\n27\n5 Yakshavalyamsa\n56\n....\n35 Yamamsa Amayamsa26\n6 Kinnaramsa\n...\n55\n36 Kantakamsa\n...25\n7 Bhrashtamsa\n...\n54\n37 Sudhamsa\n....\n24\n8 Kulaghnama\n...\n53\n38 Amrutamsa\n... 23\n9 Garalamsa\n52\n....\n39 Purnachandramsa ... 22\n10 Agnyamsa\n...\n51\n40 Vishapradigdhamsa 21\n11 Mayamsa\n*...\n50\n41 Kulanasamsa\n...\n20\n12 Prethapurisamsa\n49\n...\n42 Vamsakshayamsa ... 19\n13 Apampathyamsa\n...\n48\n43 Uthpathakamsa\n....\n18\n14 Devaganesamsa ... 47\n44 Kalamsa\n...\n17\n15 Kalamsa\n...\n46\n45 Saumyamsa\n...\n16\n16 Sarpamsa\n...\n45\n46 Mridvamsa\n....\n15\n17 Amruthamsa\n...\n44\n47 Seethalamsa\n...\n14\n18 Chandramsa\n.*..\n43\n48 Damshtrakaralamsa 13\n19 Mridwamsa\n42\n...\n49 Indumukhamsa\n...\n12\n20 Komalamsa\n... 41\n50 Pravinamsa\n... 11\n21 Padmabhanvamsa... 40\n51 Kalagniamsa\n...\n10\n22 Vishnuamsa\n... 39\n52 Dandayudhamsa\n....\n9\n23 Brahmamsa\n.... 38\n53 Nirmalamsa\n8\n21 Maheswaramsa\n...\n37\n54 Subhakaramsa\n...\n7\n25 Devamsa\n....\n36\n55 Kruramsa\n....\n6\n26 Ardramsa\n... 35\n56 Seethalamsa\n....\n5\n27 Kalinasamsa\n...\n34\n28 Kshitiswaramsa\n33\n29 Kamalakaramsa\n...\n32\n80 Gulikamsa\n****\n31\n57 Sudhamsa\n58 Payodhyamsa\n59 Bhramanamsa\n60 Indurekhamsa\n...\n4\n1.6\n3\n2\n....\n....\n1",
+  "extraction_confidence": 0.95,
+  "extraction_notes": "The OCR for '60th parts' was initially 'with parts' and 'oth parts' in the prose, which has been corrected based on astrological context.; Some numbers in the table were misread by OCR (e.g., '3C' corrected to '30', '1.6' corrected to '6', 'Amayamsa26' corrected to 'Amayamsa 26').; Header 'Eve Sign' corrected to 'Even Sign'.",
+  "confidence": {
+    "overall_score": 0.95,
+    "criteria": {
+      "image_quality": 0.95,
+      "text_clarity": 0.9,
+      "layout_detection": 0.98
+    },
+    "reasoning": null,
+    "flags": []
+  },
+  "retry_metadata": {
+    "initial_model": "gemini-2.5-flash",
+    "retry_model": null,
+    "initial_confidence": null,
+    "retry_reason": null,
+    "retry_count": 0
+  }
+}

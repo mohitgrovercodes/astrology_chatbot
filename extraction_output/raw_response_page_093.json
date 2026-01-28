@@ -1,0 +1,118 @@
+{
+  "metadata": {
+    "page_number": 93,
+    "book_title": "Jataka_Parijat_Vol_1by_Vaidyanatha_Dikshita_pages_removed",
+    "chapter_title": null,
+    "chapter_number": null,
+    "section_title": null,
+    "page_type": "mixed",
+    "has_tables": false,
+    "has_charts": false,
+    "languages_present": [
+      "english",
+      "sanskrit"
+    ],
+    "astrology_system": "vedic"
+  },
+  "content_blocks": [
+    {
+      "content_type": "heading",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 1
+    },
+    {
+      "content_type": "notes",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 2
+    },
+    {
+      "content_type": "shloka",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Planetary Avasthas from Saravali"
+      },
+      "table_data": null,
+      "sequence_order": 3
+    },
+    {
+      "content_type": "shloka",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Jagrat, Swapna, Supta Avasthas"
+      },
+      "table_data": null,
+      "sequence_order": 4
+    },
+    {
+      "content_type": "translation",
+      "text": "",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "",
+        "notes": null,
+        "topic": "Translation of Sloka 85"
+      },
+      "table_data": null,
+      "sequence_order": 5
+    },
+    {
+      "content_type": "notes",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 6
+    },
+    {
+      "content_type": "notes",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 7
+    },
+    {
+      "content_type": "prose",
+      "text": "",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 8
+    }
+  ],
+  "raw_text": "Sl. 85\nद्वितीयोऽध्यायः\n89\nAlso सारावली\nस्वामित्रक्षेत्रसंस्थानां गृहाणी बालसंशिका।\nस्वत्रिकोणगतानां व कुमारो नाम संज्ञितः ॥\nअहाणो खोचसंस्थानां युवराजः प्रकीर्तितः ।\nशत्रुक्षेत्रगतानां व वृद्धो नाम तथेरितः ॥\nनीचयानां ग्रहाणां च दशा मरणसंशिता ।\nतत्तत्फलसमायुक्ता प्रहाणां तु दशा भवेत् ॥\nबालैः सुखो सुशीलश्च यौवनैरवनीश्वरः ।\nवृद्धैर्याधिऋणे वृद्धिर्मरणे मरण व्ययम् ॥\nपुराशिगैः शुभखगैर्धीराः सङ्गामरक्षिणो बलिनः ।\nनिश्चेष्टैः सुकठोराः क्रूरा मूखर्वाश्च जायन्ते ॥\nयुबतिभवनस्थितेषु च मृदवः सङ्गामभीरुकाः पुरुषाः ।\nजलकुसुमवस्त्रनिरताः सौम्याः कस्याः स्वजनहृष्टाः ॥\nउच्चांशं स्वनवांशं च जागरूकं वदन्ति हि ।\nसुहनवांशकं वमं सुप्तं नीचारिभांशकम् ॥ ८५ ॥\nSloka. 85. That portion of a zodiacal sign in which\na planet is in its exaltation and that Navamsa which is\nowned by it, they say, is its waking state. The Navam-\nsa belonging to a friendly planet is its dreaming state,\nwhile its sleep is that portion wherein it is in its de-\npression as also that which is owned by an enemy.\ncf. पराशर-त्र्यंशादर्श श्रिभागं च कल्पयित्वा पृथक् पृथक् ।\nविषमादि क्रमेणैव समे वै विपरीतकम् ॥\nविज्ञाय प्रथमं पुंसां जाग्रत्स्वप्नसुषुप्तिकाः ।\nविशेषतः परीक्षा स्याजागरः कार्यसाधकः ॥\nस्वप्नावस्था मध्यफला उपदेष्टा गुरुर्षदि ।\nनिष्फला चरभावस्था ज्ञातव्या मुनिसत्तम ॥\nBesides the ten Avastha's (अवस्थाः) or conditions described in\nslokas 16-18 supra and the three ones mentioned in the present\nsloka, there are some inore Avasthas (अवस्थाः) which have been\nascribed to the several planets due to their being placed in certain\n12",
+  "extraction_confidence": 0.92,
+  "extraction_notes": "Corrected several OCR errors in the Devanagari script based on Sanskrit and astrological context (e.g., 'गृहाणी' to 'ग्रहाणां', 'अहाणो खोचसंस्थानां' to 'ग्रहाणां स्वोच्चसंस्थानां').",
+  "confidence": {
+    "overall_score": 0.92,
+    "criteria": {
+      "image_quality": 0.9,
+      "text_clarity": 0.88,
+      "layout_detection": 0.95
+    },
+    "reasoning": null,
+    "flags": [
+      "DEVANAGARI_CORRECTION_NEEDED"
+    ]
+  },
+  "retry_metadata": {
+    "initial_model": "gemini-2.5-flash-lite",
+    "retry_model": "gemini-2.5-pro",
+    "initial_confidence": 0.4,
+    "retry_reason": "Confidence below threshold (0.9)",
+    "retry_count": 1
+  }
+}

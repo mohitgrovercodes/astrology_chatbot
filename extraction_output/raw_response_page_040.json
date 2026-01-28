@@ -1,0 +1,172 @@
+{
+  "metadata": {
+    "page_number": 40,
+    "book_title": "Jataka_Parijat_Vol_1by_Vaidyanatha_Dikshita_pages_removed",
+    "chapter_title": null,
+    "chapter_number": 1,
+    "section_title": null,
+    "page_type": "text_heavy",
+    "has_tables": false,
+    "has_charts": false,
+    "languages_present": [
+      "english",
+      "sanskrit"
+    ],
+    "astrology_system": "vedic"
+  },
+  "content_blocks": [
+    {
+      "content_type": "prose",
+      "text": "aggregate 360 and are the measurements in degrees of the 12 signs\nwhich they subtend at the centre.",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 1
+    },
+    {
+      "content_type": "prose",
+      "text": "As the whole zodiac is passed over in 24 hours, each degree\nis finished in 24/360×60×60 or 240 seconds or 240/24 or 10\nVighatikas or Chashakas.",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 2
+    },
+    {
+      "content_type": "shloka",
+      "text": "भागवव्यवहारश्च क्षेत्रे भागेनैकेन काले दश चषका भवन्ति । यस्माद्या कक्षाः\nक्षेत्रे सा काले प्राण इति\n\n",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "भागवव्यवहारश्च क्षेत्रे भागेनैकेन काले दश चषका भवन्ति । यस्माद्या कक्षाः\nक्षेत्रे सा काले प्राण इति",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Sanskrit verse on Chashakas and Pranas"
+      },
+      "table_data": null,
+      "sequence_order": 3
+    },
+    {
+      "content_type": "translation",
+      "text": "So that 1 kala or 1 (circular measure)= 1 (प्राण) or Asu\n(6 Pranas being = 1 (चषक) Chashaka",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "So that 1 kala or 1 (circular measure)= 1 (प्राण) or Asu\n(6 Pranas being = 1 (चषक) Chashaka",
+        "notes": null,
+        "topic": "Translation of Sanskrit verse"
+      },
+      "table_data": null,
+      "sequence_order": 4
+    },
+    {
+      "content_type": "shloka",
+      "text": "1. (घटिका) Ghatika is therefore 360 (प्राणाः) Pranas\n\n",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "1. (घटिका) Ghatika is therefore 360 (प्राणाः) Pranas",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Definition of Ghatika"
+      },
+      "table_data": null,
+      "sequence_order": 5
+    },
+    {
+      "content_type": "shloka",
+      "text": "\"तत्रैतज्जातं काले या घटिका सा षष्ठयधिकेन शतश्रयेण गुणिता प्राणा\nभवन्ति । क्षेते च ता एव विलिप्तास्तासां षष्ठया भागमपहृत्य षड्भागाः क्षेसे\nअवन्ति । एवं मेषादीनां प्राणभागाः दशगुणिताश्वषका भवन्ति । तेन चषकशतद्वय\nमेषमीनयोः प्रमाणम् । एवं चत्वारिंशदधिकं शतद्वयं कृषकुंभयोः । \"उत्पलः।\n\n",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "\"तत्रैतज्जातं काले या घटिका सा षष्ठयधिकेन शतश्रयेण गुणिता प्राणा\nभवन्ति । क्षेते च ता एव विलिप्तास्तासां षष्ठया भागमपहृत्य षड्भागाः क्षेसे\nअवन्ति । एवं मेषादीनां प्राणभागाः दशगुणिताश्वषका भवन्ति । तेन चषकशतद्वय\nमेषमीनयोः प्रमाणम् । एवं चत्वारिंशदधिकं शतद्वयं कृषकुंभयोः । \"उत्पलः।",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Sanskrit verse on Pranas and Chashakas calculation"
+      },
+      "table_data": null,
+      "sequence_order": 6
+    },
+    {
+      "content_type": "translation",
+      "text": "Thus it is seen that the several measurements mentioned in\nthe sloka in the text when multiplied by 10 give the Chashakas\n(200, 240, 280 &c. in time) of the several signs. These figures\nare useful in finding out the relative lengths of the several parts\nof a human body (see Adhyaya III, sloka 76).",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "Thus it is seen that the several measurements mentioned in\nthe sloka in the text when multiplied by 10 give the Chashakas\n(200, 240, 280 &c. in time) of the several signs. These figures\nare useful in finding out the relative lengths of the several parts\nof a human body (see Adhyaya III, sloka 76).",
+        "notes": null,
+        "topic": "Explanation of Chashaka calculation and its application"
+      },
+      "table_data": null,
+      "sequence_order": 7
+    },
+    {
+      "content_type": "shloka",
+      "text": "तत्र यस्मिषङ्ग दीर्घराशिर्भवति दीर्घाधिपो वा ग्रहस्तदङ्ग दीर्घ भवति मध्ययोर्मध्यं\nइस्वयोईस्वमिति\" उत्पलः\n\n",
+      "verse_data": {
+        "verse_number": null,
+        "sanskrit_text": "तत्र यस्मिषङ्ग दीर्घराशिर्भवति दीर्घाधिपो वा ग्रहस्तदङ्ग दीर्घ भवति मध्ययोर्मध्यं\nइस्वयोईस्वमिति\" उत्पलः",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Sanskrit verse on body part lengths"
+      },
+      "table_data": null,
+      "sequence_order": 8
+    },
+    {
+      "content_type": "notes",
+      "text": "cf. सारावली — इस्वास्तिमिगेोजघटामिथुनधनु: कर्किमृगमुखाश्च समाः ।\nवृश्चिककन्यामृगपतिवणिजो दीर्घाः समाख्याताः ॥\nएभिर्लप्ताधिगतैः शीर्षप्रभृतीनि सर्वजन्तूनाम् ।\nसदृशानि च जायन्ते गगनचरैश्चैव तुल्यानि ॥\nAlso सत्य - दीर्घाधिपतिदीर्घे गृहे स्थितोऽवयवदीर्षकृङ्गवति ॥",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 9
+    },
+    {
+      "content_type": "shloka",
+      "text": "तनुः शरीरारिखराः किरीटिनो घना गुरुर्व्हयनखानरानुकाः ।\nशशांकभागा यदि तुंबुरादिके सुहूर्तजन्मादिषु मृत्युसूचकाः ॥ ५७ ॥\n\n",
+      "verse_data": {
+        "verse_number": "57",
+        "sanskrit_text": "तनुः शरीरारिखराः किरीटिनो घना गुरुर्व्हयनखानरानुकाः ।\nशशांकभागा यदि तुंबुरादिके सुहूर्तजन्मादिषु मृत्युसूचकाः ॥ ५७ ॥",
+        "transliteration": null,
+        "translation": null,
+        "notes": null,
+        "topic": "Sanskrit verse on Moon's degrees indicating death"
+      },
+      "table_data": null,
+      "sequence_order": 10
+    },
+    {
+      "content_type": "translation",
+      "text": "Sloka. 57. If the degrees attained by the Moon\nin Mesha and the other signs be respectively 8, 25, 22,\n22, 21, 1, 4, 23, 18, 20, 20, 10, they indicate death when\na muhurta, a birth or other such points are under con-\nsideration,",
+      "verse_data": {
+        "verse_number": "57",
+        "sanskrit_text": "",
+        "transliteration": null,
+        "translation": "Sloka. 57. If the degrees attained by the Moon\nin Mesha and the other signs be respectively 8, 25, 22,\n22, 21, 1, 4, 23, 18, 20, 20, 10, they indicate death when\na muhurta, a birth or other such points are under con-\nsideration,",
+        "notes": null,
+        "topic": "Translation of Sloka 57"
+      },
+      "table_data": null,
+      "sequence_order": 11
+    }
+  ],
+  "raw_text": "36\nआतकपारिजाते\nAdh. I\naggregate 360 and are the measurements in degrees of the 12 signs\nwhich they subtend at the centre.\nAs the whole zodiac is passed over in 24 hours, each degree\nis finished in 24/360×60×60 or 240 seconds or 240/24 or 10\nVighatikas or Chashakas.\nभागवव्यवहारश्च क्षेत्रे भागेनैकेन काले दश चषका भवन्ति । यस्माद्या कक्षाः\nक्षेत्रे सा काले प्राण इति\nSo that 1 kala or 1 (circular measure)= 1 (प्राण) or Asu\n(6 Pranas being = 1 (चषक) Chashaka\n1. (घटिका) Ghatika is therefore 360 (प्राणाः) Pranas\n\"तत्रैतज्जातं काले या घटिका सा षष्ठयधिकेन शतश्रयेण गुणिता प्राणा\nभवन्ति । क्षेते च ता एव विलिप्तास्तासां षष्ठया भागमपहृत्य षड्भागाः क्षेसे\nअवन्ति । एवं मेषादीनां प्राणभागाः दशगुणिताश्वषका भवन्ति । तेन चषकशतद्वय\nमेषमीनयोः प्रमाणम् । एवं चत्वारिंशदधिकं शतद्वयं कृषकुंभयोः । \"उत्पलः।\nThus it is seen that the several measurements mentioned in\nthe sloka in the text when multiplied by 10 give the Chashakas\n(200, 240, 280 &c. in time) of the several signs. These figures\nare useful in finding out the relative lengths of the several parts\nof a human body (see Adhyaya III, sloka 76).\nतत्र यस्मिषङ्ग दीर्घराशिर्भवति दीर्घाधिपो वा ग्रहस्तदङ्ग दीर्घ भवति मध्ययोर्मध्यं\nइस्वयोईस्वमिति\" उत्पलः\n०१. सारावली - इस्वास्तिमिगेोजघटामिथुनधनु: कर्किमृगमुखाश्च समाः ।\nवृश्चिककन्यामृगपतिवणिजो दीर्घाः समाख्याताः ॥\nएभिर्लप्ताधिगतैः शीर्षप्रभृतीनि सर्वजन्तूनाम् ।\nसदृशानि च जायन्ते गगनचरैश्चैव तुल्यानि ॥\nAlso सत्य - दीर्घाधिपतिदीर्घे गृहे स्थितोऽवयवदीर्षकृङ्गवति ॥\nतनुः शरीरारिखराः किरीटिनो घना गुरुर्व्हयनखानरानुकाः ।\nशशांकभागा यदि तुंबुरादिके सुहूर्तजन्मादिषु मृत्युसूचकाः ॥ ५७ ॥\nSloka. 57. If the degrees attained by the Moon\nin Mesha and the other signs be respectively 8, 25, 22,\n22, 21, 1, 4, 23, 18, 20, 20, 10, they indicate death when\na muhurta, a birth or other such points are under con-\nsideration,",
+  "extraction_confidence": 0.97,
+  "extraction_notes": "",
+  "confidence": {
+    "overall_score": 0.97,
+    "criteria": {
+      "image_quality": 0.98,
+      "text_clarity": 0.96,
+      "layout_detection": 0.97
+    },
+    "reasoning": null,
+    "flags": []
+  },
+  "retry_metadata": {
+    "initial_model": "gemini-2.5-flash-lite",
+    "retry_model": null,
+    "initial_confidence": null,
+    "retry_reason": null,
+    "retry_count": 0
+  }
+}
