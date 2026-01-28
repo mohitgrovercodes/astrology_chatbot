@@ -230,15 +230,11 @@ python src/rag/preprocessing/pipeline.py input.json --skip-embedding
 ## Next Phase: LLM Integration (Phase 4)
 
 **Prerequisites:** RAG pipeline complete (75%)  
-**Remaining:** Vector database integration
+## 🔜 Next Milestone: Phase 4 — LLM & Chat Integration
 
-### Phase 4 Goals
-
-1. **Prompt Engineering** - System/developer/user prompts
-2. **LLM Selection** - Choose primary model (Gemini/GPT-4)
-3. **Chain Design** - RAG chain with retrieval + generation
-4. **Context Management** - Fit retrieved chunks + query in context
-5. **Response Streaming** - Real-time response delivery
+1.  **Full Data Refresh**: Run `src/rag/preprocessing/pipeline.py` to regenerate high-precision embeddings.
+2.  **Conversational RAG**: Integrate the retrieval engine into a Chatbot interface.
+3.  **Stateful Memory**: Add conversation history support to the `RAGEngine`.
 
 ---
 
@@ -278,6 +274,14 @@ python src/rag/preprocessing/pipeline.py input.json --skip-embedding
 - **Result:** Full cost visibility for all API usage
 
 ### Session 3 (2026-01-22)
+## Phase 3: RAG Pipeline — ✅ CODE COMPLETE (Data Refresh Pending)
+
+### Latest: High-Precision Retrieval & Persistence (2026-01-28)
+
+**The retrieval engine is now production-hardened.** Implemented 1,000-token semantic chunks, Hybrid Search (BM25 + RRF), and Windows Unicode stability. 
+
+> [!IMPORTANT]
+> **Data Action Required**: While the retrieval *code* is 100% stable, the existing JSON data in `preprocessing_output` is stale (6,000-token modularity). A full re-processing is recommended to achieve the "Awesome Result" in precision.
 - **Text Preprocessing Pipeline Implementation**
 - Created 6 preprocessing modules (structural_cleaner, page_analyzer, semantic_segmenter, chunk_enricher, embedder, pipeline)
 - Implemented Pydantic schemas for data validation
