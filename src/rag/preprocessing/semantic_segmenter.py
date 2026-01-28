@@ -39,8 +39,8 @@ class SemanticSegmenter:
     Extracts verse-commentary pairs and concept explanations.
     """
     
-    # Maximum tokens per unit (leave room for query + response in RAG)
-    MAX_TOKENS_PER_UNIT = 6000
+    # Maximum tokens per unit (optimized for RAG retrieval accuracy)
+    MAX_TOKENS_PER_UNIT = 1000
     
     # Approximate chars per token for English + Sanskrit mix
     CHARS_PER_TOKEN = 4

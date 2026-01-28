@@ -2,7 +2,8 @@
 """
 Phase 6: Embedding
 
-Generate embeddings using OpenAI text-embedding-3-large model.
+Production-ready embedding generation using OpenAI models.
+Includes exponential backoff retries, centralized logging, and cost tracking.
 """
 
 import os
@@ -10,270 +11,199 @@ import json
 import time
 import argparse
 from pathlib import Path
-from typing import List, Optional
-from dotenv import load_dotenv
-load_dotenv()
+from typing import List, Optional, Dict, Any
 
-# Handle both relative and direct imports
+# Project imports
 try:
-    from .schemas import (
-        EnrichedChunk,
-        EnrichedDocument,
-    )
+    from src.utils.config import get_config
+    from src.utils.logger import get_logger
+    from src.utils.cost_tracking import CostTrackingWrapper
+    from .schemas import EnrichedChunk, EnrichedDocument
+    logger = get_logger(__name__)
+    CONFIG_AVAILABLE = True
 except ImportError:
-    from schemas import (
-        EnrichedChunk,
-        EnrichedDocument,
-    )
-
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    CONFIG_AVAILABLE = False
+    # Local fallback for schemas if not in package mode
+    try:
+        from schemas import EnrichedChunk, EnrichedDocument
+    except ImportError:
+        # Define minimal classes for standalone operation if schemas are missing
+        from pydantic import BaseModel
+        class EnrichedChunk(BaseModel):
+            chunk_id: str
+            text_for_embedding: str
+            embedding: Optional[List[float]] = None
+        class EnrichedDocument(BaseModel):
+            chunks: List[EnrichedChunk]
 
 class Embedder:
     """
-    Generate embeddings using OpenAI text-embedding-3-large.
+    Production-grade Embedder with robust error handling and cost tracking.
     """
     
-    # OpenAI embedding model
-    MODEL = "text-embedding-3-large"
-    DIMENSIONS = 3072  # Full dimensionality for best quality
-    BATCH_SIZE = 100   # OpenAI batch limit
-    
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         """
         Initialize embedder.
         
         Args:
-            api_key: OpenAI API key (or from OPENAI_API_KEY env var)
+            api_key: OpenAI API key
+            model: Model name (defaults to config)
         """
-        self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        if CONFIG_AVAILABLE:
+            config = get_config()
+            self.model = model or config.embeddings.model
+            self.dimensions = config.embeddings.dimensions
+            self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        else:
+            self.model = model or "text-embedding-3-large"
+            self.dimensions = 3072
+            self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
+
         self.client = None
+        self.batch_size = 100
         
-        # Initialize cost tracking
-        try:
-            from src.utils.cost_tracking import CostTrackingWrapper
-            self.cost_tracker = CostTrackingWrapper(
-                model_name=self.MODEL,
-                model_type="embedding"
-            )
-        except ImportError:
-            print("[WARN] Cost tracking not available")
-            self.cost_tracker = None
-        
+        # Initialize client
         if self.api_key:
             try:
                 from openai import OpenAI
                 self.client = OpenAI(api_key=self.api_key)
-                print(f"[OK] OpenAI client initialized")
+                logger.info(f"OK: OpenAI Embedder initialized: {self.model}")
             except ImportError:
-                print("[WARN] openai package not installed. Install with: pip install openai")
+                logger.error("ERROR: openai package not installed. Run: pip install openai")
         else:
-            print("[WARN] OPENAI_API_KEY not set. Embeddings will be skipped.")
-    
-    
-    def embed_texts(self, texts: List[str], delay: float = 0.5, max_retries: int = 3) -> List[List[float]]:
+            logger.warning("WARN: OPENAI_API_KEY not set. Embedding will yield zero-vectors.")
+
+        # Initialize cost tracking
+        try:
+            from src.utils.cost_tracking import CostTrackingWrapper
+            self.cost_tracker = CostTrackingWrapper(
+                model_name=self.model,
+                model_type="embedding"
+            )
+        except ImportError:
+            self.cost_tracker = None
+
+    def embed_texts(self, texts: List[str], max_retries: int = 5) -> List[List[float]]:
         """
-        Generate embeddings for a list of texts with robust retry logic.
-        
-        Args:
-            texts: List of text strings to embed
-            delay: Delay between batches (for rate limiting)
-            max_retries: Maximum retry attempts per batch
-            
-        Returns:
-            List of embedding vectors
+        Generate embeddings with exponential backoff retries.
         """
         if not self.client:
-            print("[SKIP] No OpenAI client, returning empty embeddings")
-            return [[0.0] * self.DIMENSIONS for _ in texts]
+            logger.error("No OpenAI client available. Returning zero-vectors.")
+            return [[0.0] * self.dimensions for _ in texts]
         
         all_embeddings = []
-        current_batch_size = self.BATCH_SIZE
+        current_batch_size = self.batch_size
         
         for i in range(0, len(texts), current_batch_size):
             batch = texts[i:i + current_batch_size]
+            attempt = 0
+            success = False
             
-            # Retry logic with exponential backoff
-            for attempt in range(max_retries):
+            while attempt < max_retries and not success:
                 try:
                     response = self.client.embeddings.create(
-                        model=self.MODEL,
+                        model=self.model,
                         input=batch,
-                        dimensions=self.DIMENSIONS,
+                        dimensions=self.dimensions if "3-" in self.model else None,
                     )
                     
-                    # Extract embeddings in order
                     batch_embeddings = [item.embedding for item in response.data]
                     all_embeddings.extend(batch_embeddings)
                     
-                    # Log cost if tracking is available
-                    if self.cost_tracker and hasattr(response, 'usage'):
-                        try:
-                            self.cost_tracker.log_from_response(
-                                response,
-                                operation="embedding",
-                                metadata={"batch_num": i//current_batch_size + 1, "batch_size": len(batch)}
-                            )
-                        except Exception as e:
-                            print(f"[WARN] Failed to log embedding cost: {e}")
+                    # Track cost
+                    if self.cost_tracker:
+                        self.cost_tracker.log_from_response(response)
                     
-                    print(f"[OK] Embedded batch {i//current_batch_size + 1}/{(len(texts) + current_batch_size - 1)//current_batch_size}")
-                    
-                    # Rate limiting delay
-                    if i + current_batch_size < len(texts):
-                        time.sleep(delay)
-                    
-                    break  # Success, exit retry loop
+                    success = True
+                    logger.info(f"OK: Embedded batch {i//current_batch_size + 1}/{(len(texts) + current_batch_size - 1)//current_batch_size}")
                     
                 except Exception as e:
-                    error_str = str(e).lower()
-                    is_rate_limit = any([
-                        "429" in error_str,
-                        "rate limit" in error_str,
-                        "quota" in error_str,
-                        "resource exhausted" in error_str
-                    ])
+                    attempt += 1
+                    error_msg = str(e).lower()
                     
-                    if is_rate_limit and attempt < max_retries - 1:
-                        # Exponential backoff
-                        wait_time = (2 ** attempt) * 2
-                        print(f"[WARN] Rate limit hit. Waiting {wait_time}s... (Attempt {attempt+1}/{max_retries})")
+                    if any(x in error_msg for x in ["429", "rate limit", "too many requests"]):
+                        wait_time = (2 ** attempt + 1)
+                        logger.warning(f"WAIT: Rate limit hit. Retrying in {wait_time}s... (Attempt {attempt}/{max_retries})")
                         time.sleep(wait_time)
                         
-                        # Reduce batch size on retry
+                        # Dynamic batch sizing
                         if current_batch_size > 10:
                             current_batch_size = current_batch_size // 2
-                            print(f"[INFO] Reducing batch size to {current_batch_size}")
+                            logger.info(f"INFO: Reducing batch size to {current_batch_size}")
                     else:
-                        print(f"[ERROR] Embedding batch failed after {max_retries} attempts: {e}")
-                        # Return zero vectors for failed batch
-                        all_embeddings.extend([[0.0] * self.DIMENSIONS for _ in batch])
-                        break
-                # Return zero vectors for failed batch
-                all_embeddings.extend([[0.0] * self.DIMENSIONS for _ in batch])
-        
+                        logger.error(f"ERROR: Embedding failed: {e}")
+                        if attempt >= max_retries:
+                            logger.critical("CRITICAL: Max retries reached. Filling batch with zero-vectors.")
+                            all_embeddings.extend([[0.0] * self.dimensions for _ in batch])
+                            success = True 
+                        else:
+                            time.sleep(1)
+
         return all_embeddings
-    
+
     def embed_document(self, enriched_doc: EnrichedDocument) -> EnrichedDocument:
-        """
-        Add embeddings to all chunks in a document.
-        
-        Args:
-            enriched_doc: Enriched document from Phase 5
-            
-        Returns:
-            Document with embeddings added
-        """
-        # Extract texts for embedding
+        """Process an entire EnrichedDocument."""
         texts = [chunk.text_for_embedding for chunk in enriched_doc.chunks]
-        
-        print(f"[INFO] Generating embeddings for {len(texts)} chunks...")
-        
-        # Generate embeddings
+        if not texts:
+            logger.warning("No chunks found in document.")
+            return enriched_doc
+            
+        logger.info(f"START: Generating embeddings for {len(texts)} chunks...")
         embeddings = self.embed_texts(texts)
         
-        # Add embeddings to chunks
         for chunk, embedding in zip(enriched_doc.chunks, embeddings):
             chunk.embedding = embedding
-        
-        return enriched_doc
-    
-    def process_file(
-        self,
-        input_file: str,
-        output_file: Optional[str] = None,
-    ) -> EnrichedDocument:
-        """
-        Process an enriched JSON file through Phase 6 embedding.
-        
-        Args:
-            input_file: Path to enriched JSON from Phase 5
-            output_file: Optional output path
             
-        Returns:
-            EnrichedDocument with embeddings
-        """
+        return enriched_doc
+
+    def process_file(self, input_file: str, output_file: Optional[str] = None):
+        """Standalone file processing."""
         input_path = Path(input_file)
-        
-        # Load enriched document
+        if not input_path.exists():
+            logger.error(f"File not found: {input_file}")
+            return
+
         with open(input_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        enriched_doc = EnrichedDocument(**data)
-        
-        # Add embeddings
+        # Load schema
+        try:
+            enriched_doc = EnrichedDocument(**data)
+        except Exception as e:
+            logger.error(f"Schema validation failed: {e}")
+            return
+
         enriched_doc = self.embed_document(enriched_doc)
         
-        # Save output
-        if output_file is None:
-            output_file = str(input_path.parent / f"{input_path.stem}_embedded.json")
+        output_path = Path(output_file) if output_file else input_path.parent / f"{input_path.stem}_embedded.json"
         
-        output_path = Path(output_file)
         with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(enriched_doc.model_dump(), f, ensure_ascii=False, indent=2)
-        
-        print(f"[OK] Embedded {len(enriched_doc.chunks)} chunks")
-        print(f"[OK] Saved to: {output_path}")
-        
-        return enriched_doc
+            if hasattr(enriched_doc, "model_dump"):
+                json.dump(enriched_doc.model_dump(), f, ensure_ascii=False, indent=2)
+            else:
+                json.dump(enriched_doc.dict(), f, ensure_ascii=False, indent=2)
+                
+        logger.info(f"SUCCESS: Successfully processed and saved to: {output_path}")
 
-
-def test_embedder():
-    """Test embedder (requires OPENAI_API_KEY)."""
-    print("=" * 70)
-    print("EMBEDDER TEST")
-    print("=" * 70)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Phase 6: Embedder (Production Version)")
+    parser.add_argument("input", help="Path to input JSON file", nargs="?")
+    parser.add_argument("--output", "-o", help="Output file path")
+    parser.add_argument("--test", action="store_true", help="Run a quick test")
+    
+    args = parser.parse_args()
     
     embedder = Embedder()
     
-    if embedder.client:
-        # Test with sample text
-        test_texts = [
-            "Gulika in the 5th house affects progeny and education.",
-            "Mars in Aries gives courage and leadership qualities.",
-        ]
-        
-        embeddings = embedder.embed_texts(test_texts)
-        
-        print(f"\n[OK] Generated {len(embeddings)} embeddings")
-        print(f"[OK] Embedding dimension: {len(embeddings[0])}")
-        print(f"[OK] First few values: {embeddings[0][:5]}")
+    if args.test:
+        print("Running Embedder Test...")
+        test_text = ["Gulika in the 5th house is auspicious.", "Mars in Aries gives courage."]
+        vecs = embedder.embed_texts(test_text)
+        print(f"DONE: Generated {len(vecs)} vectors of size {len(vecs[0])}")
+    elif args.input:
+        embedder.process_file(args.input, args.output)
     else:
-        print("[SKIP] No API key, skipping actual embedding test")
-
-
-if __name__ == "__main__":
-    def main():
-        """CLI entry point."""
-        parser = argparse.ArgumentParser(
-            description="Phase 6: Embedding - Generate embeddings using OpenAI text-embedding-3-large."
-        )
-        parser.add_argument(
-            "input_file", 
-            nargs="?", 
-            help="Path to enriched JSON file from Phase 5"
-        )
-        parser.add_argument(
-            "--output", 
-            "-o", 
-            help="Optional output path"
-        )
-        parser.add_argument(
-            "--test", 
-            action="store_true", 
-            help="Run simple test with dummy data"
-        )
-        
-        args = parser.parse_args()
-        
-        if args.test:
-            test_embedder()
-            return
-
-        if not args.input_file:
-            parser.print_help()
-            print("\n[ERROR] input_file argument is required unless --test is specified.")
-            return
-
-        embedder = Embedder()
-        embedder.process_file(args.input_file, args.output)
-
-    main()
+        parser.print_help()

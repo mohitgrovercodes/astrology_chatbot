@@ -30,12 +30,12 @@ except ImportError:
         PageType,
     )
 
-# Try importing LLM Factory (lazy import inside init to avoid circular deps if possible, but safe here)
+# Try importing LLM Factory (Standardized absolute/relative fallback)
 try:
-    from ..llm.factory import LLMFactory
+    from src.llm.factory import LLMFactory
 except ImportError:
     try:
-        from src.rag.llm.factory import LLMFactory
+        from ..llm.factory import LLMFactory
     except ImportError:
         LLMFactory = None
 

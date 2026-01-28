@@ -55,12 +55,38 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="Batch PDF Extraction with Optimizations")
     parser.add_argument("pdf_path", help="Path to PDF file")
-    parser.add_argument("--start", type=int, default=1, help="Start page")
-    parser.add_argument("--end", type=int, default=10, help="End page")
+    parser.add_argument("--start", type=int, default=None, help="Start page")
+    parser.add_argument("--end", type=int, default=None, help="End page")
     parser.add_argument("--workers", type=int, default=4, help="Number of parallel workers")
     parser.add_argument("--output", default="./extraction_output", help="Output directory")
     
     args = parser.parse_args()
+    
+    # INTERACTIVE PAGE SELECTION
+    if args.start is None:
+        while True:
+            try:
+                val = input("\nEnter Start Page (standard: 1): ").strip()
+                args.start = int(val) if val else 1
+                if args.start < 1: raise ValueError
+                break
+            except ValueError:
+                print("❌ Invalid input. Please enter a positive integer.")
+                
+    if args.end is None:
+        while True:
+            try:
+                val = input("Enter End Page (e.g., 10): ").strip()
+                if not val:
+                    print("❌ End page is required.")
+                    continue
+                args.end = int(val)
+                if args.end < args.start:
+                    print(f"❌ End page must be at least {args.start}.")
+                    continue
+                break
+            except ValueError:
+                print("❌ Invalid input. Please enter a positive integer.")
     
     # 1. AUTH SETUP: Use GCP Credentials for Vertex AI
     # Ensure credentials file is set

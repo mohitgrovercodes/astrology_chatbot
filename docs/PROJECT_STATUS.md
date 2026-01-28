@@ -1,8 +1,8 @@
 # PROJECT STATUS — Astrology AI Chatbot
 
 > **Last Updated:** 2026-01-27  
-> **Current Phase:** Phase 3 - RAG Pipeline (Vision Extraction Production-Ready)  
-> **Overall Progress:** 89%
+> **Current Phase:** Phase 3 - RAG Pipeline (Hybrid Architecture Complete)  
+> **Overall Progress:** 92%
 
 ---
 
@@ -11,7 +11,7 @@
 ```
 Phase 1: Foundation         [██████████] 100% ✅ COMPLETE
 Phase 2: Engine Integration [██████████] 100% ✅ COMPLETE & VERIFIED
-Phase 3: RAG Pipeline       [█████████░] 90% ← IN PROGRESS (Preprocessing Complete, Vector DB Pending)
+Phase 3: RAG Pipeline       [█████████▉] 95% ← IN PROGRESS (Advanced Retrieval Logic Complete)
 Phase 4: LLM Integration    [░░░░░░░░░░] 0%
 Phase 5: Orchestration      [░░░░░░░░░░] 0%
 Phase 6: Safety             [░░░░░░░░░░] 0%
@@ -27,9 +27,9 @@ Utilities: Cost Tracking    [██████████] 100% ✅ COMPLETE
 
 ## Phase 3: RAG Pipeline — 🔧 IN PROGRESS (90%)
 
-### Latest: Production-Grade Vision Extraction (2026-01-27)
+### Latest: "Best of Both Worlds" Hybrid RAG (2026-01-28)
 
-**Production-grade extraction system** with model comparison, hybrid strategy, content validation, parallel processing, and checkpoint/resume capability.
+**Merged advanced retrieval strategies with production hardening.** Implemented Hybrid Search (BM25 + RRF), Advanced HyDE, and standardized logging/retries.
 
 ### ✅ Completed
 
@@ -116,11 +116,18 @@ Utilities: Cost Tracking    [██████████] 100% ✅ COMPLETE
    - Summary generation
    - Optimized embedding text construction
 
-6. **Phase 6: Embedding Integration**
+6. **Phase 6: Embedding Integration** (Hardened)
    - OpenAI text-embedding-3-large support
-   - Batch processing (100 chunks/batch)
-   - Rate limiting
+   - **Exponential Backoff Retries**: Handles 429 errors gracefully
+   - **Centralized Logging**: Full visibility via `src.utils.logger`
+   - **Config Driven**: All settings moved to `config.yaml`
    - 3072-dimension embeddings
+
+7. **Advanced Retrieval Logic** ✨ NEW (2026-01-28)
+   - **Hybrid Search**: BM25 keyword matching + Vector search
+   - **Reciprocal Rank Fusion (RRF)**: Merges scores without normalization issues
+   - **Advanced HyDE**: Hypothetical document generation using Gemini-Flash
+   - **Granular Chunking**: Fixed at 1,000 tokens for precision
 
 7. **Cost Tracking System** ✨ NEW
    - Automatic cost logging for all LLM/embedding API calls
