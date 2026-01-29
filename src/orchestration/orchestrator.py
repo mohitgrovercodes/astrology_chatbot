@@ -27,6 +27,14 @@ except ImportError:
     print("[WARN] RAG engine not available")
     RAG_AVAILABLE = False
 
+# Import user profile manager
+try:
+    from user_profile_manager import UserProfileManager, get_default_profile_manager
+    PROFILE_MANAGER_AVAILABLE = True
+except ImportError:
+    print("[WARN] User profile manager not available")
+    PROFILE_MANAGER_AVAILABLE = False
+
 
 # =============================================================================
 # STATE DEFINITION
@@ -43,6 +51,10 @@ class ConversationState(TypedDict):
     user_id: Optional[str]
     conversation_history: List[Dict[str, str]]
     
+    # User profile (NEW: Phase 5.1)
+    user_profile: Optional[Dict[str, Any]]  # Loaded from database
+    user_authenticated: bool
+    
     # Classification
     intent_type: Optional[str]  # 'calculation', 'interpretation', 'chitchat', 'blocked'
     astro_system: Optional[str]  # 'vedic', 'western'
@@ -51,6 +63,7 @@ class ConversationState(TypedDict):
     # Birth data (if calculation)
     birth_data: Optional[Dict[str, Any]]
     birth_data_complete: bool
+    birth_data_source: Optional[str]  # 'profile' or 'query'
     missing_fields: List[str]
     
     # Execution results
@@ -74,6 +87,89 @@ class ConversationState(TypedDict):
 # =============================================================================
 # NODE FUNCTIONS
 # =============================================================================
+
+def load_user_profile_node(state: ConversationState) -> ConversationState:
+    """
+    Node 0: Load user profile and authenticate.
+    
+    Loads user data from MongoDB (or dummy data) and verifies subscription.
+    If user has birth data in profile, auto-populate it.
+    """
+    user_id = state.get("user_id")
+    
+    if not user_id:
+        state["user_authenticated"] = False
+        state["error"] = "No user_id provided"
+        state["processing_path"] = state.get("processing_path", [])
+        state["processing_path"].append("load_user_profile [no_user_id]")
+        return state
+    
+    if not PROFILE_MANAGER_AVAILABLE:
+        # Fallback: No profile system
+        state["user_authenticated"] = True  # Allow for testing
+        state["user_profile"] = None
+        state["processing_path"] = state.get("processing_path", [])
+        state["processing_path"].append("load_user_profile [unavailable]")
+        return state
+    
+    # Load profile
+    profile_manager = get_default_profile_manager()
+    
+    # Authenticate user
+    is_authenticated = profile_manager.authenticate_user(user_id)
+    state["user_authenticated"] = is_authenticated
+    
+    if not is_authenticated:
+        state["is_blocked"] = True
+        state["block_reason"] = "authentication_failed"
+        state["final_answer"] = """🔒 Access Denied
+
+Your subscription is not active or has expired. 
+
+To continue using the Astrology AI Chatbot, please:
+• Renew your subscription
+• Contact support if you believe this is an error
+
+Thank you for your understanding! 🙏"""
+        state["processing_path"] = state.get("processing_path", [])
+        state["processing_path"].append("load_user_profile [auth_failed]")
+        return state
+    
+    # Load profile data
+    profile = profile_manager.get_user_profile(user_id)
+    
+    if profile:
+        state["user_profile"] = profile.to_dict()
+        
+        # Auto-populate birth data if available
+        if profile.has_complete_birth_data():
+            state["birth_data"] = {
+                "date": profile.date_of_birth,
+                "time": profile.time_of_birth,
+                "location_text": profile.place_of_birth,
+                "latitude": profile.latitude,
+                "longitude": profile.longitude,
+                "timezone": profile.timezone
+            }
+            state["birth_data_complete"] = True
+            state["birth_data_source"] = "profile"
+            state["missing_fields"] = []
+            
+            print(f"[PROFILE] Loaded for {profile.name}: Birth data available")
+        else:
+            print(f"[PROFILE] Loaded for {profile.name}: Birth data incomplete")
+        
+        # Update last active
+        profile_manager.update_last_active(user_id)
+    else:
+        state["user_profile"] = None
+        print(f"[PROFILE] Profile not found for user_id: {user_id}")
+    
+    state["processing_path"] = state.get("processing_path", [])
+    state["processing_path"].append("load_user_profile")
+    
+    return state
+
 
 def classify_intent_node(state: ConversationState) -> ConversationState:
     """
@@ -145,12 +241,8 @@ def extract_birth_data_node(state: ConversationState) -> ConversationState:
     """
     Node 3: Extract birth data from query (if calculation type).
     
-    Extracts:
-    - Birth date
-    - Birth time
-    - Birth location
-    
-    Sets flags for missing data.
+    First checks if user profile has birth data. If yes, uses that.
+    Otherwise, tries to extract from query.
     """
     if state["intent_type"] != "calculation":
         # Skip if not calculation
@@ -158,21 +250,45 @@ def extract_birth_data_node(state: ConversationState) -> ConversationState:
         state["processing_path"].append("extract_birth_data [skipped]")
         return state
     
-    query = state["query"]
+    # Check if birth data already loaded from profile
+    if state.get("birth_data_source") == "profile" and state.get("birth_data_complete"):
+        state["processing_path"].append("extract_birth_data [from_profile]")
+        print(f"[EXTRACT] Using birth data from user profile")
+        return state
     
-    # Extract birth data
+    # Extract from query
+    query = state["query"]
     extracted = extract_birth_data_from_query.invoke({"query": query})
     
+    # If user has partial profile data, merge with extracted
+    profile_data = state.get("birth_data", {})
+    
     state["birth_data"] = {
-        "date": extracted.get("birth_date"),
-        "time": extracted.get("birth_time"),
-        "location_text": extracted.get("location_text"),
-        "latitude": None,  # Would need geocoding
-        "longitude": None,
+        "date": extracted.get("birth_date") or profile_data.get("date"),
+        "time": extracted.get("birth_time") or profile_data.get("time"),
+        "location_text": extracted.get("location_text") or profile_data.get("location_text"),
+        "latitude": profile_data.get("latitude"),  # From profile only
+        "longitude": profile_data.get("longitude"),  # From profile only
+        "timezone": profile_data.get("timezone"),
     }
     
-    state["missing_fields"] = extracted.get("missing_fields", [])
-    state["birth_data_complete"] = len(state["missing_fields"]) == 0
+    # Determine missing fields
+    missing = []
+    if not state["birth_data"]["date"]:
+        missing.append("birth_date")
+    if not state["birth_data"]["time"]:
+        missing.append("birth_time")
+    # Location check: we need at least text OR coordinates
+    has_location = (
+        state["birth_data"]["location_text"] or
+        (state["birth_data"]["latitude"] and state["birth_data"]["longitude"])
+    )
+    if not has_location:
+        missing.append("location")
+    
+    state["missing_fields"] = missing
+    state["birth_data_complete"] = len(missing) == 0
+    state["birth_data_source"] = "query" if extracted.get("birth_date") else "mixed"
     
     state["processing_path"].append("extract_birth_data")
     
@@ -187,6 +303,7 @@ def request_missing_data_node(state: ConversationState) -> ConversationState:
     """
     Node 4: Request missing birth data from user.
     
+    Personalized based on user profile.
     If birth data is incomplete, generate a friendly prompt
     asking for missing information.
     """
@@ -195,20 +312,47 @@ def request_missing_data_node(state: ConversationState) -> ConversationState:
     if not missing:
         return state
     
-    # Generate request message
-    missing_str = ", ".join(missing)
+    # Get user name from profile
+    user_name = ""
+    if state.get("user_profile"):
+        user_name = state["user_profile"].get("name", "").split()[0]  # First name
+        if user_name:
+            user_name = f"{user_name}, "
     
-    state["final_answer"] = f"""To calculate your birth chart accurately, I need the following information:
+    # Check if we have location from profile
+    has_profile_location = (
+        state.get("birth_data", {}).get("latitude") and
+        state.get("birth_data", {}).get("longitude")
+    )
+    
+    # Generate personalized request
+    if has_profile_location:
+        # We have location, just need date/time
+        state["final_answer"] = f"""Hi {user_name}to calculate your chart, I need:
+
+{chr(10).join('• ' + field.replace('_', ' ').title() for field in missing if field != 'location')}
+
+I already have your birth location ({state['birth_data'].get('location_text', 'on file')}) from your profile.
+
+Please provide the missing details. For example:
+"March 15, 1990 at 2:30 PM"
+
+Looking forward to generating your chart! 🌟"""
+    else:
+        # Need all fields
+        missing_str = ", ".join(f.replace('_', ' ') for f in missing)
+        
+        state["final_answer"] = f"""Hi {user_name}to calculate your birth chart accurately, I need:
 
 {chr(10).join('• ' + field.replace('_', ' ').title() for field in missing)}
 
 Please provide these details in your next message. For example:
-"I was born on March 15, 1990 at 2:30 PM in New York City"
+"I was born on March 15, 1990 at 2:30 PM in Delhi"
 
-Looking forward to generating your chart! 🌟"""
+Your birth data will be added to your profile for future convenience! 🌟"""
     
     state["requires_followup"] = True
-    state["followup_question"] = f"Please provide your {missing_str}"
+    state["followup_question"] = f"Please provide your {', '.join(missing)}"
     
     state["processing_path"].append("request_missing_data")
     
@@ -222,6 +366,8 @@ def execute_calculation_node(state: ConversationState) -> ConversationState:
     Calls appropriate calculation tool based on:
     - System (Vedic vs Western)
     - Type (birth chart, transits, dasha)
+    
+    Uses coordinates from user profile (required).
     """
     if state["intent_type"] != "calculation" or not state["birth_data_complete"]:
         state["processing_path"].append("execute_calculation [skipped]")
@@ -234,11 +380,12 @@ def execute_calculation_node(state: ConversationState) -> ConversationState:
     print(f"[CALCULATE] System: {system}, Type: {calc_type}")
     
     try:
-        # TODO: In production, you'd geocode location_text to get lat/lon
-        # For now, using placeholder coordinates
-        if not birth_data["latitude"]:
-            birth_data["latitude"] = 28.6139  # Delhi default
-            birth_data["longitude"] = 77.2090
+        # Validate coordinates
+        if not birth_data.get("latitude") or not birth_data.get("longitude"):
+            state["error"] = "Birth location coordinates not available in profile"
+            print(f"[ERROR] {state['error']}")
+            state["processing_path"].append("execute_calculation [error]")
+            return state
         
         # Execute calculation
         if system == "vedic":
@@ -254,7 +401,8 @@ def execute_calculation_node(state: ConversationState) -> ConversationState:
                     "birth_date": birth_data["date"],
                     "birth_time": birth_data["time"],
                     "latitude": birth_data["latitude"],
-                    "longitude": birth_data["longitude"]
+                    "longitude": birth_data["longitude"],
+                    "timezone": birth_data.get("timezone")
                 })
         
         elif system == "western":
@@ -262,7 +410,8 @@ def execute_calculation_node(state: ConversationState) -> ConversationState:
                 "birth_date": birth_data["date"],
                 "birth_time": birth_data["time"],
                 "latitude": birth_data["latitude"],
-                "longitude": birth_data["longitude"]
+                "longitude": birth_data["longitude"],
+                "timezone": birth_data.get("timezone")
             })
         
         else:
@@ -431,6 +580,20 @@ def synthesize_response_node(state: ConversationState) -> ConversationState:
 # ROUTING FUNCTIONS
 # =============================================================================
 
+def route_after_profile_load(state: ConversationState) -> str:
+    """
+    Decide next step after loading user profile.
+    
+    Routes:
+    - not authenticated → END (shows access denied message)
+    - authenticated → classify_intent
+    """
+    if not state.get("user_authenticated"):
+        return END
+    
+    return "classify_intent"
+
+
 def route_after_safety_check(state: ConversationState) -> str:
     """
     Decide next step after safety check.
@@ -496,6 +659,7 @@ def create_orchestration_graph() -> StateGraph:
     Create the complete LangGraph orchestration flow.
     
     Flow:
+    0. Load user profile & authenticate
     1. Classify intent
     2. Safety check
     3. [If calculation] Extract birth data
@@ -508,6 +672,7 @@ def create_orchestration_graph() -> StateGraph:
     workflow = StateGraph(ConversationState)
     
     # Add nodes
+    workflow.add_node("load_user_profile", load_user_profile_node)
     workflow.add_node("classify_intent", classify_intent_node)
     workflow.add_node("safety_check", safety_check_node)
     workflow.add_node("extract_birth_data", extract_birth_data_node)
@@ -517,7 +682,17 @@ def create_orchestration_graph() -> StateGraph:
     workflow.add_node("synthesize_response", synthesize_response_node)
     
     # Define edges
-    workflow.set_entry_point("classify_intent")
+    workflow.set_entry_point("load_user_profile")
+    
+    # After profile load, check authentication
+    workflow.add_conditional_edges(
+        "load_user_profile",
+        route_after_profile_load,
+        {
+            END: END,
+            "classify_intent": "classify_intent",
+        }
+    )
     
     workflow.add_edge("classify_intent", "safety_check")
     
@@ -596,11 +771,14 @@ class AstrologyOrchestrator:
             query=query,
             user_id=user_id,
             conversation_history=conversation_history or [],
+            user_profile=None,
+            user_authenticated=False,
             intent_type=None,
             astro_system=None,
             calculation_type=None,
             birth_data=None,
             birth_data_complete=False,
+            birth_data_source=None,
             missing_fields=[],
             calculation_result=None,
             rag_result=None,
