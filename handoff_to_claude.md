@@ -1,51 +1,65 @@
-# Handoff to Claude
+# 🚀 Handoff: Phase 3 Complete -> Initiating Phase 4
 
-## 🚀 Project Status: RAG Pipeline Complete (100% Phase 3)
+**Date:** 2026-01-29
+**Status:** RAG Pipeline Stabilized. Moving to "Brain" Building.
 
-We have verified the full pipelines, simplified the user experience with interactive CLIs, and consolidated all documentation. The system is ready for Phase 4 (LLM Integration).
+## 🌟 Executive Summary for Claude
+We have just completed **Phase 3 (RAG Pipeline)**. The system can now:
+1.  Ingest PDFs (Vision LLM).
+2.  Clean & Chunk text (Semantic Units).
+3.  Store w/ Embeddings (ChromaDB + OpenAI).
+4.  Retrieve w/ Smart Routing (Vector vs Hybrid vs HyDE).
 
-### ✅ Recent Accomplishments (Critical for Context)
+**Current Goal (Phase 4):**
+We need to **build the "Astrologer Persona"**. The current bot answers questions, but it sounds like a generic AI or a database searcher. We want it to speak like a *Rishi* or an *Expert Consultant*—respectful, precise, and acknowledging limits.
 
-1.  **UX & Interactive CLI Overhaul** (2026-01-29):
-    *   **Interactive Defaults**: Refactored `pipeline.py`, `batch_extract.py`, and `run_preprocessing_phases.py` to be fully interactive.
-    *   **Smart Input Scanning**: Scripts now auto-scan `data/raw` for input files and present a numbered list.
-    *   **Consolidated Docs**: Deleted redundant documentation (`QUICKSTART.md`, old status files) to reduce noise. `README.md` is now the single source of truth for usage.
+---
 
-2.  **Pipeline Verification**:
-    *   Verified the full RAG pipeline (Extraction -> Segmentation -> Embedding -> ChromaDB).
-    *   Standardized LLM `max_tokens` to 4096 across all calls.
-    *   Fixed OpenAI factory integration in `src/llm/factory.py`.
+## 📂 Critical Files (Project Knowledge)
+Add these to your context window immediately:
 
-3.  **Vertex AI Integration**:
-    *   Prioritized Vertex AI (`ChatVertexAI`) for all Google models.
-    *   Standardized on `gemini-2.5-flash` for extraction and cleaning.
+### 1. The Map
+*   `docs/ASTRO_CHATBOT_PROJECT_STATUS.md`: The single source of truth for progress.
+*   `task.md`: The active checklist for Phase 4.
+*   `implementation_plan.md`: The detailed step-by-step technical plan for Phase 4.
 
-### 🚧 Immediate Next Steps (To-Do)
+### 2. The Core Code (To Be Modified)
+*   `src/rag/rag_engine.py`: Contains `answer_question` and the new `_classify_query_intent` (Router). You will refactor this to use Templates.
+*   `src/llm/factory.py`: The LLM infrastructure.
+*   `chatbot.py`: The user interface (CLI).
 
-The RAG Pipeline (Phase 3) is **COMPLETE**. The immediate next steps are to move to **Phase 4: LLM Integration & Orchestration**.
+---
 
-1.  **Monitor Large Ingestion**: The user is likely running a large batch ingestion of "Jataka Parijata" or "BPHS". Verify the `data/vectordb` size and quality after this run.
-2.  **Phase 4 Kickoff (Chatbot Personality)**:
-    *   Design the `SystemPrompt` for the Astrologer persona (Vedic vs Western styles).
-    *   Implement "Chat History" memory in `RAGEngine` (currently it's stateless).
-3.  **Vector Store Inspection**: Use the `chatbot.py` /filter commands to verify that retrieving "Mars in 7th house" actually returns relevant chunks from the new ingestion.
+## 🛠️ What We Are Doing Now (Phase 4 Roadmap)
 
-### 🤖 Guidance for Claude (Instruction for the Next Agent)
+We are transitioning from **Infrastructure** to **Intelligence**.
 
-1.  **Trust `README.md`**: It has been updated with the latest interactive commands.
-2.  **Check `data/raw`**: This is where user files should go. The scripts expect it.
-3.  **Interactive First**: When asking the user to run commands, prefer the simple interactive ones (e.g., `python chatbot.py`) over long flag-based commands.
-4.  **Vertex AI is King**: Continue using `ChatVertexAI` via the `LLMFactory`. Do not hardcode API keys.
+### Step 1: Directory Structure (Immediate)
+Create `src/llm/prompts/` to separate logic from text.
+*   `src/llm/prompts/personas.py`: Store system prompts (e.g., `VEDIC_CLASSICAL`).
+*   `src/llm/prompts/templates.py`: Store Jinja2-style templates for RAG prompts.
 
-### 🛠️ Key Context Files (Recommended Ingestion)
+### Step 2: Refactor Factory
+Audit `src/llm/factory.py` to ensure it robustly handles:
+*   Model switching (User asks "Switch to GPT-4" -> It happens).
+*   Rate limiting (Already decent, but verify).
 
-1.  **Handoff Documentation**:
-    *   [handoff_to_claude.md](file:///d:/AI/IMGProjects/astro_chatbot/astro_chatbot/handoff_to_claude.md)
-    *   [docs/ASTRO_CHATBOT_PROJECT_STATUS.md](file:///d:/AI/IMGProjects/astro_chatbot/astro_chatbot/docs/ASTRO_CHATBOT_PROJECT_STATUS.md) (Master Status)
-    *   [README.md](file:///d:/AI/IMGProjects/astro_chatbot/astro_chatbot/README.md) (Usage Guide)
+### Step 3: Integrate Persona into Engine
+Modify `RAGEngine` in `src/rag/rag_engine.py`:
+*   Replace hardcoded `SYSTEM_PROMPT` string with dynamic loading from `personas.py`.
+*   Inject conversation history intelligently (Summary vs Full History).
 
-2.  **Core Codebase**:
-    *   [pipeline.py](file:///d:/AI/IMGProjects/astro_chatbot/astro_chatbot/src/rag/preprocessing/pipeline.py) (Orchestrator)
-    *   [batch_extract.py](file:///d:/AI/IMGProjects/astro_chatbot/astro_chatbot/batch_extract.py) (Extraction Entry)
-    *   [chatbot.py](file:///d:/AI/IMGProjects/astro_chatbot/astro_chatbot/chatbot.py) (Main Interface)
+### Step 4: Testing Tone
+Run `chatbot.py` and verify:
+*   Does it say "I believe..." or "According to the Shastras..."? (We want the latter).
+*   Does it use Sanskrit terms correctly?
 
+---
+
+## 💡 Key Context: The "Router"
+We realized that **Pure Vector Search** is great for concepts ("Inauspicious Sun"), but **Hybrid Search** is needed for lookups ("Verse 12").
+*   We implemented a `_classify_query_intent` method in `rag_engine.py`.
+*   **DO NOT BREAK THIS**. When refactoring, ensure the "Auto-Router" logic remains preserved or enhanced.
+
+## 🏁 Final Words
+You are building the **Soul** of the machine now. The Body (RAG) is ready. Good luck!

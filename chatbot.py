@@ -1,88 +1,93 @@
 #!/usr/bin/env python3
 """
-Astrology AI Chatbot - Interactive CLI
+Astrology AI Chatbot - Phase 5 (LangGraph Orchestrated)
 
-RAG-powered chatbot for Vedic astrology questions.
+Fully orchestrated chatbot with:
+- Calculation engine integration (Vedic & Western)
+- RAG-powered interpretations
+- Safety guardrails
+- Smart routing
 """
 
-import os
 import sys
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Optional
 
 # Add src to path
 project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root / "src"))
+sys.path.insert(0, str(project_root))
 
-from src.rag.rag_engine import RAGEngine
+from orchestrator import AstrologyOrchestrator
+from conversation_store import ConversationStore, get_default_store
 
 
-class AstrologyChatbot:
-    """Interactive chatbot for astrology questions."""
+class AstrologyChatbotPhase5:
+    """Phase 5 chatbot with complete orchestration."""
     
     WELCOME_MESSAGE = """
-╔══════════════════════════════════════════════════════════════╗
-║          🌟 Astrology AI Chatbot 🌟                         ║
-║                                                              ║
-║  Ask questions about Vedic astrology based on classical     ║
-║  texts like Brihat Parasara Hora Shastra.                   ║
-║                                                              ║
-║  Commands:                                                   ║
-║    /help      - Show this help message                      ║
-║    /filter    - Set metadata filters                        ║
-║    /clear     - Clear conversation history                  ║
-║    /sources   - Toggle source display                       ║
-║    /quit      - Exit chatbot                                ║
-╚══════════════════════════════════════════════════════════════╝
-"""
-    
-    HELP_MESSAGE = """
-Available Commands:
-  /help                    - Show this help message
-  /filter planet=Mars      - Filter by planet
-  /filter house=5          - Filter by house
-  /filter clear            - Clear all filters
-  /clear                   - Clear conversation history
-  /sources on|off          - Toggle source citations
-  /quit                    - Exit chatbot
-
-Examples:
-  What does Mars in the 5th house signify?
-  Explain the concept of Gulika
-  /filter planet=Jupiter
-  What are the effects of Jupiter?
+╔═══════════════════════════════════════════════════════════════════╗
+║          🌟 Astrology AI Chatbot (Phase 5 - Final) 🌟           ║
+║                                                                   ║
+║  Unified system for birth chart calculations AND classical       ║
+║  Vedic astrology interpretations.                                ║
+║                                                                   ║
+║  ✨ NEW in Phase 5:                                              ║
+║    • Birth chart calculations (Vedic & Western)                  ║
+║    • Automatic dasha periods                                     ║
+║    • Transit calculations                                        ║
+║    • Intelligent routing (calculation vs interpretation)         ║
+║    • Safety guardrails (blocks harmful queries)                  ║
+║    • Hybrid responses (calculation + interpretation)             ║
+║                                                                   ║
+║  What I can help with:                                           ║
+║    📊 "Calculate my birth chart" (+ birth details)               ║
+║    📚 "What does Jupiter in 5th house mean?"                     ║
+║    🌙 "Show me my current dasha periods"                         ║
+║    🔄 "What are the transits today?"                             ║
+║    ❓ "Explain the concept of Rahu-Ketu"                         ║
+║                                                                   ║
+║  Commands:                                                        ║
+║    /help      - Show this help                                   ║
+║    /history   - View conversation                                ║
+║    /clear     - Clear session                                    ║
+║    /quit      - Exit                                             ║
+╚═══════════════════════════════════════════════════════════════════╝
 """
     
     def __init__(
         self,
-        collection_name: str = "Jataka Parijata Vol 1 By Vaidyanatha Dikshita",
-        db_path: str = "data/vectordb",
-        llm_provider: str = "google",
-        llm_model: Optional[str] = None,
-        use_reranker: bool = False,
-        reranker_method: str = "cohere",
+        session_id: Optional[str] = None,
+        enable_storage: bool = True
     ):
-        """Initialize chatbot."""
-        print("Initializing Astrology AI Chatbot...")
+        """Initialize Phase 5 chatbot."""
+        print("Initializing Astrology AI Chatbot (Phase 5)...")
         
-        self.engine = RAGEngine(
-            collection_name=collection_name,
-            db_path=db_path,
-            llm_provider=llm_provider,
-            llm_model=llm_model,
-            use_reranker=use_reranker,
-            reranker_method=reranker_method,
-        )
+        # Initialize orchestrator
+        self.orchestrator = AstrologyOrchestrator()
         
-        self.conversation_history: List[Dict[str, str]] = []
-        self.filters: Dict[str, Any] = {}
-        self.show_sources = True
+        # Initialize conversation storage
+        self.enable_storage = enable_storage
+        self.session_id = session_id
+        
+        if self.enable_storage:
+            self.store = get_default_store()
+            
+            if session_id:
+                print(f"[INFO] Resuming session: {session_id}")
+            else:
+                self.session_id = self.store.create_session(
+                    metadata={"phase": "5", "orchestrated": True}
+                )
+                print(f"[INFO] Created new session: {self.session_id}")
         
         print("✅ Ready!\n")
     
     def run(self):
         """Run interactive chatbot loop."""
         print(self.WELCOME_MESSAGE)
+        
+        if self.enable_storage:
+            print(f"Session ID: {self.session_id}\n")
         
         while True:
             try:
@@ -95,17 +100,66 @@ Examples:
                 # Handle commands
                 if user_input.startswith("/"):
                     if not self._handle_command(user_input):
-                        break  # Exit if command returns False
+                        break  # Exit
                     continue
                 
-                # Process question
-                self._answer_question(user_input)
+                # Process query through orchestrator
+                self._process_query(user_input)
                 
             except KeyboardInterrupt:
                 print("\n\nGoodbye! 🌙")
                 break
             except Exception as e:
                 print(f"\n❌ Error: {e}")
+                import traceback
+                traceback.print_exc()
+    
+    def _process_query(self, query: str):
+        """Process query through orchestrator."""
+        print("\n🤔 Processing...\n")
+        
+        # Get conversation history
+        history = []
+        if self.enable_storage:
+            history = self.store.get_history(self.session_id, max_turns=10)
+        
+        # Process through orchestrator
+        result = self.orchestrator.process_query(
+            query=query,
+            conversation_history=history
+        )
+        
+        # Display result
+        self._display_result(result)
+        
+        # Save to storage
+        if self.enable_storage:
+            try:
+                self.store.add_turn(
+                    self.session_id,
+                    query,
+                    result["answer"]
+                )
+            except Exception as e:
+                print(f"[WARN] Failed to save conversation: {e}")
+    
+    def _display_result(self, result: dict):
+        """Display orchestrator result."""
+        print("=" * 70)
+        print("✨ ANSWER")
+        print("=" * 70)
+        print(result["answer"])
+        print()
+        
+        # Show metadata (debug info)
+        if result.get("processing_path"):
+            path = " → ".join(result["processing_path"])
+            print(f"[Processing Path: {path}]")
+        
+        if result.get("error"):
+            print(f"⚠️  Warning: {result['error']}")
+        
+        print()
     
     def _handle_command(self, command: str) -> bool:
         """
@@ -116,29 +170,28 @@ Examples:
         """
         cmd = command.lower().split()[0]
         
-        if cmd == "/quit" or cmd == "/exit":
+        if cmd in ["/quit", "/exit"]:
             print("\nGoodbye! 🌙")
             return False
         
         elif cmd == "/help":
-            print(self.HELP_MESSAGE)
+            print(self.WELCOME_MESSAGE)
+        
+        elif cmd == "/history":
+            self._show_history()
         
         elif cmd == "/clear":
-            self.conversation_history = []
-            print("✅ Conversation history cleared")
-        
-        elif cmd == "/filter":
-            self._handle_filter_command(command)
-        
-        elif cmd == "/sources":
-            parts = command.split()
-            if len(parts) > 1:
-                self.show_sources = parts[1].lower() in ["on", "true", "yes"]
+            if self.enable_storage:
+                self.store.delete_session(self.session_id)
+                self.session_id = self.store.create_session(
+                    metadata={"phase": "5", "orchestrated": True}
+                )
+                print(f"✅ Conversation cleared. New session: {self.session_id}")
             else:
-                self.show_sources = not self.show_sources
-            
-            status = "ON" if self.show_sources else "OFF"
-            print(f"✅ Source citations: {status}")
+                print("⚠️  Storage disabled")
+        
+        elif cmd == "/session":
+            self._show_session_info()
         
         else:
             print(f"❌ Unknown command: {cmd}")
@@ -146,98 +199,44 @@ Examples:
         
         return True
     
-    def _handle_filter_command(self, command: str):
-        """Handle /filter command."""
-        parts = command.split(maxsplit=1)
-        
-        if len(parts) == 1:
-            # Show current filters
-            if self.filters:
-                print("Current filters:")
-                for key, value in self.filters.items():
-                    print(f"  {key}: {value}")
-            else:
-                print("No filters set")
+    def _show_history(self):
+        """Display conversation history."""
+        if not self.enable_storage:
+            print("⚠️  Storage disabled")
             return
         
-        filter_arg = parts[1].strip()
+        history = self.store.get_history(self.session_id)
         
-        if filter_arg.lower() == "clear":
-            self.filters = {}
-            print("✅ Filters cleared")
+        if not history:
+            print("No conversation history yet.")
             return
         
-        # Parse filter (e.g., "planet=Mars" or "house=5")
-        if "=" in filter_arg:
-            key, value = filter_arg.split("=", 1)
-            key = key.strip().lower()
-            value = value.strip()
-            
-            # Map to metadata field names
-            if key == "planet":
-                self.filters["planets"] = value
-            elif key == "house":
-                self.filters["houses"] = value
-            elif key == "sign":
-                self.filters["signs"] = value
-            elif key == "nakshatra":
-                self.filters["nakshatras"] = value
-            elif key in ["planets", "houses", "signs", "nakshatras", "yogas", "concepts"]:
-                self.filters[key] = value
-            else:
-                print(f"❌ Unknown filter key: {key}")
-                return
-            
-            print(f"✅ Filter set: {key} = {value}")
-        else:
-            print("❌ Invalid filter format. Use: /filter key=value")
-            print("Example: /filter planet=Mars")
+        print("\n" + "=" * 70)
+        print(f"CONVERSATION HISTORY ({len(history)} turns)")
+        print("=" * 70)
+        
+        for i, turn in enumerate(history, 1):
+            print(f"\n[Turn {i}]")
+            print(f"You: {turn['user']}")
+            print(f"Bot: {turn['assistant'][:200]}...")
+        
+        print("\n" + "=" * 70)
     
-    def _answer_question(self, question: str):
-        """Process and answer a question."""
-        print("\n🤔 Thinking...\n")
+    def _show_session_info(self):
+        """Show session information."""
+        print("\n" + "=" * 70)
+        print("SESSION INFO")
+        print("=" * 70)
         
-        # Get answer from RAG engine
-        # Auto-Routing Enabled: Passing None for hyde/hybrid lets the engine decide based on query intent.
-        response = self.engine.answer_question(
-            query=question,
-            top_k=5,
-            filters=self.filters if self.filters else None,
-            use_hyde=None,   # Auto
-            use_hybrid=None, # Auto
-            expand_context=True,
-            conversation_history=self.conversation_history,
-        )
+        if self.enable_storage:
+            history = self.store.get_history(self.session_id)
+            print(f"Session ID: {self.session_id}")
+            print(f"Turns: {len(history)}")
+            print(f"Storage: JSON (data/conversations/)")
+        else:
+            print("Storage: Disabled")
         
-        # Display answer
-        print("=" * 60)
-        print("✨ ANSWER")
-        print("=" * 60)
-        print(response.answer)
-        
-        # Display sources if enabled
-        if self.show_sources and response.sources:
-            print("\n" + "=" * 60)
-            print("📚 SOURCES")
-            print("=" * 60)
-            for i, chunk in enumerate(response.sources, 1):
-                source_info = f"[{i}] {chunk.metadata.get('source_book', 'Unknown')}"
-                if chunk.metadata.get('chapter'):
-                    source_info += f" - {chunk.metadata['chapter']}"
-                if chunk.metadata.get('verse_number'):
-                    source_info += f" (Verse {chunk.metadata['verse_number']})"
-                source_info += f" - Relevance: {chunk.score:.1%}"
-                print(source_info)
-        
-        # Update conversation history
-        self.conversation_history.append({
-            "user": question,
-            "assistant": response.answer,
-        })
-        
-        # Keep only last 5 turns
-        if len(self.conversation_history) > 5:
-            self.conversation_history = self.conversation_history[-5:]
+        print("=" * 70)
 
 
 def main():
@@ -245,100 +244,24 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(
-        description="Astrology AI Chatbot - Interactive CLI"
+        description="Astrology AI Chatbot - Phase 5 (Orchestrated)"
     )
     parser.add_argument(
-        "--collection",
-        default="brihat_parasara_hora_sastra",
-        help="ChromaDB collection name"
+        "--session",
+        help="Resume existing session ID"
     )
     parser.add_argument(
-        "--db-path",
-        default="data/vectordb",
-        help="Path to vector database"
-    )
-    parser.add_argument(
-        "--provider",
-        default="google",
-        choices=["google", "openai"],
-        help="LLM provider (google or openai)"
-    )
-    parser.add_argument(
-        "--model",
-        help="LLM model to use (auto-selected if not specified)"
-    )
-    parser.add_argument(
-        "--rerank",
+        "--no-storage",
         action="store_true",
-        help="Enable reranking for better precision"
-    )
-    parser.add_argument(
-        "--reranker-method",
-        default="cohere",
-        choices=["cohere", "cross-encoder"],
-        help="Reranker method (cohere or cross-encoder)"
+        help="Disable conversation storage"
     )
     
     args = parser.parse_args()
     
-    # ==========================================
-    # Interactive Configuration
-    # ==========================================
-    collection_name = args.collection
-    db_path = args.db_path
-    provider = args.provider
-    
-    if len(sys.argv) == 1:  # No args provided
-        print("\n" + "=" * 60)
-        print("🤖 Chatbot Setup")
-        print("=" * 60)
-        
-        # 1. Collection
-        # 1. Collection
-        import chromadb
-        try:
-            client = chromadb.PersistentClient(path=db_path)
-            collections = client.list_collections()
-            col_names = [c.name for c in collections]
-        except Exception:
-            col_names = []
-
-        print(f"\n[1/3] Collection Selection")
-        if col_names:
-            print("Found existing collections:")
-            for i, name in enumerate(col_names, 1):
-                print(f"  {i}. {name}")
-            
-            sel = input(f"      Select [1] or type name: ").strip()
-            if sel.isdigit() and 1 <= int(sel) <= len(col_names):
-                collection_name = col_names[int(sel)-1]
-            elif sel:
-                collection_name = sel
-            else:
-                collection_name = col_names[0]
-        else:
-            default_col = "brihat_parasara_hora_sastra"
-            user_col = input(f"      Enter Name [{default_col}]: ").strip()
-            collection_name = user_col if user_col else default_col
-        
-        # 2. LLM Provider
-        print(f"\n[2/3] Select LLM Provider:")
-        print("      1. Google (Gemini) [Default]")
-        print("      2. OpenAI (GPT-4)")
-        prov_choice = input("      Choice: ").strip()
-        if prov_choice == "2":
-            provider = "openai"
-        else:
-            provider = "google"
-            
-    # Initialize and run chatbot
-    chatbot = AstrologyChatbot(
-        collection_name=collection_name,
-        db_path=db_path,
-        llm_provider=provider,
-        llm_model=args.model,
-        use_reranker=args.rerank,
-        reranker_method=args.reranker_method,
+    # Initialize and run
+    chatbot = AstrologyChatbotPhase5(
+        session_id=args.session,
+        enable_storage=not args.no_storage
     )
     
     chatbot.run()

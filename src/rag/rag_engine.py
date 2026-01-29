@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 """
-RAG Engine for Astrology Chatbot
+RAG Engine for Astrology Chatbot - Phase 4 Enhanced
 
 Orchestrates retrieval and generation for question-answering.
+
+Phase 4 Enhancements:
+- Persona system (hybrid traditional-modern astrologer)
+- LangChain prompt templates
+- Conversation storage (JSON now, MongoDB later)
+- Follow-up detection and query expansion
+- Preserved auto-routing logic (keyword/conceptual/general)
 """
 
 import os
+import json
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
@@ -21,6 +29,28 @@ from src.rag.retriever import AstrologyRetriever, RetrievedChunk
 from src.llm.factory import create_llm
 from src.rag.reranker import Reranker
 
+# Phase 4: Import personas and templates
+try:
+    from src.llm.prompts import (
+        get_persona,
+        get_default_persona,
+        PromptTemplateFactory,
+        format_context_from_chunks,
+        format_conversation_history,
+    )
+    PROMPTS_AVAILABLE = True
+except ImportError:
+    print("[WARN] Prompts module not found. Using legacy prompts.")
+    PROMPTS_AVAILABLE = False
+
+# Phase 4: Import conversation store
+try:
+    from conversation_store import ConversationStore, get_default_store
+    STORAGE_AVAILABLE = True
+except ImportError:
+    print("[WARN] ConversationStore not found. History will be in-memory only.")
+    STORAGE_AVAILABLE = False
+
 
 @dataclass
 class RAGResponse:
@@ -28,6 +58,7 @@ class RAGResponse:
     answer: str
     sources: List[RetrievedChunk]
     query: str
+    session_id: Optional[str] = None
     
     def format_with_sources(self) -> str:
         """Format answer with source citations."""
@@ -53,10 +84,16 @@ class RAGEngine:
     """
     RAG Engine for Astrology Q&A.
     Combines retrieval with LLM generation.
+    
+    Phase 4 Enhancements:
+    - Persona-driven responses
+    - Conversation history storage
+    - Follow-up detection
+    - Context expansion
     """
     
-    # System prompt for astrology expertise
-    SYSTEM_PROMPT = """You are an expert Vedic astrology consultant with deep knowledge of classical texts like Brihat Parasara Hora Shastra, Jataka Parijata, and other authoritative sources.
+    # Legacy system prompt (fallback if prompts module unavailable)
+    LEGACY_SYSTEM_PROMPT = """You are an expert Vedic astrology consultant with deep knowledge of classical texts like Brihat Parasara Hora Shastra, Jataka Parijata, and other authoritative sources.
 
 Your role is to provide accurate, insightful answers to astrology questions based on the retrieved context from classical texts. 
 
@@ -80,6 +117,9 @@ Always be respectful of the sacred nature of Vedic astrology."""
         retriever: Optional[AstrologyRetriever] = None,
         use_reranker: bool = False,
         reranker_method: str = "cross-encoder",
+        persona: str = "hybrid",  # Phase 4: Persona selection
+        enable_storage: bool = True,  # Phase 4: Persistent storage
+        session_id: Optional[str] = None,  # Phase 4: Session management
     ):
         """
         Initialize RAG engine.
@@ -93,6 +133,9 @@ Always be respectful of the sacred nature of Vedic astrology."""
             retriever: Optional pre-initialized retriever
             use_reranker: Enable reranking for better precision
             reranker_method: 'cross-encoder'
+            persona: Astrologer persona ('hybrid', 'traditional', 'educational', 'western')
+            enable_storage: Enable conversation storage
+            session_id: Existing session ID (creates new if None)
         """
         # Initialize retriever
         self.retriever = retriever or AstrologyRetriever(
@@ -118,6 +161,44 @@ Always be respectful of the sacred nature of Vedic astrology."""
                 print(f"[OK] Reranker enabled: {reranker_method}")
             except Exception as e:
                 print(f"[WARN] Reranker initialization failed: {e}")
+        
+        # Phase 4: Initialize persona and templates
+        if PROMPTS_AVAILABLE:
+            print(f"[INFO] Loading persona: {persona}")
+            self.persona_config = get_persona(persona)
+            self.persona_name = persona
+            
+            # Create prompt templates
+            factory = PromptTemplateFactory()
+            self.rag_template = factory.get_rag_template(self.persona_config)
+            self.intent_classifier_template = factory.get_intent_classifier_template()
+            self.followup_detector_template = factory.get_followup_detector_template()
+            self.context_expander_template = factory.get_context_expander_template()
+            
+            print(f"[OK] Persona loaded: {self.persona_config.name}")
+        else:
+            print(f"[WARN] Using legacy system prompt (prompts module unavailable)")
+            self.persona_config = None
+            self.persona_name = "legacy"
+        
+        # Phase 4: Initialize conversation storage
+        self.enable_storage = enable_storage and STORAGE_AVAILABLE
+        self.session_id = session_id
+        
+        if self.enable_storage:
+            self.conversation_store = get_default_store()
+            
+            # Create or load session
+            if session_id:
+                print(f"[INFO] Using existing session: {session_id}")
+            else:
+                self.session_id = self.conversation_store.create_session(
+                    metadata={"persona": persona}
+                )
+                print(f"[INFO] Created new session: {self.session_id}")
+        else:
+            self.conversation_store = None
+            print(f"[WARN] Conversation storage disabled")
         
         print(f"[OK] RAG Engine ready")
     
@@ -155,10 +236,13 @@ Always be respectful of the sacred nature of Vedic astrology."""
                         queries.append(expanded)
                         break
         
+        return queries
     
     def _classify_query_intent(self, query: str) -> str:
         """
         Classify query intent to select retrieval strategy.
+        
+        Uses hybrid approach: rule-based primary, LLM fallback for edge cases.
         
         Returns:
             One of: "keyword", "conceptual", "general"
@@ -188,6 +272,129 @@ Always be respectful of the sacred nature of Vedic astrology."""
             
         # 3. Default -> Vector Search
         return "general"
+    
+    def _is_followup_query(
+        self,
+        query: str,
+        conversation_history: List[Dict[str, str]]
+    ) -> bool:
+        """
+        Detect if query is a follow-up to previous conversation.
+        
+        Uses rule-based detection (fast, accurate for most cases).
+        
+        Args:
+            query: Current user query
+            conversation_history: Previous conversation turns
+            
+        Returns:
+            True if follow-up, False if new query
+        """
+        if not conversation_history:
+            return False
+        
+        q_lower = query.lower()
+        
+        # Strong follow-up indicators
+        strong_indicators = [
+            query.startswith("what about ") and len(query.split()) < 8,  # "what about in the 7th?"
+            query.startswith("what if "),
+            query.startswith("and "),
+            query.startswith("also "),
+            "tell me more about that" in q_lower,
+            "about that" in q_lower,
+            "about it" in q_lower,
+        ]
+        
+        if any(strong_indicators):
+            return True
+        
+        # Check for pronouns without clear antecedents
+        pronouns = ["it", "that", "this", "them", "they"]
+        has_vague_pronoun = any(
+            f" {pronoun} " in f" {q_lower} " or f" {pronoun}'" in f" {q_lower} "
+            for pronoun in pronouns
+        )
+        
+        # Short query with vague pronoun is likely follow-up
+        if has_vague_pronoun and len(query.split()) < 10:
+            return True
+        
+        return False
+    
+    def _expand_followup_query(
+        self,
+        query: str,
+        conversation_history: List[Dict[str, str]]
+    ) -> str:
+        """
+        Expand follow-up query into self-contained query.
+        
+        Args:
+            query: Follow-up query (e.g., "What about in the 7th?")
+            conversation_history: Previous turns
+            
+        Returns:
+            Expanded query (e.g., "What are effects of Mars in the 7th house?")
+        """
+        if not PROMPTS_AVAILABLE:
+            return query  # Can't expand without templates
+        
+        # Get recent context
+        context = self._get_recent_context(conversation_history, n=3)
+        
+        # Format prompt
+        try:
+            prompt = self.context_expander_template.format(
+                conversation_context=context,
+                followup_query=query
+            )
+            
+            # Get expansion from LLM
+            response = self.llm.invoke(prompt)
+            expanded = response.content.strip()
+            
+            # Validate expansion (should be longer and more specific)
+            if len(expanded) > len(query) and expanded != query:
+                return expanded
+            
+        except Exception as e:
+            print(f"[WARN] Query expansion failed: {e}")
+        
+        # Fallback: return original query
+        return query
+    
+    def _get_recent_context(
+        self,
+        conversation_history: List[Dict[str, str]],
+        n: int = 3
+    ) -> str:
+        """
+        Get summary of recent conversation for context.
+        
+        Args:
+            conversation_history: Previous turns
+            n: Number of recent turns to include
+            
+        Returns:
+            Formatted context string
+        """
+        if not conversation_history:
+            return "No previous conversation."
+        
+        recent = conversation_history[-n:] if len(conversation_history) > n else conversation_history
+        
+        parts = []
+        for turn in recent:
+            if 'user' in turn:
+                parts.append(f"User asked: {turn['user']}")
+            if 'assistant' in turn:
+                # Summarize assistant response (first 100 chars)
+                response = turn['assistant']
+                summary = response[:100] + "..." if len(response) > 100 else response
+                parts.append(f"Assistant explained: {summary}")
+        
+        return "\n".join(parts)
 
     def answer_question(
         self,
@@ -198,6 +405,7 @@ Always be respectful of the sacred nature of Vedic astrology."""
         use_hybrid: Optional[bool] = None, # Added Explicit Flag
         expand_context: bool = True,
         conversation_history: Optional[List[Dict[str, str]]] = None,
+        save_to_store: bool = True,  # Phase 4: Auto-save to storage
     ) -> RAGResponse:
         """
         Answer a question using RAG with automatic strategy routing.
@@ -209,12 +417,30 @@ Always be respectful of the sacred nature of Vedic astrology."""
             use_hyde: Force HyDE (None = Auto)
             use_hybrid: Force Hybrid (None = Auto)
             expand_context: Expand with related chunks
-            conversation_history: Previous conversation turns
+            conversation_history: Previous conversation turns (if not using storage)
+            save_to_store: Save turn to conversation store
             
         Returns:
             RAGResponse with answer and sources
         """
         print(f"\n[QUERY] {query}")
+        
+        # Phase 4: Load history from storage if enabled
+        if self.enable_storage and conversation_history is None:
+            conversation_history = self.conversation_store.get_history(self.session_id)
+            if conversation_history:
+                print(f"[STORAGE] Loaded {len(conversation_history)} previous turns")
+        
+        # Phase 4: Check if this is a follow-up question
+        original_query = query
+        if conversation_history and len(conversation_history) > 0:
+            is_followup = self._is_followup_query(query, conversation_history)
+            if is_followup:
+                print(f"[FOLLOW-UP] Detected follow-up question")
+                expanded_query = self._expand_followup_query(query, conversation_history)
+                if expanded_query and expanded_query != query:
+                    print(f"[EXPANSION] '{query}' → '{expanded_query}'")
+                    query = expanded_query
         
         # Helper to determine strategy
         intent = self._classify_query_intent(query)
@@ -233,8 +459,6 @@ Always be respectful of the sacred nature of Vedic astrology."""
         
         # Expand query for better recall
         query_variations = self._expand_query(query)
-        # if len(query_variations) > 1:
-        #     print(f"[EXPANSION] Generated {len(query_variations)} query variations")
         
         # Retrieve relevant chunks
         all_chunks = []
@@ -281,10 +505,23 @@ Always be respectful of the sacred nature of Vedic astrology."""
             print(f"[ERROR] Generation failed: {e}")
             answer = f"I apologize, but I encountered an error generating the answer: {e}"
         
+        # Phase 4: Save to conversation store
+        if self.enable_storage and save_to_store:
+            try:
+                self.conversation_store.add_turn(
+                    self.session_id,
+                    original_query,  # Save original query, not expanded
+                    answer
+                )
+                print(f"[STORAGE] Saved turn to session {self.session_id}")
+            except Exception as e:
+                print(f"[WARN] Failed to save turn: {e}")
+        
         return RAGResponse(
             answer=answer,
             sources=chunks[:top_k],  # Return only top-k for citation
-            query=query,
+            query=original_query,
+            session_id=self.session_id if self.enable_storage else None,
         )
     
     def _build_prompt(
@@ -292,9 +529,50 @@ Always be respectful of the sacred nature of Vedic astrology."""
         query: str,
         chunks: List[RetrievedChunk],
         conversation_history: Optional[List[Dict[str, str]]] = None,
+    ):
+        """
+        Build prompt for LLM using templates.
+        
+        Args:
+            query: User question
+            chunks: Retrieved chunks
+            conversation_history: Previous turns
+            
+        Returns:
+            Formatted messages for LLM (or string for legacy mode)
+        """
+        # Phase 4: Use template-based prompt if available
+        if PROMPTS_AVAILABLE and self.persona_config:
+            # Format context from retrieved chunks
+            context = format_context_from_chunks(chunks)
+            
+            # Format conversation history (keep last 10 turns)
+            chat_history = []
+            if conversation_history:
+                recent_history = conversation_history[-10:]  # Truncate to last 10
+                chat_history = format_conversation_history(recent_history)
+            
+            # Generate prompt using template
+            messages = self.rag_template.format_messages(
+                context=context,
+                chat_history=chat_history,
+                question=query
+            )
+            
+            return messages
+        
+        # Legacy: Build string-based prompt (fallback)
+        else:
+            return self._build_legacy_prompt(query, chunks, conversation_history)
+    
+    def _build_legacy_prompt(
+        self,
+        query: str,
+        chunks: List[RetrievedChunk],
+        conversation_history: Optional[List[Dict[str, str]]] = None,
     ) -> str:
         """
-        Build prompt for LLM.
+        Build legacy string-based prompt (fallback if templates unavailable).
         
         Args:
             query: User question
@@ -307,7 +585,7 @@ Always be respectful of the sacred nature of Vedic astrology."""
         parts = []
         
         # System prompt
-        parts.append(self.SYSTEM_PROMPT)
+        parts.append(self.LEGACY_SYSTEM_PROMPT)
         parts.append("\n" + "=" * 60 + "\n")
         
         # Context from retrieved chunks
@@ -360,6 +638,40 @@ Always be respectful of the sacred nature of Vedic astrology."""
             lines.append(source)
         
         return "\n".join(lines)
+    
+    # Phase 4: Session management methods
+    
+    def get_session_history(self, max_turns: Optional[int] = None) -> List[Dict[str, str]]:
+        """Get conversation history for current session."""
+        if not self.enable_storage:
+            return []
+        return self.conversation_store.get_history(self.session_id, max_turns)
+    
+    def clear_session_history(self):
+        """Clear conversation history for current session."""
+        if self.enable_storage:
+            self.conversation_store.delete_session(self.session_id)
+            # Create new session
+            self.session_id = self.conversation_store.create_session(
+                metadata={"persona": self.persona_name}
+            )
+            print(f"[INFO] Created new session: {self.session_id}")
+    
+    def switch_persona(self, persona: str):
+        """Switch to a different astrologer persona."""
+        if not PROMPTS_AVAILABLE:
+            print("[ERROR] Cannot switch persona - prompts module unavailable")
+            return
+        
+        print(f"[INFO] Switching persona: {self.persona_name} → {persona}")
+        self.persona_config = get_persona(persona)
+        self.persona_name = persona
+        
+        # Recreate RAG template with new persona
+        factory = PromptTemplateFactory()
+        self.rag_template = factory.get_rag_template(self.persona_config)
+        
+        print(f"[OK] Persona switched to: {self.persona_config.name}")
 
 
 def main():
@@ -371,12 +683,14 @@ def main():
     parser.add_argument("--collection", default="brihat_parasara_hora_sastra", help="Collection name")
     parser.add_argument("--top-k", type=int, default=5, help="Number of chunks to retrieve")
     parser.add_argument("--model", default="gemini-2.5-flash", help="LLM model")
+    parser.add_argument("--persona", default="hybrid", help="Astrologer persona")
     parser.add_argument("--hyde", action="store_true", help="Use HyDE retrieval")
     parser.add_argument("--no-expand", action="store_true", help="Don't expand context")
     parser.add_argument("--rerank", action="store_true", help="Enable reranking")
-    parser.add_argument("--reranker-method", default="cohere", choices=["cohere", "cross-encoder"], help="Reranker method")
+    parser.add_argument("--reranker-method", default="cross-encoder", help="Reranker method")
     parser.add_argument("--filter-planet", help="Filter by planet")
     parser.add_argument("--filter-house", help="Filter by house")
+    parser.add_argument("--no-storage", action="store_true", help="Disable conversation storage")
     
     args = parser.parse_args()
     
@@ -396,8 +710,10 @@ def main():
     engine = RAGEngine(
         collection_name=args.collection,
         llm_model=args.model,
+        persona=args.persona,
         use_reranker=args.rerank,
         reranker_method=args.reranker_method,
+        enable_storage=not args.no_storage,
     )
     
     # Get answer
@@ -414,6 +730,9 @@ def main():
     print("ANSWER")
     print("=" * 60)
     print(response.format_with_sources())
+    
+    if response.session_id:
+        print(f"\n[INFO] Session ID: {response.session_id}")
 
 
 if __name__ == "__main__":
