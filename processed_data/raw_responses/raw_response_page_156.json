@@ -1,0 +1,74 @@
+{
+  "metadata": {
+    "page_number": 156,
+    "book_title": "Brihat Parasara Hora Sastra Vol 2 By Maharishi Parashara",
+    "chapter_title": "Dasas Results",
+    "chapter_number": null,
+    "section_title": null,
+    "page_type": "text_heavy",
+    "has_tables": false,
+    "has_charts": false,
+    "languages_present": [
+      "english",
+      "sanskrit"
+    ],
+    "astrology_system": "vedic"
+  },
+  "content_blocks": [
+    {
+      "content_type": "heading",
+      "text": "132",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 1
+    },
+    {
+      "content_type": "heading",
+      "text": "Dasas Results",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 2
+    },
+    {
+      "content_type": "prose",
+      "text": "88-89: Apropos results are in the Dasa of Venus and similar kind of results may also be expected in the Venus's Antradasa of the Mahadasa of other planets. Should Venus be the lord of the 2nd or the 7th house, there will be physical danger. To mitigate this effect, obeisance of Lord Shiva through Vedic Mantras or recitation of Mrityunjaya (मृत्युञ्जय मन्त्र) may be performed. Donation of cow or buffalo also brings a sound health.",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 3
+    },
+    {
+      "content_type": "notes",
+      "text": "Notes: Acquiring the lordship of the 2nd and the 7th houses, Venus becomes Maraka (propensity of inflicting death). However, Venus acts as Maraka when posited in the malefic houses. With the placement in the inauspicious houses and under malefic aspects, Venus becomes more powerful towards his function of Markesha.",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 4
+    },
+    {
+      "content_type": "prose",
+      "text": "The good and adverse results of the planets surface during the Mahadasa and Antardasa of such planets. However, the native also experiences the effect of the other planets who are exerting their influences (benefic or malefic) on the planet whose Dasa or Antardasa is operating. With every Ascendant, the sequence of the results of the Dasa of a particular planet gets changed. The Ascendant plays predominant role in fixing malefic or benefic characteristic of a planet and consequently sets in variation in the results during their Dasas.",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 5
+    }
+  ],
+  "raw_text": "132\nDasas Results\n88-89: Apropos results are in the Dasa of Venus and similar\nkind of results may also be expected in the Venus's Antradasa of the\nMahadasa of other planets. Should Venus be the lord of the 2nd or\nthe 7th house, there will be physical danger. To mitigate this effect,\nobeisance of Lord Shiva through Vedic Mantras or recitation of\nMrityunjaya (मृत्युञ्जय मन्त्र) may be performed. Donation of cow or\nbuffalo also brings a sound health.\nNotes: Acquiring the lordship of the 2nd and the 7th houses,\nVenus becomes Maraka (propensity of inflicting death). However, Venus\nacts as Maraka when posited in the malefic houses. With the placement\nin the inauspicious houses and under malefic aspects, Venus becomes\nmore powerful towards his function of Markesha.\nThe good and adverse results of the planets surface during the\nMahadasa and Antardasa of such planets. However, the native also\nexperiences the effect of the other planets who are exerting their influences\n(benefic or malefic) on the planet whose Dasa or Antardasa is operating.\nWith every Ascendant, the sequence of the results of the Dasa of a\nparticular planet gets changed. The Ascendant plays predominant role in\nfixing malefic or benefic characteristic of a planet and consequently sets\nin variation in the results during their Dasas.",
+  "extraction_confidence": 0.98,
+  "extraction_notes": "",
+  "confidence": {
+    "overall_score": 0.98,
+    "criteria": {
+      "image_quality": 0.99,
+      "text_clarity": 0.98,
+      "layout_detection": 0.97
+    },
+    "reasoning": null,
+    "flags": []
+  },
+  "retry_metadata": {
+    "initial_model": "gemini-2.5-flash-lite",
+    "retry_model": null,
+    "initial_confidence": null,
+    "retry_reason": null,
+    "retry_count": 0
+  }
+}

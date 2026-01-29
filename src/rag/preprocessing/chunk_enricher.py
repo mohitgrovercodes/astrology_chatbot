@@ -94,21 +94,22 @@ class ChunkEnricher:
     # Approximate chars per token
     CHARS_PER_TOKEN = 4
     
-    def __init__(self, use_llm: bool = True, tradition: str = "vedic", parallel_workers: int = 10):
+    def __init__(self, use_llm: bool = True, tradition: str = "vedic", parallel_workers: int = 10, model_name: str = "gemini-2.5-flash"):
         self.use_llm = use_llm
         self.tradition = tradition
         self.parallel_workers = parallel_workers
+        self.model = None
         
         if use_llm:
             try:
-                # Create LLM using factory with rate limiting
+                # Create LLM using factory
                 self.model = create_llm(
-                provider="google",
-                model="gemini-2.5-flash",
-                temperature=0.0,
-                use_rate_limiting=True,
-                rate_limit_delay=1.5
-            )
+                    provider="google",
+                    model=model_name,
+                    temperature=0.1,
+                    use_rate_limiting=True,
+                    rate_limit_delay=1.0 
+                )
                 
                 # Determine which provider was used
                 from langchain_google_vertexai import ChatVertexAI

@@ -72,10 +72,22 @@ class CostTrackerCallback(BaseCallbackHandler):
                 usage = response.llm_output["token_usage"]
                 input_tokens = usage.get("prompt_tokens", 0)
                 output_tokens = usage.get("completion_tokens", 0)
-            elif hasattr(response, "usage_metadata"):
-                # Alternative token usage format
-                input_tokens = getattr(response.usage_metadata, "input_tokens", 0)
-                output_tokens = getattr(response.usage_metadata, "output_tokens", 0)
+            elif hasattr(response, "usage_metadata") and response.usage_metadata:
+                # Vertex AI / Google GenAI format variations
+                usage_meta = response.usage_metadata
+                
+                # Check for various attribute names (Vertex vs Standard)
+                if hasattr(usage_meta, "prompt_token_count"):
+                    input_tokens = usage_meta.prompt_token_count
+                    output_tokens = getattr(usage_meta, "candidates_token_count", 0) or getattr(usage_meta, "total_token_count", 0) - input_tokens
+                elif isinstance(usage_meta, dict):
+                    # Sometimes it comes as a dict
+                    input_tokens = usage_meta.get("input_tokens") or usage_meta.get("prompt_token_count", 0)
+                    output_tokens = usage_meta.get("output_tokens") or usage_meta.get("candidates_token_count", 0)
+                else:
+                    # Standard object attributes
+                    input_tokens = getattr(usage_meta, "input_tokens", 0)
+                    output_tokens = getattr(usage_meta, "output_tokens", 0)
             else:
                 # No token usage info available
                 logger.warning(f"No token usage info in LLM response for {self.model}")

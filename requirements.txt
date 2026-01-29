@@ -70,11 +70,10 @@ rank-bm25>=0.2.2  # Hybrid search (BM25)
 tiktoken>=0.5.0   # Tokenization for sub-chunking
 
 # ----------------------------------------------------------------------------
-# OPTIONAL: RERANKING (Phase 2)
+# RERANKING
 # ----------------------------------------------------------------------------
-# Uncomment if using reranking features:
-# cohere>=4.0.0  # For Cohere Rerank API
-# sentence-transformers>=2.2.0  # For local cross-encoder
+
+sentence-transformers>=2.2.0  # For local cross-encoder
 
 # ----------------------------------------------------------------------------
 # API FRAMEWORK

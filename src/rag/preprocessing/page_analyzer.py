@@ -54,26 +54,40 @@ class PageAnalyzer:
         r'^अध्याय\s*\d+',  # Sanskrit chapter
     ]
     
-    def __init__(self, use_llm: bool = True):
+    
+    def __init__(self, use_llm: bool = True, model_name: str = "gemini-2.5-flash-lite"):
         """
         Initialize page analyzer.
         
         Args:
             use_llm: Whether to use LLM for complex analysis
+            model_name: Model to use (default: gemini-2.5-flash-lite)
         """
         self.use_llm = use_llm
         self.model = None
         self.is_vertex_ai = False
+        self.embedding_model = None
         
+        # Initialize Sentence Transformer for semantic continuity (local & fast)
+        try:
+            from sentence_transformers import SentenceTransformer
+            # Load a lightweight, efficient model for sentence similarity
+            self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+            print("[✅] Sentence Transformer initialized (all-MiniLM-L6-v2)")
+        except ImportError:
+            print("[WARN] sentence-transformers not installed. Semantic checks will be skipped.")
+        except Exception as e:
+            print(f"[WARN] Failed to load Sentence Transformer: {e}")
+
         if use_llm:
             try:
                 # Create LLM using factory with rate limiting
                 self.model = create_llm(
                     provider="google",
-                    model="gemini-2.5-flash",
+                    model=model_name,
                     temperature=0.0,
                     use_rate_limiting=True,
-                    rate_limit_delay=1.5
+                    rate_limit_delay=1.0
                 )
                 
                 # Determine which provider was used
@@ -81,7 +95,7 @@ class PageAnalyzer:
                 self.is_vertex_ai = isinstance(self.model, ChatVertexAI)
                 
                 provider_name = "Vertex AI" if self.is_vertex_ai else "AI Studio"
-                print(f"[âœ…] Using {provider_name} via LLMFactory with rate limiting")
+                print(f"[✅] Using {provider_name} via LLMFactory with rate limiting")
                 
             except Exception as e:
                 print(f"[WARN] LLM initialization failed: {e}")
@@ -197,40 +211,60 @@ class PageAnalyzer:
         
         return ' '.join(parts) if parts else None
     
+    def calculate_semantic_continuity(self, text1: str, text2: str) -> float:
+        """
+        Calculate semantic similarity between end of text1 and start of text2.
+        """
+        if not self.embedding_model:
+            return 0.5 # Neutral if no model
+            
+        try:
+            from sentence_transformers import util
+            
+            # Take last 300 chars of page 1 and first 300 of page 2
+            t1_end = text1[-300:] if len(text1) > 300 else text1
+            t2_start = text2[:300] if len(text2) > 300 else text2
+            
+            embeddings = self.embedding_model.encode([t1_end, t2_start])
+            sim = util.pytorch_cos_sim(embeddings[0], embeddings[1])
+            return float(sim[0][0])
+        except Exception as e:
+            print(f"[WARN] Semantic check failed: {e}")
+            return 0.5
+
     def analyze_continuation_rule_based(
         self, 
         page1: CleanedPage, 
         page2: CleanedPage
     ) -> Tuple[bool, float]:
         """
-        Rule-based continuation detection between two pages.
-        
-        Args:
-            page1: First page
-            page2: Second page
-            
-        Returns:
-            Tuple of (continues, confidence)
+        Rule-based continuation detection with Semantic Augmentation.
         """
         confidence = 0.0
         
-        # Check if page1 ends mid-sentence
+        # 1. Grammar: Check sentence boundaries (Strong signal)
         _, ends_mid = self.detect_sentence_boundaries(page1.content)
+        starts_mid, _ = self.detect_sentence_boundaries(page2.content)
+        
         if ends_mid:
             confidence += 0.4
-        
-        # Check if page2 starts mid-sentence
-        starts_mid, _ = self.detect_sentence_boundaries(page2.content)
         if starts_mid:
-            confidence += 0.4
+            confidence += 0.2 # Boosting this slightly less than trailing sentence
         
-        # Check if they discuss same topic
+        # 2. Semantic: Check meaning continuity (New!)
+        semantic_score = self.calculate_semantic_continuity(page1.content, page2.content)
+        if semantic_score > 0.6:
+            confidence += 0.3
+        elif semantic_score < 0.3:
+            confidence -= 0.2 # Likely topic shift
+            
+        # 3. Topic: Keyword matching (Simple fallback)
         topic1 = self.extract_main_topic(page1.content)
         topic2 = self.extract_main_topic(page2.content)
         if topic1 and topic2 and topic1 == topic2:
-            confidence += 0.2
+            confidence += 0.1
         
-        # Check for verse number continuity
+        # 4. Verse continuity
         if page1.verse_numbers and page2.verse_numbers:
             try:
                 last_verse = int(page1.verse_numbers[-1].split('-')[-1])
@@ -240,10 +274,9 @@ class PageAnalyzer:
             except ValueError:
                 pass
         
-        # Check if there's a new chapter on page2
+        # 5. Chapter boundaries (Strong Negative)
         chapter2, _ = self.detect_chapter_section(page2.content, page2.title)
         if chapter2:
-            # New chapter means not a continuation
             confidence = max(0, confidence - 0.5)
         
         return confidence >= 0.5, min(confidence, 1.0)

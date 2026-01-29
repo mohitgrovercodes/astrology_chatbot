@@ -1,0 +1,80 @@
+{
+  "metadata": {
+    "page_number": 143,
+    "book_title": "Brihat Parasara Hora Sastra Vol 2 By Maharishi Parashara",
+    "chapter_title": null,
+    "chapter_number": null,
+    "section_title": null,
+    "page_type": "text_heavy",
+    "has_tables": false,
+    "has_charts": false,
+    "languages_present": [
+      "english"
+    ],
+    "astrology_system": "vedic"
+  },
+  "content_blocks": [
+    {
+      "content_type": "heading",
+      "text": "Brihat Parasara Hora Sastra",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 1
+    },
+    {
+      "content_type": "prose",
+      "text": "of exaltation, own sign, in Kendras (Angles) or Trikonas (Trines)\nand conjoined with the benefic planets, full moon, powerful and\naccompanied by the lord of the 10th, the 9th or the 4th house, during\nthe Dasa of the Moon, beginning till the end, happiness, enjoyment,\nauspiciousness would prevail. Gain in wealth and agriculture\nproduce, many auspicious ceremonies at home, comforts of\nconveyance, meeting with the king, success at works, blessing of\ngoddess Laxami enhancement of fortune through Royalty and\nfriends and state of extreme enjoyment are achieved. Acquisition\nof conveyance and white apparels, happiness of having a son,\naddition of cows in the house etc., are the other benefits native\nwould reap during this period.",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 2
+    },
+    {
+      "content_type": "prose",
+      "text": "If the Moon is posited in the 11th house and is also in her\nown sign or in the sign of exaltation, gain of wealth in its assorted\nforms, accretion in fortune, happiness and education and also\nRoyal commendation are likly to be bestowed during this period.",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 3
+    },
+    {
+      "content_type": "notes",
+      "text": "Notes : The Moon is Karaka of happiness. Therefore, Maharishi\nperceives state of extreme happiness in the auspicious and favourable\npositions of the Moon. In the natural horoscope, the Moon is also Karaka\nof vehicle (any kind of conveyance) and animals. Therefore, comforts of\nvehicles and (wealth of) cows is enhanced during this period. The Moon\nis also Karaka of 'Mare' (female horse) as such Rishi points out Ratha\n(chariot) though the tradition of chariot is no longer in existence in the\nmodern age. The horse driven vehicle is a passenger carrier and hence\nit can be compared with the similar type of vehicle of the modern time.",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 4
+    },
+    {
+      "content_type": "prose",
+      "text": "The Bombay's edition of this treatise, states that in the major\nperiod of the Moon, the results like, warmth of the mother, house, garden,\ntank etc., status in the society, elegant conveyance, marriage in the house\nand other related auspicious functions, success in business,\naccomplishment of venture, fortune uplift with the blessings of preceptor\nand friends and pitfall-gains are generally felt.",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 5
+    },
+    {
+      "content_type": "prose",
+      "text": "The effects of the Moon's Dasa enunciated in the publication of\nM/s. Thakur Prashad & Sons are almost identical. Rise in the fortune\n(status) is an additional effect which it has recorded - along with one extra\nShloka which states.",
+      "verse_data": null,
+      "table_data": null,
+      "sequence_order": 6
+    }
+  ],
+  "raw_text": "Brihat Parasara Hora Sastra 119\nof exaltation, own sign, in Kendras (Angles) or Trikonas (Trines)\nand conjoined with the benefic planets, full moon, powerful and\naccompanied by the lord of the 10th, the 9th or the 4th house, during\nthe Dasa of the Moon, beginning till the end, happiness, enjoyment,\nauspiciousness would prevail. Gain in wealth and agriculture\nproduce, many auspicious ceremonies at home, comforts of\nconveyance, meeting with the king, success at works, blessing of\ngoddess Laxami enhancement of fortune through Royalty and\nfriends and state of extreme enjoyment are achieved. Acquisition\nof conveyance and white apparels, happiness of having a son,\naddition of cows in the house etc., are the other benefits native\nwould reap during this period.\nIf the Moon is posited in the 11th house and is also in her\nown sign or in the sign of exaltation, gain of wealth in its assorted\nforms, accretion in fortune, happiness and education and also\nRoyal commendation are likly to be bestowed during this period.\nNotes : The Moon is Karaka of happiness. Therefore, Maharishi\nperceives state of extreme happiness in the auspicious and favourable\npositions of the Moon. In the natural horoscope, the Moon is also Karaka\nof vehicle (any kind of conveyance) and animals. Therefore, comforts of\nvehicles and (wealth of) cows is enhanced during this period. The Moon\nis also Karaka of 'Mare' (female horse) as such Rishi points out Ratha\n(chariot) though the tradition of chariot is no longer in existence in the\nmodern age. The horse driven vehicle is a passenger carrier and hence\nit can be compared with the similar type of vehicle of the modern time.\nThe Bombay's edition of this treatise, states that in the major\nperiod of the Moon, the results like, warmth of the mother, house, garden,\ntank etc., status in the society, elegant conveyance, marriage in the house\nand other related auspicious functions, success in business,\naccomplishment of venture, fortune uplift with the blessings of preceptor\nand friends and pitfall-gains are generally felt.\nThe effects of the Moon's Dasa enunciated in the publication of\nM/s. Thakur Prashad & Sons are almost identical. Rise in the fortune\n(status) is an additional effect which it has recorded - along with one extra\nShloka which states.",
+  "extraction_confidence": 0.98,
+  "extraction_notes": "",
+  "confidence": {
+    "overall_score": 0.98,
+    "criteria": {
+      "image_quality": 0.99,
+      "text_clarity": 0.98,
+      "layout_detection": 0.97
+    },
+    "reasoning": null,
+    "flags": []
+  },
+  "retry_metadata": {
+    "initial_model": "gemini-2.5-flash-lite",
+    "retry_model": null,
+    "initial_confidence": null,
+    "retry_reason": null,
+    "retry_count": 0
+  }
+}

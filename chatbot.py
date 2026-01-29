@@ -198,17 +198,13 @@ Examples:
         print("\n🤔 Thinking...\n")
         
         # Get answer from RAG engine
+        # Auto-Routing Enabled: Passing None for hyde/hybrid lets the engine decide based on query intent.
         response = self.engine.answer_question(
             query=question,
             top_k=5,
             filters=self.filters if self.filters else None,
-            use_hyde=False,
-            # Use hybrid retrieval internally if engine supports it? 
-            # Actually RAGEngine.answer_question defaults to semantic. 
-            # We should probably expose hybrid selection here, but for now let's trust the engine's default.
-            # Wait, user issue is "straightforward questions not answered".
-            # Often this is due to strict filters or semantic mismatch.
-            # Let's ensuring we are calling retrieve with hybrid if useful.
+            use_hyde=None,   # Auto
+            use_hybrid=None, # Auto
             expand_context=True,
             conversation_history=self.conversation_history,
         )
@@ -298,10 +294,32 @@ def main():
         print("=" * 60)
         
         # 1. Collection
-        default_col = "brihat_parasara_hora_sastra"
-        print(f"\n[1/3] Enter Collection Name")
-        user_col = input(f"      Default [{default_col}]: ").strip()
-        collection_name = user_col if user_col else default_col
+        # 1. Collection
+        import chromadb
+        try:
+            client = chromadb.PersistentClient(path=db_path)
+            collections = client.list_collections()
+            col_names = [c.name for c in collections]
+        except Exception:
+            col_names = []
+
+        print(f"\n[1/3] Collection Selection")
+        if col_names:
+            print("Found existing collections:")
+            for i, name in enumerate(col_names, 1):
+                print(f"  {i}. {name}")
+            
+            sel = input(f"      Select [1] or type name: ").strip()
+            if sel.isdigit() and 1 <= int(sel) <= len(col_names):
+                collection_name = col_names[int(sel)-1]
+            elif sel:
+                collection_name = sel
+            else:
+                collection_name = col_names[0]
+        else:
+            default_col = "brihat_parasara_hora_sastra"
+            user_col = input(f"      Enter Name [{default_col}]: ").strip()
+            collection_name = user_col if user_col else default_col
         
         # 2. LLM Provider
         print(f"\n[2/3] Select LLM Provider:")

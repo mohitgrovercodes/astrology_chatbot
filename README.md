@@ -185,7 +185,7 @@ python src/rag/preprocessing/vector_db_builder.py embedded.json --reset
 - **Extraction**: Gemini Vision (Flash/Pro) via Vertex AI
 - **Embeddings**: OpenAI `text-embedding-3-large` (3072 dimensions)
 - **Vector DB**: ChromaDB with persistent storage
-- **LLM**: Gemini 2.0 Flash via Vertex AI
+- **LLM**: Gemini 2.5 Flash via Vertex AI
 - **Retrieval**: Semantic search + metadata filtering
 - **Framework**: LangChain, Pydantic
 

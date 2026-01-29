@@ -1,0 +1,1063 @@
+# Brihat Parasara Hora Sastra Vol 2 by Maharishi Parashara.pdf
+
+
+---
+
+## Page 135
+
+**Chapter:** RESULTS OF THE DASAS
+
+**Verse ||११||:**
+
+_श्रुताश्च बहुधा भेदा दशानां च मया मुने !!
+फलं च कीदृशं तासां कृपया मेऽनुच्यताम् ? ।।१२।।
+
+_
+
+1: Maitreya said; O Venerable Said ! I am enlightened with
+the various types of Dasas. Kindly apprise me with the nature of
+their results.
+
+**Verse ।।१२।।:**
+
+_साधारणं विशिष्टञ्च दशानां द्विविधं फलम् ।
+ग्रहणां च स्वभावेन स्थानस्थितिवशेन च ।।१२।।
+
+_
+
+2: Sage Parasara said : - O Vipra ! Dasas emanate two
+types of results, one of general nature and two, of pronounced
+nature which corresponds to the natural characteristics and acquired
+position (in the horoscope) of the planets.
+
+**Verse ।।१३।।:**
+
+_ग्रहवीर्यानुसारेंण फलं शंस्यं दशासु च ।
+आद्येऽधिकारिणो खेते दशारम्भे फलं वदेत् ।।१३।।
+
+_
+
+**Verse ।।१४।।:**
+
+_दशामध्ये फलं वाच्यं मध्यदेशाणणे लगे ।
+अन्ते फलं तृतीयस्य व्यस्तं खेते च वक्रगे ।।१४।।
+
+_
+
+3-4: The results of the Dasas of the planets be ascertained
+on the basis of the strength of the planets. The planet in the first
+
+
+---
+
+## Page 136
+
+Dreckkana, gives results in the beginning of the Dasa, in the second
+Dreckkana, in the middle of the Dasa and in the third Drekkana, in the
+concluding part of the Dasa. The results of the retrograde planets
+be considered in the reverse order.
+
+Notes: The consequential effects of planets that of natural
+characteristic and placement in the horoscope, be felt in the three different
+segments of the Dasa. If the planets are posited between 0° and 10°, the
+effects be considered in the first segment (part) of the Dasa (1/3rd Dasa)
+and between 10°s and 20°, in the second (middle) segement and between
+20° and 30° in the third (last) segment of the Dasa. However, if the planet
+is in retrogression, including the Dasa of Rahu and Ketu, the results of the
+first segment of the Dasa will be felt and the result of planet in the first
+Dreckkana will be considered.
+
+**Verse १५ ॥:**
+
+_दशारम्भे दशाधीशे लग्ने शुभदृग्गुते ।
+स्वेच्छे स्वमे स्वमैत्रे वा शुभं तस्य दशाफलम् ॥
+
+_
+
+**Verse १६ ॥:**
+
+_षष्ठाष्टव्ययस्थे च नीचास्तरिपुभस्थिते ।
+अशुभं तत्फलं चाप्यं भुवे सर्वदशाफलम् ॥
+
+_
+
+In the event of the lord of the Dasa being in the
+Ascendant, having benefic aspects, conjunct with the benefic
+planets, exalted, in own sign or in the friendly sign, favourable
+results will be felt in the beginning of the Dasa. If the planet is posited
+in the 6th, 8th or 12th house, debilitated, in inimical sign or combust,
+the result will be unfavourable. Now I narrate the results of the
+Dasas.
+
+Notes: To comprehend the efficacy of the Dasas explicitly, some
+other astrological principles, aphorisms, maxims, are cited as under :
+i) The transit of the lord of Mahadasa (main period) on a
+particular sign, renders specific effects on the house of such
+sign.
+ii) The house aspected by its lord, promises favourable results
+during the Mahadasa of the said planet.
+iii) Every planet during the currency of the first half of its
+Mahadasa gives result of the house next to the Ascendant
+and in the 2nd half, the result of the house 2nd from the
+Ascendant will be prominent.
+
+
+---
+
+## Page 137
+
+
+---
+
+## Page 138
+
+**Chapter:** Dasas Results
+
+results in the first half. This Dasa is known as 'Mishrita' (mixed) Dasa.
+
+At the time of birth, if any planet is in the inimical or debilitated sign and acquires the same Navamsa, the Dasa of such planet is called "Kashta" Dasa. In this Dasa the native suffers loss of wealth and loses his health.
+
+The Dasa of a planet which at the time of birth is in the friendly, own or exaltation on Mooltrikona signs or Vargas, is called 'Shubha' Dasa. In this Dasa, excellent results could be expected.
+
+The Avrohini Dasa ushers most inauspicious and unfavourable results when Dasa lord is posited in an inimical or debilitation sign or in the Navamsa of the same signs.
+
+The Dasa of the planet which is found in retrogression at the time of birth, results in demotion, humiliation, disgrace obstacles, failures and loss of happiness.
+
+The Dasa of a planet having longitude equivalent to the longitude of the house (Bhava-Madhya) renders favourable results.
+
+The planet's Dasa with high benefic lines in Ashtaka Varga is also favourable.
+
+The Dasa of a planet if powerful in the Shada Bala, signifies favourable events.
+
+The planet in the last degree of the sign (Rashi-Anta) produces unfavourable results during its Dasa.
+
+If the longitude of a planet falls at the junction of the two houses (Bhava-Sandhi), the result of the Dasa of such a planet is considered not good.
+
+The Dasa of a planet which acquires less number of benefic lines in Ashtakavarga also produces unfavourable results.
+
+The lord of the sign having 'Mandi' in it, does not give good results during its Dasa.
+
+There are four most important 'Balas' (strength) of planet. These are Sthana, Chesta, Kala and Driga Balas. If a planet acquires strength through all these four Balas, is only then considered powerful and in the absence of adequate
+
+
+---
+
+## Page 139
+
+**Chapter:** VIMSHOTTARI MAHARADASA
+
+strength contributed by these four Balas, the planet is rendered weak. If a planet armed with the strength from these four 'Balas' and posited in the fifth house, it will acquire the potentiality of producing par excellent (Sumpoorna) results. If it has power i) from three Balas, three fourth, ii) from two Balas, one half and iii) one Bala, one fourth of the "Sumpoorna" results could be predicted.
+
+### VIMSHOTTARI MAHADADAS
+
+### Results during the Mahadasa of the Sun :
+
+**Verse ॥ १० ॥:**
+
+_मूलत्रिकोणे स्वक्षेत्रे स्तोच्चे वा परमोच्चगो ।
+केन्द्रत्रिकोणलाभस्थे भाग्यकर्माधिपैर्युते ॥ १० ॥
+
+_
+
+**Verse ॥ ८ ॥:**
+
+_सूर्ये बलसमायुक्ते निजवर्गे बले युते ।
+तानिन्द्रिये महत् सौख्यं धनलाभादिकं शुभम् ॥ ८ ॥
+
+_
+
+**Verse ॥ ११ ॥:**
+
+_अत्यन्तं राजसन्मानमर्वांदोत्यादिकं शुभम् ।
+सुताधिपसमायुक्तो पुत्रलाभं च विन्दति ॥ ११ ॥
+
+_
+
+**Verse ॥ १० ॥:**
+
+_धनेशश्च सम्बन्धे गजान्तैश्वर्यमादिशेत् ।
+वाहनधिपसम्बन्धे वाहनत्रयलाभकृत् ॥ १० ॥
+
+_
+
+**Verse ॥ ११ ॥:**
+
+_नृपालतुष्टिर्वितावः सेनाधीशः सुखी नरः ।
+बलवाहनलाभश्च दशायों बलिनो रवः ॥ ११ ॥
+
+_
+
+At the time of birth, the Sun if, posited in the Moolatrikona, own or exalted sign and occupies Angles (Kendras), Trines (Trikonas) or 11th house and conjunct with the lords of 9th or 10th house and also powerful and in his own Vargas (Divisions), during the Dasa of the Sun the native acquires lots of comforts and happiness. This Dasa is also favourable for the gain of wealth and profit earning activities. This ushers the time during which high status (position) is conferred by the king (Government/authorities/ employer), acquisition of conveyance etc. If the Sun is conjunct with the lord of the 5th house, birth of son; with 11th lord, comforts of elephant (costly vehicles); with 4th lord, gain of three vehicles, wealth, ministership with the blessing of the king (authorities) etc. are attained. In the Dasa of the strong Sun, the native acquires power (authority), conveyance etc.
+
+
+---
+
+## Page 140
+
+**Chapter:** Dasas Results
+
+### Dasas Results
+
+Notes : In accordance to Vimsottari Dasa system, the Mahadasa of the Sun is of six years duration. At the beginning of the Mahadasa of the Sun, the native receives results akin to the signification of the Sun. The nature of the Sun depends upon the condition in which it is placed in the sign. Besides, the position of the house occupied by the Sun is also of great importance and has a bearing in the signification of the events.
+The Sun is a vehicle of energy and it radiates intense power in life. To instil confidence, purity of mind, pride, bodily energy, high attainments etc., are some of the natural characteristics of the Sun. Consequently, the native observes, the following effects during the operation of the Mahadasa of the Sun :
+
+The disappointments get over, confidence gets infused, purity of thoughts springs up.
+
+Native gets energetic and exalted.
+
+The native may not have a mind to influence the other person, but the person automatically gets impressed.
+
+Emergence of royal feelings and native do get the blessings of the authorities (king) in some form or the other.
+
+During the Mahadasa of the Sun, the native would like to undertake assignments, jobs, ventures etc; of large dimensions.
+
+Native acquires sound health.
+
+In the other Astrological works propounded by great Sages or the Savant of Astrology dipict similar kind of results in the Mahadasa of the Sun as contained in Birhat Parasara Hora Sastra. Kalidasa in his Uttarakalamrit observed, as follows :
+
+"In the Sun's Dasa, if the Sun be auspicious to the native, it will give children, intellegence, wisdom, high status and power, knowledge, wealth, fame, valour, happiness and divine favour in its Dasa".
+
+The version of 'Phala Deepika' in this respect is as follows:
+
+"If the Sun is auspicious, native will accumulate wealth through his proficiency, through travels, kings and battles (disputes). The native wanders in jungles and mountains, attains fame and becomes industrious, the native develops sharpness in his nature and in his work and also gains success, comforts etc.".
+
+
+---
+
+## Page 141
+
+Savant Kalyana Varma in his Saravali records the following
+effects of Sun's Mahadasa :
+
+"In the auspicious Mahadasa of the Sun, the native will profit from
+new medicines, development of roads (routes), chemicals supplies,
+forest, evil friendship, hunting, skin, fiery things, king's atrocities and
+battles, etc., besides, gain of wealth and commendation from the king.
+patience, persistent efforts, valour, prestige, elevation of fame, brilliance
+and kingly comforts are achieved !!
+
+### Inauspicious results of the Sun's Mahadasa :
+
+**Verse १२॥:**
+
+_नीचे षष्ठके रिष्के दुर्बले पापसंयुते ।
+राहुकेतुसमायुक्ते दुःस्थानाधिपसंयुते ॥१२॥
+
+_
+
+**Verse १३॥:**
+
+_तस्मिन्दाये महापीड़ा धनधान्यविनाशकृत ।
+राजकोपः प्रवाशश्च राजदे धनक्षयः ॥१३॥
+
+_
+
+**Verse १४॥:**
+
+_ज्वरपीड़ा मरणोन्मिश्रविरोधाकृत ।
+पितृक्षयभयं चैव गृहे त्वशुभमेव च ॥१४॥
+
+_
+
+**Verse १५॥:**
+
+_पितुर्वर्गे मनस्ताप जनक्षो च विन्दति ।
+शुभदृष्टियुते सूर्ये मध्ये तस्मिन् क्वचिदुत्तमम् ॥१५॥
+
+_
+
+**Verse १६॥:**
+
+_पापग्रहेण सन्दृष्टे वदेत्त्याफल बुधः ॥१६॥
+
+_
+
+If the Sun is weak by his position in the 6th, the 8th
+or the 12th house, sign of debilitation, conjunct with the malefics,
+Rahu or Ketu or with the lords of the 6th, the 8th or the 12th house,
+during the operation of the Dasa, intense miseries, loss of wealth
+and fame, living in foreign land, punishment by the Sovereign
+(Government/authorities), money crunch, pains of illness, defame,
+confrontation with brothers and friends, fear of father's death, and
+other kind of unfavourable results are felt. In this duration, mental
+agonv of the parents and native also encounters unjustified wrath
+of public. If weak Sun has aspect or company of the benefic planets,
+native at times, gets happy events but if there is only malefic
+influence, the learned astrologers shall always predict unfavourable
+results.
+
+Notes: According to the Sage, the outcome of unfavourable
+results during the progress of the Dasa of any planet, the following
+
+
+---
+
+## Page 142
+
+**Chapter:** Dasas Results
+
+situations should essentially exist !
+
+i) Planets occupying the sign of debilitation
+
+ii) Planets posited in the 6th, the 8th or the 12th house
+
+iii) Planets are radically weak
+
+iv) Planets having conjunction with Rahu or Ketu or with the lords of the 6th, the 8th or the 12th house.
+
+The debilitated Sun gives sudden effects, such as fracture of the bones, eruption of sudden fever. In this currency of Dasa the native loses his confidence. If the Sun is not in the state of debilitation but otherwise badly placed, in his Dasa, the native faces the bad period boldly and puts his best efforts to overcome it. In case the Sun being the lord of the 6th, the 8th or the 12th house and also posited in one of these houses, the adverse results are not noticed, because the Sun perforce has to give effects of Viparita Rajayoga. Under these circumstances, the more the malefic influences, on the Sun, the more it goes in favour of the native.
+
+### Results during the Mahadasa of the Moon :
+
+**Verse १६-१८:**
+
+_एवं सूर्यफलं विप्र ! संक्षेपादुदितं मया ।
+विंशोत्तरीमतेनाय भुवं चन्द्रदशाफलम् ॥१६॥
+स्वेच्छे स्वेक्षेत्रे वा क्षेत्रे लाभत्रिकोणे ।
+शुभग्रहेण संयुक्ते पूर्णं चन्द्रं बलेयुते ॥१७॥
+कर्मभाग्याधिपैर्युक्ते वाहनेशबलेयुते ।
+
+_
+
+Thus, O Brahmin! I have briefly described the results of the Sun's Dasa.
+Now, according to Vimsottari, the results of the Moon's Dasa are described.
+If the Moon is in its own sign or own house, or in a trine or angle, or conjoined with benefic planets, or strong, or conjoined with lords of karma and bhagya, or with the lord of the vehicle, the results are good.
+
+**Verse १८-२१:**
+
+_अथन्तंश्वर्यसौभाग्य-धन-धान्यादिमुक्तं ॥१८॥
+गृहे तु शुभकार्याणि वाहनां राजदर्शनम् ।
+स्याद् गृहे लक्ष्मीकटाक्षकृत् ॥१९॥
+मित्रप्रभुवशाद्भाग्यं राज्यलाभं महोत्सुखम् ।
+अश्वान्दोलादिलाभं च श्वेतवस्त्रादिकं लभेत् ॥२०॥
+पुत्रलाभादिसन्तोषं गृहगोधनसंिकुलम ।
+
+_
+
+The native gets wealth, fortune, money, grains etc. in abundance. He performs auspicious deeds, gets vehicles and audience with the king. He gets the grace of Lakshmi. He gets fortune through friends and rulers, gains kingdom and great happiness. He gets horses, palanquins etc. and white garments.
+
+**Verse २१-२२:**
+
+_धनस्थानगते चन्द्रे तुडे स्वक्षेत्रेऽपि वा ॥२१॥
+अनेकधनलाभं च भाग्यवृद्धिं महत्सुखम् ।
+निक्षेपरजसम्मां विद्यालाभं च विन्दति ॥२२॥
+
+_
+
+If the Moon is in the 2nd house or in its own sign, the native gets many financial gains, increase of fortune and great happiness. He gets deposits, honour and education.
+
+O Brahmin! After briefly describing the results of the Dasa of the Sun, now I explain the results of the Moon's Dasa in accordance to Vimsottari Dasa system. If the Moon is in the sign
+
+
+---
+
+## Page 143
+
+### Brihat Parasara Hora Sastra
+
+of exaltation, own sign, in Kendras (Angles) or Trikonas (Trines)
+and conjoined with the benefic planets, full moon, powerful and
+accompanied by the lord of the 10th, the 9th or the 4th house, during
+the Dasa of the Moon, beginning till the end, happiness, enjoyment,
+auspiciousness would prevail. Gain in wealth and agriculture
+produce, many auspicious ceremonies at home, comforts of
+conveyance, meeting with the king, success at works, blessing of
+goddess Laxami enhancement of fortune through Royalty and
+friends and state of extreme enjoyment are achieved. Acquisition
+of conveyance and white apparels, happiness of having a son,
+addition of cows in the house etc., are the other benefits native
+would reap during this period.
+
+If the Moon is posited in the 11th house and is also in her
+own sign or in the sign of exaltation, gain of wealth in its assorted
+forms, accretion in fortune, happiness and education and also
+Royal commendation are likly to be bestowed during this period.
+
+Notes : The Moon is Karaka of happiness. Therefore, Maharishi
+perceives state of extreme happiness in the auspicious and favourable
+positions of the Moon. In the natural horoscope, the Moon is also Karaka
+of vehicle (any kind of conveyance) and animals. Therefore, comforts of
+vehicles and (wealth of) cows is enhanced during this period. The Moon
+is also Karaka of 'Mare' (female horse) as such Rishi points out Ratha
+(chariot) though the tradition of chariot is no longer in existence in the
+modern age. The horse driven vehicle is a passenger carrier and hence
+it can be compared with the similar type of vehicle of the modern time.
+
+The Bombay's edition of this treatise, states that in the major
+period of the Moon, the results like, warmth of the mother, house, garden,
+tank etc., status in the society, elegant conveyance, marriage in the house
+and other related auspicious functions, success in business,
+accomplishment of venture, fortune uplift with the blessings of preceptor
+and friends and pitfall-gains are generally felt.
+
+The effects of the Moon's Dasa enunciated in the publication of
+M/s. Thakur Prashad & Sons are almost identical. Rise in the fortune
+(status) is an additional effect which it has recorded - along with one extra
+Shloka which states.
+
+
+---
+
+## Page 144
+
+"The Moon duly influenced by the lords of 10th and 9th houses duly conjunct with the 4th lord, gives effect to rise in fortune and gain in wealth and health".
+
+In the above Shloka, these particular results are obtained only in the combination of the Moon with the Yoga Karaka planets.
+
+**Verse १२३:**
+
+_नीचे वा क्षीणचन्द्रे वा धनहानिर्विष्यति ।
+दुश्चिक्ये बलसंयुक्ते क्वचित्सौख्यं क्वचिद्दुःखम् ।।१२३।।
+
+_
+
+**Verse १२४:**
+
+_दुर्बले पापसंयुक्ते देहजाड्यं मनोऽरुजम् ।
+भृत्यपीड़ा विसहानिर्मृत्युवर्गजनादधः ।।१२४।।
+
+_
+
+**Verse १२५:**
+
+_षष्ठाष्टमव्यये चन्द्रे दुर्बले पापसंयुते ।
+राजश्रेष्ो मनोदुःखं धनधान्यादिनाशनम् ।।१२५।।
+
+_
+
+**Verse १२६:**
+
+_मातृक्लेशं मनस्तापं देहजाड्यं मनोऽरुजम् ।
+दुःखे चन्द्रे बलैर्युक्ते क्वचित्क्लेशं क्वचित्सुखम् ।।
+देहजाड्यं क्वचिच्चैव शान्त्यं तत्र शुभं दिशेत् ।।१२६।।
+
+_
+
+If the Moon is in the sign of debilitation and powerless being in Krishna Pakasha, in the Dasa of such Moon, there will be gain in wealth. In case, the powerful Moon is in the 3rd house, fluctuating effects, at times, comforts and at time, gain in wealth are felt. Having conjunct with the malefic planets, the weak Moon sets in sluggish feeling, mental derangement, trouble in service, loss of wealth and intense trouble (death like) from the maternal relations.
+If the same weak Moon is posited in the 6th, the 8th or the 12th house, (Trik Houses), blame from the authorities (King), mental tension, loss of wealth and health, conflict with mother, enertness, mental depression etc., will also caused during the Dasa. If the Moon is posited in Trik houses (6th, 8th or 12th) but powerful, mixed results of gain in wealth, happiness or bodily pains etc., will be felt intermittently.
+
+Notes: The Moon has intense relation with the mind. The Moon regulates efficacy of the mind. It is for these very reasons, Maharishi Parasara, related the results of the weak Moon with different state of mind those are felt during the major period of the said Moon. The major symptoms of Moon's affliction are sulggisness, inertness, uneasiness, mental aberrations etc. The Bombay's Edition of Birhat Parasara Hora
+
+
+---
+
+## Page 145
+
+**Chapter:** Results during the Mahadasa of Mars
+
+Sastra deposes the malefic effects of the afflicted Moon during its Dasa
+such as, loss of wealth, poverty, wretchedness, miseries, phlegmatic
+diseases, shivering fever etc.
+
+### Results during the Mahadasa of Mars :
+
+**Verse 26-32:**
+
+_स्वमोच्चादिगतस्यैवं नीचस्थभ्गस्य च ।
+बवीमि भूमिपुत्रस्य शुभाशुभदशाफलम् ॥२७॥
+परमोच्चगते भौमे स्वोच्चे ।
+स्वक्षैन्द्रीकोणे वा लाभे वा धनगडेपि वा ॥२८॥
+सम्पूर्णबलसंयुक्ते शुभदृष्टे ।
+राज्यलाभं भूमिलाभं धनधान्यादिलाभकृत् ॥२९॥
+आधिक्ष्यं राजसम्मानं वाहनाम्बरभूषणम् ।
+विदेशे स्थानलाभं च सोदराणां सुखं लभतेत् ॥३०॥
+केन्द्रे गते सदा भौमे दुश्चिक्ये बल संयुते ।
+पराक्रमाद्सिंहलाभो युद्धे शत्रुजयो भवेत् ॥३१॥
+कलत्रपुत्रविभवं राजसम्मानमेव च ।
+दशादो सुखमाप्नोति दशान्ते कष्टमादिशेत् ॥३२॥
+
+_
+
+Now I narrate the auspicious and inauspicious
+results of the Dasa of Mars consequential to its placement in
+exaltation or own signs or in debilitated or nimical sign. If Mars is in
+deep exaltation, exalted sign, Mooltrikona sign, own sign, Angle or
+Trine houses, the 11th or the 2nd house and also with full strength,
+in conjunction with and aspected by the benefic planets and posited
+in benefic Navamsa, the Dasa will result in gain in wealth and
+agriculture produce, benefit from the Sovereign (Government,
+ernp!cyer etc.). Felicitations from the Sovereign, acquisition
+conveyance, apparels, jewellery etc., dwelling in the foreign land,
+warmth and compassion from brothers (co-borns) is also attained.
+Strong Mars placed in the 3rd or Angle houses, gives wealth earned
+through sustained struggle, victory over enemies etc. In the beginning
+of the Dasa comforts from wife, son, status and Royal felicitation is
+felt. However, some difficult time towards the end of the Dasa may
+also be expected.
+
+Notes: The Edition of Bombay indicates some additional results
+such as, the major period of Mars ushers wisdom, tension free mind, valour
+
+
+---
+
+## Page 146
+
+**Chapter:** Dasa Results
+
+etc., and the native constructs pond.
+
+Mars becomes strong if posited in the auspicious houses, and it instils fiery nature in the native. He also gets courage, firmness and patience. Besides, urge of creativity is also felt during this period. In other words, whatever task the native accomplishes during the Dasa of Mars, it is purely due to his personal efforts, struggle and virility.
+
+**Verse:**
+
+_नीचादिदुष्टभावस्थे भौमे बलविवर्जिते ।
+पापयुक्ते पापदृष्टे सा दशा नेष्टदायिका ।। ३३ ।।
+
+_
+
+33: Mars, if in the sign of debilitation, located in the inauspicious houses, powerless, conjunct or aspected by the malefic planets, the Dasa of Mars will give bad and unfavourable results.
+
+Notes: Here Maharishi gave a mere indication of unfavourable results during the Dasa of afflicted and badly placed Mars in the nativity.
+In this respect, Bombay Edition contains a half the Shloka.
+
+**Verse:**
+
+_"पापै भौमरुजातीर्दं च कलहं चौरागिनं ।
+घणमक्षदीक्षणं महीशपीड़नरुजः क्षोभक्षतिं दास्यति"
+
+_
+
+It means that if Mars is malefic, it sets in disease, trouble, some time theft, fire, imprisonment, injury, weak eyesight, displeasure from king (Government) etc.
+
+Other ancient works gave detailed account of the effects of the Dasa of malefic Mars. According to Jataka Parijataka, during the Dasa of afflicted Mars, the native suffers from bile, blood infection, painful fever, company of unchaste women, conflict with wife, disrespect to preceptor, friends and lack of affection for son and would consume bad food.
+Ancient Scholars viz., Kalidasa and Manteshwara expressed the same opinion. However, Savant Kalyan Verma's contention on this subject is at variance and according to him when the Dasa of the afflicted Mars is in progress, the native suffers from epilepsy, cuts and wounds and he tends to become arrogant, unethical and irreligious.
+
+### Results during Mahadasa of Rahu and Ketu :
+
+
+---
+
+## Page 147
+
+### Brihat Parasara Hora Sastra
+
+Brihat Parasara Hora Sastra
+
+**Verse ॥१३४॥:**
+
+_एवं राहोश्च केतोश्च कथयामि गृहादिकम् ।
+तयोईशाफलञ्चैव तत्राग्रे द्विजन्दन ॥१३४॥
+
+_
+
+**Verse ॥१३५॥:**
+
+_राहोस्तु वृषभं केतोर्विश्चिकं तुडसंज्ञकम् ।
+मूलत्रिकोणं ज्ञेयं युग्मं चापं क्रमेण च ॥१३५॥
+
+_
+
+**Verse ॥१३६॥:**
+
+_कुम्भाली च गृही प्रोक्तो कन्या-मीनो च केनचित् ।
+तदाये बहुसारल्यं च धनधान्यादिसम्पदाम् ॥१३६॥
+
+_
+
+**Verse ॥१३७॥:**
+
+_वाहने पुत्रसम्भ वः ।
+नवनगृहनिर्माणं धर्मचिन्ता महोत्सवः ॥१३७॥
+
+_
+
+**Verse ॥१३८॥:**
+
+_विदेशराजसन्मानं वस्त्राडारभूषणम् ।
+शुभयुक्ते शुभदृष्टे योगकारकसंयुते ॥१३८॥
+
+_
+
+**Verse ॥१३९॥:**
+
+_केन्द्रिकोणलाभं वा दुश्चिक्ये शुभराशिगे ।
+महाराजप्रसादेन सर्वसम्पत्सुखं लभम् ॥१३९॥
+
+_
+
+**Verse ॥१३९½॥:**
+
+_यवनप्रभसम्बन्धं  गृहे कल्याणसम्भ वम् ॥१३९½॥
+
+_
+
+O Brahmin! Now I explain the signs etc., of Rahu and Ketu so that I can disclose the results of their Dasa before you. The exaltation signs of Rahu is Scorpio and for Ketu it is Taurus and the Moola Trikona signs are respectively Sagittarius and Gemini. Own sign of Rahu is Aquarius and of Ketu is Scorpio. Some have reckoned Virgo and Pisces signs respectively. If Rahu is exalted in the nativity, its Dasa will be extremely favourable and wealth, prosperity etc., is attained. Ambitions are accomplished through friends and king (Government), possibility of conveyance and son, construction of new residence, religious feelings, festivity, Royal recognition in the foreign land, decorative items, Jewellery etc., are also achieved. If Rahu is also aspected by and in conjunction with the benefic planets, positied in Angles, Trines the 11th or the 3rd house and with auspicious sign, property, land etc. and happiness is achieved with the blessing of king. Also recognition from the head of the family and welfare of house become possible.
+
+Notes: Rahu represents foreign and other religions. Therefore, in favourable time, the native makes profits from the sovereign and that too through a person of a different religion.
+
+Bombay's publication of the treatise cites some more results. Such as, the major period of Rahu, brings about beneficence, expansion of kingdom, spreading of religion, pilgrimage, higher knowledge and dominance. Travelling abroad is also stated to be on card.
+
+
+---
+
+## Page 148
+
+**Chapter:** Results during the Mahadasa of Jupiter
+
+**Verse 180:**
+
+_रन्ध्रे वा व्यये रहौ तद्दाये कष्टमादिशेत् ।
+पापग्रहेण सम्बन्धे मारकग्रहसंयुते ॥
+नीचराशिगते वापि स्थानभ्रंशो मनोव्यथा ।
+विनाशी दारपुत्राणां कुत्तितान्नं च भोजनम् ॥
+दशादौ देहपीड़ा च धनधान्यपरिस्थितिः ।
+दशामध्ये तु सौख्यं स्यात् स्वदेशे धनलामकॄत् ॥
+दशान्ते कष्टमाप्नोति स्थानभ्रंशो मनोव्यथा ॥४३॥
+
+_
+
+If Rahu is posited in the 8th or the 12th house, the result of the Dasa is painful. If Rahu has connection with the malefic planets and is conjunct with 'Maraka' house, the result will be shifting of place, mental agony, death of wife and son, stale food etc. In the beginning of Dasa, physical stress and loss of wealth and agriculture produce, be expected and in the middle position of the Dasa, the native receives comforts and also wealth (profits) from the foreign countries. In the last portion of the Dasa, distress, change of place and mental stresses and strains will be felt.
+
+Notes: During the Dasa of afflicted Rahu, the native encounters
+- disappointments, irritation, injury, accidents, debts, negligence, theft,
+plundering, cheating, heavy expenditure, disease and ailments, offensive
+behaviours, suspicion, doubts, betrayal, etc.
+
+### Results during the Mahadasa of Jupiter :
+
+**Verse 184:**
+
+_यः सर्वैषु नभोगेपु बुधेरतिशुभः स्मृतः ।
+तस्य देवेन्द्रपूज्यस्य कथयामि दशाफलम् ॥४४॥
+
+_
+
+Amongst all the planets, the planet which is considered
+as most auspicious, now I describe the results of the Dasa of that
+divine-worship Jupiter.
+
+**Verse 185:**
+
+_स्वेच्चे स्वक्षेत्रगे जीवे केन्द्र लाभत्रिकोणगे ।
+मूलत्रिकोणलाभे वा तुंगांशे स्वांशेऽपि वा ॥४५॥
+
+_
+
+**Verse 186:**
+
+_राज्यलाभं महासौख्यं राजसमानकीर्तनम् ।
+गजवाजिसमायुक्तं देवब्रह्मणपूजनम् ॥
+
+_
+
+**Verse 187:**
+
+_दारपुत्रादिसौख्यं च वाहनादरलाभजम् ।
+यज्ञादिकर्मसिद्धिः स्याद्देवान्तश्रवणादिकम् ॥४६॥
+
+_
+
+If Jupiter is in own sign, exalted, in Kendra or Trikona, or in
+Mul-trikona, or in the Navamsa of exaltation or own sign, the native
+will get kingdom, great happiness, fame and honour, elephants and
+horses, worship of gods and Brahmins, happiness from wife and
+children, vehicles, and success in religious ceremonies and hearing
+about gods.
+
+
+---
+
+## Page 149
+
+### Brihat Parasara Hora Sastra
+
+### 125
+
+**Verse:**
+
+_महाराजप्रसादेनाभीष्टसिद्धिः सुखलावहा ।
+आन्दोलिकादिल.लाभश्च कल्याणं च महत्कुलम् ॥४८॥
+पुत्रादारदि.लाभश्च अन्नदानं महप्रियम् ॥४९॥
+
+_
+
+If Jupiter, is posited in the exaltation sign, own
+sign, Angles (Kendras), Trines, the 11th house, Mooltrikona sign,
+own or exalted Navamsa, benefit from the Sovereign, felicitation
+from king (Government, authorities etc.), aesthetical happiness,
+comforts of elephants, horses, worship of God and Brahmins,
+affection from wife and son, vehicles and clothes be attained,
+success in Yagna (यज्ञ) and ventures, listening of sermons on
+'Vedanta', accomplishments with king's blessings, ushering of
+happiness, acquisition of 'Palaki' (vehicle), overall prosperity,
+pleasure of wife (marriage) and sons, gift of choiced food and fruits
+etc., be caused during the Dasa.
+
+Notes: Some particular effects of the Dasa of the benefic Jupiter
+planets recorded in the publications of Bombay are heavy accretion of
+wealth, entrusted with authority, increase in fortune, fame, over all
+qualitative improvement, hosts of servants, magnificence etc.
+
+**Verse:**
+
+_नीचास्तपापसंयुक्ते  जीवै  रिष्फाप्तसंयुते ॥५०॥
+स्थानधर्मं मनस्तापं पुत्रपीड़ामदभयम् ।
+पश्वादिधनहानिश्च  तीर्थयात्रादिकं  लभेतृ ॥५०॥
+आदी कष्टफलं  चैव चतुष्पाज्जीवल.भकृत् ।
+मध्य.न्ते सुखमाप्नोति राजसम्मानवैभवम् ॥५१॥
+
+_
+
+Jupiter, in case is in the sign of debilitation, conjunct
+with the malefic planets, posited in the 8th or the 12th house, the
+result will be change of house (residence), mental tension, grief
+from son, lurking fears, loss of wealth and animals, pilgrimage etc.
+Distress and then gain of animals, in the beginning of the Dasa and
+attainment of comforts, Royal commendations, magnificence etc.
+are caused towards the middle and the last portions of the Dasa.
+
+Notes: The additional results of the Dasa of Jupiter contained in
+the Bombay's publication are, physical distress, loss of patience, depletion
+of wealth and property (land), father in despair, lurking fear of theft etc.
+Native may face false blame or allegations in the Dasa of malefic Jupiter.
+
+
+---
+
+## Page 150
+
+**Chapter:** Results during the Mahadasa of Saturn
+
+### Results during the Mahadasa of Saturn :
+
+**Verse ॥१४२॥:**
+
+_अथ सर्व्वेपु खेटेषु योगतिहीनः प्रकीर्तितः ।
+तस्य भास्करपुत्रस्य कथयामि दशाफलम् ॥१४२॥
+
+_
+
+Now I unfold the result of the Saturn (Suryaputra) who is a most inferior and degraded amongst all the planets.
+
+**Verse ॥१४३॥:**
+
+_स्वोचे स्वक्षेत्रे मन्दे मित्रक्षेत्रेऽपि वा यदि ।
+मूलत्रिकोणे भागे वा तुंगांशे स्वांशगेऽपि वा ॥१४३॥
+
+_
+
+**Verse ॥१४४॥:**
+
+_दुश्चिक्ये लाभगे चैव राजसम्मानवैभवम् ।
+राजयोगं प्रकुर्वीत सेनाधीशमहत्सुखम् ॥१४४॥
+
+_
+
+**Verse ॥१४५॥:**
+
+_लक्ष्मीक्टाक्षचिन्तानि राज्यलाभं करोति च ।
+गृहे कल्याणसम्पत्तिर्पुत्रादिलाभकृत् ॥१४६॥
+
+_
+
+If Saturn is in the sign of exaltation, own sign, friendly sign, Mooltrikona, the 9th house, or in the Navamsa of the exaltation or own signs, the 3rd house, the 11th house, the native is bestowed with recognition from the king (Government), accretion of wealth, pleasure of literary discussions, elephant ride at the behest of the king, Jewellery etc., high status, commander of the army, monetary gains, splendid happiness. The native gains through authorities (Government), prosperity at home, marriage (wife), birth of son etc.
+
+Notes: In the natural horoscope, Saturn is the lord of 10th and 11th houses. 10th house represents authority (Government) and 11th house denotes profit, gains etc. Therefore, in the benefic placement of Saturn, the native, during the Dasa of Saturn, acquires wealth, status, business, education, success in ventures, governmental post etc. The 10th house also is related to festivals and hence it gives festivities and celebrations of such nature in which lots of presents etc. are received. The native helps others in their business activities through his contacts with the high authorities. He also makes some profit in this process. Some learned Astrologers take the 11th house for the birth of the child because the 11th house is the 5th from the 7th house (wife house). The Sage has said about
+
+
+---
+
+## Page 151
+
+**Chapter:** Results of the Dasa of Mercury
+
+the birth of child in the Saturn's Dasa in this context only.
+
+**Verse ॥९५॥:**
+
+_षष्ठाष्टमव्यये मन्दे नीचे वाऽस्तङ्गतोऽपि वा ।
+विप्रशास्त्रादिपीड़ा च स्थानभंशं महद्भयम् ॥
+पितृमातृवियोगं च दारुपुत्रादिपीडनम् ।
+राजवैषम्यकार्याणि ह्यनिष्टं बन्धनं तथा ॥
+शुभयुक्तेऽपि मन्दे योगकारकसंयुते ।
+केन्द्रत्रिकोणालाभे वा मीने कार्येऽपि शनी ॥
+राज्यलाभं महोत्साहं गजाश्वाम्बरसंकुलम् ॥६०॥
+
+_
+
+If Saturn is posited in the 6th, the 8th or the 12th
+house, debilitated, combust, danger of poison and weapons,
+destruction of place, change of place, intense fear, agony of
+parents, grief of wife and children, antigovernmental activities and
+misfortune, imprisonment etc., and distressful results therefrom
+are expected. Saturns, if conjoined with benefic and Yogakarka
+planets, posited in Angles, Trine houses, the 11th house or in
+Pisces or Sagittarius sign, gain from authorities (Government),
+highly enthusiasm, comfort of clothes, elephant, horses (conveyance)
+etc., will be attained.
+
+### Results of the Dasa of Mercury :
+
+**Verse ॥६१॥:**
+
+_अथ सर्वन्मोघेयु ः यः कुमारः प्रकीर्तितः ।
+तस्य तारेशपुत्रस्य कथयामि दशाफलम् ॥
+
+_
+
+Now I narrate the results of the Dasa of Moon's son
+Mercury who is also known as 'Kumar' planet (adolescence)
+
+**Verse ॥६२॥:**
+
+_स्वोन्चे स्वक्षेत्रसंयुक्ते केन्द्रलाभत्रिकोणे ।
+मित्रक्षेत्रसमयुक्तं सौम्ये दाये महत्सुखम् ॥
+
+_
+
+**Verse ॥६३॥:**
+
+_धनधान्यविलाभं च सत्कीर्तिधनसम्पदाम् ।
+ज्ञानाधिक्यं नृपप्रीतिं सत्कर्मगुणवर्द्धनम् ॥
+
+_
+
+**Verse ॥६४॥:**
+
+_पुत्रादारदि-सौख्यं च देहारोग्यं महत्सुखम् ।
+क्षीरेण भोजनं सौख्यं व्यापारालभते धनम् ॥
+
+_
+
+**Verse ॥६५॥:**
+
+_शुभदृष्टिपुते सौम्ये भाये कर्मधिपे दशा ।
+आधिपत्ये बलवती सम्पूर्णफलदायिका ॥
+
+_
+
+
+---
+
+## Page 152
+
+### 128
+
+### Dasa Results
+
+Mercury being exalted, posited in own sign, Angles (Kendras), Trines, friendly sign ushers happiness, acquisition of wealth, prosperity; popularity, property, attainment of higher education and refind qualities gratification from the Rulers, keen interest in pious works, warmth of wife and children, pleasure of sound health, high degree of contentment, decent food (prepared in milk), and business gains. Mercury if aspected by or conjunct with benefic planets and lord of 10th house or having Bhava Bala, its Dasa will give full effects.
+
+Notes: In the Dasa of benefic Mercury, the income is earned through many sources. Mercury is the Karaka of intelligence and business/ trade as such, it gives high attainments in the educational front. The native carries many literary pursuits and there is big boost to the business. Mercury itself is a 'Satvika' planet and it takes the native towards righteous, virtuous and ethical side and protect him against false pride etc.
+
+**Verse:**
+
+_पापग्रहैयुते दृष्टे राजदेषं मनोऽरुजम् ।
+बन्धुजनविरोघं च विदेशगमनं लभेत् ॥६६॥
+परप्रेष्यं च कलहं मूत्रकृच्छ्रान्महहृदभ्यम् ।
+षष्ठाष्टमव्ये सौम्ये लाभभोगाग्यनाशनाम् ॥६७॥
+वातपीड़ां धनं चैव पाण्डुरोगं विनिर्दिशेत् ।
+तृप्तोऽपि निनिर्भीतिं च कृष्णिभूमिनिवासनम् ॥६८॥
+दशादौ धनधान्यं च विद्यालाभं महत्सुखम् ।
+पुत्रकल्याणसम्पत्तिः सन्मार्गे धनलाभकृत् । ६९ ।
+मध्ये नरेन्द्रसन्मानमन्ते दुःखं भविष्यति । ७० ।
+
+_
+
+Mercury if aspected by or conjunct with malefic planets, the native faces the wrath of the Ruler (Government), gets mentally upset, confrontation from co-borns and relatives, foreign travels etc. Also becomes dependant, acquires urinary disease and under goes grave fear.
+
+If Mercury is located in the 6th, the 8th or the 12th house, income, passion and wealth gets decimated, disease like jaundice and rheumatism are indicative. Fright of the Government (King), theft, fire etc., destruction of agriculture produce, cattles, property (land). The beginning of the Dasa brings about, wealth and abundant comforts, warmth of sons, felicity,
+
+acquisition of property, gains in wealth. Middle part of the Dasa,
+
+
+---
+
+## Page 153
+
+**Chapter:** Results of the Dasa of Ketu
+
+brings recognition from the king (Government) and last portion of the Dasa, sets in miseries, obstacles etc.
+
+### Results of the Dasa of Ketu :
+
+**Verse ७१:**
+
+_यस्तमोप्रहयोर्मध्ये कबन्धः कथ्यते बुधैः ।
+तस्य केतुरिदानीं ते कथयामि दशाफलम् ॥७१॥
+
+_
+
+Now I describe the result of the Dasa of Ketu reckoned as 'headless body' (कबन्घ) planet amidst all the planets.
+
+**Verse ७२:**
+
+_केन्द्रे लाभे त्रिकोणे वा शुभराशौ शुभेक्षिते ।
+स्वोच्चे वा शुभवर्गें वा राजप्रीतिं, मनोऽनुगम् ॥७२॥
+
+_
+
+**Verse ७३:**
+
+_देशग्रामधिपत्यं च वाहनं पुत्रसम्भषम् ।
+देशान्तरप्रयाणं च निर्दिशेत् तत् सुखावहम् ॥७३॥
+
+_
+
+**Verse ७४:**
+
+_पुत्रदारसुखं चैव चतुष्पाज्जीवनाऽऽकृत् ।
+दुश्चिक्ये केतुदये सुखं दिशेत् ॥७४॥
+
+_
+
+**Verse ७५:**
+
+_राज्यं करोति मिश्रांशं गजवाजिसमन्वितम् ।
+दशादौ राजयोगश्च दशामध्ये महद्भयम् ॥७५॥
+
+_
+
+**Verse ७६:**
+
+_अन्ते दूराटनं चैव देहविस्मरणं तथा ।
+धने रन्ध्रे व्यये केतौ पापदृष्टियुतेक्षिते ॥७६॥
+
+_
+
+**Verse ७७:**
+
+_निगंडं बन्धुनाशं च स्थानभ्रंशं मनोऽरुजम् ।
+शूद्रासंगादिलाभं च कुरुते रोगसंकुलम् ॥७७॥
+
+_
+
+If Ketu is posited in Angles (Kendras) the 11th house, Trines (Trikonas), in benefic signs duly aspected by the benefic Vargas (divisions), seeking of kings' affection, administrator of the country or village, possibility of the pleasure of conveyance and children, happiness from the travelling of the country and foreign land be indicative. In this Ketu's Dasa, the native will have the pleasure of his wife and children and gains of cattles. Ketu being in the 3rd, the 6th or the 11th house will give happiness in its Dasa and the native gains from the king, affection of freinds and pleasure of owning elephant, horses etc. (conveyance). Beginning of the Dasa brings kingship, in the middle of the Dasa, feeling of intense fear and towards the end of the Dasa, travelling to farflung countries and fear of ailments is felt. Ketu conjunct with or aspected by the malefic planets while posited in the 2nd, the 8th or the 12th house
+
+
+---
+
+## Page 154
+
+brings about severance of relationship with co-borns, relatives etc., and destruction of the property (land), anguish, company of inferiors, eruption of disease etc.
+
+Notes: Rahu and Ketu get maximum influence from the planet with whom they are conjunct with. It they are not in conjunction with any planet, the lords of the signs located with, exert their influence on them. Therefore, they emphatically deliver the effects of the planets, they have these kinds of associations.
+
+### Results of the Dasa of Venus.
+
+**Verse ||७८॥:**
+
+_अथ भूतेषु यः शुक्रो मदरूपेण तिष्ठति ।
+तस्य दैवगुरुर्विप्र ! कथयामि दशाफलम् ॥ ७८ ॥
+
+_
+
+Venus who resides in every human being with passion and strong emotions and preceptor of the devils, Brahmin by caste, now I perorate the results of the Dasa of that very Venus before you.
+
+**Verse ॥ ७९ ॥:**
+
+_परमोच्चगते शुक्रे स्वोच्चे स्वक्षेत्रकेन्द्रे ।
+
+_
+
+**Verse ॥ ८० ॥:**
+
+_नृपाभिषेक-सम्प्रप्तिर्वाहनारूढभूषणम् ।
+
+_
+
+**Verse ॥ ८१ ॥:**
+
+_गजाश्वपशुलाभं च नित्यं मिष्ठान्नभोजनम् ।
+
+_
+
+**Verse ॥ ८२ ॥:**
+
+_अखण्डमण्डलाधीश-राजसन्मानवे भवेत् ।
+
+_
+
+**Verse ॥ ८२ १/२ ॥:**
+
+_मुदगवाधोर्धं च गृहे लक्ष्मीकटासकृत् ।
+त्रिकोणस्थे निजे तस्मिन् राज्यार्थं गृहसम्मदः ।
+विवाहोत्सवकार्य्याणि पुत्रकल्याणवे भवेत् ।
+सेनाधिपत्यं कुरुते इष्टबन्धुसमागमम् ।
+नष्टराज्याब्धनाप्राप्तिं गृहे गोधनसङ्ग्रहम् ॥
+
+_
+
+If Venus is in deep exaltation, own sign or in Angles (Kendras), the native will have coronations (kingship); gains of vehicles, clothes, ornaments, elephants, horses (conveyance) and other animals; eats food with sweet every day, gets recognition from sovereign, sounding of drum (percussions) loudly and gets wealthy and prosperous house (with the grace of goddess Laxami). Venus if occupies the Trines (Trikona), bestowal of kingdom (synonymity with the high government position etc.), wealth, house, festivity at home, welfare of childrens, commandership of the army and welcome visits of the dear relatives, accumulation of cattle be also
+
+
+---
+
+## Page 155
+
+predicted.
+
+Notes: Venus is the Karaka of sex, lust and passion, status, respects, ornaments, work energy, wealth assets, marriage, cattle, musical instruments, conveyance, (horse, in ancient parlance) delightful beauty, treasure, honour, ministership, putting king under spell, occultism, tantric. Auspicious and strong Dasa of Venus, the native will have all the amenities, traits etc., signified by the planet.
+
+**Verse ८३:**
+
+_षष्ठाष्टमव्यये  शुके  नीचे  वा  व्ययराशिगे । । ८३ । ।
+
+_
+
+**Verse ८४:**
+
+_आत्मबन्धुजनद्वेषं  दारवग्नादिपीडनम् ।
+व्ययसायात्फलं  नष्टं  गोमहिष्यादिहानिकृत् । ।
+दारपुत्रादिपीड़ा  वा  आत्मबन्धुवियोगकृत् । । ८४ १/२ । ।
+
+_
+
+Venus, in case is posited in the 6th, the 8th or the 12th house, in the sign of debilitation or in the sign of the 12th lord, the Dasa of Venus will produce enmity with the relatives, distress from the women folks, loss in business, cattle etc., agony to wife and children, annoyance of relatives etc.
+
+**Verse ८५:**
+
+_भाग्यकर्माधिपत्येन  लग्नवाहनराशिगे । । ८५ । ।
+
+_
+
+**Verse ८६:**
+
+_तदृशायी  महत्सोत्स्यं  देशग्रामधिपालता ।
+देवालयतडागादिपुण्यकर्मसु  संग्रहः । । ८६ । ।
+
+_
+
+**Verse ८७:**
+
+_आनन्दाने  महत्सोख्यं  नित्यं  मिष्टान्नभोजनम् ।
+उत्साहः  कीर्तिसम्पत्ती  स्त्रीपुत्रधनसम्पदः । । ८७ । ।
+
+_
+
+Venus being the lord of the 9th or the 10th house and posited in the Ascendant or the 4th house, the Dasa of Venus will set in tremendous happiness and the native becomes administrator of state or village (town), his religious instinct will get stirred up and thus he will construct temples, tanks and will take pleasure in giving donation of food etc., eat sumptuous food with sweet, get enthusiastic towards his work and will have the comfort of status, wealth, assets, wife, children etc.
+
+**Verse ८८:**
+
+_स्वमुक्तो  फलमेव  स्याद्बलान्व्यानि  भुक्तिषु ।
+द्वितीयधननाये  तु  देहीपीड़ा  भविष्यति । । ८८ । ।
+
+_
+
+**Verse ८९:**
+
+_तदोषपरिहारार्थं  रुद्रां  वा  त्रयम्बकं  जपेत् ।
+श्वेतां  गां  महिषीं  दयादारोग्यं  च  ततो  भवेत् । । ८९ । ।
+
+_
+
+If Venus is the lord of the 2nd house, the native will suffer from diseases and distress. To get rid of these, one should worship Rudra or Tryambaka, give away a white cow or buffalo, and then he will be free from diseases.
+
+
+---
+
+## Page 156
+
+**Chapter:** Dasas Results
+
+### 132
+
+### Dasas Results
+
+88-89: Apropos results are in the Dasa of Venus and similar kind of results may also be expected in the Venus's Antradasa of the Mahadasa of other planets. Should Venus be the lord of the 2nd or the 7th house, there will be physical danger. To mitigate this effect, obeisance of Lord Shiva through Vedic Mantras or recitation of Mrityunjaya (मृत्युञ्जय मन्त्र) may be performed. Donation of cow or buffalo also brings a sound health.
+
+Notes: Acquiring the lordship of the 2nd and the 7th houses, Venus becomes Maraka (propensity of inflicting death). However, Venus acts as Maraka when posited in the malefic houses. With the placement in the inauspicious houses and under malefic aspects, Venus becomes more powerful towards his function of Markesha.
+
+The good and adverse results of the planets surface during the Mahadasa and Antardasa of such planets. However, the native also experiences the effect of the other planets who are exerting their influences (benefic or malefic) on the planet whose Dasa or Antardasa is operating. With every Ascendant, the sequence of the results of the Dasa of a particular planet gets changed. The Ascendant plays predominant role in fixing malefic or benefic characteristic of a planet and consequently sets in variation in the results during their Dasas.
+

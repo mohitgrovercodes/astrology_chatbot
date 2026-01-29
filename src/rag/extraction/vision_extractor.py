@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Filter warnings from deprecated google.generativeai
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, module="google.generativeai")
-from google import genai
+import google.generativeai as genai
 from PIL import Image
 import numpy as np
 

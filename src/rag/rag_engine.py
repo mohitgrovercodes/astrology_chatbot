@@ -155,47 +155,96 @@ Always be respectful of the sacred nature of Vedic astrology."""
                         queries.append(expanded)
                         break
         
-        return queries[:3]  # Max 3 query variations
     
+    def _classify_query_intent(self, query: str) -> str:
+        """
+        Classify query intent to select retrieval strategy.
+        
+        Returns:
+            One of: "keyword", "conceptual", "general"
+        """
+        q_lower = query.lower()
+        
+        # 1. Keyword/Citation intent -> Hybrid Search
+        # Explicit request for verse/chapter numbers or Sanskrit terms
+        keyword_indicators = [
+            "verse", "chapter", "shloka", "sloka", "sanskrit", 
+            "number", "citation", "reference", "source", "author",
+            "stanza", "text says", "quote"
+        ]
+        if any(k in q_lower for k in keyword_indicators):
+            return "keyword"
+            
+        # 2. Conceptual/Explanatory intent -> HyDE
+        # Complex questions asking for mechanics or reasons
+        conceptual_indicators = [
+            "why", "how", "explain", "concept", "significance",
+            "relationship", "difference", "between", "impact of",
+            "reason for", "philosophy", "understand"
+        ]
+        # Also treat very long/detailed queries as conceptual
+        if len(query.split()) > 15 or any(k in q_lower for k in conceptual_indicators):
+            return "conceptual"
+            
+        # 3. Default -> Vector Search
+        return "general"
+
     def answer_question(
         self,
         query: str,
         top_k: int = 5,
         filters: Optional[Dict[str, Any]] = None,
-        use_hyde: bool = False,
+        use_hyde: Optional[bool] = None,   # Changed to Optional
+        use_hybrid: Optional[bool] = None, # Added Explicit Flag
         expand_context: bool = True,
         conversation_history: Optional[List[Dict[str, str]]] = None,
     ) -> RAGResponse:
         """
-        Answer a question using RAG.
+        Answer a question using RAG with automatic strategy routing.
         
         Args:
             query: User question
             top_k: Number of chunks to retrieve
             filters: Metadata filters
-            use_hyde: Use HyDE retrieval
+            use_hyde: Force HyDE (None = Auto)
+            use_hybrid: Force Hybrid (None = Auto)
             expand_context: Expand with related chunks
             conversation_history: Previous conversation turns
             
         Returns:
             RAGResponse with answer and sources
         """
-        print(f"\\n[QUERY] {query}")
+        print(f"\n[QUERY] {query}")
+        
+        # Helper to determine strategy
+        intent = self._classify_query_intent(query)
+        
+        # Resolve strategy flags (Explicit overrides Auto)
+        final_hyde = use_hyde if use_hyde is not None else (intent == "conceptual")
+        final_hybrid = use_hybrid if use_hybrid is not None else (intent == "keyword")
+        
+        # Log strategy decision
+        strategy_name = "Custom Override"
+        if use_hyde is None and use_hybrid is None:
+            strategy_name = f"Auto-Router ({intent})"
+        
+        print(f"[ROUTER] Strategy: {strategy_name}")
+        print(f"         Thinking: HyDE={final_hyde}, Hybrid={final_hybrid}, Vector={not (final_hyde or final_hybrid)}")
         
         # Expand query for better recall
         query_variations = self._expand_query(query)
-        if len(query_variations) > 1:
-            print(f"[EXPANSION] Generated {len(query_variations)} query variations")
+        # if len(query_variations) > 1:
+        #     print(f"[EXPANSION] Generated {len(query_variations)} query variations")
         
-        # Retrieve relevant chunks using hybrid search
+        # Retrieve relevant chunks
         all_chunks = []
         for q in query_variations:
-            if use_hyde:
+            if final_hyde:
                 chunks = self.retriever.retrieve_with_advanced_hyde(q, top_k=top_k, filters=filters, llm=self.llm)
-            else:
-                # Use hybrid search by default based on strict feedback
-                # This fixes the issue where simple keyword matches were missed by pure vector search
+            elif final_hybrid:
                 chunks = self.retriever.retrieve_hybrid(q, top_k=top_k, filters=filters)
+            else:
+                chunks = self.retriever.retrieve(q, top_k=top_k, filters=filters)
             all_chunks.extend(chunks)
         
         # Deduplicate and sort by score

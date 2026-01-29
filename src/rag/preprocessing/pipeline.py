@@ -64,9 +64,11 @@ class PreprocessingPipeline:
         
         # Initialize phase processors
         self.cleaner = StructuralCleaner(use_llm=use_llm_cleaning)
-        self.analyzer = PageAnalyzer(use_llm=use_llm)
+        # Phase 3: Use Lite model if LLM is enabled (Cost Optimization)
+        self.analyzer = PageAnalyzer(use_llm=use_llm, model_name="gemini-2.5-flash-lite")
         self.segmenter = SemanticSegmenter(source_book=source_book)
-        self.enricher = ChunkEnricher(use_llm=use_llm, tradition=tradition)
+        # Phase 5: Compulsory LLM usage with Flash model (Quality Assurance)
+        self.enricher = ChunkEnricher(use_llm=True, tradition=tradition, model_name="gemini-2.5-flash")
         self.embedder = Embedder()
         self.vector_db_builder = VectorDBBuilder()
     
@@ -80,7 +82,7 @@ class PreprocessingPipeline:
             return output_path
         return None
     
-    def run_phase1_extraction(self, input_pdf: str, output_dir: Optional[str] = None) -> str:
+    def run_phase1_extraction(self, input_pdf: str, output_dir: Optional[str] = None, start_page: int = None, end_page: int = None) -> str:
         """Run Phase 1: PDF Extraction using Vision Pipeline."""
         print("\n" + "=" * 60)
         print("PHASE 1: EXTRACTION (Vision LLM)")
@@ -95,7 +97,7 @@ class PreprocessingPipeline:
         
         config = PipelineConfig(
             output_dir=output_dir,
-            gemini_model="gemini-2.5-flash",  # Standardized model
+            gemini_model="gemini-2.5-flash-lite",  # Use Lite for text-heavy efficiency
             book_title=self.source_book,
             save_raw_responses=True
         )
@@ -105,7 +107,9 @@ class PreprocessingPipeline:
         # Process PDF
         result = vision_pipeline.process_pdf(
             pdf_path=str(pdf_path),
-            book_title=self.source_book
+            book_title=self.source_book,
+            start_page=start_page,
+            end_page=end_page
         )
         
         # Return path to the extraction JSON
@@ -137,10 +141,25 @@ class PreprocessingPipeline:
                     pages.append(self._convert_rich_to_simple_page(item))
                 else:
                     pages.append(ExtractedPage(**item))
-        else:
-            if isinstance(data, dict) and "metadata" in data and "content_blocks" in data:
+        elif isinstance(data, dict):
+            # NEW: Handle complete ExtractionResult
+            if "pages" in data and isinstance(data["pages"], list):
+                print(f"  Detected ExtractionResult format (Source: {data.get('source_file', 'unknown')})")
+                pages = []
+                for item in data["pages"]:
+                     # Convert each page in the list
+                     if isinstance(item, dict):
+                        # Determine if it needs conversion or direct instantiation
+                        # For now, assume it matches ExtractedPage schema
+                        try:
+                            pages.append(ExtractedPage(**item))
+                        except Exception:
+                             # Try conversion if direct init fails
+                            pages.append(self._convert_rich_to_simple_page(item))
+            elif "metadata" in data and "content_blocks" in data:
                 pages = [self._convert_rich_to_simple_page(data)]
             else:
+                # Fallback for unexpected single objects
                 pages = [ExtractedPage(**data)]
         
         print(f"  Input: {len(pages)} pages")
@@ -346,6 +365,8 @@ class PreprocessingPipeline:
         skip_embedding: bool = False,
         skip_vectordb: bool = False,
         reset_collection: bool = False,
+        start_page: int = None,
+        end_page: int = None,
     ) -> EnrichedDocument:
         """
         Run the complete pipeline from Phase 1/2 to Phase 7.
@@ -375,19 +396,46 @@ class PreprocessingPipeline:
         if input_file.lower().endswith('.pdf'):
             # Determine output directory for extraction
             extract_dir = self.output_dir if self.output_dir else None
-            current_input = self.run_phase1_extraction(input_file, str(extract_dir) if extract_dir else None)
+            current_input = self.run_phase1_extraction(
+                input_file, 
+                str(extract_dir) if extract_dir else None,
+                start_page=start_page,
+                end_page=end_page
+            )
+            
+        # Determine starting phase based on input JSON structure
+        # (Naive check: load json header to guess type)
+        input_data = {}
+        if not input_file.lower().endswith('.pdf'):
+            try:
+                with open(input_file, 'r', encoding='utf-8') as f:
+                    input_data = json.load(f)
+            except Exception:
+                pass
+
+        # Resume Logic
+        enriched_doc = None
         
-        # Phase 2
-        cleaned_doc = self.run_phase2(current_input)
+        # If input has 'chunks' -> It is EnrichedDocument (Resume at Phase 6)
+        if "chunks" in input_data:
+            print(f"\n[INFO] Detected EnrichedDocument (Phase 5 output). Resuming at Phase 6...")
+            from schemas import EnrichedDocument
+            enriched_doc = EnrichedDocument(**input_data)
+        else:
+            # Phase 2
+            cleaned_doc = self.run_phase2(current_input)
+            
+            # Phase 3
+            linked_doc = self.run_phase3(cleaned_doc)
+            
+            # Phase 4
+            semantic_doc = self.run_phase4(linked_doc)
+            
+            # Phase 5
+            enriched_doc = self.run_phase5(semantic_doc)
         
-        # Phase 3
-        linked_doc = self.run_phase3(cleaned_doc)
-        
-        # Phase 4
-        semantic_doc = self.run_phase4(linked_doc)
-        
-        # Phase 5
-        enriched_doc = self.run_phase5(semantic_doc)
+        # Phase 6
+        final_doc = self.run_phase6(enriched_doc, skip_embedding)
         
         # Phase 6
         final_doc = self.run_phase6(enriched_doc, skip_embedding)
@@ -445,6 +493,7 @@ Examples:
     # ==========================================
     # Interactive Mode
     # ==========================================
+    is_interactive = not args.input
     input_file = args.input
     source_book = args.source_book
     tradition = args.tradition
@@ -459,13 +508,30 @@ Examples:
         # Check defaults
         default_dir = Path("data/raw")
         default_dir.mkdir(parents=True, exist_ok=True)
+        processed_dir = Path("processed_data")
         
-        candidates = list(default_dir.glob("*.pdf")) + list(default_dir.glob("*.json"))
+        # Gather candidates
+        candidates = []
+        
+        # 1. Raw PDFs/JSONs
+        candidates.extend(list(default_dir.glob("*.pdf")))
+        candidates.extend(list(default_dir.glob("*.json")))
+        
+        # 2. Processed Outputs (for resuming)
+        if processed_dir.exists():
+            candidates.extend(list(processed_dir.glob("*.json")))
+            
+        # 3. Extraction Outputs (if any)
+        extract_dir = Path("extraction_output")
+        if extract_dir.exists():
+             candidates.extend(list(extract_dir.glob("*.json")))
         
         if candidates:
-            print(f"\nFound files in {default_dir}:")
+            print(f"\nFound available files:")
             for i, f in enumerate(candidates, 1):
-                print(f"  {i}. {f.name}")
+                # Show parent dir for context if not in default raw
+                label = f.name if f.parent == default_dir else f"{f.parent.name}/{f.name}"
+                print(f"  {i}. {label}")
 
         while not input_file:
             prompt = "\n[1/4] Enter input file path (PDF/JSON)"
@@ -491,6 +557,20 @@ Examples:
             else:
                 print(f"❌ File not found: {val}")
                 input_file = None
+    
+    # 1b. Page Range (If PDF)
+    start_page = None
+    end_page = None
+    if input_file and input_file.lower().endswith('.pdf'):
+        print(f"\n[1b/4] Page Range Extraction (Optional)")
+        sp = input(f"       Start Page [1]: ").strip()
+        if sp.isdigit():
+            start_page = int(sp)
+            ep = input(f"       End Page [All]: ").strip()
+            if ep.isdigit():
+                end_page = int(ep)
+        else:
+            print("       Using default: Start=1, End=All")
     
     # 2. Source Book
     if not source_book:
@@ -519,15 +599,8 @@ Examples:
                 print("❌ Invalid choice.")
     
     # 3b. LLM Usage
-    use_llm_flag = args.use_llm
-    if not input_file: # Only interactive if we are in interactive mode
-        llm_choice = input(f"\n[3b/4] Use LLM for enhanced cleaning/enrichment? (Y/n) [y]: ").lower().strip()
-        if llm_choice == 'n':
-            use_llm_flag = False
-        else:
-            use_llm_flag = True
-    elif use_llm_flag:
-        use_llm_flag = True
+    # Default to False for speed (can enable with --use-llm)
+    use_llm_flag = False
     
     # 4. Output Dir
     if not output_dir:
@@ -560,6 +633,8 @@ Examples:
         skip_embedding=args.skip_embedding,
         skip_vectordb=args.skip_vectordb,
         reset_collection=args.reset_collection,
+        start_page=start_page,
+        end_page=end_page,
     )
     
     # Save final output

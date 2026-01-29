@@ -216,6 +216,20 @@ class AstrologyRetriever:
             logger.error(f"HyDE error: {e}")
             return self.retrieve(query, top_k, filters)
 
+    def expand_context(
+        self,
+        chunks: List[RetrievedChunk],
+        max_related: int = 2
+    ) -> List[RetrievedChunk]:
+        """
+        Expand context by fetching adjacent chunks (previous/next).
+        Currently a placeholder that returns original chunks to prevent errors.
+        TODO: Implement true expansion using chunk_index/seq_id from metadata.
+        """
+        # For now, just return the chunks to fix the AttributeError
+        # In future: Query DB for chunk_index = current +/- 1 within same chapter
+        return chunks
+
     def _parse_results(self, results) -> List[RetrievedChunk]:
         chunks = []
         if results and results['ids'] and results['ids'][0]:

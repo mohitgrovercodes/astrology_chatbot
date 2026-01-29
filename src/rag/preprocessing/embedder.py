@@ -12,6 +12,10 @@ import time
 import argparse
 from pathlib import Path
 from typing import List, Optional, Dict, Any
+from dotenv import load_dotenv
+
+# Load env vars
+load_dotenv()
 
 # Project imports
 try:
