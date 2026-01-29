@@ -46,19 +46,57 @@ def main():
     # Configuration
     default_input = "extraction_output/batch_result_pages_108-116.json"
     
+    # 1. Input File
     if args.input:
         input_json = args.input
     else:
-        # Auto-detect most recent batch file if no input provided
-        if Path(default_input).exists():
-           input_json = default_input
-        else:
-           # Try to find any batch result
-           batches = list(Path("extraction_output").glob("batch_result_*.json"))
-           if batches:
-               input_json = str(batches[-1])
-           else:
-               input_json = default_input # Fallback
+        # Interactive mode
+        print("\n" + "="*60)
+        print("🔧 Preprocessing Phases Runner (Phases 2-5)")
+        print("="*60)
+        
+        while True:
+            val = input("\n[1/4] Enter input JSON path: ").strip().strip('"')
+            if not val:
+               # Try auto-detect
+               batches = list(Path("extraction_output").glob("batch_result_*.json"))
+               if batches:
+                   print(f"      No input provided. Auto-selecting latest: {batches[-1].name}")
+                   input_json = str(batches[-1])
+                   break
+               else:
+                   print("❌ Input required (or no auto-detectable files found).")
+            elif Path(val).exists():
+                input_json = val
+                break
+            else:
+                print(f"❌ File not found: {val}")
+
+    # 2. Source Book
+    source_book = "Jataka Parijata Vol 1" # Default fallback
+    if not args.input: # Only ask in interactive mode
+        user_book = input(f"\n[2/4] Source Book Name (Default: {source_book}): ").strip()
+        if user_book:
+            source_book = user_book
+
+    # 3. Tradition
+    tradition = "vedic"
+    if not args.input:
+        print(f"\n[3/4] Astrology Tradition:")
+        print("      1. Vedic (Default)")
+        print("      2. Western")
+        choice = input("      Choice: ").strip()
+        if choice == "2":
+            tradition = "western"
+    
+    # 4. LLM Usage
+    use_llm = True
+    if not args.input:
+        llm_choice = input(f"\n[4/4] Use LLM for cleaning/enrichment? (Y/n) [y]: ").lower().strip()
+        if llm_choice == 'n':
+            use_llm = False
+    elif args.use_llm:
+        use_llm = True
     
     output_dir = args.output
     
@@ -90,10 +128,10 @@ def main():
     # Initialize pipeline
     print("[INIT] Initializing preprocessing pipeline...")
     pipeline = PreprocessingPipeline(
-        source_book="Jataka Parijata Vol 1 By Vaidyanatha Dikshita",
-        tradition="vedic",
-        use_llm=args.use_llm,  # Enable LLM for enrichment
-        use_llm_cleaning=args.use_llm, # Enable LLM for structural cleaning (Phase 2)
+        source_book=source_book,
+        tradition=tradition,
+        use_llm=use_llm,  # Enable LLM for enrichment
+        use_llm_cleaning=use_llm, # Enable LLM for structural cleaning (Phase 2)
         output_dir=output_dir
     )
     print("[OK] Pipeline initialized")

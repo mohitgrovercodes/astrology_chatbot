@@ -54,31 +54,75 @@ except ImportError:
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Batch PDF Extraction with Optimizations")
-    parser.add_argument("pdf_path", help="Path to PDF file")
+    # Make arguments optional for interactive mode
+    parser.add_argument("pdf_path", nargs="?", help="Path to PDF file")
     parser.add_argument("--start", type=int, default=None, help="Start page")
     parser.add_argument("--end", type=int, default=None, help="End page")
-    parser.add_argument("--workers", type=int, default=4, help="Number of parallel workers")
+    parser.add_argument("--workers", type=int, default=None, help="Number of parallel workers")
     parser.add_argument("--output", default="./extraction_output", help="Output directory")
     
     args = parser.parse_args()
     
-    # INTERACTIVE PAGE SELECTION
+    print("\n" + "=" * 60)
+    print("📑 Batch PDF Extraction Tool")
+    print("=" * 60)
+    
+    # 1. Input File
+    if not args.pdf_path:
+        # Check defaults
+        default_dir = Path("data/raw")
+        default_dir.mkdir(parents=True, exist_ok=True)
+        
+        pdf_files = list(default_dir.glob("*.pdf"))
+        
+        if pdf_files:
+            print(f"\nFound PDFs in {default_dir}:")
+            for i, f in enumerate(pdf_files, 1):
+                print(f"  {i}. {f.name}")
+        
+        while not args.pdf_path:
+            prompt = "\n[1/4] Enter input PDF path"
+            if pdf_files:
+                prompt += f" (or enter number 1-{len(pdf_files)}): "
+            else:
+                prompt += ": "
+                
+            val = input(prompt).strip().strip('"')
+            
+            # Check if user entered a number
+            if val.isdigit() and pdf_files:
+                idx = int(val) - 1
+                if 0 <= idx < len(pdf_files):
+                    args.pdf_path = str(pdf_files[idx])
+                    print(f"     Selected: {args.pdf_path}")
+                    break
+            
+            # Check if user entered a path
+            if os.path.exists(val):
+                args.pdf_path = val
+            elif os.path.exists(default_dir / val):
+                 args.pdf_path = str(default_dir / val)
+            else:
+                print(f"❌ File not found: {val}")
+    
+    # 2. Start Page
     if args.start is None:
         while True:
             try:
-                val = input("\nEnter Start Page (standard: 1): ").strip()
+                val = input("\n[2/4] Enter Start Page (Default: 1): ").strip()
                 args.start = int(val) if val else 1
                 if args.start < 1: raise ValueError
                 break
             except ValueError:
                 print("❌ Invalid input. Please enter a positive integer.")
                 
+    # 3. End Page
     if args.end is None:
         while True:
             try:
-                val = input("Enter End Page (e.g., 10): ").strip()
+                val = input("\n[3/4] Enter End Page (e.g., 50): ").strip()
                 if not val:
-                    print("❌ End page is required.")
+                    print("❌ End page is required for batch processing.")
                     continue
                 args.end = int(val)
                 if args.end < args.start:
@@ -87,6 +131,16 @@ def main():
                 break
             except ValueError:
                 print("❌ Invalid input. Please enter a positive integer.")
+
+    # 4. Workers
+    if args.workers is None:
+        default_workers = 4
+        try:
+            val = input(f"\n[4/4] Number of parallel workers (Default: {default_workers}): ").strip()
+            args.workers = int(val) if val else default_workers
+        except ValueError:
+            args.workers = default_workers
+
     
     # 1. AUTH SETUP: Use GCP Credentials for Vertex AI
     # Ensure credentials file is set

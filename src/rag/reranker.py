@@ -2,7 +2,7 @@
 """
 Reranker for improving retrieval precision.
 
-Uses cross-encoder models or API-based reranking (Cohere).
+Uses local cross-encoder models for high-precision ranking.
 """
 
 import os
@@ -26,39 +26,24 @@ class Reranker:
     
     def __init__(
         self,
-        method: str = "cohere",  # "cohere" or "cross-encoder"
-        model: str = "rerank-english-v3.0",
+        method: str = "cross-encoder",  # "cross-encoder"
+        model: str = "cross-encoder/ms-marco-MiniLM-L6-v2",
     ):
         """
         Initialize reranker.
         
         Args:
-            method: Reranking method ("cohere" or "cross-encoder")
+            method: Reranking method ("cross-encoder")
             model: Model name
         """
         self.method = method
         self.model = model
         self.client = None
         
-        if method == "cohere":
-            self._init_cohere()
-        elif method == "cross-encoder":
+        if method == "cross-encoder":
             self._init_cross_encoder()
         else:
             raise ValueError(f"Unknown reranking method: {method}")
-    
-    def _init_cohere(self):
-        """Initialize Cohere client."""
-        try:
-            import cohere
-            api_key = os.environ.get("COHERE_API_KEY")
-            if api_key:
-                self.client = cohere.Client(api_key)
-                print(f"[OK] Cohere reranker initialized")
-            else:
-                print("[WARN] COHERE_API_KEY not set. Reranking disabled.")
-        except ImportError:
-            print("[WARN] Cohere not installed. Install: pip install cohere")
     
     def _init_cross_encoder(self):
         """Initialize cross-encoder model."""
@@ -89,47 +74,11 @@ class Reranker:
         if not self.client or not chunks:
             return chunks
         
-        if self.method == "cohere":
-            return self._rerank_cohere(query, chunks, top_k)
-        elif self.method == "cross-encoder":
+        if self.method == "cross-encoder":
             return self._rerank_cross_encoder(query, chunks, top_k)
         
         return chunks
     
-    def _rerank_cohere(
-        self,
-        query: str,
-        chunks: List[RetrievedChunk],
-        top_k: Optional[int],
-    ) -> List[RetrievedChunk]:
-        """Rerank using Cohere API."""
-        try:
-            # Prepare documents
-            documents = [chunk.display_text for chunk in chunks]
-            
-            # Rerank
-            response = self.client.rerank(
-                query=query,
-                documents=documents,
-                model=self.model,
-                top_n=top_k or len(chunks),
-            )
-            
-            # Reorder chunks based on rerank results
-            reranked = []
-            for result in response.results:
-                idx = result.index
-                chunk = chunks[idx]
-                # Update score with rerank score
-                chunk.score = result.relevance_score
-                reranked.append(chunk)
-            
-            print(f"[RERANK] Cohere reranked {len(reranked)} chunks")
-            return reranked
-            
-        except Exception as e:
-            print(f"[ERROR] Cohere reranking failed: {e}")
-            return chunks
     
     def _rerank_cross_encoder(
         self,
@@ -167,13 +116,13 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="Test Reranker")
-    parser.add_argument("--method", default="cohere", choices=["cohere", "cross-encoder"])
+    parser.add_argument("--method", default="cross-encoder", choices=["cross-encoder"])
     parser.add_argument("--model", help="Model name")
     
     args = parser.parse_args()
     
     # Test reranker initialization
-    reranker = Reranker(method=args.method, model=args.model or "rerank-english-v3.0")
+    reranker = Reranker(method=args.method, model=args.model or "cross-encoder/ms-marco-MiniLM-L6-v2")
     
     print(f"\n✅ Reranker initialized: {args.method}")
     print(f"Model: {reranker.model}")

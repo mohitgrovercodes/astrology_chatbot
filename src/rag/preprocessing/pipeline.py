@@ -420,17 +420,16 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python pipeline.py input.json
+  python pipeline.py
   python pipeline.py input.json --output-dir ./processed --source-book "BPHS"
-  python pipeline.py input.json --use-llm --skip-embedding
         """
     )
     
-    parser.add_argument("input", help="Input file (PDF or JSON)")
+    # Make input optional to allow interactive mode
+    parser.add_argument("input", nargs="?", help="Input file (PDF or JSON)")
     parser.add_argument("-o", "--output-dir", help="Directory for intermediate outputs")
-    parser.add_argument("-s", "--source-book", default="Brihat Parasara Hora Shastra",
-                       help="Name of the source book")
-    parser.add_argument("-t", "--tradition", choices=["vedic", "western"], default="vedic",
+    parser.add_argument("-s", "--source-book", help="Name of the source book")
+    parser.add_argument("-t", "--tradition", choices=["vedic", "western"], 
                        help="Astrology tradition")
     parser.add_argument("--use-llm", action="store_true",
                        help="Use LLM for enhanced analysis")
@@ -442,37 +441,140 @@ Examples:
                        help="Clear existing collection before inserting")
     
     args = parser.parse_args()
+
+    # ==========================================
+    # Interactive Mode
+    # ==========================================
+    input_file = args.input
+    source_book = args.source_book
+    tradition = args.tradition
+    output_dir = args.output_dir
     
-    # Create output directory if specified
-    if args.output_dir:
-        os.makedirs(args.output_dir, exist_ok=True)
+    print("\n" + "=" * 60)
+    print("🌟 Astrology RAG Pipeline Configurator 🌟")
+    print("=" * 60)
+
+    # 1. Input File
+    if not input_file:
+        # Check defaults
+        default_dir = Path("data/raw")
+        default_dir.mkdir(parents=True, exist_ok=True)
+        
+        candidates = list(default_dir.glob("*.pdf")) + list(default_dir.glob("*.json"))
+        
+        if candidates:
+            print(f"\nFound files in {default_dir}:")
+            for i, f in enumerate(candidates, 1):
+                print(f"  {i}. {f.name}")
+
+        while not input_file:
+            prompt = "\n[1/4] Enter input file path (PDF/JSON)"
+            if candidates:
+                prompt += f" (or enter number 1-{len(candidates)}): "
+            else:
+                prompt += ": "
+
+            val = input(prompt).strip().strip('"')
+            
+            # Check if user entered a number
+            if val.isdigit() and candidates:
+                idx = int(val) - 1
+                if 0 <= idx < len(candidates):
+                    input_file = str(candidates[idx])
+                    print(f"     Selected: {input_file}")
+                    break
+
+            if os.path.exists(val):
+                input_file = val
+            elif os.path.exists(default_dir / val):
+                 input_file = str(default_dir / val)
+            else:
+                print(f"❌ File not found: {val}")
+                input_file = None
+    
+    # 2. Source Book
+    if not source_book:
+        default_name = Path(input_file).stem.replace("_", " ").title()
+        print(f"\n[2/4] Enter Source Book Name (e.g., 'Jataka Parijata Vol 1')")
+        user_book = input(f"      Default [{default_name}]: ").strip()
+        source_book = user_book if user_book else default_name
+
+    # 3. Tradition
+    if not tradition:
+        print(f"\n[3/4] Select Astrology Tradition:")
+        print("      1. Vedic (Parasara/Jaimini)")
+        print("      2. Western (Tropical)")
+        while True:
+            choice = input("      Enter choice [1]: ").strip()
+            if choice == "1" or choice == "":
+                tradition = "vedic"
+                break
+            elif choice == "2":
+                tradition = "western"
+                break
+            elif choice.lower() in ["vedic", "western"]:
+                tradition = choice.lower()
+                break
+            else:
+                print("❌ Invalid choice.")
+    
+    # 3b. LLM Usage
+    use_llm_flag = args.use_llm
+    if not input_file: # Only interactive if we are in interactive mode
+        llm_choice = input(f"\n[3b/4] Use LLM for enhanced cleaning/enrichment? (Y/n) [y]: ").lower().strip()
+        if llm_choice == 'n':
+            use_llm_flag = False
+        else:
+            use_llm_flag = True
+    elif use_llm_flag:
+        use_llm_flag = True
+    
+    # 4. Output Dir
+    if not output_dir:
+        default_out = "processed_data"
+        user_out = input(f"\n[4/4] Output Directory (Default: {default_out}): ").strip()
+        output_dir = user_out if user_out else default_out
+
+    # Create output directory
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+    
+    print("\n" + "-" * 60)
+    print(f"✅ Ready to process:")
+    print(f"   File:      {input_file}")
+    print(f"   Book:      {source_book}")
+    print(f"   Tradition: {tradition}")
+    print(f"   Output:    {output_dir}")
+    print("-" * 60 + "\n")
     
     # Run pipeline
     pipeline = PreprocessingPipeline(
-        source_book=args.source_book,
-        tradition=args.tradition,
-        use_llm=args.use_llm,
-        output_dir=args.output_dir,
+        source_book=source_book,
+        tradition=tradition,
+        use_llm=use_llm_flag,
+        output_dir=output_dir,
     )
     
     result = pipeline.run_full_pipeline(
-        args.input,
+        input_file,
         skip_embedding=args.skip_embedding,
         skip_vectordb=args.skip_vectordb,
         reset_collection=args.reset_collection,
     )
     
     # Save final output
-    input_path = Path(args.input)
-    if args.output_dir:
-        output_path = Path(args.output_dir) / f"{input_path.stem}_final.json"
+    input_path = Path(input_file)
+    final_filename = f"{input_path.stem}_final.json"
+    
+    if output_dir:
+        output_path = Path(output_dir) / final_filename
     else:
-        output_path = input_path.parent / f"{input_path.stem}_final.json"
+        output_path = input_path.parent / final_filename
     
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(result.model_dump(), f, ensure_ascii=False, indent=2)
     
-    print(f"\n[OK] Final output: {output_path}")
+    print(f"\n[OK] Final output saved to: {output_path}")
 
 
 if __name__ == "__main__":

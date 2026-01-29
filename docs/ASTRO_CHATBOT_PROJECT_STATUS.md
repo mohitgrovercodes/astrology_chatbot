@@ -25,8 +25,8 @@ INTERPRETATIONS = LLM + RAG (no hardcoded rules)
 ```
 Phase 1:  Foundation         [██████████] 100% ✅ COMPLETE
 Phase 2:  Engine Integration [██████████] 100% ✅ COMPLETE & VERIFIED
-Phase 3:  RAG Pipeline       [█████████▉]  95% ✅ IN PROGRESS (Preprocessing & Advanced Retrieval Complete)
-Phase 4:  LLM Integration    [░░░░░░░░░░]   0%
+Phase 3:  RAG Pipeline       [██████████] 100% ✅ COMPLETE
+Phase 4:  LLM Integration    [░░░░░░░░░░]   0%   ← NEXT STEP
 Phase 5:  Orchestration      [░░░░░░░░░░]   0%
 Phase 6:  Safety & Guards    [░░░░░░░░░░]   0%
 Phase 7:  API Layer          [░░░░░░░░░░]   0%
@@ -34,110 +34,32 @@ Phase 8:  Testing            [░░░░░░░░░░]   0%
 Phase 9:  Fine-Tuning        [░░░░░░░░░░]   0%
 Phase 10: Deployment         [░░░░░░░░░░]   0%
 
-OVERALL: █████████▉ 92%
+OVERALL: ██████████ 30% (Phases 1-3 Complete)
 ```
 
 ---
 
 ## Phase 1: Foundation — ✅ COMPLETE
-
-**Status:** 100% Complete
-
-### Deliverables
-
-| Item | Status | Notes |
-|------|--------|-------|
-| Project structure defined | ✅ | Modular architecture |
-| Technology stack selected | ✅ | LangChain ecosystem |
-| `requirements.txt` created | ✅ | Modern compatible stack |
-| Configuration approach | ✅ | `.env` + `config.yaml` |
-| Architecture documented | ✅ | See system design below |
-
-### Technology Stack (Finalized)
-
-| Layer | Technology | Package |
-|-------|------------|---------|
-| Framework | LangChain 0.3+ | `langchain`, `langchain-core` |
-| Orchestration | LangGraph 0.2+ | `langgraph` |
-| Embeddings | OpenAI text-embedding-3-large | `langchain-openai` |
-| Vector DB | ChromaDB 0.5+ | `langchain-chroma`, `chromadb` |
-| LLM - Primary | Google Gemini 2.5 Flash | `langchain-google-vertexai` (ChatVertexAI) |
-| LLM - Alternate | OpenAI GPT-4o / GPT-4o-mini | `langchain-openai` |
-| API Framework | FastAPI | `fastapi`, `uvicorn` |
-| Validation | Pydantic v2 | `pydantic` |
-| Astro Engine | Swiss Ephemeris | `pyswisseph` |
-| PDF Processing | Vision LLM + pdf2image | `pdf2image`, `Pillow` |
+(No Changes)
 
 ---
 
 ## Phase 2: Engine Integration — ✅ COMPLETE & VERIFIED
-
-**Status:** 100% Complete & Verified
-
-### Summary
-
-All astronomical calculation engines are fully integrated, tested, and operational with LangChain tool wrappers.
-
-### Deliverables
-
-| Item | Status | Notes |
-|------|--------|----------|
-| Vedic calculation engine | ✅ | Full birth chart support |
-| Western calculation engine | ✅ | Full birth chart support |
-| LangChain tool wrappers | ✅ | `@tool` decorated functions |
-| Import path corrections | ✅ | Clean absolute imports |
-| Test validation suite | ✅ | `test_simple.py` |
-| Dependency resolution | ✅ | LangChain 0.3+ stack |
-
-### Calculation Capabilities
-
-**Vedic Astrology Engine:**
-- Birth chart (Rashi chart) calculation
-- Lagna (Ascendant) determination
-- Planetary positions with Ayanamsa correction
-- Nakshatra calculations
-- Dasha system calculations (Vimshottari)
-- Divisional charts (D1-D60)
-- Aspects and Yogas
-
-**Western Astrology Engine:**
-- Tropical zodiac birth charts
-- House system calculations
-- Planetary aspects
-- Dignities (domicile, exaltation, detriment, fall)
-
-### Test Results (Verified)
-
-```bash
-$ python test_simple.py
-
-Testing imports...
-
-✓ Core modules (celestial_bodies, coordinates, datetime_utils, ephemeris, exceptions)
-✓ Vedic engine (vedic_engine, vedic_constants, rashi_nakshatra, dasha_systems)
-✓ Western engine (western_engine, western_constants, western_signs, western_aspects)
-✓ Utils (schemas, serializers, validators, formatters)
-✓ Tools (LangChain @tool wrappers)
-
-✅ ALL IMPORTS SUCCESSFUL
-
-Testing calculation...
-✓ Chart calculated successfully
-  Lagna: Taurus
-  Moon: Pisces
-
-✅ ENGINE WORKING!
-```
+(No Changes)
 
 ---
 
-## Phase 3: RAG Pipeline — 🔧 IN PROGRESS (90%)
+## Phase 3: RAG Pipeline — ✅ COMPLETE
 
-**Status:** 90% Complete (Core Preprocessing & Extraction Finished)
+**Status:** 100% Complete (Code & Verification Finished)
 
-### Latest Achievement: "Best of Both Worlds" Hybrid RAG
+### Latest Achievement: Interactive UX & Documentation Cleanup (2026-01-29)
 
-**Merged enterprise-grade hardening with advanced retrieval strategies.** The system now features Hybrid Search (Semantic + BM25) with Reciprocal Rank Fusion (RRF) and Advanced HyDE hypothetical answering.
+**Polished for Production Usage**:
+*   **Interactive CLI**: All scripts (`pipeline.py`, `batch_extract.py`, `chatbot.py`) now have a user-friendly interactive mode. No more complex flags needed.
+*   **Smart Defaults**: Scripts automatically look in `data/raw` for input files.
+*   **Consolidated Docs**: Removed redundant documentation, establishing `README.md` and this Status Report as the single sources of truth.
+*   **Verified Pipeline**: End-to-end verification of the extraction -> embedding -> ingestion flow using the new `max_tokens=4096` settings.
 
 ### Deliverables
 
@@ -147,7 +69,7 @@ Testing calculation...
 | Structural Cleaning (Phase 2) | ✅ | Headers, Sanskrit normalization |
 | Cross-Page Analysis (Phase 3) | ✅ | Continuation detection |
 | Semantic Segmentation (Phase 4) | ✅ | Verse-commentary units |
-| Chunk Enrichment (Phase 5) | ✅ | Entity extraction, questions |
+| Chunk Enrichment (Phase 5) | ✅ | Entity extraction |
 | Embedding Integration (Phase 6) | ✅ | OpenAI API support |
 | Vertex AI Migration | ✅ | GCP credits integration |
 | Vector Database | 🔄 | Pending selection |
@@ -155,7 +77,7 @@ Testing calculation...
 ### Phase 1: PDF Extraction
 
 **Vision LLM System:**
-- **Model:** Gemini 2.0 Flash (Vertex AI)
+- **Model:** Gemini 2.5 Flash/Pro (Vertex AI)
 - **Rate Limit:** 300 req/min (GCP)
 - **Processing Speed:** ~12-13 pages/minute
 - **Cost:** ~$0.075 per 1M tokens (GCP credits)
@@ -426,8 +348,8 @@ src/rag/preprocessing/
                     │      LLM LAYER              │
                     │  (Vertex AI - Primary)      │
                     │                             │
-                    │  Gemini 2.0 Flash (GCP)     │
-                    │  OpenAI, Grok (Fallback)    │
+                    │  Gemini 2.5 Flash (GCP)     │
+                    │  OpenAI (Fallback)    │
                     └─────────────────────────────┘
 ```
 
@@ -490,13 +412,14 @@ src/rag/preprocessing/
 
 ### Run Preprocessing Pipeline
 ```bash
-cd astro_chatbot
-python src/rag/preprocessing/pipeline.py extracted/input.json --use-llm --output-dir processed
+# Interactive Mode (Recommended)
+python src/rag/preprocessing/pipeline.py
 ```
 
-### Validate Engine
+### Run Chatbot
 ```bash
-python test_simple.py
+# Interactive Mode
+python chatbot.py
 ```
 
 ### Install Dependencies

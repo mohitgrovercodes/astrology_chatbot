@@ -88,23 +88,19 @@ GOOGLE_APPLICATION_CREDENTIALS=path/to/google_credentials.json
 
 ### 3. Run Complete Pipeline
 
+### 3. Run Complete Pipeline
+(No flags needed - it will ask you for details!)
+
 ```bash
-# Extract and process PDF (Phases 1-7)
-python src/rag/preprocessing/pipeline.py input.pdf --output-dir preprocessing_output
+# Interactive mode (Recommended)
+python src/rag/preprocessing/pipeline.py
+```
 
-# Or run phases individually:
+### 4. Run Chatbot 🎉
 
-# Phase 1: Extract PDF
-python batch_extract.py book.pdf --start 1 --end 99
-
-# Phases 2-6: Process
-python run_preprocessing_phases.py --input extraction_output/page_1.json
-
-# Phase 6: Embed
-python src/rag/preprocessing/embedder.py preprocessing_output/enriched.json
-
-# Phase 7: Build vector DB
-python src/rag/preprocessing/vector_db_builder.py preprocessing_output/embedded.json --reset
+```bash
+# Interactive mode (Recommended)
+python chatbot.py
 ```
 
 ### 4. Run Chatbot 🎉
@@ -171,7 +167,7 @@ python src/rag/retriever.py "Explain Gulika" --hyde --expand
 python src/rag/rag_engine.py "What is the significance of the 10th house?"
 
 # Custom model
-python src/rag/rag_engine.py "Jupiter in Aries" --model gemini-1.5-pro
+python src/rag/rag_engine.py "Jupiter in Aries" --model gemini-2.5-flash
 ```
 
 ### Collection Management

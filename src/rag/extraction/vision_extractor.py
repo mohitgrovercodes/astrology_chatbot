@@ -1,5 +1,5 @@
 """
-Vision LLM Extractor using Google Gemini 1.5 Pro.
+Vision LLM Extractor using Google Gemini 2.5 Flash/Lite/Pro
 This module handles the actual extraction of content from page images.
 """
 
@@ -78,8 +78,8 @@ class ExtractionConfig:
     enable_auto_upgrade: bool = True  # Enable automatic model upgrading
     
     # Hybrid Strategy: Use different models based on page type
-    enable_hybrid_strategy: bool = True  # Use Flash-Lite for text_heavy, Flash for table_heavy
-    hybrid_table_model: str = "gemini-2.5-flash"  # Model for table-heavy pages
+    enable_hybrid_strategy: bool = True  # Use Flash-Lite for text_heavy, Pro for table_heavy
+    hybrid_table_model: str = "gemini-2.5-pro"  # Model for table-heavy pages
     
     # Content Quality Validation
     enable_content_validation: bool = True  # Validate content blocks and adjust confidence

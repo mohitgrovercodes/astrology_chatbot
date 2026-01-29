@@ -40,7 +40,7 @@ class SemanticSegmenter:
     """
     
     # Maximum tokens per unit (optimized for RAG retrieval accuracy)
-    MAX_TOKENS_PER_UNIT = 1000
+    MAX_TOKENS_PER_UNIT = 800
     
     # Approximate chars per token for English + Sanskrit mix
     CHARS_PER_TOKEN = 4

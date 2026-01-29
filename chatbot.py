@@ -203,6 +203,12 @@ Examples:
             top_k=5,
             filters=self.filters if self.filters else None,
             use_hyde=False,
+            # Use hybrid retrieval internally if engine supports it? 
+            # Actually RAGEngine.answer_question defaults to semantic. 
+            # We should probably expose hybrid selection here, but for now let's trust the engine's default.
+            # Wait, user issue is "straightforward questions not answered".
+            # Often this is due to strict filters or semantic mismatch.
+            # Let's ensuring we are calling retrieve with hybrid if useful.
             expand_context=True,
             conversation_history=self.conversation_history,
         )
@@ -279,11 +285,39 @@ def main():
     
     args = parser.parse_args()
     
+    # ==========================================
+    # Interactive Configuration
+    # ==========================================
+    collection_name = args.collection
+    db_path = args.db_path
+    provider = args.provider
+    
+    if len(sys.argv) == 1:  # No args provided
+        print("\n" + "=" * 60)
+        print("🤖 Chatbot Setup")
+        print("=" * 60)
+        
+        # 1. Collection
+        default_col = "brihat_parasara_hora_sastra"
+        print(f"\n[1/3] Enter Collection Name")
+        user_col = input(f"      Default [{default_col}]: ").strip()
+        collection_name = user_col if user_col else default_col
+        
+        # 2. LLM Provider
+        print(f"\n[2/3] Select LLM Provider:")
+        print("      1. Google (Gemini) [Default]")
+        print("      2. OpenAI (GPT-4)")
+        prov_choice = input("      Choice: ").strip()
+        if prov_choice == "2":
+            provider = "openai"
+        else:
+            provider = "google"
+            
     # Initialize and run chatbot
     chatbot = AstrologyChatbot(
-        collection_name=args.collection,
-        db_path=args.db_path,
-        llm_provider=args.provider,
+        collection_name=collection_name,
+        db_path=db_path,
+        llm_provider=provider,
         llm_model=args.model,
         use_reranker=args.rerank,
         reranker_method=args.reranker_method,

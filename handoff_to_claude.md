@@ -1,66 +1,51 @@
 # Handoff to Claude
 
-## 🚀 Project Status: Preprocessing Pipeline Modernized (89% Overall)
+## 🚀 Project Status: RAG Pipeline Complete (100% Phase 3)
 
-We have completed the modernization of the text preprocessing pipeline (Phases 2-6) and hardened the extraction pipeline (Phase 1) for **Vertex AI**.
+We have verified the full pipelines, simplified the user experience with interactive CLIs, and consolidated all documentation. The system is ready for Phase 4 (LLM Integration).
 
 ### ✅ Recent Accomplishments (Critical for Context)
 
-1.  **Vertex AI Integration & Auth Fixes**:
-    *   **Prioritized Vertex AI**: `src/llm/factory.py` now prefers `ChatVertexAI` over AI Studio.
-    *   **Fixed Authentication**: Removed `google_api_key` parameter when using Vertex AI (it relies on ADC properly now).
-    *   **SDK Update**: Updated `src/rag/extraction/vision_extractor.py` to use `from google import genai` and set `GOOGLE_APPLICATION_CREDENTIALS`.
-    *   **Configuration**: Initialized Vertex with Project ID `445806945384` and location `us-central1`.
+1.  **UX & Interactive CLI Overhaul** (2026-01-29):
+    *   **Interactive Defaults**: Refactored `pipeline.py`, `batch_extract.py`, and `run_preprocessing_phases.py` to be fully interactive.
+    *   **Smart Input Scanning**: Scripts now auto-scan `data/raw` for input files and present a numbered list.
+    *   **Consolidated Docs**: Deleted redundant documentation (`QUICKSTART.md`, old status files) to reduce noise. `README.md` is now the single source of truth for usage.
 
-2.  **LLM Factory Cleanup**:
-    *   Removed `ChatAnthropic` and `ChatXAI` dependencies to solve import errors.
-    *   Standardized on `gemini-2.5-flash` for all tasks (extraction and preprocessing).
+2.  **Pipeline Verification**:
+    *   Verified the full RAG pipeline (Extraction -> Segmentation -> Embedding -> ChromaDB).
+    *   Standardized LLM `max_tokens` to 4096 across all calls.
+    *   Fixed OpenAI factory integration in `src/llm/factory.py`.
 
-3.  **Method Call Standardisation**:
-    *   Fixed `AttributeError` in preprocessing modules (`structural_cleaner`, `page_analyzer`, `chunk_enricher`) by changing raw `.generate_content()` calls to LangChain's `.invoke()`.
+3.  **Vertex AI Integration**:
+    *   Prioritized Vertex AI (`ChatVertexAI`) for all Google models.
+    *   Standardized on `gemini-2.5-flash` for extraction and cleaning.
 
 ### 🚧 Immediate Next Steps (To-Do)
 
-The immediate goal is to finish **Phase 2: Pipeline Refactoring** from the `implementation_plan.md`.
+The RAG Pipeline (Phase 3) is **COMPLETE**. The immediate next steps are to move to **Phase 4: LLM Integration & Orchestration**.
 
-1.  **Verification**: Confirm successful run of the pipeline with the new Vertex AI auth settings:
-    ```bash
-    python run_preprocessing_phases.py --input extraction_output/batch_result_pages_100-110.json --use-llm
-    ```
-2.  **Create Configuration Module**: Create `src/rag/preprocessing/config.py` to centralize settings (currently scattered in args and init methods).
-3.  **Update Schemas**: Modify `src/rag/preprocessing/schemas.py` to natively accept the "Rich" JSON output from `VisionExtractor` (removing compatibility layers).
-4.  **Parallelization**: Implement `ThreadPoolExecutor` in `src/rag/preprocessing/structural_cleaner.py` to match the performance of other modules.
+1.  **Monitor Large Ingestion**: The user is likely running a large batch ingestion of "Jataka Parijata" or "BPHS". Verify the `data/vectordb` size and quality after this run.
+2.  **Phase 4 Kickoff (Chatbot Personality)**:
+    *   Design the `SystemPrompt` for the Astrologer persona (Vedic vs Western styles).
+    *   Implement "Chat History" memory in `RAGEngine` (currently it's stateless).
+3.  **Vector Store Inspection**: Use the `chatbot.py` /filter commands to verify that retrieving "Mars in 7th house" actually returns relevant chunks from the new ingestion.
 
 ### 🤖 Guidance for Claude (Instruction for the Next Agent)
 
-When you take over, please prioritize these architectural principles and technical details:
-
-1.  **Vertex AI Purity**:
-    *   Do **NOT** use `google_api_key` for Vertex AI. The `LLMFactory` is configured to use ADC.
-    *   The project ID is `445806945384` and location is `us-central1`.
-    *   Always use `ChatVertexAI` from `langchain_google_vertexai`.
-
-2.  **SDK Transition**:
-    *   We are moving to the new `google.genai` SDK. In `vision_extractor.py`, use `from google import genai`.
-    *   Be aware that `genai.configure` is from the old `google-generativeai` package. The new SDK uses a `Client` object, though for now, we've just updated the imports and env vars.
-
-3.  **Pipeline Philosophy**:
-    *   Transition from **File-based** to **In-memory**.
-    *   The `implementation_plan.md` is your North Star. Follow the "Phase 2: Pipeline Refactoring" steps.
-
-4.  **Astrology Context**:
-    *   This is a RAG system for Vedic Astrology. Accuracy in Sanskrit extraction and preservation of verse numbers (`॥ 1.1 ॥`) is critical.
-    *   Avoid hallucinations; if the OCR is bad, we retry with a better model (Gemini Pro).
+1.  **Trust `README.md`**: It has been updated with the latest interactive commands.
+2.  **Check `data/raw`**: This is where user files should go. The scripts expect it.
+3.  **Interactive First**: When asking the user to run commands, prefer the simple interactive ones (e.g., `python chatbot.py`) over long flag-based commands.
+4.  **Vertex AI is King**: Continue using `ChatVertexAI` via the `LLMFactory`. Do not hardcode API keys.
 
 ### 🛠️ Key Context Files (Recommended Ingestion)
 
 1.  **Handoff Documentation**:
-    *   [handoff_to_claude.md](file:///C:/Users/mogr1/.gemini/antigravity/brain/36d443ce-b6ea-4404-84bb-535dba28f718/handoff_to_claude.md)
-    *   [implementation_plan.md](file:///C:/Users/mogr1/.gemini/antigravity/brain/36d443ce-b6ea-4404-84bb-535dba28f718/implementation_plan.md)
-    *   [task.md](file:///C:/Users/mogr1/.gemini/antigravity/brain/36d443ce-b6ea-4404-84bb-535dba28f718/task.md)
+    *   [handoff_to_claude.md](file:///d:/AI/IMGProjects/astro_chatbot/astro_chatbot/handoff_to_claude.md)
+    *   [docs/ASTRO_CHATBOT_PROJECT_STATUS.md](file:///d:/AI/IMGProjects/astro_chatbot/astro_chatbot/docs/ASTRO_CHATBOT_PROJECT_STATUS.md) (Master Status)
+    *   [README.md](file:///d:/AI/IMGProjects/astro_chatbot/astro_chatbot/README.md) (Usage Guide)
 
 2.  **Core Codebase**:
-    *   [factory.py](file:///d:/AI/IMGProjects/astro_chatbot/astro_chatbot/src/llm/factory.py)
-    *   [vision_extractor.py](file:///d:/AI/IMGProjects/astro_chatbot/astro_chatbot/src/rag/extraction/vision_extractor.py)
-    *   [pipeline.py](file:///d:/AI/IMGProjects/astro_chatbot/astro_chatbot/src/rag/preprocessing/pipeline.py)
-    *   [schemas.py](file:///d:/AI/IMGProjects/astro_chatbot/astro_chatbot/src/rag/preprocessing/schemas.py)
+    *   [pipeline.py](file:///d:/AI/IMGProjects/astro_chatbot/astro_chatbot/src/rag/preprocessing/pipeline.py) (Orchestrator)
+    *   [batch_extract.py](file:///d:/AI/IMGProjects/astro_chatbot/astro_chatbot/batch_extract.py) (Extraction Entry)
+    *   [chatbot.py](file:///d:/AI/IMGProjects/astro_chatbot/astro_chatbot/chatbot.py) (Main Interface)
+

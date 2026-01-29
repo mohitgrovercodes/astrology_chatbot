@@ -79,7 +79,7 @@ Always be respectful of the sacred nature of Vedic astrology."""
         temperature: float = 0.3,
         retriever: Optional[AstrologyRetriever] = None,
         use_reranker: bool = False,
-        reranker_method: str = "cohere",
+        reranker_method: str = "cross-encoder",
     ):
         """
         Initialize RAG engine.
@@ -92,7 +92,7 @@ Always be respectful of the sacred nature of Vedic astrology."""
             temperature: LLM temperature
             retriever: Optional pre-initialized retriever
             use_reranker: Enable reranking for better precision
-            reranker_method: 'cohere' or 'cross-encoder'
+            reranker_method: 'cross-encoder'
         """
         # Initialize retriever
         self.retriever = retriever or AstrologyRetriever(
@@ -106,7 +106,7 @@ Always be respectful of the sacred nature of Vedic astrology."""
             provider=llm_provider,
             model=llm_model,
             temperature=temperature,
-            max_tokens=2048,
+            max_tokens=4096,
             use_rate_limiting=True,
         )
         
@@ -180,7 +180,7 @@ Always be respectful of the sacred nature of Vedic astrology."""
         Returns:
             RAGResponse with answer and sources
         """
-        print(f"\n[QUERY] {query}")
+        print(f"\\n[QUERY] {query}")
         
         # Expand query for better recall
         query_variations = self._expand_query(query)
@@ -191,9 +191,10 @@ Always be respectful of the sacred nature of Vedic astrology."""
         all_chunks = []
         for q in query_variations:
             if use_hyde:
-                chunks = self.retriever.retrieve_with_hyde(q, top_k=top_k, filters=filters)
+                chunks = self.retriever.retrieve_with_advanced_hyde(q, top_k=top_k, filters=filters, llm=self.llm)
             else:
-                # Use hybrid search by default for better quality
+                # Use hybrid search by default based on strict feedback
+                # This fixes the issue where simple keyword matches were missed by pure vector search
                 chunks = self.retriever.retrieve_hybrid(q, top_k=top_k, filters=filters)
             all_chunks.extend(chunks)
         
@@ -320,7 +321,7 @@ def main():
     parser.add_argument("query", nargs="?", help="Question to ask")
     parser.add_argument("--collection", default="brihat_parasara_hora_sastra", help="Collection name")
     parser.add_argument("--top-k", type=int, default=5, help="Number of chunks to retrieve")
-    parser.add_argument("--model", default="gemini-2.0-flash-exp", help="LLM model")
+    parser.add_argument("--model", default="gemini-2.5-flash", help="LLM model")
     parser.add_argument("--hyde", action="store_true", help="Use HyDE retrieval")
     parser.add_argument("--no-expand", action="store_true", help="Don't expand context")
     parser.add_argument("--rerank", action="store_true", help="Enable reranking")
