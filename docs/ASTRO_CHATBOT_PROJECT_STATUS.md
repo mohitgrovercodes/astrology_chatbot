@@ -3,8 +3,8 @@
 > **Project Name:** Astrology AI Chatbot  
 > **Project Type:** Production-Grade AI Conversational System  
 > **Started:** January 2025  
-> **Current Phase:** Phase 3 - RAG Pipeline  
-> **Overall Progress:** 92%
+> **Current Phase:** Phase 4 - LLM Integration  
+> **Overall Progress:** 40%
 
 ---
 
@@ -26,7 +26,7 @@ INTERPRETATIONS = LLM + RAG (no hardcoded rules)
 Phase 1:  Foundation         [██████████] 100% ✅ COMPLETE
 Phase 2:  Engine Integration [██████████] 100% ✅ COMPLETE & VERIFIED
 Phase 3:  RAG Pipeline       [██████████] 100% ✅ COMPLETE
-Phase 4:  LLM Integration    [░░░░░░░░░░]   0%   ← NEXT STEP
+Phase 4:  LLM Integration    [██░░░░░░░░]  20%   ← IN PROGRESS
 Phase 5:  Orchestration      [░░░░░░░░░░]   0%
 Phase 6:  Safety & Guards    [░░░░░░░░░░]   0%
 Phase 7:  API Layer          [░░░░░░░░░░]   0%
@@ -34,7 +34,7 @@ Phase 8:  Testing            [░░░░░░░░░░]   0%
 Phase 9:  Fine-Tuning        [░░░░░░░░░░]   0%
 Phase 10: Deployment         [░░░░░░░░░░]   0%
 
-OVERALL: ██████████ 30% (Phases 1-3 Complete)
+OVERALL: ████░░░░░░ 40% (Phases 1-3 Complete)
 ```
 
 ---
@@ -254,8 +254,9 @@ src/rag/preprocessing/
 2. ✅ ~~Text Cleaning & Normalization~~ - COMPLETE
 3. ✅ ~~Chunking Strategy~~ - COMPLETE (semantic units)
 4. ✅ ~~Vertex AI Migration~~ - COMPLETE
-5. 🔄 **Vector Database Integration** - Choose and implement (Pinecone/Qdrant/Weaviate)
-6. **Retrieval Testing** - Validate retrieval quality
+5. ✅ ~~Vector Database Integration~~ - COMPLETE (ChromaDB + OpenAI Embeddings)
+6. ✅ ~~Retrieval Testing~~ - COMPLETE (Debug Tool + Hybrid/HyDE Strategy)
+7. ✅ ~~Query Router~~ - COMPLETE (Level 2 RAG Router Implemented)
 
 ---
 
@@ -436,22 +437,14 @@ gcloud services enable aiplatform.googleapis.com --project=astro-ocr
 
 ## How to Continue Development
 
-**To complete Phase 3 (RAG Pipeline):**
+**Phase 3 (RAG Pipeline) is COMPLETE.**
+*   **Vector Database:** Selected **ChromaDB** (Local Persisted) for development speed and cost efficiency.
+*   **Status:** Ingestion, Retrieval, and Reranking are fully operational.
 
-1. **Choose Vector Database:**
-   - Pinecone (cloud, scalable)
-   - Qdrant (open-source, fast)
-   - Weaviate (feature-rich)
-
-2. **Implement VectorDB Integration:**
-   - Upsert enriched chunks
-   - Test retrieval with metadata filtering
-   - Evaluate retrieval quality
-
-3. **Begin Phase 4 (LLM Integration):**
-   - Multi-provider LLM factory
-   - Prompt engineering
-   - Response synthesis
+**Next Immediate Steps (Phase 4):**
+1.  **Refine LLM Persona:** Develop system prompts that speak like an expert astrologer (respectful, traditional, yet clear).
+2.  **Orchestration (LangGraph):** Build the "Brain" that decides when to Calculate vs. Retrieve vs. Clarify.
+3.  **Chat History:** Ensure multi-turn context awareness (e.g., "What about for Mars?").
 
 ---
 
@@ -466,6 +459,6 @@ gcloud services enable aiplatform.googleapis.com --project=astro-ocr
 
 ---
 
-**Status:** ✅ Phase 3 RAG Pipeline 95% Complete  
+**Status:** ✅ Phase 3 RAG Pipeline 100% Complete  
 **All Systems:** Operational  
-**Next Action:** Finalize Vector Database persistent storage (ChromaDB persistence or Cloud alternative)
+**Next Action:** Begin Phase 4: LLM Integration & Orchestration (LangGraph)
