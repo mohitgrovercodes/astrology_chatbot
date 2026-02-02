@@ -37,10 +37,10 @@ class NakshatraState(TypedDict):
     user_profile: Optional[Dict]
     authenticated: bool
     
-    intent: Optional[str]  # CHITCHAT | NEEDS_CALCULATION | NEEDS_RAG
-    confidence: float
     intent_reasoning: str
     cached: bool
+    detected_language: str  # 'en', 'hi', 'ta', etc.
+    original_query: str     # Keep original for final response
     
     # Calculation results (for PREDICTION flow)
     chart_data: Optional[Dict]  # Birth chart
@@ -114,6 +114,7 @@ class EnhancedLangGraphOrchestrator:
         
         # Nodes
         workflow.add_node("authenticate", self._authenticate_node)
+        workflow.add_node("detect_language", self._detect_language_node)
         workflow.add_node("classify_intent", self._classify_intent_node)
         workflow.add_node("handle_chitchat", self._handle_chitchat_node)
         workflow.add_node("handle_calculation_only", self._handle_calculation_only_node)
@@ -125,7 +126,8 @@ class EnhancedLangGraphOrchestrator:
         workflow.set_entry_point("authenticate")
         
         # Edges
-        workflow.add_edge("authenticate", "classify_intent")
+        workflow.add_edge("authenticate", "detect_language")
+        workflow.add_edge("detect_language", "classify_intent")
         
         # 4-way conditional routing
         workflow.add_conditional_edges(
@@ -185,6 +187,36 @@ class EnhancedLangGraphOrchestrator:
         self.user_manager.update_last_active(state['user_id'])
         
         print(f"[AUTH] [SUCCESS] Authenticated: {user_profile.name}")
+        return state
+
+    def _detect_language_node(self, state: NakshatraState) -> NakshatraState:
+        """Node 1.5: Detect query language."""
+        query = state['query']
+        print(f"[LANG] Detecting language for: '{query[:30]}...'")
+        
+        # Use LLM for robust detection (handles Hinglish/Tamilish better than regex)
+        detection_prompt = f"""Identify the language of the following text. 
+Return ONLY the ISO 639-1 code (e.g., 'en', 'hi', 'ta').
+If it's multi-lingual (like Hinglish), return the primary language or 'hi'.
+Text: "{query}"
+Language Code:"""
+        
+        try:
+            response = self.llm.invoke(detection_prompt)
+            lang = response.content.strip().lower()[:2] if hasattr(response, 'content') else str(response).strip().lower()[:2]
+            
+            # Support known codes, default to 'en'
+            if lang not in ['en', 'hi', 'ta', 'te', 'mr', 'bn', 'gu', 'kn', 'ml']:
+                lang = 'en'
+                
+            state['detected_language'] = lang
+            state['original_query'] = query
+            print(f"[LANG] Detected: {lang}")
+        except Exception as e:
+            print(f"[LANG] Detection error: {e}")
+            state['detected_language'] = 'en'
+            state['original_query'] = query
+            
         return state
     
     def _classify_intent_node(self, state: NakshatraState) -> NakshatraState:
@@ -408,7 +440,8 @@ Provide a concise answer:"""
             knowledge_chunks = self.hybrid_retriever.retrieve(
                 query=retrieval_query,
                 intent="RAG_WITH_CALCULATION",
-                top_k=5
+                top_k=5,
+                language=state.get('detected_language', 'en')
             )
             
             state['knowledge_chunks'] = knowledge_chunks
@@ -422,7 +455,8 @@ Provide a concise answer:"""
                     dasha_data=state.get('dasha_data', {}),
                     transit_data=state.get('transit_data', {}),
                     knowledge_chunks=knowledge_chunks,
-                    user_profile=user_profile
+                    user_profile=user_profile,
+                    language=state.get('detected_language', 'en')
                 )
             else:
                 prompt = self.prompt_builder.build_prompt(
@@ -430,7 +464,8 @@ Provide a concise answer:"""
                     intent="RAG_WITH_CALCULATION",
                     user_profile=state['user_profile'],
                     knowledge_chunks=knowledge_chunks,
-                    conversation_history=state.get('conversation_history', [])
+                    conversation_history=state.get('conversation_history', []),
+                    language=state.get('detected_language', 'en')
                 )
             
             # Step 4: Generate
@@ -464,7 +499,8 @@ Provide a concise answer:"""
             knowledge_chunks = self.hybrid_retriever.retrieve(
                 query=state['query'],
                 intent="RAG_ONLY",
-                top_k=5
+                top_k=5,
+                language=state.get('detected_language', 'en')
             )
             
             state['knowledge_chunks'] = knowledge_chunks
@@ -474,7 +510,8 @@ Provide a concise answer:"""
             prompt = self._build_theory_prompt(
                 query=state['query'],
                 knowledge_chunks=knowledge_chunks,
-                user_profile=state['user_profile']
+                user_profile=state['user_profile'],
+                language=state.get('detected_language', 'en')
             )
             
             # Step 3: Generate response with LLM
@@ -492,8 +529,19 @@ Provide a concise answer:"""
         
         return state
     
-    def _build_theory_prompt(self, query: str, knowledge_chunks: list, user_profile: dict) -> str:
+    def _build_theory_prompt(self, query: str, knowledge_chunks: list, user_profile: dict, language: str = "en") -> str:
         """Build prompt for general astrology theory explanations."""
+        
+        # Get persona based on language
+        try:
+            from src.ai.personas import get_persona
+            persona = get_persona(user_profile.get('preferred_system', 'vedic'))
+            system_prompt = persona.get_system_prompt(
+                user_name=user_profile.get('name', 'User'),
+                language=language
+            )
+        except:
+            system_prompt = "You are an expert Vedic astrologer explaining astrological concepts."
         
         # Format knowledge context
         context = "\n\n".join([
@@ -514,6 +562,8 @@ USER'S QUESTION: "{query}"
 RELEVANT KNOWLEDGE FROM CLASSICAL TEXTS:
 {context}
 
+{system_prompt}
+
 INSTRUCTIONS:
 1. Provide a clear, educational explanation of the astrological concept
 2. Use classical Vedic astrology principles
@@ -521,6 +571,7 @@ INSTRUCTIONS:
 4. Reference the classical texts when possible
 5. Keep the tone professional but accessible
 6. This is a GENERAL explanation, not specific to any person's chart
+7. Respond entirely in {language}
 
 Provide a detailed explanation:"""
         
@@ -546,8 +597,10 @@ Provide a detailed explanation:"""
         chart_data: Dict,
         dasha_data: Dict,
         transit_data: Dict,
+        transit_data: Dict,
         knowledge_chunks: List,
-        user_profile: Dict
+        user_profile: Dict,
+        language: str = "en"
     ) -> str:
         """
         Build personalized prediction prompt with REAL chart context.
@@ -571,8 +624,19 @@ Provide a detailed explanation:"""
         mars_transit = transit_data.get('transits', {}).get('Mars', 'Unknown')
         transit_date = transit_data.get('date', 'current')
         
+        # Get persona based on language
+        try:
+            from src.ai.personas import get_persona
+            persona = get_persona(user_profile.get('preferred_system', 'vedic'))
+            system_prompt = persona.get_system_prompt(
+                user_name=user_profile.get('name', 'User'),
+                language=language
+            )
+        except:
+            system_prompt = "You are an expert Vedic astrologer."
+
         # ✅ NEW: Enhanced prompt with rich chart data
-        prompt = f"""You are an expert Vedic astrologer. Provide a personalized prediction based on the user's actual birth chart.
+        prompt = f"""{system_prompt}
 
 USER PROFILE:
 • Name: {user_profile.get('name', 'User')}
@@ -621,7 +685,7 @@ INSTRUCTIONS:
 6. Be specific about THEIR chart - mention actual signs, houses, and planets
 7. If timing is relevant, provide approximate time frames based on dasha periods
 
-Provide a detailed, personalized prediction:"""
+Provide a detailed, personalized prediction in {language}:"""
         
         return prompt
     
@@ -666,6 +730,8 @@ Provide a detailed, personalized prediction:"""
             "confidence": 0.0,
             "intent_reasoning": "",
             "cached": False,
+            "detected_language": "en",
+            "original_query": query,
             "chart_data": None,
             "dasha_data": None,
             "transit_data": None,

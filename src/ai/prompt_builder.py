@@ -19,7 +19,8 @@ class PromptBuilder:
         transits: Optional[Dict] = None,
         dasha: Optional[Dict] = None,
         knowledge_chunks: Optional[List] = None,
-        conversation_history: Optional[List[Dict]] = None
+        conversation_history: Optional[List[Dict]] = None,
+        language: str = "en"
     ) -> str:
         """Build dynamic prompt for query."""
         
@@ -27,7 +28,10 @@ class PromptBuilder:
         try:
             from .personas import get_persona
             persona = get_persona(user_profile.get('preferred_system', 'vedic'))
-            system_prompt = persona.get_system_prompt(user_profile.get('name', 'Client'))
+            system_prompt = persona.get_system_prompt(
+                user_name=user_profile.get('name', 'Client'),
+                language=language
+            )
         except:
             system_prompt = f"You are NakshatraAI, a professional astrologer.\nCLIENT: {user_profile.get('name', 'Client')}"
         
@@ -65,7 +69,7 @@ class PromptBuilder:
         sections.append(f"\nQUESTION:\n\"{query}\"")
         
         # Instructions
-        sections.append(f"\nRESPOND:\n{self._get_instructions(intent)}")
+        sections.append(f"\nRESPOND:\n{self._get_instructions(intent, language)}")
         
         return "\n".join(sections)
     
@@ -106,11 +110,22 @@ class PromptBuilder:
             return "Teach concept clearly."
         return None
     
-    def _get_instructions(self, intent: str) -> str:
+    def _get_instructions(self, intent: str, language: str = "en") -> str:
         base = "Be professional, warm, clear. Cite sources."
+        if language == "hi":
+            base = "पेशेवर, मिलनसार और स्पष्ट रहें। स्रोतों का हवाला दें।"
+        elif language == "ta":
+            base = "தொழில்முறை, அன்பான மற்றும் தெளிவாக இருங்கள். ஆதாரங்களைக் குறிப்பிடவும்."
+            
+        lang_instruction = f" Respond entirely in {language}." if language != "en" else ""
+        
         if intent == "PREDICTION":
-            return base + " Focus on timing. Emphasize free will."
-        return base
+            pred = " Focus on timing. Emphasize free will."
+            if language == "hi": pred = " समय (timing) पर ध्यान दें। स्वतंत्र इच्छा (free will) पर जोर दें।"
+            elif language == "ta": pred = " நேரத்தின் முக்கியத்துவத்தில் (timing) கவனம் செலுத்துங்கள். விருப்ப சுதந்திரத்தை (free will) வலியுறுத்துங்கள்."
+            return base + pred + lang_instruction
+            
+        return base + lang_instruction
 
 
 if __name__ == "__main__":

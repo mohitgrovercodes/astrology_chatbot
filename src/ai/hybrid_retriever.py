@@ -41,17 +41,36 @@ class HybridRetriever:
         except Exception as e:
             print(f"[BM25] Error: {e}")
     
-    def retrieve(self, query: str, intent: str = "DEFAULT", top_k: int = 5, filters: Optional[Dict] = None) -> List[Document]:
-        """Main retrieval method."""
-        print(f"[HYBRID] Intent: {intent}")
+    def retrieve(self, query: str, intent: str = "DEFAULT", top_k: int = 5, filters: Optional[Dict] = None, language: str = "en") -> List[Document]:
+        """Main retrieval method with cross-lingual support."""
+        print(f"[HYBRID] Intent: {intent}, Language: {language}")
+        
+        # Step 1: Query Translation (Cross-lingual RAG)
+        # We find English text using an English version of the query
+        search_query = query
+        if language != "en":
+            print(f"[HYBRID] Translating non-English query to English for retrieval...")
+            search_query = self._translate_to_english(query)
+            print(f"[HYBRID] Translated: '{search_query}'")
+
         sem_w, key_w, hyde_w = self.WEIGHTS_BY_INTENT.get(intent, self.WEIGHTS_BY_INTENT["DEFAULT"])
         
-        semantic = self._semantic_search(query, k=15, filters=filters)
-        keyword = self._keyword_search(query, k=15)
-        hyde = self._hyde_search(query, k=15, filters=filters)
+        semantic = self._semantic_search(search_query, k=15, filters=filters)
+        keyword = self._keyword_search(search_query, k=15)
+        hyde = self._hyde_search(search_query, k=15, filters=filters)
         
         fused = self._reciprocal_rank_fusion([semantic, keyword, hyde], [sem_w, key_w, hyde_w])
         return fused[:top_k]
+
+    def _translate_to_english(self, query: str) -> str:
+        """Translate query to English using LLM for retrieval."""
+        try:
+            prompt = f"Translate the following astrological query to English for use in a database search. Keep technical terms accurate. Return ONLY the translation.\nQuery: {query}\nTranslation:"
+            response = self.llm.invoke(prompt)
+            return response.content.strip() if hasattr(response, 'content') else str(response).strip()
+        except Exception as e:
+            print(f"[HYBRID] Translation error: {e}")
+            return query
     
     def _semantic_search(self, query: str, k: int, filters: Optional[Dict]) -> List[Document]:
         try:
