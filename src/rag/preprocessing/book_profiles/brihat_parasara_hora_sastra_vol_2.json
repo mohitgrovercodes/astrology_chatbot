@@ -1,0 +1,30 @@
+{
+  "book_id": "brihat_parasara_hora_sastra_vol_2",
+  "parsing_strategy": {
+    "verse_pattern": "॥\\s*(\\d+)\\s*॥",
+    "section_pattern": "Chapter\\s*-\\s*(\\d+)",
+    "semantic_markers": [
+      "Notes:",
+      "Maitreya said;",
+      "Sage Parasara said : -",
+      "Now I narrate the results of the Dasas.",
+      "To comprehend the efficacy of the Dasas explicitly,",
+      "i)",
+      "This Dasa is known as",
+      "In this Dasa"
+    ],
+    "hierarchy": [
+      "Chapter",
+      "Verse (Sanskrit)",
+      "Verse (English Translation)",
+      "Dialogue/Speaker",
+      "Commentary/Notes",
+      "Sub-point/Principle"
+    ],
+    "sanskrit_present": true
+  },
+  "technical_limits": {
+    "max_tokens": 700,
+    "chunk_overlap": 50
+  }
+}

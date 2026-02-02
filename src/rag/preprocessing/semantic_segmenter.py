@@ -38,31 +38,56 @@ class SemanticSegmenter:
     Segment linked pages into semantic units.
     Extracts verse-commentary pairs and concept explanations.
     """
-    
-    # Maximum tokens per unit (optimized for RAG retrieval accuracy)
-    MAX_TOKENS_PER_UNIT = 800
-    
-    # Approximate chars per token for English + Sanskrit mix
-    CHARS_PER_TOKEN = 4
-    
-    # Verse number patterns
-    VERSE_PATTERN = r'॥\s*(\d+(?:\s*[-–]\s*\d+)?)\s*॥'
-    
-    # Section heading patterns (numbered sections like "1. Introduction")
-    SECTION_PATTERN = r'^(\d+)\.\s+([A-Z][^\n]+)'
-    
     def __init__(self, source_book: Optional[str] = None):
         """
         Initialize semantic segmenter.
-        
-        Args:
-            source_book: Name of the source book
+        Loads book-specific profile if available, else uses default.
         """
         self.source_book = source_book or "Unknown Source"
+        self.config = self._load_profile(self.source_book)
+        
+        # Apply strategy from profile
+        strategy = self.config.get("parsing_strategy", {})
+        self.verse_pattern = strategy.get("verse_pattern", r'॥\s*(\d+(?:\s*[-–]\s*\d+)?)\s*॥')
+        self.section_pattern = strategy.get("section_pattern", r'^(\d+)\.\s+([A-Z][^\n]+)')
+        self.semantic_markers = strategy.get("semantic_markers", [
+            r'\n\n', 
+            r'\bNotes?\s*:', 
+            r'[.!?।॥]\s+'
+        ])
+        
+        # Apply technical limits from profile
+        limits = self.config.get("technical_limits", {})
+        self.max_tokens = limits.get("max_tokens", 700)
+        self.chunk_overlap = limits.get("chunk_overlap", 50)
+        self.chars_per_token = limits.get("chars_per_token", 4)
+
+    def _load_profile(self, book_title: str) -> Dict:
+        """Load profile JSON from book_profiles directory."""
+        import os
+        
+        # Normalize name for file search
+        slug = book_title.lower().replace(" ", "_")
+        profile_dir = Path(__file__).parent / "book_profiles"
+        profile_path = profile_dir / f"{slug}.json"
+        
+        if profile_path.exists():
+            print(f"  [INFO] Loading book profile: {profile_path.name}")
+            with open(profile_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        
+        # Fallback to default
+        default_path = profile_dir / "default_vedic.json"
+        if default_path.exists():
+            print(f"  [INFO] Profile not found for '{book_title}'. Using default_vedic.json")
+            with open(default_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+                
+        return {}
     
     def estimate_tokens(self, text: str) -> int:
         """Estimate token count from character count."""
-        return len(text) // self.CHARS_PER_TOKEN
+        return len(text) // self.chars_per_token
     
     def generate_unit_id(self, chapter: Optional[str], verse_num: Optional[str], unit_type: UnitType) -> str:
         """Generate a unique ID for a semantic unit."""
@@ -166,7 +191,7 @@ class SemanticSegmenter:
         content = block["content"]
         
         # Find all verse markers with their positions
-        verse_matches = list(re.finditer(self.VERSE_PATTERN, content))
+        verse_matches = list(re.finditer(self.verse_pattern, content))
         
         if not verse_matches:
             # No verses found - treat as concept explanation
@@ -273,7 +298,7 @@ class SemanticSegmenter:
             unit_type = UnitType.CONCEPT_EXPLANATION
         
         # Split by sections if there are numbered sections
-        section_matches = list(re.finditer(self.SECTION_PATTERN, content, re.MULTILINE))
+        section_matches = list(re.finditer(self.section_pattern, content, re.MULTILINE))
         
         if section_matches:
             # Create unit for each section
@@ -371,42 +396,110 @@ class SemanticSegmenter:
     
     def split_oversized_unit(self, unit: SemanticUnit) -> List[SemanticUnit]:
         """
-        Split an oversized unit into smaller chunks with overlap.
+        Split an oversized unit using hierarchical semantic breakpoints:
+        1. Paragraphs (\n\n)
+        2. Semantic Markers (e.g., "Note:", "Result:")
+        3. Sentences (. ! ? । ॥)
         
         Args:
             unit: Oversized semantic unit
             
         Returns:
-            List of smaller units
+            List of smaller units with contextual headers
         """
-        if unit.token_count <= self.MAX_TOKENS_PER_UNIT:
+        if unit.token_count <= self.max_tokens:
             return [unit]
+            
+        text = unit.combined_text
         
-        # Split by paragraphs
-        paragraphs = unit.combined_text.split('\n\n')
+        # Markers from profile
+        markers = self.semantic_markers
+        
+        # Combine markers into a regex pattern
+        split_pattern = '|'.join(f'({m})' for m in markers)
+        
+        # Split text while keeping delimiters
+        parts = re.split(split_pattern, text, flags=re.IGNORECASE)
+        # Filter out None and empty strings
+        parts = [p for p in parts if p]
         
         chunks = []
-        current_chunk = []
+        current_chunk_parts = []
         current_tokens = 0
         
-        for para in paragraphs:
-            para_tokens = self.estimate_tokens(para)
-            
-            if current_tokens + para_tokens > self.MAX_TOKENS_PER_UNIT:
-                if current_chunk:
-                    chunks.append('\n\n'.join(current_chunk))
-                current_chunk = [para]
-                current_tokens = para_tokens
-            else:
-                current_chunk.append(para)
-                current_tokens += para_tokens
+        # Header context for child chunks
+        header = ""
+        context_parts = []
+        if unit.chapter: context_parts.append(unit.chapter)
+        if unit.section: context_parts.append(unit.section)
         
-        if current_chunk:
-            chunks.append('\n\n'.join(current_chunk))
+        if context_parts or (unit.verse and unit.verse.number):
+            header_lines = []
+            if context_parts:
+                header_lines.append(f"Context: {' | '.join(context_parts)}")
+            if unit.verse and unit.verse.number:
+                header_lines.append(f"Verse: {unit.verse.number}")
+            header_lines.append("(Continuation)\n---\n")
+            header = "\n".join(header_lines)
+        
+        header_tokens = self.estimate_tokens(header)
+        
+        for part in parts:
+            part_tokens = self.estimate_tokens(part)
+            
+            # Effective limit for current part
+            # Part 1 uses full limit, Part 2+ must leave room for header
+            effective_limit = self.max_tokens
+            if chunks: # If we already have one chunk, current and future parts will need headers
+                effective_limit -= header_tokens
+            
+            # If a single part is itself > effective_limit, we must split it by words (safety fallback)
+            if part_tokens > effective_limit:
+                # Flush current chunk first
+                if current_chunk_parts:
+                    chunks.append("".join(current_chunk_parts))
+                    current_chunk_parts = []
+                    current_tokens = 0
+                
+                # Split large part into word-based chunks
+                words = part.split(' ')
+                word_chunk = []
+                word_tokens = 0
+                for word in words:
+                    w_tokens = self.estimate_tokens(word + ' ')
+                    # Headers apply to ANY sub-part created here if there are already chunks
+                    sub_effective = self.max_tokens - (header_tokens if chunks or word_chunk else 0)
+                    
+                    if word_tokens + w_tokens > sub_effective:
+                        if word_chunk:
+                            chunks.append(" ".join(word_chunk))
+                        word_chunk = [word]
+                        word_tokens = w_tokens
+                    else:
+                        word_chunk.append(word)
+                        word_tokens += w_tokens
+                if word_chunk:
+                    chunks.append(" ".join(word_chunk))
+                continue
+
+            if current_tokens + part_tokens > effective_limit:
+                if current_chunk_parts:
+                    chunks.append("".join(current_chunk_parts))
+                current_chunk_parts = [part]
+                current_tokens = part_tokens
+            else:
+                current_chunk_parts.append(part)
+                current_tokens += part_tokens
+        
+        if current_chunk_parts:
+            chunks.append("".join(current_chunk_parts))
         
         # Create new units for each chunk
         result = []
         for i, chunk_text in enumerate(chunks):
+            # Inject header for subsequent parts
+            final_text = chunk_text if i == 0 else header + chunk_text
+            
             new_unit = SemanticUnit(
                 unit_id=f"{unit.unit_id}-part{i+1}",
                 unit_type=unit.unit_type,
@@ -414,12 +507,12 @@ class SemanticSegmenter:
                 source_book=unit.source_book,
                 chapter=unit.chapter,
                 section=unit.section,
-                verse=unit.verse if i == 0 else None,  # Verse only in first part
-                commentary=chunk_text if unit.unit_type != UnitType.VERSE_COMMENTARY else None,
+                verse=unit.verse if i == 0 else None,  # Original verse data only in first part
+                commentary=final_text if unit.unit_type != UnitType.VERSE_COMMENTARY else None,
                 notes=None,
-                combined_text=chunk_text,
+                combined_text=final_text,
                 related_units=[f"{unit.unit_id}-part{j+1}" for j in range(len(chunks)) if j != i],
-                token_count=self.estimate_tokens(chunk_text),
+                token_count=self.estimate_tokens(final_text),
             )
             result.append(new_unit)
         
@@ -454,7 +547,7 @@ class SemanticSegmenter:
         # Step 3: Split oversized units
         final_units = []
         for unit in all_units:
-            if unit.token_count > self.MAX_TOKENS_PER_UNIT:
+            if unit.token_count > self.max_tokens:
                 split_units = self.split_oversized_unit(unit)
                 final_units.extend(split_units)
             else:

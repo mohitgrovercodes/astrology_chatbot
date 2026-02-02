@@ -27,6 +27,7 @@ from src.rag.extraction.vision_pipeline import VisionPipeline, PipelineConfig
 from schemas import ExtractedPage, CleanedDocument, LinkedDocument, SemanticDocument, EnrichedDocument
 from structural_cleaner import StructuralCleaner
 from page_analyzer import PageAnalyzer
+from book_profiler import BookProfiler
 from semantic_segmenter import SemanticSegmenter
 from chunk_enricher import ChunkEnricher
 from embedder import Embedder
@@ -240,6 +241,42 @@ class PreprocessingPipeline:
             self._save_checkpoint(linked_doc, "phase3_linked", Path(cleaned_doc.source_file))
         
         return linked_doc
+
+    def run_phase3_5_profiling(self, linked_doc: LinkedDocument) -> None:
+        """Run Phase 3.5: Structural Profiling (Discovery)."""
+        print("\n" + "=" * 60)
+        print("PHASE 3.5: STRUCTURAL PROFILING (Discovery)")
+        print("=" * 60)
+        
+        # Check if profile already exists
+        slug = self.source_book.lower().replace(" ", "_")
+        profile_path = Path(__file__).parent / "book_profiles" / f"{slug}.json"
+        
+        if profile_path.exists():
+            print(f"  [INFO] Profile for '{self.source_book}' already exists. Skipping discovery.")
+            # Reload segmenter to ensure it picks up the profile (if it was newly created)
+            self.segmenter = SemanticSegmenter(source_book=self.source_book)
+            return
+
+        print(f"  Profile for '{self.source_book}' not found. Discovering DNA...")
+        
+        # Take a sample of text (first 10 pages)
+        sample_pages = linked_doc.pages[:10]
+        sample_text = "\n\n".join([p.content for p in sample_pages])
+        
+        try:
+            profiler = BookProfiler()
+            profile = profiler.discover_profile(self.source_book, sample_text)
+            if profile:
+                profiler.save_profile(profile)
+                print(f"  [SUCCESS] Structural DNA discovered and saved.")
+                # IMPORTANT: Update segmenter with the new profile
+                self.segmenter = SemanticSegmenter(source_book=self.source_book)
+            else:
+                print(f"  [WARNING] Discovery failed. Using defaults.")
+        except Exception as e:
+            print(f"  [ERROR] Profiling error: {e}")
+            print(f"  Continuing with default Vedic profile...")
     
     def run_phase4(self, linked_doc: LinkedDocument) -> SemanticDocument:
         """Run Phase 4: Semantic Segmentation."""
@@ -427,6 +464,9 @@ class PreprocessingPipeline:
             
             # Phase 3
             linked_doc = self.run_phase3(cleaned_doc)
+            
+            # Phase 3.5: Profiling (NEW)
+            self.run_phase3_5_profiling(linked_doc)
             
             # Phase 4
             semantic_doc = self.run_phase4(linked_doc)
