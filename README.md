@@ -4,8 +4,8 @@
 > Combining deterministic astronomical calculations with LLM-powered interpretations
 
 [![Status](https://img.shields.io/badge/status-production--ready-brightgreen)]()
-[![Progress](https://img.shields.io/badge/progress-85%25-blue)]()
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue)]()
+[![Progress](https://img.shields.io/badge/progress-82%25-blue)]()
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)]()
 [![License](https://img.shields.io/badge/license-proprietary-red)]()
 
 ---
@@ -36,8 +36,11 @@ An expert-level **Astrology AI Chatbot** designed for integration into mobile ap
 - ✅ **User authentication** with subscriber-only access
 - ✅ **Automatic birth data loading** from user profiles
 - ✅ **Classical text-grounded interpretations** via RAG
+- ✅ **Automated Book Profiling** (Structural DNA discovery)
+- ✅ **8-Phase Preprocessing Pipeline** for high-precision data
 - ✅ **Intelligent orchestration** using LangGraph
 - ✅ **Personalized experience** with conversation memory
+- ✅ **Safety & Ethics Guardrails** (Professional-style disclaimers)
 
 ### Core Principle
 
@@ -168,9 +171,15 @@ ORCHESTRATION = LangGraph (state machine)
 
 ### Prerequisites
 
-- Python 3.10 or higher
+- Python 3.11 or higher
 - pip package manager
-- OpenAI API key (or Google Gemini API key)
+- **Choose ONE provider:**
+  - **Google Cloud (Vertex AI) - RECOMMENDED**
+    - Service Account JSON key
+    - Enabled Vertex AI API
+  - **OpenAI**
+    - API Key (sk-...)
+- **MongoDB** (Local or Atlas) for user storage
 
 ### Installation
 
@@ -273,23 +282,36 @@ pip install -r requirements.txt --break-system-packages
 ### Step 3: Configuration
 
 ```bash
-# Create environment file
-cat > .env << EOF
+# Set up environment file
+cp .env.example .env
+
+# Edit .env with your configuration:
+# ----------------------------------
 # LLM Providers
 OPENAI_API_KEY=your-openai-key-here
 GOOGLE_API_KEY=your-google-key-here
+
+# Google Cloud (If using Vertex AI)
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
+GOOGLE_CLOUD_PROJECT=your-project-id
 
 # Default LLM
 DEFAULT_LLM_PROVIDER=google
 DEFAULT_LLM_MODEL=gemini-2.5-flash
 
-# MongoDB (Production)
-# MONGODB_URI=mongodb://username:password@host:27017/database
+# MongoDB
+MONGODB_URI=mongodb://localhost:27017/astro_data
+```
 
-# Embeddings
-OPENAI_EMBEDDING_MODEL=text-embedding-3-large
-EMBEDDING_DIMENSIONS=3072
-EOF
+### Step 4: Run the API (Phase 7)
+
+```bash
+# Start the FastAPI server
+uvicorn src.api.main:app --reload
+
+# Documentation available at:
+# http://localhost:8000/api/docs
+```
 ```
 
 ### Step 4: Verify Installation
@@ -525,6 +547,8 @@ python orchestrator.py
 - [x] Phase 4: LLM Integration (Personas, Templates)
 - [x] Phase 5: Orchestration (LangGraph)
 - [x] Phase 5.1: User Authentication
+- [x] Phase 6: Safety & Guardrails
+- [x] Phase 3.5 & 4: RAG Preprocessing Upgrade (Structural Discovery)
 
 ### 🚧 In Progress (15%)
 
@@ -691,4 +715,4 @@ python orchestrator.py                        # Test orchestrator
 ---
 
 *Built with ❤️ by the Astrology AI Team*  
-*Last Updated: January 29, 2026*
+*Last Updated: February 2, 2026*

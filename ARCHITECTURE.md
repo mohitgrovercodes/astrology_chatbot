@@ -1,8 +1,8 @@
 # NakshatraAI Architecture V2 - Simplified + LangGraph
 
-**Date:** January 30, 2026  
-**Version:** 2.0  
-**Status:** Production Architecture
+**Date:** February 2, 2026  
+**Version:** 2.1  
+**Status:** In Production / Scaling Phase
 
 ---
 
@@ -198,6 +198,38 @@ User Query
                             │(Primary)            │
                             └─────────────────────┘
 ```
+
+---
+
+## 📚 RAG Preprocessing Pipeline (8-Phase Discovery)
+
+To achieve high-precision astrology retrieval, we implemented a sophisticated **Preprocessing Pipeline** that moves beyond fixed-length chunking.
+
+### The 8-Phase Workflow
+
+| Phase | Name | Responsibility |
+| :--- | :--- | :--- |
+| **P1** | Extraction | Vision-LLM based PDF-to-Markdown extraction |
+| **P2** | Cleaning | Structural normalization and noise removal |
+| **P3** | Analysis | Cross-page continuity and chapter detection |
+| **P3.5**| **Profiling** | **Automated Structural Discovery (LLM)** |
+| **P4** | **Segmentation**| **Profile-Aware Semantic Chunking** |
+| **P5** | Enrichment | Summary, Entity Extraction (Planets/Houses) |
+| **P6** | Embedding | Multi-vector indexing (OpenAI Large) |
+| **P7** | Ingestion | Vector Database persistence (ChromaDB) |
+
+### Key Innovation: Structural Discovery (Phase 3.5)
+The system is **Book-Agnostic**. Before splitting a book, it uses an LLM to "read" representative samples and identify:
+- **Verse Patterns**: Regex for shloka markers (e.g. `॥ 42 ॥`).
+- **Semantic Markers**: Transition keywords (e.g. `"Sage Parasara said"`, `"Note:"`).
+- **Hierarchy**: Logical nesting of chapters, verses, and commentaries.
+
+### Semantic Segmentation (Phase 4)
+We use a **Hierarchical Splitter** instead of a token-limited one:
+1. **Hard Breaks**: Page/Chapter boundaries.
+2. **Context markers**: Discovered transition phrases.
+3. **Soft breaks**: Sentence boundaries (respecting Sanskrit punctuation).
+4. **Context Injection**: Each split chunk inherits a "Context Header" to prevent meaning fragmentation.
 
 ---
 

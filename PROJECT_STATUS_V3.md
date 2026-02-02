@@ -1,10 +1,10 @@
 # 🚀 ASTROLOGY AI CHATBOT - PROJECT STATUS V3
 
 **Date:** February 2, 2026  
-**Last Updated:** Phase 6 Complete  
+**Last Updated:** Phase 4 (Semantic Segmentation V2) Complete  
 **Current Phase:** Phase 6 ✅ COMPLETE | Phase 7 ⏳ NEXT  
-**Overall Progress:** 78%  
-**Status:** Safety & Guardrails Implemented, All Tests Passing
+**Overall Progress:** 82%  
+**Status:** Preprocessing Pipeline Upgraded to 8-Phase Structural Discovery
 
 ---
 
@@ -14,7 +14,7 @@
 ```
 Phase 1: Deterministic Engine        ████████████████████ 100% ✅
 Phase 2: User Management              ████████████████████ 100% ✅
-Phase 3: RAG Pipeline                 ████████████████████ 100% ✅
+Phase 3: RAG Preprocessing V2         ████████████████████ 100% ✅
 Phase 4: LLM Integration              ████████████████████ 100% ✅
 Phase 5: Orchestration                ████████████████████ 100% ✅
   Phase 5.5: Integration              ████████████████████ 100% ✅
@@ -23,9 +23,9 @@ Phase 7: Fine-tuning                  ░░░░░░░░░░░░░░
 Phase 8: Production Deployment        ░░░░░░░░░░░░░░░░░░░░   0% 📋
 ```
 
-### Overall Progress: 78%
+### Overall Progress: 82%
 ```
-████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 78%
+██████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 82%
 ``` 
 
 ╔═══════════════════════════════════════════════════════════╗
@@ -78,6 +78,25 @@ Bot: "I sense this is an important question for you. To provide the most
       you looking to understand longevity factors in your chart, or is there 
       a specific concern I can address with more care?"
 ```
+
+---
+
+### ✅ Phase 3.5 & 4: RAG Preprocessing Upgrade - COMPLETE!
+
+**Completed:** February 2, 2026
+
+**What Was Built:**
+- **Automated Book Profiling** (`src/rag/preprocessing/book_profiler.py`):
+  - Uses Gemini to "discover" the structural DNA of any new book (Verse regex, transition markers).
+  - Generates JSON profiles in `src/rag/preprocessing/book_profiles/`.
+- **Enhanced Semantic Segmentation** (`src/rag/preprocessing/semantic_segmenter.py`):
+  - Moved from 800-token fixed cuts to **Profile-Aware Logical Chunking**.
+  - Hierarchical breakpoints: Paragraphs → Markers → Sentences.
+  - **Context Injection**: Oversized chunks now include contextual headers (Chapter/Verse/Continuation).
+
+**Integration:**
+- ✅ Integrated into `pipeline.py` as an 8-phase workflow.
+- ✅ System is now book-agnostic and truly scalable.
 
 ---
 

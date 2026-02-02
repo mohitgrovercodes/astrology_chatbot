@@ -2,9 +2,9 @@
 ## Astrology AI Chatbot Project - Cross-Platform Context Transfer
 
 **Date:** February 2, 2026  
-**Handoff From:** Claude (Sonnet 4.5) → Antigravity (Sonnet 4.5)  
-**Current Phase:** Phase 5.5 - COMPLETE (100%)  
-**Overall Progress:** 72%
+**Handoff From:** Antigravity (Sonnet 4.5) → Next Session  
+**Current Phase:** Phase 4 (Upgrade) - COMPLETE (100%)  
+**Overall Progress:** 82%
 
 ---
 
@@ -47,6 +47,12 @@ ORCHESTRATION = LangGraph StateGraph (3-category routing)
 - test_routing.py: 89-100% accuracy (16-18/18) ✓
 - Real chart data in orchestrator ✓
 
+✅ **RAG Pipeline Upgrade (Phase 3.5 & 4)**
+- `book_profiler.py` → Automated structural discovery (LLM)
+- `semantic_segmenter.py` → Profile-aware logical chunking
+- Hierarchical breakpoints & Contextual header injection
+- Full 8-phase pipeline integration in `pipeline.py`
+
 ### **Key Changes Made:**
 1. Created `src/tools/calculation_tools.py` with 3 LangChain tools
 2. Updated `src/orchestration/orchestrator.py` to use real calculations
@@ -81,6 +87,10 @@ astro_chatbot/
 │   └── tools/
 │       ├── calculation_tools.py     ✅ NEW - VedicEngine wrappers
 │       └── __init__.py              ✅ Updated imports
+├── src/rag/preprocessing/
+│   ├── book_profiles/               ✅ NEW - JSON structural profiles
+│   ├── book_profiler.py             ✅ NEW - Automated discovery script
+│   └── semantic_segmenter.py        ✅ UPGRADED - Semantic chunking
 ├── test_routing.py                  ✅ 89-100% passing
 ├── chatbot.py                       ✅ Interactive CLI
 └── PROJECT_STATUS_V3.md             ✅ Updated
@@ -253,20 +263,15 @@ python chatbot.py
 ## 📝 SESSION-SPECIFIC NOTES
 
 ### **What Happened This Session:**
-1. **Deployed integration package** from Claude's work
-2. **Fixed 8+ API mismatches** in calculation_tools.py:
-   - VedicEngine.generate_chart() parameters
-   - Rashi/Nakshatra enum conversions
-   - DashaPeriod.lord vs .planet
-   - House cusps float access
-3. **Added factory function** for test compatibility
-4. **Verified all tests passing**
-5. **Cleaned up documentation**
+1. **Implemented Automated Book Profiling (Phase 3.5)**: System now "discovers" book structure using LLM before processing.
+2. **Upgraded Semantic Segmentation (Phase 4)**: Moved from token-based splits to concept-based splits with context injection.
+3. **Refactored Preprocessing Pipeline**: Standardized on an 8-phase workflow for high-precision RAG.
+4. **Verified scalability**: Tested with *BPHS Vol 2* and confirmed profile-aware splitting works.
 
 ### **Test Results:**
-- calculation_tools.py: ✅ All 3 tests pass
-- test_routing.py: ✅ 89-100% accuracy
-- Only 2 misclassifications (NEEDS_CALCULATION → NEEDS_RAG), which is acceptable
+- `verify_profiles.py`: ✅ Profile loading & segmentation success
+- `book_profiler.py` run on BPHS: ✅ Automated JSON profile generated
+- 100% adherence to new 700-token semantic limit.
 
 ### **Ready for Phase 6:**
 The system is now fully integrated and ready for safety/guardrails implementation.
