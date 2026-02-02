@@ -6,7 +6,7 @@ Request and response models for chart calculation endpoints.
 """
 
 from pydantic import BaseModel, Field
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Any
 
 
 class ChartRequest(BaseModel):
@@ -37,6 +37,11 @@ class PlanetPosition(BaseModel):
     house: int
     degree: float
     nakshatra: Optional[str] = None
+    nakshatra_pada: Optional[int] = None
+    is_retrograde: bool = False
+    is_combust: bool = False
+    speed: float = 0.0
+    dignity: str = "neutral"
 
 
 class DashaPeriod(BaseModel):
@@ -47,14 +52,109 @@ class DashaPeriod(BaseModel):
     end_date: str
 
 
+class VargaPosition(BaseModel):
+    """A planet's position in a divisional chart."""
+    sign: str
+    house: int
+    division_number: int
+
+
+class YogaData(BaseModel):
+    """Vedic Yoga information."""
+    name: str
+    category: str
+    is_present: bool
+    forming_planets: List[str]
+    forming_houses: List[int]
+    strength: float
+    description: Optional[str] = None
+
+
+class AspectData(BaseModel):
+    """Aspect information."""
+    aspecting_planet: str
+    aspected_house: int
+    aspect_type: str
+    strength: float
+
+
+# --- Western Astrology Models ---
+
+class WesternPlanetPosition(BaseModel):
+    """Western-style planet position."""
+    sign: str
+    house: int
+    degree: float
+    is_retrograde: bool
+    speed: float
+    dignity_score: int
+    dignity_status: List[str]
+
+
+class WesternAspect(BaseModel):
+    """Western aspect (planetary angular relationship)."""
+    planet1: str
+    planet2: str
+    aspect_type: str
+    orb: float
+    strength: float
+    is_major: bool
+
+
+class WesternHouseData(BaseModel):
+    """Western house cusp and occupancy."""
+    number: int
+    cusp_degree: float
+    cusp_sign: str
+    planets: List[str]
+
+
+class WesternChartResponse(BaseModel):
+    """Western natal chart response."""
+    sun_sign: str
+    moon_sign: str
+    ascendant_sign: str
+    midheaven_sign: str
+    planets: Dict[str, WesternPlanetPosition]
+    houses: List[WesternHouseData]
+    aspects: List[WesternAspect]
+    total_dignity_score: int
+
+
+# --- Core Astronomical Models ---
+
+class RawPlanetData(BaseModel):
+    """Raw astronomical data for a planet."""
+    longitude: float
+    latitude: float
+    distance: float
+    speed_longitude: float
+    speed_latitude: float
+    speed_distance: float
+    is_retrograde: bool
+
+
+class CoreEphemerisResponse(BaseModel):
+    """Raw ephemeris data response."""
+    julian_day: float
+    ayanamsa_value: Optional[float] = None
+    planets: Dict[str, RawPlanetData]
+    house_cusps: List[float]
+    angles: Dict[str, float]
+
+
 class ChartResponse(BaseModel):
     """Birth chart calculation response."""
     lagna: str = Field(..., description="Ascendant sign")
+    lagna_degree: float = Field(0.0, description="Ascendant degree")
     rashi: str = Field(..., description="Moon sign")
     nakshatra: str = Field(..., description="Birth nakshatra")
     planets: Dict[str, PlanetPosition] = Field(..., description="Planet positions")
-    houses: List[str] = Field(..., description="House cusps")
+    houses: List[str] = Field(..., description="House sign placements (1-12)")
     dasha: Dict = Field(..., description="Current dasha periods")
+    vargas: Optional[Dict[str, Dict[str, VargaPosition]]] = Field(None, description="Divisional charts (D9, D10, etc.)")
+    yogas: Optional[List[YogaData]] = Field(None, description="Important Yogas found in the chart")
+    aspect_grid: Optional[Dict[str, List[AspectData]]] = Field(None, description="Planetary aspects per house")
     transits: Optional[Dict] = Field(None, description="Current transits")
     
     class Config:

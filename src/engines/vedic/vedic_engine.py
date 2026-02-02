@@ -50,6 +50,7 @@ from src.engines.vedic.graha_stats import AllGrahaStats, compute_all_graha_stats
 from src.engines.vedic.rashi_nakshatra import VedicMapping, compute_vedic_mapping, LagnaData
 from src.engines.vedic.dasha_systems import VimshottariDasha, compute_vimshottari_dasha
 from src.engines.vedic.aspects_yogas import AspectGrid, YogaAnalysis, compute_aspect_grid, detect_all_yogas
+from src.engines.vedic.divisional_charts import AllVargaPositions, compute_all_vargas
 
 
 # =============================================================================
@@ -101,6 +102,7 @@ class VedicChart:
     dasha: VimshottariDasha
     aspects: AspectGrid
     yogas: YogaAnalysis
+    vargas: Dict[CelestialBody, AllVargaPositions]
     
     # Convenience accessors
     @property
@@ -296,6 +298,10 @@ class VedicEngine:
         # Layer 4C: Yoga detection
         yogas = detect_all_yogas(vedic_mapping)
         
+        # Layer 4D: Divisional Charts (All 16)
+        graha_longitudes = {body: pos.longitude for body, pos in positions.items()}
+        vargas = compute_all_vargas(graha_longitudes, tuple(VargaChart))
+        
         return VedicChart(
             birth_data=birth_data,
             julian_day=jd,
@@ -308,7 +314,8 @@ class VedicEngine:
             vedic_mapping=vedic_mapping,
             dasha=dasha,
             aspects=aspects,
-            yogas=yogas
+            yogas=yogas,
+            vargas=vargas
         )
     
     def compute_transits(

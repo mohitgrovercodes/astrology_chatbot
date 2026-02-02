@@ -16,6 +16,7 @@ from src.ai.user_manager import UserManager
 from src.ai.hybrid_retriever import HybridRetriever
 from src.ai.prompt_builder import PromptBuilder
 from src.engines.vedic.vedic_engine import VedicEngine
+from src.engines.western.western_engine import WesternAstroEngine
 from src.api.config import settings
 
 
@@ -23,6 +24,7 @@ from src.api.config import settings
 _orchestrator_instance: Optional[object] = None
 _user_manager_instance: Optional[UserManager] = None
 _vedic_engine_instance: Optional[VedicEngine] = None
+_western_engine_instance: Optional[WesternAstroEngine] = None
 
 
 def get_llm():
@@ -171,11 +173,26 @@ def get_vedic_engine() -> VedicEngine:
     return _vedic_engine_instance
 
 
+def get_western_engine() -> WesternAstroEngine:
+    """
+    Get singleton Western engine instance.
+    """
+    global _western_engine_instance
+    
+    if _western_engine_instance is None:
+        print("[API] Initializing Western engine...")
+        _western_engine_instance = WesternAstroEngine()
+        print("[API] ✓ Western engine initialized")
+    
+    return _western_engine_instance
+
+
 # Reset function for testing
 def reset_dependencies():
     """Reset all singleton instances (for testing)."""
-    global _orchestrator_instance, _user_manager_instance, _vedic_engine_instance
+    global _orchestrator_instance, _user_manager_instance, _vedic_engine_instance, _western_engine_instance
     _orchestrator_instance = None
     _user_manager_instance = None
     _vedic_engine_instance = None
+    _western_engine_instance = None
     print("[API] Dependencies reset")
