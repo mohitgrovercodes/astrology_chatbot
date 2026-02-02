@@ -20,6 +20,10 @@ from langchain_core.messages import HumanMessage, AIMessage
 # ✅ NEW: Import calculation tools
 from src.tools.calculation_tools import get_calculation_tools
 
+# ✅ PHASE 6: Import safety module
+from src.safety.guardrails import QueryAnalyzer, ResponseEnhancer
+from src.safety.input_validator import InputValidator
+
 
 class NakshatraState(TypedDict):
     """Enhanced state with calculation results."""
@@ -45,6 +49,9 @@ class NakshatraState(TypedDict):
     
     # RAG results
     knowledge_chunks: Optional[List]
+    
+    # ✅ PHASE 6: Safety analysis
+    query_analysis: Optional[Dict]  # Sensitivity analysis from QueryAnalyzer
     
     # Response
     answer: str
@@ -84,10 +91,16 @@ class EnhancedLangGraphOrchestrator:
         self.calculation_tools = calculation_tools
         self.llm = llm
         
+        # ✅ PHASE 6: Initialize safety components
+        self.query_analyzer = QueryAnalyzer()
+        self.response_enhancer = ResponseEnhancer()
+        self.input_validator = InputValidator()
+        
         self.graph = self._build_graph()
         
         print("[LANGGRAPH] [SUCCESS] Enhanced orchestrator initialized")
         print("[LANGGRAPH] Routes: CHITCHAT | NEEDS_CALCULATION | NEEDS_RAG")
+        print("[LANGGRAPH] ✓ Safety guardrails enabled (Phase 6)")
     
     def _build_graph(self) -> StateGraph:
         """Build enhanced graph with 3-way routing."""
@@ -280,14 +293,38 @@ class EnhancedLangGraphOrchestrator:
         """
         Node 3c: Handle RAG queries with REAL calculations for predictions.
         ✅ UPDATED: Now uses actual calculation tools (no placeholders!)
+        ✅ PHASE 6: Added safety analysis for sensitive queries
         
         Flow:
-        1. Determine if calculation is needed (for prediction queries)
-        2. Calculate if needed (REAL calculations now!)
-        3. Retrieve relevant knowledge
-        4. Synthesize personalized response
+        1. Analyze query for sensitive content (PHASE 6)
+        2. Determine if calculation is needed (for prediction queries)
+        3. Calculate if needed (REAL calculations now!)
+        4. Retrieve relevant knowledge
+        5. Synthesize personalized response
         """
-        print("[RAG] Unified flow: Check Calc -> Retrieve -> Interpret")
+        print("[RAG] Unified flow: Safety Check -> Calc -> Retrieve -> Interpret")
+        
+        # ✅ PHASE 6: Analyze query for sensitive content
+        query_analysis = self.query_analyzer.analyze(state['query'])
+        state['query_analysis'] = {
+            'category': query_analysis.category.value,
+            'sensitivity_level': query_analysis.sensitivity_level,
+            'handling_strategy': query_analysis.handling_strategy.value,
+            'requires_disclaimer': query_analysis.requires_disclaimer,
+            'clarifying_question': query_analysis.clarifying_question,
+            'positive_redirect': query_analysis.positive_redirect
+        }
+        
+        print(f"[SAFETY] Category: {query_analysis.category.value}, "
+              f"Sensitivity: {query_analysis.sensitivity_level:.2f}, "
+              f"Strategy: {query_analysis.handling_strategy.value}")
+        
+        # Check if we should ask clarifying question first (C in C→B→A)
+        should_clarify, clarifying_q = self.response_enhancer.should_ask_clarification(query_analysis)
+        if should_clarify and clarifying_q:
+            print(f"[SAFETY] High sensitivity detected - asking clarifying question first")
+            state['answer'] = clarifying_q
+            return state
         
         user_profile = state['user_profile']
         q = state['query'].lower().strip()
