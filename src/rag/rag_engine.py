@@ -109,7 +109,7 @@ Always be respectful of the sacred nature of Vedic astrology."""
 
     def __init__(
         self,
-        collection_name: str = "brihat_parasara_hora_sastra",
+        collection_name: str = "saravali_vol1",
         db_path: str = "data/vectordb",
         llm_provider: str = "google",
         llm_model: Optional[str] = None,
@@ -405,6 +405,7 @@ Always be respectful of the sacred nature of Vedic astrology."""
         use_hybrid: Optional[bool] = None, # Added Explicit Flag
         expand_context: bool = True,
         conversation_history: Optional[List[Dict[str, str]]] = None,
+        user_profile: Optional[Dict[str, Any]] = None, # Added Profile
         save_to_store: bool = True,  # Phase 4: Auto-save to storage
     ) -> RAGResponse:
         """
@@ -494,7 +495,7 @@ Always be respectful of the sacred nature of Vedic astrology."""
             print(f"[CONTEXT] Expanded to {len(chunks)} chunks")
         
         # Build prompt
-        prompt = self._build_prompt(query, chunks, conversation_history)
+        prompt = self._build_prompt(query, chunks, conversation_history, user_profile)
         
         # Generate answer
         print(f"[GENERATION] Generating answer...")
@@ -529,6 +530,7 @@ Always be respectful of the sacred nature of Vedic astrology."""
         query: str,
         chunks: List[RetrievedChunk],
         conversation_history: Optional[List[Dict[str, str]]] = None,
+        user_profile: Optional[Dict[str, Any]] = None, # Added Profile
     ):
         """
         Build prompt for LLM using templates.
@@ -558,6 +560,25 @@ Always be respectful of the sacred nature of Vedic astrology."""
                 chat_history=chat_history,
                 question=query
             )
+            
+            # Inject User Profile if available
+            if user_profile:
+                from langchain_core.messages import SystemMessage
+                profile_text = (
+                    f"USER PROFILE:\n"
+                    f"Name: {user_profile.get('name', 'Unknown')}\n"
+                    f"User ID: {user_profile.get('user_id', 'Unknown')}\n"
+                )
+                if 'birth_details' in user_profile:
+                    bd = user_profile['birth_details']
+                    profile_text += (
+                        f"Birth Date: {bd.get('date')}\n"
+                        f"Birth Time: {bd.get('time')}\n"
+                        f"Location: {bd.get('location', {}).get('address', 'Unknown')}\n"
+                    )
+                
+                # Insert after system behavior prompt (index 1) but before context
+                messages.insert(1, SystemMessage(content=profile_text))
             
             return messages
         

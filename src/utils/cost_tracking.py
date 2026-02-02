@@ -67,6 +67,10 @@ class CostTrackerCallback(BaseCallbackHandler):
             **kwargs: Additional arguments
         """
         try:
+            # SKIP: Flash models (usage not tracked/shared)
+            if "flash" in self.model.lower():
+                return
+
             # Extract token usage from response
             if response.llm_output and "token_usage" in response.llm_output:
                 usage = response.llm_output["token_usage"]
@@ -144,6 +148,10 @@ def track_llm_cost(
             result = func(*args, **kwargs)
             
             try:
+                # SKIP: Flash models
+                if "flash" in model_name.lower():
+                    return result
+
                 # Extract token counts
                 if extract_tokens:
                     input_tokens, output_tokens = extract_tokens(result)

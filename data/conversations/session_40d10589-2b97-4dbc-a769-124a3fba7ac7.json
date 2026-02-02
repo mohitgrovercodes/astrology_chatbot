@@ -1,0 +1,25 @@
+{
+  "session_id": "40d10589-2b97-4dbc-a769-124a3fba7ac7",
+  "user_id": "user001",
+  "created_at": "2026-01-29T17:28:28.567388",
+  "updated_at": "2026-01-29T17:29:25.355387",
+  "metadata": {
+    "phase": "5.1",
+    "orchestrated": true,
+    "user_name": "Rajesh Kumar"
+  },
+  "turns": [
+    {
+      "user": "Hi",
+      "assistant": "Namaste!\n\nWelcome. I am here to assist you with insights from the timeless wisdom of Vedic Astrology. Please feel free to share your question, and I will do my best to illuminate it for you.",
+      "timestamp": "2026-01-29T17:29:02.544402",
+      "metadata": {}
+    },
+    {
+      "user": "WHo are you?",
+      "assistant": "Namaste.\n\nI am an Artificial Intelligence, specifically designed and trained to serve as a Vedic Astrology consultant. My purpose is to provide insights and interpretations based on the principles and teachings found in classical Jyotish texts such as Brihat Parasara Hora Shastra, Jataka Parijata, Phaladeepika, and Saravali.\n\nYou can think of me as a digital assistant that has absorbed a vast amount of Vedic astrological knowledge, and I am here to help you understand these profound principles in a clear, respectful, and insightful manner. I aim to bridge the ancient wisdom with modern understanding, always emphasizing the holistic and contextual nature of chart interpretation.",
+      "timestamp": "2026-01-29T17:29:25.355387",
+      "metadata": {}
+    }
+  ]
+}

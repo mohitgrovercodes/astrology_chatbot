@@ -175,8 +175,8 @@ class LLMFactory:
                 model_name=model,
                 temperature=temperature,
                 max_output_tokens=max_tokens,
-                project="445806945384",
-                location="us-central1",
+                project=os.environ.get("GOOGLE_CLOUD_PROJECT", "445806945384"),
+                location=os.environ.get("VERTEX_AI_LOCATION", "us-central1"),
                 **kwargs
             )
         

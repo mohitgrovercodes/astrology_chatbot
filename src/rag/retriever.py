@@ -9,12 +9,12 @@ keyword search (BM25), and HyDE augmentation.
 import os
 import json
 import numpy as np
-import chromadb
+# lazy import chromadb
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
-from chromadb.config import Settings
-from rank_bm25 import BM25Okapi
+# lazy from chromadb.config import Settings
+# lazy from rank_bm25 import BM25Okapi
 
 # Project imports
 try:
@@ -76,10 +76,13 @@ class AstrologyRetriever:
             self.collection_name = collection_name or config.rag.collection_name
             self.db_path = Path(db_path or config.env.chroma_persist_dir)
         else:
-            self.collection_name = collection_name or "brihat_parasara_hora_sastra"
+            self.collection_name = collection_name or "saravali_vol1"
             self.db_path = Path(db_path or "data/vectordb")
         
         # Initialize ChromaDB
+        import chromadb
+        from chromadb.config import Settings
+        
         self.client = chromadb.PersistentClient(
             path=str(self.db_path),
             settings=Settings(anonymized_telemetry=False)
@@ -105,6 +108,7 @@ class AstrologyRetriever:
         """Build BM25 index from ChromaDB documents."""
         if not self.collection: return
         try:
+            from rank_bm25 import BM25Okapi
             all_docs = self.collection.get(include=["documents", "metadatas"])
             if all_docs and all_docs['documents']:
                 self.bm25_documents = all_docs['documents']
@@ -122,8 +126,12 @@ class AstrologyRetriever:
         filters: Optional[Dict[str, Any]] = None,
     ) -> List[RetrievedChunk]:
         """Core semantic retrieval."""
-        if not self.collection or not self.embedder.client:
-            logger.error("Retrieval unavailable (Check DB/API Key)")
+        if not self.collection:
+            logger.error(f"Retrieval unavailable: Collection '{self.collection_name}' not loaded.")
+            return []
+            
+        if not self.embedder.client:
+            logger.error("Retrieval unavailable: Embedder client not initialized (Check OPENAI_API_KEY).")
             return []
             
         where_clause = self._build_where_clause(filters) if filters else None

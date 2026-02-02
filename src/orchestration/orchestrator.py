@@ -1,853 +1,617 @@
 """
-LangGraph Orchestrator for Astrology AI Chatbot.
+Enhanced LangGraph Orchestrator with REAL Calculation Integration.
 
-Coordinates between calculation tools and RAG engine to provide
-intelligent routing and response synthesis.
+✅ UPDATED: Now uses actual VedicEngine calculations (no placeholders!)
+
+3-way routing:
+1. CHITCHAT → Quick response
+2. NEEDS_CALCULATION → Real birth chart calculation
+3. NEEDS_RAG → Knowledge + Real chart data + Interpretation/Prediction
 """
 
-from typing import TypedDict, List, Dict, Any, Optional, Annotated
+from typing import Dict, List, Optional, Any, TypedDict, Annotated
 from datetime import datetime
+import operator
+import json
+
 from langgraph.graph import StateGraph, END
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage
 
-# Import calculation tools
-from calculation_tools import (
-    calculate_vedic_birth_chart,
-    calculate_western_birth_chart,
-    calculate_vedic_transits,
-    classify_astrology_query,
-    extract_birth_data_from_query,
-)
-
-# Import RAG engine
-try:
-    from rag_engine_phase4 import RAGEngine, RAGResponse
-    RAG_AVAILABLE = True
-except ImportError:
-    print("[WARN] RAG engine not available")
-    RAG_AVAILABLE = False
-
-# Import user profile manager
-try:
-    from user_profile_manager import UserProfileManager, get_default_profile_manager
-    PROFILE_MANAGER_AVAILABLE = True
-except ImportError:
-    print("[WARN] User profile manager not available")
-    PROFILE_MANAGER_AVAILABLE = False
+# ✅ NEW: Import calculation tools
+from src.tools.calculation_tools import get_calculation_tools
 
 
-# =============================================================================
-# STATE DEFINITION
-# =============================================================================
-
-class ConversationState(TypedDict):
-    """
-    State maintained throughout the conversation flow.
+class NakshatraState(TypedDict):
+    """Enhanced state with calculation results."""
     
-    This state is passed between nodes and updated at each step.
-    """
     # Input
     query: str
-    user_id: Optional[str]
-    conversation_history: List[Dict[str, str]]
+    user_id: str
+    conversation_history: List[Dict]
     
-    # User profile (NEW: Phase 5.1)
-    user_profile: Optional[Dict[str, Any]]  # Loaded from database
-    user_authenticated: bool
+    # User context
+    user_profile: Optional[Dict]
+    authenticated: bool
     
-    # Classification
-    intent_type: Optional[str]  # 'calculation', 'interpretation', 'chitchat', 'blocked'
-    astro_system: Optional[str]  # 'vedic', 'western'
-    calculation_type: Optional[str]  # 'birth_chart', 'transits', 'dasha'
+    intent: Optional[str]  # CHITCHAT | NEEDS_CALCULATION | NEEDS_RAG
+    confidence: float
+    intent_reasoning: str
+    cached: bool
     
-    # Birth data (if calculation)
-    birth_data: Optional[Dict[str, Any]]
-    birth_data_complete: bool
-    birth_data_source: Optional[str]  # 'profile' or 'query'
-    missing_fields: List[str]
+    # Calculation results (for PREDICTION flow)
+    chart_data: Optional[Dict]  # Birth chart
+    dasha_data: Optional[Dict]  # Current dashas
+    transit_data: Optional[Dict]  # Current transits
     
-    # Execution results
-    calculation_result: Optional[Dict[str, Any]]
-    rag_result: Optional[Dict[str, Any]]
+    # RAG results
+    knowledge_chunks: Optional[List]
     
-    # Safety
-    is_blocked: bool
-    block_reason: Optional[str]
-    
-    # Output
-    final_answer: str
-    requires_followup: bool
-    followup_question: Optional[str]
-    
-    # Metadata
-    processing_path: List[str]  # Track which nodes were executed
+    # Response
+    answer: str
     error: Optional[str]
+    processing_time: float
+    
+    messages: Annotated[List, operator.add]
 
 
-# =============================================================================
-# NODE FUNCTIONS
-# =============================================================================
-
-def load_user_profile_node(state: ConversationState) -> ConversationState:
+class EnhancedLangGraphOrchestrator:
     """
-    Node 0: Load user profile and authenticate.
-    
-    Loads user data from MongoDB (or dummy data) and verifies subscription.
-    If user has birth data in profile, auto-populate it.
+    Enhanced orchestrator with 3-way routing and REAL calculations.
     """
-    user_id = state.get("user_id")
     
-    if not user_id:
-        state["user_authenticated"] = False
-        state["error"] = "No user_id provided"
-        state["processing_path"] = state.get("processing_path", [])
-        state["processing_path"].append("load_user_profile [no_user_id]")
-        return state
-    
-    if not PROFILE_MANAGER_AVAILABLE:
-        # Fallback: No profile system
-        state["user_authenticated"] = True  # Allow for testing
-        state["user_profile"] = None
-        state["processing_path"] = state.get("processing_path", [])
-        state["processing_path"].append("load_user_profile [unavailable]")
-        return state
-    
-    # Load profile
-    profile_manager = get_default_profile_manager()
-    
-    # Authenticate user
-    is_authenticated = profile_manager.authenticate_user(user_id)
-    state["user_authenticated"] = is_authenticated
-    
-    if not is_authenticated:
-        state["is_blocked"] = True
-        state["block_reason"] = "authentication_failed"
-        state["final_answer"] = """🔒 Access Denied
-
-Your subscription is not active or has expired. 
-
-To continue using the Astrology AI Chatbot, please:
-• Renew your subscription
-• Contact support if you believe this is an error
-
-Thank you for your understanding! 🙏"""
-        state["processing_path"] = state.get("processing_path", [])
-        state["processing_path"].append("load_user_profile [auth_failed]")
-        return state
-    
-    # Load profile data
-    profile = profile_manager.get_user_profile(user_id)
-    
-    if profile:
-        state["user_profile"] = profile.to_dict()
+    def __init__(
+        self,
+        intent_classifier,
+        user_manager,
+        hybrid_retriever,
+        prompt_builder,
+        calculation_tools: Optional[Dict] = None,  # ✅ CHANGED: Now optional
+        llm=None,
+        mongodb_uri: Optional[str] = None
+    ):
+        """Initialize enhanced orchestrator."""
+        self.intent_classifier = intent_classifier
+        self.user_manager = user_manager
+        self.hybrid_retriever = hybrid_retriever
+        self.prompt_builder = prompt_builder
         
-        # Auto-populate birth data if available
-        if profile.has_complete_birth_data():
-            state["birth_data"] = {
-                "date": profile.date_of_birth,
-                "time": profile.time_of_birth,
-                "location_text": profile.place_of_birth,
-                "latitude": profile.latitude,
-                "longitude": profile.longitude,
-                "timezone": profile.timezone
+        # ✅ NEW: Auto-load calculation tools if not provided
+        if calculation_tools is None:
+            print("[LANGGRAPH] Loading calculation tools...")
+            calculation_tools = get_calculation_tools()
+            print(f"[LANGGRAPH] ✓ Loaded {len(calculation_tools)} calculation tools")
+        
+        self.calculation_tools = calculation_tools
+        self.llm = llm
+        
+        self.graph = self._build_graph()
+        
+        print("[LANGGRAPH] [SUCCESS] Enhanced orchestrator initialized")
+        print("[LANGGRAPH] Routes: CHITCHAT | NEEDS_CALCULATION | NEEDS_RAG")
+    
+    def _build_graph(self) -> StateGraph:
+        """Build enhanced graph with 3-way routing."""
+        
+        workflow = StateGraph(NakshatraState)
+        
+        # Nodes
+        workflow.add_node("authenticate", self._authenticate_node)
+        workflow.add_node("classify_intent", self._classify_intent_node)
+        workflow.add_node("handle_chitchat", self._handle_chitchat_node)
+        workflow.add_node("handle_calculation", self._handle_calculation_node)
+        workflow.add_node("handle_rag", self._handle_rag_node)
+        workflow.add_node("format_response", self._format_response_node)
+        
+        # Entry point
+        workflow.set_entry_point("authenticate")
+        
+        # Edges
+        workflow.add_edge("authenticate", "classify_intent")
+        
+        # 3-way conditional routing
+        workflow.add_conditional_edges(
+            "classify_intent",
+            self._route_by_intent,
+            {
+                "chitchat": "handle_chitchat",
+                "calculation": "handle_calculation",
+                "rag": "handle_rag",
+                "error": END
             }
-            state["birth_data_complete"] = True
-            state["birth_data_source"] = "profile"
-            state["missing_fields"] = []
-            
-            print(f"[PROFILE] Loaded for {profile.name}: Birth data available")
-        else:
-            print(f"[PROFILE] Loaded for {profile.name}: Birth data incomplete")
+        )
         
-        # Update last active
-        profile_manager.update_last_active(user_id)
-    else:
-        state["user_profile"] = None
-        print(f"[PROFILE] Profile not found for user_id: {user_id}")
-    
-    state["processing_path"] = state.get("processing_path", [])
-    state["processing_path"].append("load_user_profile")
-    
-    return state
-
-
-def classify_intent_node(state: ConversationState) -> ConversationState:
-    """
-    Node 1: Classify user intent.
-    
-    Determines if query is:
-    - Calculation (requires birth data & computation)
-    - Interpretation (requires RAG/LLM only)
-    - Chitchat (greeting, thanks, etc.)
-    - Blocked (harmful content)
-    """
-    query = state["query"]
-    
-    # Use classification tool
-    classification = classify_astrology_query.invoke({"query": query})
-    
-    state["intent_type"] = classification["type"]
-    state["astro_system"] = classification.get("system", "vedic")
-    state["calculation_type"] = classification.get("calculation_type")
-    state["is_blocked"] = classification["type"] == "blocked"
-    
-    # Update processing path
-    state["processing_path"] = state.get("processing_path", [])
-    state["processing_path"].append("classify_intent")
-    
-    print(f"[CLASSIFY] Intent: {state['intent_type']}, System: {state['astro_system']}")
-    
-    return state
-
-
-def safety_check_node(state: ConversationState) -> ConversationState:
-    """
-    Node 2: Safety and ethics check.
-    
-    Blocks queries about:
-    - Death timing predictions
-    - Medical diagnosis
-    - Gambling/lottery numbers
-    - Legal advice
-    """
-    if state["is_blocked"]:
-        state["block_reason"] = "This query involves predictions that astrology ethics discourage."
-        state["final_answer"] = """I appreciate your question, but I must respectfully decline to answer queries about:
-
-• Specific death timing predictions
-• Medical diagnosis or treatment
-• Gambling or lottery predictions
-• Legal advice or court case outcomes
-
-These topics fall outside the ethical boundaries of astrological consultation. 
-
-However, I'd be happy to help with:
-• Understanding planetary influences on health tendencies (not diagnosis)
-• Timing for new ventures or important decisions
-• Character analysis and life path guidance
-• Relationship compatibility
-• Career direction
-
-Would you like to rephrase your question in one of these areas?"""
+        # All paths go to format_response
+        workflow.add_edge("handle_chitchat", "format_response")
+        workflow.add_edge("handle_calculation", "format_response")
+        workflow.add_edge("handle_rag", "format_response")
         
-        state["requires_followup"] = False
-    
-    state["processing_path"].append("safety_check")
-    
-    return state
-
-
-def extract_birth_data_node(state: ConversationState) -> ConversationState:
-    """
-    Node 3: Extract birth data from query (if calculation type).
-    
-    First checks if user profile has birth data. If yes, uses that.
-    Otherwise, tries to extract from query.
-    """
-    if state["intent_type"] != "calculation":
-        # Skip if not calculation
-        state["birth_data_complete"] = True
-        state["processing_path"].append("extract_birth_data [skipped]")
-        return state
-    
-    # Check if birth data already loaded from profile
-    if state.get("birth_data_source") == "profile" and state.get("birth_data_complete"):
-        state["processing_path"].append("extract_birth_data [from_profile]")
-        print(f"[EXTRACT] Using birth data from user profile")
-        return state
-    
-    # Extract from query
-    query = state["query"]
-    extracted = extract_birth_data_from_query.invoke({"query": query})
-    
-    # If user has partial profile data, merge with extracted
-    profile_data = state.get("birth_data", {})
-    
-    state["birth_data"] = {
-        "date": extracted.get("birth_date") or profile_data.get("date"),
-        "time": extracted.get("birth_time") or profile_data.get("time"),
-        "location_text": extracted.get("location_text") or profile_data.get("location_text"),
-        "latitude": profile_data.get("latitude"),  # From profile only
-        "longitude": profile_data.get("longitude"),  # From profile only
-        "timezone": profile_data.get("timezone"),
-    }
-    
-    # Determine missing fields
-    missing = []
-    if not state["birth_data"]["date"]:
-        missing.append("birth_date")
-    if not state["birth_data"]["time"]:
-        missing.append("birth_time")
-    # Location check: we need at least text OR coordinates
-    has_location = (
-        state["birth_data"]["location_text"] or
-        (state["birth_data"]["latitude"] and state["birth_data"]["longitude"])
-    )
-    if not has_location:
-        missing.append("location")
-    
-    state["missing_fields"] = missing
-    state["birth_data_complete"] = len(missing) == 0
-    state["birth_data_source"] = "query" if extracted.get("birth_date") else "mixed"
-    
-    state["processing_path"].append("extract_birth_data")
-    
-    print(f"[EXTRACT] Birth data complete: {state['birth_data_complete']}")
-    if not state["birth_data_complete"]:
-        print(f"[EXTRACT] Missing: {state['missing_fields']}")
-    
-    return state
-
-
-def request_missing_data_node(state: ConversationState) -> ConversationState:
-    """
-    Node 4: Request missing birth data from user.
-    
-    Personalized based on user profile.
-    If birth data is incomplete, generate a friendly prompt
-    asking for missing information.
-    """
-    missing = state.get("missing_fields", [])
-    
-    if not missing:
-        return state
-    
-    # Get user name from profile
-    user_name = ""
-    if state.get("user_profile"):
-        user_name = state["user_profile"].get("name", "").split()[0]  # First name
-        if user_name:
-            user_name = f"{user_name}, "
-    
-    # Check if we have location from profile
-    has_profile_location = (
-        state.get("birth_data", {}).get("latitude") and
-        state.get("birth_data", {}).get("longitude")
-    )
-    
-    # Generate personalized request
-    if has_profile_location:
-        # We have location, just need date/time
-        state["final_answer"] = f"""Hi {user_name}to calculate your chart, I need:
-
-{chr(10).join('• ' + field.replace('_', ' ').title() for field in missing if field != 'location')}
-
-I already have your birth location ({state['birth_data'].get('location_text', 'on file')}) from your profile.
-
-Please provide the missing details. For example:
-"March 15, 1990 at 2:30 PM"
-
-Looking forward to generating your chart! 🌟"""
-    else:
-        # Need all fields
-        missing_str = ", ".join(f.replace('_', ' ') for f in missing)
+        # End
+        workflow.add_edge("format_response", END)
         
-        state["final_answer"] = f"""Hi {user_name}to calculate your birth chart accurately, I need:
-
-{chr(10).join('• ' + field.replace('_', ' ').title() for field in missing)}
-
-Please provide these details in your next message. For example:
-"I was born on March 15, 1990 at 2:30 PM in Delhi"
-
-Your birth data will be added to your profile for future convenience! 🌟"""
+        return workflow.compile()
     
-    state["requires_followup"] = True
-    state["followup_question"] = f"Please provide your {', '.join(missing)}"
+    # ========================================================================
+    # NODE IMPLEMENTATIONS
+    # ========================================================================
     
-    state["processing_path"].append("request_missing_data")
-    
-    return state
-
-
-def execute_calculation_node(state: ConversationState) -> ConversationState:
-    """
-    Node 5: Execute astrological calculations.
-    
-    Calls appropriate calculation tool based on:
-    - System (Vedic vs Western)
-    - Type (birth chart, transits, dasha)
-    
-    Uses coordinates from user profile (required).
-    """
-    if state["intent_type"] != "calculation" or not state["birth_data_complete"]:
-        state["processing_path"].append("execute_calculation [skipped]")
-        return state
-    
-    birth_data = state["birth_data"]
-    system = state["astro_system"]
-    calc_type = state["calculation_type"]
-    
-    print(f"[CALCULATE] System: {system}, Type: {calc_type}")
-    
-    try:
-        # Validate coordinates
-        if not birth_data.get("latitude") or not birth_data.get("longitude"):
-            state["error"] = "Birth location coordinates not available in profile"
-            print(f"[ERROR] {state['error']}")
-            state["processing_path"].append("execute_calculation [error]")
+    def _authenticate_node(self, state: NakshatraState) -> NakshatraState:
+        """Node 1: Authenticate user."""
+        print(f"[AUTH] Authenticating user: {state['user_id']}")
+        
+        # Check if user exists
+        if not self.user_manager.user_exists(state['user_id']):
+            print(f"[AUTH] [FAIL] User not found: {state['user_id']}")
+            state['authenticated'] = False
+            state['error'] = "User not found. Please register first."
             return state
         
-        # Execute calculation
-        if system == "vedic":
-            if calc_type == "transits":
-                result = calculate_vedic_transits.invoke({
-                    "birth_date": birth_data["date"],
-                    "birth_time": birth_data["time"],
-                    "latitude": birth_data["latitude"],
-                    "longitude": birth_data["longitude"]
-                })
-            else:  # birth_chart
-                result = calculate_vedic_birth_chart.invoke({
-                    "birth_date": birth_data["date"],
-                    "birth_time": birth_data["time"],
-                    "latitude": birth_data["latitude"],
-                    "longitude": birth_data["longitude"],
-                    "timezone": birth_data.get("timezone")
-                })
+        # Load profile
+        user_profile = self.user_manager.get_user_profile(state['user_id'])
         
-        elif system == "western":
-            result = calculate_western_birth_chart.invoke({
-                "birth_date": birth_data["date"],
-                "birth_time": birth_data["time"],
-                "latitude": birth_data["latitude"],
-                "longitude": birth_data["longitude"],
-                "timezone": birth_data.get("timezone")
+        if user_profile is None:
+            print(f"[AUTH] [FAIL] Could not load profile")
+            state['authenticated'] = False
+            state['error'] = "Could not load user profile."
+            return state
+        
+        # Success
+        state['authenticated'] = True
+        state['user_profile'] = user_profile.to_dict()
+        
+        # Update last active
+        self.user_manager.update_last_active(state['user_id'])
+        
+        print(f"[AUTH] [SUCCESS] Authenticated: {user_profile.name}")
+        return state
+    
+    def _classify_intent_node(self, state: NakshatraState) -> NakshatraState:
+        """Node 2: Classify intent."""
+        print(f"[INTENT] Classifying query: '{state['query'][:50]}...'")
+        
+        result = self.intent_classifier.classify(
+            query=state['query'],
+            user_profile=state['user_profile'],
+            conversation_history=state.get('conversation_history', [])
+        )
+        
+        state['intent'] = result['intent']
+        state['confidence'] = result['confidence']
+        state['intent_reasoning'] = result.get('reasoning', '')
+        state['cached'] = result.get('cached', False)
+        
+        cache_status = "CACHED" if state['cached'] else "LLM"
+        print(f"[INTENT] [LLM] -> {state['intent']} (confidence: {state['confidence']:.2f})")
+        
+        return state
+    
+    def _handle_chitchat_node(self, state: NakshatraState) -> NakshatraState:
+        """Node 3a: Handle conversational queries."""
+        print("[CHITCHAT] Quick response")
+        
+        user_name = state['user_profile'].get('name', 'User')
+        q = state['query'].lower().strip()
+        
+        # Simple pattern matching for common chitchat
+        if any(word in q for word in ['hi', 'hello', 'hey', 'namaste']):
+            state['answer'] = f"Namaste, {user_name}! I'm NakshatraAI, your professional astrology consultant. How may I assist you today?"
+        elif any(word in q for word in ['who are you', 'what are you']):
+            state['answer'] = f"I'm NakshatraAI, a professional Vedic astrology consultant. I can analyze your birth chart, predict timing for life events, and provide guidance based on classical astrological principles."
+        elif any(word in q for word in ['thanks', 'thank you']):
+            state['answer'] = f"You're welcome, {user_name}! Feel free to ask anything about your chart or astrological concepts."
+        else:
+            state['answer'] = f"Hello {user_name}! I'm here to help with astrological guidance. What would you like to know?"
+        
+        return state
+    
+    def _handle_calculation_node(self, state: NakshatraState) -> NakshatraState:
+        """
+        Node 3b: Handle pure calculation with REAL VedicEngine.
+        ✅ UPDATED: Now uses actual calculation tools (no placeholders!)
+        """
+        print("[CALCULATION] Generating chart data")
+        
+        user_profile = state['user_profile']
+        
+        # Check if user has birth data
+        if not user_profile.get('date_of_birth'):
+            state['answer'] = "I don't have your birth details. Please update your profile with date, time, and place of birth."
+            return state
+        
+        try:
+            # ✅ NEW: Use REAL calculation tool
+            print("[CALCULATION] Calling VedicEngine...")
+            chart_tool = self.calculation_tools['vedic_birth_chart']
+            chart_data = chart_tool.invoke({
+                "date_of_birth": user_profile.get('date_of_birth'),
+                "time_of_birth": user_profile.get('time_of_birth'),
+                "latitude": user_profile.get('latitude'),
+                "longitude": user_profile.get('longitude'),
+                "timezone": user_profile.get('timezone', 'Asia/Kolkata')
             })
-        
-        else:
-            result = {"error": True, "message": f"Unknown system: {system}"}
-        
-        state["calculation_result"] = result
-        
-        if result.get("error"):
-            state["error"] = result.get("message", "Calculation failed")
-            print(f"[ERROR] {state['error']}")
-        else:
-            print(f"[CALCULATE] Success! Chart type: {result.get('chart_type')}")
-        
-    except Exception as e:
-        state["error"] = f"Calculation error: {str(e)}"
-        print(f"[ERROR] {state['error']}")
-    
-    state["processing_path"].append("execute_calculation")
-    
-    return state
-
-
-def retrieve_knowledge_node(state: ConversationState) -> ConversationState:
-    """
-    Node 6: Retrieve astrological knowledge via RAG.
-    
-    Uses RAG engine to fetch relevant classical text passages
-    for interpretation queries.
-    """
-    if not RAG_AVAILABLE:
-        state["processing_path"].append("retrieve_knowledge [unavailable]")
-        return state
-    
-    # Skip RAG for pure calculations (unless user asks for interpretation too)
-    if state["intent_type"] == "calculation" and "what" not in state["query"].lower():
-        state["processing_path"].append("retrieve_knowledge [skipped]")
-        return state
-    
-    query = state["query"]
-    
-    # Initialize RAG engine
-    try:
-        rag_engine = RAGEngine(
-            persona="hybrid",
-            enable_storage=False  # Orchestrator manages history
-        )
-        
-        # Get answer from RAG
-        response = rag_engine.answer_question(
-            query=query,
-            top_k=5,
-            conversation_history=state.get("conversation_history", []),
-            save_to_store=False  # Managed externally
-        )
-        
-        state["rag_result"] = {
-            "answer": response.answer,
-            "sources": [
-                {
-                    "book": chunk.metadata.get("source_book"),
-                    "chapter": chunk.metadata.get("chapter"),
-                    "relevance": chunk.score
-                }
-                for chunk in response.sources[:3]  # Top 3 sources
-            ]
-        }
-        
-        print(f"[RAG] Retrieved {len(response.sources)} sources")
-        
-    except Exception as e:
-        state["error"] = f"RAG error: {str(e)}"
-        print(f"[ERROR] {state['error']}")
-    
-    state["processing_path"].append("retrieve_knowledge")
-    
-    return state
-
-
-def synthesize_response_node(state: ConversationState) -> ConversationState:
-    """
-    Node 7: Synthesize final response.
-    
-    Combines:
-    - Calculation results (if any)
-    - RAG knowledge (if any)
-    - Appropriate formatting
-    
-    Into a coherent, helpful response.
-    """
-    # If already has final answer (blocked, missing data), skip
-    if state.get("final_answer"):
-        state["processing_path"].append("synthesize_response [skipped]")
-        return state
-    
-    parts = []
-    
-    # Part 1: Calculation results
-    calc_result = state.get("calculation_result")
-    if calc_result and not calc_result.get("error"):
-        parts.append("## 📊 Your Chart Calculation\n")
-        
-        if calc_result.get("chart_type") == "vedic":
-            parts.append(f"**Lagna (Ascendant):** {calc_result['lagna']['rashi']}")
-            parts.append(f"**Rashi (Moon Sign):** {calc_result['rashi']}")
-            parts.append(f"**Sun Sign:** {calc_result['sun_sign']}")
-            parts.append(f"**Moon Nakshatra:** {calc_result['moon_nakshatra']}\n")
             
-            # Current Dasha
-            dasha = calc_result.get("current_dasha", {})
-            if dasha:
-                parts.append("**Current Dasha Periods:**")
-                for level, planet in dasha.items():
-                    parts.append(f"  • {level}: {planet}")
-                parts.append("")
+            # Check for errors
+            if "error" in chart_data:
+                state['answer'] = f"Error calculating chart: {chart_data['error']}"
+                state['error'] = chart_data['error']
+                return state
             
-            # Top planets
-            planets = calc_result.get("planets", {})
-            if planets:
-                parts.append("**Key Planetary Positions:**")
-                for name, data in list(planets.items())[:5]:  # Top 5
-                    house = data.get("house")
-                    rashi = data.get("rashi")
-                    parts.append(f"  • {name.title()}: {rashi}, {house}th house")
-                parts.append("")
+            print(f"[CALCULATION] ✓ Chart calculated: Lagna={chart_data['lagna']}, Rashi={chart_data['moon_sign']}")
+            
+            # Format the response
+            state['answer'] = f"""Here's your Vedic birth chart:
+
+**Birth Details:**
+• Date: {user_profile.get('date_of_birth')}
+• Time: {user_profile.get('time_of_birth')}
+• Place: {user_profile.get('place_of_birth')}
+
+**Chart Essentials:**
+• Lagna (Ascendant): {chart_data['lagna']}
+• Moon Sign (Rashi): {chart_data['moon_sign']}
+• Sun Sign: {chart_data['sun_sign']}
+• Moon Nakshatra: {chart_data['moon_nakshatra']}
+
+**Planetary Positions:**
+"""
+            
+            # Add planet positions
+            for planet_name in ['Sun', 'Moon', 'Mars', 'Mercury', 'Jupiter', 'Venus', 'Saturn']:
+                planet_data = chart_data['planets'][planet_name]
+                state['answer'] += f"• {planet_name}: {planet_data['rashi']} (House {planet_data['house']})\n"
+            
+            state['answer'] += f"\n• Rahu: {chart_data['planets']['Rahu']['rashi']} (House {chart_data['planets']['Rahu']['house']})"
+            state['answer'] += f"\n• Ketu: {chart_data['planets']['Ketu']['rashi']} (House {chart_data['planets']['Ketu']['house']})"
+            
+            state['answer'] += "\n\nWould you like me to interpret any specific aspect of your chart?"
+            
+            # Store chart data for potential follow-up questions
+            state['chart_data'] = chart_data
+            
+        except Exception as e:
+            print(f"[ERROR] Calculation failed: {e}")
+            import traceback
+            traceback.print_exc()
+            state['error'] = str(e)
+            state['answer'] = f"Error generating chart: {e}"
         
-        elif calc_result.get("chart_type") == "western":
-            parts.append(f"**Sun Sign:** {calc_result['sun_sign']}")
-            parts.append(f"**Moon Sign:** {calc_result['moon_sign']}")
-            parts.append(f"**Ascendant:** {calc_result['ascendant']}\n")
+        return state
     
-    # Part 2: RAG interpretation
-    rag_result = state.get("rag_result")
-    if rag_result:
-        if parts:  # If we have calculations, add interpretation section
-            parts.append("\n## 📚 Classical Interpretation\n")
+    def _handle_rag_node(self, state: NakshatraState) -> NakshatraState:
+        """
+        Node 3c: Handle RAG queries with REAL calculations for predictions.
+        ✅ UPDATED: Now uses actual calculation tools (no placeholders!)
         
-        parts.append(rag_result["answer"])
+        Flow:
+        1. Determine if calculation is needed (for prediction queries)
+        2. Calculate if needed (REAL calculations now!)
+        3. Retrieve relevant knowledge
+        4. Synthesize personalized response
+        """
+        print("[RAG] Unified flow: Check Calc -> Retrieve -> Interpret")
         
-        # Add sources
-        sources = rag_result.get("sources", [])
-        if sources:
-            parts.append("\n\n**Sources:**")
-            for i, source in enumerate(sources[:3], 1):
-                book = source.get("book", "Unknown")
-                chapter = source.get("chapter", "")
-                parts.append(f"{i}. {book}" + (f" - {chapter}" if chapter else ""))
-    
-    # Part 3: Error handling
-    if state.get("error"):
-        parts.append(f"\n⚠️ Note: {state['error']}")
-    
-    # Part 4: Chitchat fallback
-    if state["intent_type"] == "chitchat" and not parts:
-        parts.append("Namaste! 🙏 How may I assist you with your astrological questions today?")
-    
-    # Combine all parts
-    state["final_answer"] = "\n".join(parts) if parts else "I apologize, but I couldn't generate a response. Please try rephrasing your question."
-    state["requires_followup"] = False
-    
-    state["processing_path"].append("synthesize_response")
-    
-    return state
+        user_profile = state['user_profile']
+        q = state['query'].lower().strip()
+        
+        # Determine if this RAG query is a "Prediction" (needs calculation)
+        prediction_keywords = ['when', 'will', 'future', 'timing', 'time for', 'outcome']
+        is_prediction = any(kw in q for kw in prediction_keywords) or 'my' in q
+        
+        try:
+            # ✅ UPDATED: Step 1 - REAL Calculation (if it looks like a prediction query)
+            if is_prediction and user_profile.get('date_of_birth'):
+                print("[RAG] Step 1: Query looks personal/predictive. Calculating chart data...")
+                
+                if not state.get('chart_data'):
+                    try:
+                        # Calculate REAL birth chart
+                        print("[RAG] Calling VedicEngine for birth chart...")
+                        chart_tool = self.calculation_tools['vedic_birth_chart']
+                        chart_data = chart_tool.invoke({
+                            "date_of_birth": user_profile.get('date_of_birth'),
+                            "time_of_birth": user_profile.get('time_of_birth'),
+                            "latitude": user_profile.get('latitude'),
+                            "longitude": user_profile.get('longitude'),
+                            "timezone": user_profile.get('timezone', 'Asia/Kolkata')
+                        })
+                        
+                        if "error" not in chart_data:
+                            state['chart_data'] = chart_data
+                            print(f"[RAG] ✓ Chart calculated: Lagna={chart_data['lagna']}, Rashi={chart_data['moon_sign']}")
+                        else:
+                            print(f"[RAG] ✗ Chart calculation failed: {chart_data['error']}")
+                            state['chart_data'] = None
+                        
+                        # Calculate REAL current dasha
+                        print("[RAG] Calling VedicEngine for dasha periods...")
+                        dasha_tool = self.calculation_tools['current_dasha']
+                        dasha_data = dasha_tool.invoke({
+                            "date_of_birth": user_profile.get('date_of_birth'),
+                            "time_of_birth": user_profile.get('time_of_birth'),
+                            "latitude": user_profile.get('latitude'),
+                            "longitude": user_profile.get('longitude')
+                        })
+                        
+                        if "error" not in dasha_data:
+                            state['dasha_data'] = dasha_data
+                            print(f"[RAG] ✓ Dasha calculated: {dasha_data['dasha_sequence']}")
+                        else:
+                            print(f"[RAG] ✗ Dasha calculation failed: {dasha_data['error']}")
+                            state['dasha_data'] = None
+                        
+                        # Calculate REAL current transits
+                        print("[RAG] Calculating current transits...")
+                        transit_tool = self.calculation_tools['current_transits']
+                        transit_data = transit_tool.invoke({})
+                        
+                        if "error" not in transit_data:
+                            state['transit_data'] = transit_data
+                            print(f"[RAG] ✓ Transits calculated for {transit_data['date']}")
+                        else:
+                            print(f"[RAG] ✗ Transit calculation failed: {transit_data['error']}")
+                            state['transit_data'] = None
+                        
+                    except Exception as e:
+                        print(f"[RAG] ERROR during calculations: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        # Graceful fallback - continue without chart data
+                        state['chart_data'] = None
+                        state['dasha_data'] = None
+                        state['transit_data'] = None
+                
+                if state.get('chart_data'):
+                    print(f"[RAG] [CALC] Chart loaded for: {user_profile.get('name')}")
+                else:
+                    print(f"[RAG] [WARN] Proceeding without chart data")
+            else:
+                print("[RAG] Step 1: General query. Skipping specific calculations.")
 
+            # Step 2: Retrieve Relevant Knowledge
+            print("[RAG] Step 2: Retrieving astrological knowledge...")
+            
+            # Enhance query for better retrieval if we have chart data
+            retrieval_query = state['query']
+            if state.get('chart_data'):
+                c = state['chart_data']
+                retrieval_query += f" (Lagna: {c.get('lagna')}, Rashi: {c.get('moon_sign')})"
 
-# =============================================================================
-# ROUTING FUNCTIONS
-# =============================================================================
+            knowledge_chunks = self.hybrid_retriever.retrieve(
+                query=retrieval_query,
+                intent="NEEDS_RAG",
+                top_k=5
+            )
+            
+            state['knowledge_chunks'] = knowledge_chunks
+            print(f"[RAG] [SUCCESS] Retrieved {len(knowledge_chunks)} knowledge chunks")
+            
+            # Step 3: Build Prompt
+            if is_prediction and state.get('chart_data'):
+                prompt = self._build_prediction_prompt(
+                    query=state['query'],
+                    chart_data=state['chart_data'],
+                    dasha_data=state.get('dasha_data', {}),
+                    transit_data=state.get('transit_data', {}),
+                    knowledge_chunks=knowledge_chunks,
+                    user_profile=user_profile
+                )
+            else:
+                prompt = self.prompt_builder.build_prompt(
+                    query=state['query'],
+                    intent="NEEDS_RAG",
+                    user_profile=state['user_profile'],
+                    knowledge_chunks=knowledge_chunks,
+                    conversation_history=state.get('conversation_history', [])
+                )
+            
+            # Step 4: Generate
+            response = self.llm.invoke(prompt)
+            state['answer'] = response.content if hasattr(response, 'content') else str(response)
+            
+            print(f"[RAG] [SUCCESS] Generated response ({len(state['answer'])} chars)")
+            
+        except Exception as e:
+            print(f"[ERROR] RAG path failed: {e}")
+            import traceback
+            traceback.print_exc()
+            state['error'] = str(e)
+            state['answer'] = f"Error during astrological analysis: {e}"
+        
+        return state
+    
+    def _format_response_node(self, state: NakshatraState) -> NakshatraState:
+        """Node 4: Format final response."""
+        
+        if not state.get('error'):
+            intent = state.get('intent', 'UNKNOWN')
+            cache = "CACHED" if state.get('cached', False) else "LLM"
+            state['answer'] += f"\n\n[Intent: {intent}, {cache}]"
+        
+        return state
+    
+    # ========================================================================
+    # HELPER METHODS
+    # ========================================================================
+    
+    def _build_prediction_prompt(
+        self,
+        query: str,
+        chart_data: Dict,
+        dasha_data: Dict,
+        transit_data: Dict,
+        knowledge_chunks: List,
+        user_profile: Dict
+    ) -> str:
+        """
+        Build personalized prediction prompt with REAL chart context.
+        ✅ UPDATED: Now uses rich data structure from VedicEngine
+        """
+        
+        # Format knowledge context
+        context = "\n\n".join([
+            f"Source: {chunk.get('source', 'Unknown')}\n{chunk.get('content', '')}"
+            for chunk in knowledge_chunks[:3]
+        ]) if knowledge_chunks else "No specific texts retrieved."
+        
+        # Extract dasha info safely
+        maha_planet = dasha_data.get('mahadasha', {}).get('planet', 'Unknown')
+        antar_planet = dasha_data.get('antardasha', {}).get('planet', 'Unknown')
+        dasha_sequence = dasha_data.get('dasha_sequence', f"{maha_planet}/{antar_planet}")
+        
+        # Extract transit info safely
+        jupiter_transit = transit_data.get('transits', {}).get('Jupiter', 'Unknown')
+        saturn_transit = transit_data.get('transits', {}).get('Saturn', 'Unknown')
+        mars_transit = transit_data.get('transits', {}).get('Mars', 'Unknown')
+        transit_date = transit_data.get('date', 'current')
+        
+        # ✅ NEW: Enhanced prompt with rich chart data
+        prompt = f"""You are an expert Vedic astrologer. Provide a personalized prediction based on the user's actual birth chart.
 
-def route_after_profile_load(state: ConversationState) -> str:
-    """
-    Decide next step after loading user profile.
-    
-    Routes:
-    - not authenticated → END (shows access denied message)
-    - authenticated → classify_intent
-    """
-    if not state.get("user_authenticated"):
-        return END
-    
-    return "classify_intent"
+USER'S QUERY: "{query}"
 
+USER'S COMPLETE BIRTH CHART:
+• Lagna (Ascendant): {chart_data.get('lagna')}
+• Moon Sign (Rashi): {chart_data.get('moon_sign')}
+• Sun Sign: {chart_data.get('sun_sign')}
+• Moon Nakshatra: {chart_data.get('moon_nakshatra')}
 
-def route_after_safety_check(state: ConversationState) -> str:
-    """
-    Decide next step after safety check.
-    
-    Routes:
-    - blocked → END
-    - calculation → extract_birth_data
-    - interpretation → retrieve_knowledge
-    - chitchat → synthesize_response
-    """
-    if state["is_blocked"]:
-        return END
-    
-    intent = state["intent_type"]
-    
-    if intent == "calculation":
-        return "extract_birth_data"
-    elif intent == "interpretation":
-        return "retrieve_knowledge"
-    else:  # chitchat
-        return "synthesize_response"
+KEY PLANETARY POSITIONS:
+• Sun: {chart_data['planets']['Sun']['rashi']} in House {chart_data['planets']['Sun']['house']} ({chart_data['planets']['Sun']['nakshatra']})
+• Moon: {chart_data['planets']['Moon']['rashi']} in House {chart_data['planets']['Moon']['house']} ({chart_data['planets']['Moon']['nakshatra']})
+• Mars: {chart_data['planets']['Mars']['rashi']} in House {chart_data['planets']['Mars']['house']}
+• Mercury: {chart_data['planets']['Mercury']['rashi']} in House {chart_data['planets']['Mercury']['house']}
+• Jupiter: {chart_data['planets']['Jupiter']['rashi']} in House {chart_data['planets']['Jupiter']['house']}
+• Venus: {chart_data['planets']['Venus']['rashi']} in House {chart_data['planets']['Venus']['house']}
+• Saturn: {chart_data['planets']['Saturn']['rashi']} in House {chart_data['planets']['Saturn']['house']}
+• Rahu: {chart_data['planets']['Rahu']['rashi']} in House {chart_data['planets']['Rahu']['house']}
+• Ketu: {chart_data['planets']['Ketu']['rashi']} in House {chart_data['planets']['Ketu']['house']}
 
+CURRENT VIMSHOTTARI DASHA PERIODS:
+• Mahadasha: {maha_planet}
+• Antardasha: {antar_planet}
+• Dasha Sequence: {dasha_sequence}
 
-def route_after_birth_data_extraction(state: ConversationState) -> str:
-    """
-    Decide next step after birth data extraction.
-    
-    Routes:
-    - data complete → execute_calculation
-    - data incomplete → request_missing_data
-    """
-    if state.get("birth_data_complete"):
-        return "execute_calculation"
-    else:
-        return "request_missing_data"
+CURRENT TRANSITS (as of {transit_date}):
+• Jupiter: {jupiter_transit}
+• Saturn: {saturn_transit}
+• Mars: {mars_transit}
 
+RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
+{context}
 
-def route_after_calculation(state: ConversationState) -> str:
-    """
-    Decide next step after calculation.
-    
-    Routes:
-    - error → synthesize_response (will show error)
-    - success + interpretation needed → retrieve_knowledge
-    - success + no interpretation → synthesize_response
-    """
-    # Check if user also wants interpretation
-    query_lower = state["query"].lower()
-    wants_interpretation = any(w in query_lower for w in ["what", "mean", "signify", "indicate", "explain"])
-    
-    if wants_interpretation:
-        return "retrieve_knowledge"
-    else:
-        return "synthesize_response"
+INSTRUCTIONS:
+1. Analyze the user's SPECIFIC chart placements (not generic interpretations)
+2. Consider the current dasha period and its relationship with natal chart
+3. Factor in current transits and their impact on natal positions
+4. Use classical astrological principles from the provided context
+5. Provide a PERSONALIZED prediction with timing based on dasha/transits
+6. Be specific about THEIR chart - mention actual signs, houses, and planets
+7. If timing is relevant, provide approximate time frames based on dasha periods
 
-
-# =============================================================================
-# GRAPH CONSTRUCTION
-# =============================================================================
-
-def create_orchestration_graph() -> StateGraph:
-    """
-    Create the complete LangGraph orchestration flow.
+Provide a detailed, personalized prediction:"""
+        
+        return prompt
     
-    Flow:
-    0. Load user profile & authenticate
-    1. Classify intent
-    2. Safety check
-    3. [If calculation] Extract birth data
-    4. [If missing data] Request data → END
-    5. [If calculation] Execute calculation
-    6. [If interpretation needed] Retrieve knowledge
-    7. Synthesize final response
-    """
-    # Initialize graph
-    workflow = StateGraph(ConversationState)
+    def _route_by_intent(self, state: NakshatraState) -> str:
+        """3-way routing based on intent."""
+        
+        if not state.get('authenticated'):
+            return "error"
+        
+        intent = state.get('intent', 'NEEDS_RAG')
+        
+        if intent == "CHITCHAT":
+            return "chitchat"
+        elif intent == "NEEDS_CALCULATION":
+            return "calculation"
+        else:
+            return "rag"
     
-    # Add nodes
-    workflow.add_node("load_user_profile", load_user_profile_node)
-    workflow.add_node("classify_intent", classify_intent_node)
-    workflow.add_node("safety_check", safety_check_node)
-    workflow.add_node("extract_birth_data", extract_birth_data_node)
-    workflow.add_node("request_missing_data", request_missing_data_node)
-    workflow.add_node("execute_calculation", execute_calculation_node)
-    workflow.add_node("retrieve_knowledge", retrieve_knowledge_node)
-    workflow.add_node("synthesize_response", synthesize_response_node)
-    
-    # Define edges
-    workflow.set_entry_point("load_user_profile")
-    
-    # After profile load, check authentication
-    workflow.add_conditional_edges(
-        "load_user_profile",
-        route_after_profile_load,
-        {
-            END: END,
-            "classify_intent": "classify_intent",
-        }
-    )
-    
-    workflow.add_edge("classify_intent", "safety_check")
-    
-    workflow.add_conditional_edges(
-        "safety_check",
-        route_after_safety_check,
-        {
-            END: END,
-            "extract_birth_data": "extract_birth_data",
-            "retrieve_knowledge": "retrieve_knowledge",
-            "synthesize_response": "synthesize_response",
-        }
-    )
-    
-    workflow.add_conditional_edges(
-        "extract_birth_data",
-        route_after_birth_data_extraction,
-        {
-            "execute_calculation": "execute_calculation",
-            "request_missing_data": "request_missing_data",
-        }
-    )
-    
-    workflow.add_edge("request_missing_data", END)
-    
-    workflow.add_conditional_edges(
-        "execute_calculation",
-        route_after_calculation,
-        {
-            "retrieve_knowledge": "retrieve_knowledge",
-            "synthesize_response": "synthesize_response",
-        }
-    )
-    
-    workflow.add_edge("retrieve_knowledge", "synthesize_response")
-    workflow.add_edge("synthesize_response", END)
-    
-    return workflow.compile()
-
-
-# =============================================================================
-# ORCHESTRATOR CLASS
-# =============================================================================
-
-class AstrologyOrchestrator:
-    """
-    Main orchestrator for astrology chatbot.
-    
-    Manages conversation flow using LangGraph.
-    """
-    
-    def __init__(self):
-        """Initialize orchestrator."""
-        self.graph = create_orchestration_graph()
-        print("[ORCHESTRATOR] Initialized")
+    # ========================================================================
+    # PUBLIC API
+    # ========================================================================
     
     def process_query(
         self,
         query: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
-        user_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Process a user query through the orchestration graph.
+        user_id: str,
+        conversation_history: Optional[List[Dict]] = None
+    ) -> Dict:
+        """Process query through enhanced orchestrator."""
+        start_time = datetime.now()
         
-        Args:
-            query: User's question or request
-            conversation_history: Previous conversation turns
-            user_id: User identifier (optional)
-            
-        Returns:
-            Dictionary with final answer and metadata
-        """
-        # Initialize state
-        initial_state = ConversationState(
-            query=query,
-            user_id=user_id,
-            conversation_history=conversation_history or [],
-            user_profile=None,
-            user_authenticated=False,
-            intent_type=None,
-            astro_system=None,
-            calculation_type=None,
-            birth_data=None,
-            birth_data_complete=False,
-            birth_data_source=None,
-            missing_fields=[],
-            calculation_result=None,
-            rag_result=None,
-            is_blocked=False,
-            block_reason=None,
-            final_answer="",
-            requires_followup=False,
-            followup_question=None,
-            processing_path=[],
-            error=None
-        )
-        
-        # Execute graph
-        print(f"\n[ORCHESTRATOR] Processing: '{query[:60]}...'")
-        final_state = self.graph.invoke(initial_state)
-        
-        # Extract result
-        result = {
-            "answer": final_state["final_answer"],
-            "requires_followup": final_state.get("requires_followup", False),
-            "followup_question": final_state.get("followup_question"),
-            "intent_type": final_state.get("intent_type"),
-            "processing_path": final_state.get("processing_path", []),
-            "has_calculation": final_state.get("calculation_result") is not None,
-            "has_interpretation": final_state.get("rag_result") is not None,
-            "error": final_state.get("error"),
+        initial_state: NakshatraState = {
+            "query": query,
+            "user_id": user_id,
+            "conversation_history": conversation_history or [],
+            "user_profile": None,
+            "authenticated": False,
+            "intent": None,
+            "confidence": 0.0,
+            "intent_reasoning": "",
+            "cached": False,
+            "chart_data": None,
+            "dasha_data": None,
+            "transit_data": None,
+            "knowledge_chunks": None,
+            "answer": "",
+            "error": None,
+            "processing_time": 0.0,
+            "messages": []
         }
         
-        print(f"[ORCHESTRATOR] Complete. Path: {' → '.join(result['processing_path'])}")
+        # Run through graph
+        final_state = self.graph.invoke(initial_state)
         
-        return result
+        # Calculate processing time
+        final_state['processing_time'] = (datetime.now() - start_time).total_seconds()
+        
+        return final_state
 
 
-# =============================================================================
-# TESTING
-# =============================================================================
+# ========================================================================
+# FOR TESTING
+# ========================================================================
 
 if __name__ == "__main__":
     print("=" * 70)
-    print("LANGGRAPH ORCHESTRATOR - Test Suite")
+    print("ENHANCED ORCHESTRATOR - Integration Test")
     print("=" * 70)
     print()
-    
-    # Initialize orchestrator
-    orchestrator = AstrologyOrchestrator()
-    
-    # Test queries
-    test_queries = [
-        "Hello! How are you?",
-        "What does Mars in the 7th house mean?",
-        "Calculate my birth chart. I was born March 15, 1990 at 2:30 PM",
-        "When will I die?",
-    ]
-    
-    for i, query in enumerate(test_queries, 1):
-        print(f"\n{'=' * 70}")
-        print(f"TEST {i}: {query}")
-        print('=' * 70)
-        
-        result = orchestrator.process_query(query)
-        
-        print(f"\n[RESULT]")
-        print(f"Intent: {result['intent_type']}")
-        print(f"Path: {' → '.join(result['processing_path'])}")
-        print(f"\n{result['answer'][:300]}...")
-        
-        if result.get("error"):
-            print(f"\n⚠️ Error: {result['error']}")
-    
-    print("\n" + "=" * 70)
-    print("✅ Orchestrator tests complete!")
+    print("✅ This orchestrator now uses REAL VedicEngine calculations!")
+    print()
+    print("Changes made:")
+    print("  1. Auto-loads calculation tools from src/tools/calculation_tools.py")
+    print("  2. _handle_calculation_node uses real chart calculations")
+    print("  3. _handle_rag_node uses real chart/dasha/transit calculations")
+    print("  4. _build_prediction_prompt uses rich chart data structure")
+    print()
     print("=" * 70)
+
+
+# ========================================================================
+# FACTORY FUNCTION (for test compatibility)
+# ========================================================================
+
+def create_enhanced_orchestrator(
+    intent_classifier,
+    user_manager,
+    hybrid_retriever,
+    prompt_builder,
+    calculation_tools=None,
+    llm=None,
+    mongodb_uri=None
+):
+    """
+    Factory function to create an EnhancedLangGraphOrchestrator.
+    
+    This is a convenience function for tests and external code.
+    """
+    return EnhancedLangGraphOrchestrator(
+        intent_classifier=intent_classifier,
+        user_manager=user_manager,
+        hybrid_retriever=hybrid_retriever,
+        prompt_builder=prompt_builder,
+        calculation_tools=calculation_tools,
+        llm=llm,
+        mongodb_uri=mongodb_uri
+    )

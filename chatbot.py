@@ -1,397 +1,183 @@
-#!/usr/bin/env python3
 """
-Astrology AI Chatbot - Phase 5.1 (User-Authenticated)
-
-Integrated with existing app's user database.
-- Only paid subscribers can use the chatbot
-- Birth data auto-loaded from user profile
-- Personalized experience
+NakshatraAI Chatbot - V2 Architecture
+Uses LangGraph orchestrator with 3-category intent classification.
 """
 
-import sys
-from pathlib import Path
-from typing import Optional
+# Suppress Google Generative AI deprecation warning
+import warnings
+warnings.filterwarnings('ignore', category=FutureWarning, module='langchain_google_genai')
 
-# Add src to path
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
+import os
+from dotenv import load_dotenv
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import OpenAIEmbeddings
+from langchain_chroma import Chroma
 
-from orchestrator import AstrologyOrchestrator
-from conversation_store import ConversationStore, get_default_store
-from user_profile_manager import UserProfileManager, get_default_profile_manager
+# Load environment
+load_dotenv()
 
-
-class AstrologyChatbotAuth:
-    """Phase 5.1 chatbot with user authentication."""
-    
-    WELCOME_MESSAGE = """
-╔═══════════════════════════════════════════════════════════════════╗
-║     🌟 Astrology AI Chatbot (Phase 5.1 - Authenticated) 🌟      ║
-║                                                                   ║
-║  Welcome {user_name}! 👋                                          
-║                                                                   ║
-║  I have your birth details from your profile, so you can         ║
-║  immediately ask for calculations without providing data         ║
-║  repeatedly!                                                      ║
-║                                                                   ║
-║  What I can help with:                                           ║
-║    📊 "Calculate my birth chart"                                 ║
-║    📚 "What does Jupiter in 5th house mean?"                     ║
-║    🌙 "Show me my current dasha periods"                         ║
-║    🔄 "What are the transits today?"                             ║
-║    ❓ "Explain Rahu-Ketu"                                         ║
-║                                                                   ║
-║  Commands:                                                        ║
-║    /help      - Show this help                                   ║
-║    /profile   - View your birth data                             ║
-║    /history   - View conversation                                ║
-║    /clear     - Clear session                                    ║
-║    /quit      - Exit                                             ║
-╚═══════════════════════════════════════════════════════════════════╝
-"""
-    
-    def __init__(
-        self,
-        user_id: str,
-        session_id: Optional[str] = None,
-        enable_storage: bool = True
-    ):
-        """
-        Initialize authenticated chatbot.
-        
-        Args:
-            user_id: User identifier (from your app's database)
-            session_id: Resume existing session (optional)
-            enable_storage: Enable conversation persistence
-        """
-        print("Initializing Astrology AI Chatbot (Phase 5.1)...")
-        
-        self.user_id = user_id
-        
-        # Initialize profile manager
-        self.profile_manager = get_default_profile_manager()
-        
-        # Authenticate user
-        print(f"[AUTH] Authenticating user: {user_id}")
-        if not self.profile_manager.authenticate_user(user_id):
-            raise ValueError(f"Authentication failed for user: {user_id}. Please check subscription status.")
-        
-        # Load user profile
-        self.user_profile = self.profile_manager.get_user_profile(user_id)
-        if not self.user_profile:
-            raise ValueError(f"User profile not found: {user_id}")
-        
-        print(f"[AUTH] Welcome {self.user_profile.name}!")
-        
-        # Initialize orchestrator
-        self.orchestrator = AstrologyOrchestrator()
-        
-        # Initialize conversation storage
-        self.enable_storage = enable_storage
-        self.session_id = session_id
-        
-        if self.enable_storage:
-            self.store = get_default_store()
-            
-            if session_id:
-                print(f"[INFO] Resuming session: {session_id}")
-            else:
-                self.session_id = self.store.create_session(
-                    user_id=user_id,
-                    metadata={
-                        "phase": "5.1",
-                        "orchestrated": True,
-                        "user_name": self.user_profile.name
-                    }
-                )
-                print(f"[INFO] Created new session: {self.session_id}")
-        
-        print("✅ Ready!\n")
-    
-    def run(self):
-        """Run interactive chatbot loop."""
-        welcome = self.WELCOME_MESSAGE.format(
-            user_name=self.user_profile.name.split()[0]  # First name
-        )
-        print(welcome)
-        
-        if self.enable_storage:
-            print(f"Session ID: {self.session_id}")
-        
-        # Show birth data status
-        if self.user_profile.has_complete_birth_data():
-            print(f"✓ Birth data on file: {self.user_profile.place_of_birth}")
-        else:
-            print(f"⚠ Birth data incomplete - please update your profile")
-        
-        print()
-        
-        while True:
-            try:
-                # Get user input
-                user_input = input("\n🔮 You: ").strip()
-                
-                if not user_input:
-                    continue
-                
-                # Handle commands
-                if user_input.startswith("/"):
-                    if not self._handle_command(user_input):
-                        break  # Exit
-                    continue
-                
-                # Process query through orchestrator
-                self._process_query(user_input)
-                
-            except KeyboardInterrupt:
-                print("\n\nGoodbye! 🌙")
-                break
-            except Exception as e:
-                print(f"\n❌ Error: {e}")
-                import traceback
-                traceback.print_exc()
-    
-    def _process_query(self, query: str):
-        """Process query through orchestrator with user context."""
-        print("\n🤔 Processing...\n")
-        
-        # Get conversation history
-        history = []
-        if self.enable_storage:
-            history = self.store.get_history(self.session_id, max_turns=10)
-        
-        # Process through orchestrator (with user_id)
-        result = self.orchestrator.process_query(
-            query=query,
-            conversation_history=history,
-            user_id=self.user_id  # Pass user_id for authentication & profile
-        )
-        
-        # Display result
-        self._display_result(result)
-        
-        # Save to storage
-        if self.enable_storage:
-            try:
-                self.store.add_turn(
-                    self.session_id,
-                    query,
-                    result["answer"]
-                )
-            except Exception as e:
-                print(f"[WARN] Failed to save conversation: {e}")
-    
-    def _display_result(self, result: dict):
-        """Display orchestrator result."""
-        print("=" * 70)
-        print("✨ ANSWER")
-        print("=" * 70)
-        print(result["answer"])
-        print()
-        
-        # Show processing path (debug)
-        if result.get("processing_path"):
-            path = " → ".join(result["processing_path"])
-            print(f"[Path: {path}]")
-        
-        if result.get("error"):
-            print(f"⚠️  Note: {result['error']}")
-        
-        print()
-    
-    def _handle_command(self, command: str) -> bool:
-        """
-        Handle chatbot commands.
-        
-        Returns:
-            False if should exit, True otherwise
-        """
-        cmd = command.lower().split()[0]
-        
-        if cmd in ["/quit", "/exit"]:
-            print("\nGoodbye! 🌙")
-            return False
-        
-        elif cmd == "/help":
-            print(self.WELCOME_MESSAGE.format(user_name=self.user_profile.name.split()[0]))
-        
-        elif cmd == "/profile":
-            self._show_profile()
-        
-        elif cmd == "/history":
-            self._show_history()
-        
-        elif cmd == "/clear":
-            if self.enable_storage:
-                self.store.delete_session(self.session_id)
-                self.session_id = self.store.create_session(
-                    user_id=self.user_id,
-                    metadata={
-                        "phase": "5.1",
-                        "orchestrated": True,
-                        "user_name": self.user_profile.name
-                    }
-                )
-                print(f"✅ Conversation cleared. New session: {self.session_id}")
-            else:
-                print("⚠️  Storage disabled")
-        
-        elif cmd == "/session":
-            self._show_session_info()
-        
-        else:
-            print(f"❌ Unknown command: {cmd}")
-            print("Type /help for available commands")
-        
-        return True
-    
-    def _show_profile(self):
-        """Display user profile information."""
-        print("\n" + "=" * 70)
-        print("USER PROFILE")
-        print("=" * 70)
-        print(f"Name: {self.user_profile.name}")
-        print(f"User ID: {self.user_profile.user_id}")
-        print(f"Subscription: {self.user_profile.subscription_status} ({self.user_profile.subscription_tier})")
-        print()
-        print("Birth Data:")
-        print(f"  Date: {self.user_profile.date_of_birth}")
-        print(f"  Time: {self.user_profile.time_of_birth}")
-        print(f"  Place: {self.user_profile.place_of_birth}")
-        print(f"  Coordinates: ({self.user_profile.latitude}, {self.user_profile.longitude})")
-        print()
-        print("Preferences:")
-        print(f"  Astrology System: {self.user_profile.preferred_system.title()}")
-        print(f"  Language: {self.user_profile.language}")
-        print("=" * 70)
-    
-    def _show_history(self):
-        """Display conversation history."""
-        if not self.enable_storage:
-            print("⚠️  Storage disabled")
-            return
-        
-        history = self.store.get_history(self.session_id)
-        
-        if not history:
-            print("No conversation history yet.")
-            return
-        
-        print("\n" + "=" * 70)
-        print(f"CONVERSATION HISTORY ({len(history)} turns)")
-        print("=" * 70)
-        
-        for i, turn in enumerate(history, 1):
-            print(f"\n[Turn {i}]")
-            print(f"You: {turn['user']}")
-            print(f"Bot: {turn['assistant'][:200]}...")
-        
-        print("\n" + "=" * 70)
-    
-    def _show_session_info(self):
-        """Show session information."""
-        print("\n" + "=" * 70)
-        print("SESSION INFO")
-        print("=" * 70)
-        
-        if self.enable_storage:
-            history = self.store.get_history(self.session_id)
-            print(f"Session ID: {self.session_id}")
-            print(f"User: {self.user_profile.name} ({self.user_id})")
-            print(f"Turns: {len(history)}")
-            print(f"Storage: JSON (data/conversations/)")
-        else:
-            print("Storage: Disabled")
-        
-        print("=" * 70)
-
-
-def select_user() -> str:
-    """
-    Interactive user selection for testing.
-    
-    In production, user_id would come from your app's authentication.
-    """
-    print("\n" + "=" * 70)
-    print("USER AUTHENTICATION")
-    print("=" * 70)
-    print()
-    
-    # Get profile manager
-    profile_manager = get_default_profile_manager()
-    
-    # List dummy users (if available)
-    dummy_users = profile_manager.list_dummy_users()
-    
-    if dummy_users:
-        print("Available test users:")
-        for i, user_id in enumerate(dummy_users, 1):
-            info = profile_manager.get_dummy_user_info(user_id)
-            if info:
-                print(f"  {i}. {info['name']} ({user_id})")
-                print(f"     Status: {info['subscription']}")
-                print(f"     Location: {info['location']}")
-        print()
-        
-        choice = input("Select user (1-4) or enter user_id: ").strip()
-        
-        if choice.isdigit() and 1 <= int(choice) <= len(dummy_users):
-            return dummy_users[int(choice) - 1]
-        else:
-            return choice
-    else:
-        # Manual entry
-        return input("Enter user_id: ").strip()
+# Import V2 components
+from src.ai.intent_classifier import EnhancedIntentClassifier
+from src.ai.user_manager import get_user_manager
+from src.ai.hybrid_retriever import HybridRetriever
+from src.ai.prompt_builder import PromptBuilder
+from src.orchestration.orchestrator import create_enhanced_orchestrator
+from src.tools.calculation_tools import CALCULATION_TOOLS
 
 
 def main():
-    """Main entry point."""
-    import argparse
+    """Main chatbot loop."""
+    print("=" * 60)
+    print("🌟 NakshatraAI - Professional Astrology Consultant (V2)")
+    print("=" * 60)
+    print()
     
-    parser = argparse.ArgumentParser(
-        description="Astrology AI Chatbot - Phase 5.1 (Authenticated)"
+    # Initialize components
+    print("Initializing NakshatraAI V2...")
+    
+    # 1. User Manager
+    mongodb_uri = os.getenv('MONGODB_URI')
+    user_manager = get_user_manager(mongodb_uri)
+    
+    # 2. LLM
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        temperature=0.3
     )
-    parser.add_argument(
-        "--user",
-        help="User ID (from your app's database)"
+    print("✓ LLM: Gemini 2.5 Flash")
+    
+    # 3. Embeddings
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+    print("✓ Embeddings: OpenAI text-embedding-3-large")
+    
+    # 4. Vector Store
+    vector_store = Chroma(
+        collection_name="astrology_knowledge",
+        embedding_function=embeddings,
+        persist_directory="./data/vectordb"
     )
-    parser.add_argument(
-        "--session",
-        help="Resume existing session ID"
-    )
-    parser.add_argument(
-        "--no-storage",
-        action="store_true",
-        help="Disable conversation storage"
+    print("✓ Vector Store: ChromaDB")
+    
+    # 5. Intent Classifier (4 categories)
+    intent_classifier = EnhancedIntentClassifier(
+        llm_provider="google",
+        use_cache=True
     )
     
-    args = parser.parse_args()
+    # 6. Hybrid Retriever
+    hybrid_retriever = HybridRetriever(
+        vector_store=vector_store,
+        llm=llm
+    )
     
-    # Get user_id
-    user_id = args.user
+    # 7. Prompt Builder
+    prompt_builder = PromptBuilder()
+    
+    # 8. LangGraph Orchestrator
+    orchestrator = create_enhanced_orchestrator(
+        intent_classifier=intent_classifier,
+        user_manager=user_manager,
+        hybrid_retriever=hybrid_retriever,
+        prompt_builder=prompt_builder,
+        calculation_tools=CALCULATION_TOOLS,
+        llm=llm,
+        mongodb_uri=mongodb_uri
+    )
+    
+    print()
+    print("=" * 60)
+    print("✅ NakshatraAI V2 initialized!")
+    print("=" * 60)
+    print()
+    print("4-Category Intent System:")
+    print("  • CHITCHAT - General conversation")
+    print("  • NEEDS_CALCULATION - Pure calculation (show chart)")
+    print("  • NEEDS_PREDICTION - Prediction/Timing (Calculate + Interpret)")
+    print("  • NEEDS_KNOWLEDGE - Astrological concepts (RAG)")
+    print()
+    print("=" * 60)
+    
+    # Get user ID
+    user_id = input("\nEnter user_id (or press Enter for user001): ").strip()
     if not user_id:
-        user_id = select_user()
+        user_id = "user001"
     
-    if not user_id:
-        print("❌ User ID required")
+    print(f"\n🔐 Authenticating as: {user_id}")
+    
+    # Check if user exists
+    if not user_manager.user_exists(user_id):
+        print(f"❌ User '{user_id}' not found!")
+        print("\nAvailable test users:")
+        print("  • user001 - Arjun Kumar (Vedic)")
+        print("  • user002 - Priya Sharma (Vedic)")
+        print("  • user003 - Sophia Anderson (Western)")
+        print("\nRun: python add_test_user.py to add your own user")
         return
     
-    try:
-        # Initialize and run
-        chatbot = AstrologyChatbotAuth(
-            user_id=user_id,
-            session_id=args.session,
-            enable_storage=not args.no_storage
-        )
+    # Load profile
+    profile = user_manager.get_user_profile(user_id)
+    print(f"✓ Welcome, {profile.name}!")
+    print(f"  System: {profile.preferred_system}")
+    print(f"  Birth Data: {'✓ Complete' if profile.has_birth_data() else '✗ Missing'}")
+    print()
+    
+    # Conversation history
+    conversation_history = []
+    
+    print("=" * 60)
+    print("Chat started. Type 'quit' to exit.")
+    print("=" * 60)
+    print()
+    
+    # Main loop
+    while True:
+        # Get query
+        query = input("🔮 You: ").strip()
         
-        chatbot.run()
+        if not query:
+            continue
         
-    except ValueError as e:
-        print(f"\n❌ {e}")
-        print("\nPlease verify:")
-        print("  • User exists in database")
-        print("  • Subscription is active")
-        print("  • Birth data is complete (optional but recommended)")
+        if query.lower() in ['quit', 'exit', 'bye']:
+            print("\n✨ May the stars guide your path! Om Shanti! 🙏\n")
+            break
+        
+        # Process query
+        print("🤔 Thinking...")
+        
+        try:
+            result = orchestrator.process_query(
+                query=query,
+                user_id=user_id,
+                conversation_history=conversation_history
+            )
+            
+            # Display response
+            answer = result['answer']
+            intent = result['intent']
+            cached = result.get('cached', False)
+            processing_time = result.get('processing_time', 0)
+            
+            print(f"\n✨ NakshatraAI: {answer}\n")
+            
+            # Metadata
+            cache_status = "[CACHED]" if cached else "[LLM]"
+            print(f"[Intent: {intent}, {cache_status}, Time: {processing_time:.2f}s]")
+            print()
+            
+            # Update history
+            conversation_history.append({
+                "user": query,
+                "assistant": answer
+            })
+            
+            # Keep only last 5 turns
+            if len(conversation_history) > 5:
+                conversation_history = conversation_history[-5:]
+        
+        except Exception as e:
+            print(f"\n❌ Error: {e}\n")
+            import traceback
+            traceback.print_exc()
 
 
 if __name__ == "__main__":

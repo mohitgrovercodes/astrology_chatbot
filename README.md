@@ -281,7 +281,7 @@ GOOGLE_API_KEY=your-google-key-here
 
 # Default LLM
 DEFAULT_LLM_PROVIDER=google
-DEFAULT_LLM_MODEL=gemini-2.0-flash-exp
+DEFAULT_LLM_MODEL=gemini-2.5-flash
 
 # MongoDB (Production)
 # MONGODB_URI=mongodb://username:password@host:27017/database
@@ -645,7 +645,7 @@ This software is proprietary and confidential. Unauthorized copying, distributio
 OPENAI_API_KEY          # Required for embeddings
 GOOGLE_API_KEY          # Required for Gemini LLM
 DEFAULT_LLM_PROVIDER    # google | openai | anthropic
-DEFAULT_LLM_MODEL       # gemini-2.0-flash-exp | gpt-4o
+DEFAULT_LLM_MODEL       # gemini-2.5-flash | gpt-4o
 MONGODB_URI             # Production database (future)
 ```
 

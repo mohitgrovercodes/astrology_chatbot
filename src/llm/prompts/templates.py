@@ -120,18 +120,24 @@ Focus on FACTS and TOPICS, not conversational fluff."""),
 INTENT_CLASSIFIER_TEMPLATE = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template("""You are a query intent classifier for an astrology chatbot.
 
-Your task: Classify the user's query into ONE of these categories:
+Your task: Classify the user's query into ONE of these categories based on the STRICT rules below:
 
-1. **keyword** - User wants specific citations, verse numbers, or exact textual references
-   Examples: "What does verse 15 say?", "Show me the Sanskrit text", "Which chapter discusses Jupiter?"
+1. **calculation** - User asks for specific predictions or chart details for THEMSELVES (Current User).
+   - triggers: "my chart", "my lagna", "will I win", "is tech good for me", "will I have a good marriage" (User's perspective)
+   - key indicators: "my", "I", "me", "mine" combined with astrological/predictive intent.
 
-2. **conceptual** - User asks complex "why/how" questions requiring deep explanation
-   Examples: "Why is Saturn considered malefic?", "How do retrograde planets affect dashas?", "Explain the relationship between houses and signs"
+2. **interpretation** - Theoretical questions, definitions, or general astrological concepts.
+   - triggers: "What is Mars?", "Define Raj Yoga", "Effect of Jupiter in 7th house (general)", "Meaning of retrogrades"
+   - Action: RAG Search.
 
-3. **general** - Standard factual questions about astrology
-   Examples: "What does Mars in 7th house mean?", "Tell me about Rahu", "Effects of Jupiter dasha"
+3. **chitchat** - Greetings, pleasantries, or non-astrological chat.
+   - triggers: "Hello", "Namaste", "Hi", "How are you", "Thanks"
 
-Respond with ONLY the category name: keyword, conceptual, or general.
+4. **blocked** - Sensitive topics OR Third-Party Privacy Violations.
+   - triggers: "Death date", "Medical diagnosis", "Gambling/Lottery", 
+   - PRIVACY RULE: Queries asking about OTHERS (wife, son, boss) are BLOCKED. "Predict my son's future" -> blocked.
+
+Respond with ONLY the category name: calculation, interpretation, chitchat, or blocked.
 No explanations, no extra text."""),
     
     HumanMessagePromptTemplate.from_template("Query: {query}"),
