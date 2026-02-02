@@ -95,10 +95,25 @@ class UserManager:
             "place_of_birth": "Alwar, IN",
             "latitude": 27.5530,
             "longitude": 76.6346,
-            "timezone": "India/Kolkata",
+            "timezone": "Asia/Kolkata",
             "preferred_system": "vedic",
             "language": "en",
             "created_at": datetime(2026, 1, 30),
+            "last_active": datetime.now()
+        },
+        "default_user": {
+            "user_id": "default_user",
+            "name": "Guest User",
+            "email": "guest@example.com",
+            "date_of_birth": "2000-01-01",
+            "time_of_birth": "12:00:00",
+            "place_of_birth": "New Delhi, IN",
+            "latitude": 28.6139,
+            "longitude": 77.2090,
+            "timezone": "Asia/Kolkata",
+            "preferred_system": "vedic",
+            "language": "en",
+            "created_at": datetime.now(),
             "last_active": datetime.now()
         }
     }

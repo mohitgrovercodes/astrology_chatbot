@@ -33,6 +33,13 @@ class PromptBuilder:
         
         sections = [system_prompt]
         
+        # User Profile
+        sections.append(f"""USER PROFILE:
+• Name: {user_profile.get('name', 'User')}
+• Date of Birth: {user_profile.get('date_of_birth', 'Unknown')}
+• Time of Birth: {user_profile.get('time_of_birth', 'Unknown')}
+• Place of Birth: {user_profile.get('place_of_birth', 'Unknown')}""")
+        
         # Conversation context
         if conversation_history:
             sections.append(f"\nCONTEXT:\n{self._format_conversation(conversation_history[-3:])}")

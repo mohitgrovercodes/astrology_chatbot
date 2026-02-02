@@ -91,6 +91,11 @@ class EnhancedLangGraphOrchestrator:
         self.calculation_tools = calculation_tools
         self.llm = llm
         
+        # ✅ Connect LLM to intent classifier for accurate classification
+        if hasattr(self.intent_classifier, 'set_llm') and llm is not None:
+            self.intent_classifier.set_llm(llm)
+            print("[LANGGRAPH] ✓ LLM connected to intent classifier")
+        
         # ✅ PHASE 6: Initialize safety components
         self.query_analyzer = QueryAnalyzer()
         self.response_enhancer = ResponseEnhancer()
@@ -99,11 +104,11 @@ class EnhancedLangGraphOrchestrator:
         self.graph = self._build_graph()
         
         print("[LANGGRAPH] [SUCCESS] Enhanced orchestrator initialized")
-        print("[LANGGRAPH] Routes: CHITCHAT | NEEDS_CALCULATION | NEEDS_RAG")
+        print("[LANGGRAPH] Routes: CHITCHAT | CALCULATION_ONLY | RAG_WITH_CALCULATION | RAG_ONLY")
         print("[LANGGRAPH] ✓ Safety guardrails enabled (Phase 6)")
     
     def _build_graph(self) -> StateGraph:
-        """Build enhanced graph with 3-way routing."""
+        """Build enhanced graph with 4-way routing."""
         
         workflow = StateGraph(NakshatraState)
         
@@ -111,8 +116,9 @@ class EnhancedLangGraphOrchestrator:
         workflow.add_node("authenticate", self._authenticate_node)
         workflow.add_node("classify_intent", self._classify_intent_node)
         workflow.add_node("handle_chitchat", self._handle_chitchat_node)
-        workflow.add_node("handle_calculation", self._handle_calculation_node)
-        workflow.add_node("handle_rag", self._handle_rag_node)
+        workflow.add_node("handle_calculation_only", self._handle_calculation_only_node)
+        workflow.add_node("handle_rag_with_calculation", self._handle_rag_with_calculation_node)
+        workflow.add_node("handle_rag_only", self._handle_rag_only_node)
         workflow.add_node("format_response", self._format_response_node)
         
         # Entry point
@@ -121,22 +127,24 @@ class EnhancedLangGraphOrchestrator:
         # Edges
         workflow.add_edge("authenticate", "classify_intent")
         
-        # 3-way conditional routing
+        # 4-way conditional routing
         workflow.add_conditional_edges(
             "classify_intent",
             self._route_by_intent,
             {
                 "chitchat": "handle_chitchat",
-                "calculation": "handle_calculation",
-                "rag": "handle_rag",
+                "calculation_only": "handle_calculation_only",
+                "rag_with_calculation": "handle_rag_with_calculation",
+                "rag_only": "handle_rag_only",
                 "error": END
             }
         )
         
         # All paths go to format_response
         workflow.add_edge("handle_chitchat", "format_response")
-        workflow.add_edge("handle_calculation", "format_response")
-        workflow.add_edge("handle_rag", "format_response")
+        workflow.add_edge("handle_calculation_only", "format_response")
+        workflow.add_edge("handle_rag_with_calculation", "format_response")
+        workflow.add_edge("handle_rag_only", "format_response")
         
         # End
         workflow.add_edge("format_response", END)
@@ -156,6 +164,7 @@ class EnhancedLangGraphOrchestrator:
             print(f"[AUTH] [FAIL] User not found: {state['user_id']}")
             state['authenticated'] = False
             state['error'] = "User not found. Please register first."
+            state['answer'] = state['error']
             return state
         
         # Load profile
@@ -165,6 +174,7 @@ class EnhancedLangGraphOrchestrator:
             print(f"[AUTH] [FAIL] Could not load profile")
             state['authenticated'] = False
             state['error'] = "Could not load user profile."
+            state['answer'] = state['error']
             return state
         
         # Success
@@ -216,12 +226,12 @@ class EnhancedLangGraphOrchestrator:
         
         return state
     
-    def _handle_calculation_node(self, state: NakshatraState) -> NakshatraState:
+    def _handle_calculation_only_node(self, state: NakshatraState) -> NakshatraState:
         """
-        Node 3b: Handle pure calculation with REAL VedicEngine.
-        ✅ UPDATED: Now uses actual calculation tools (no placeholders!)
+        Node 3b: CALCULATION_ONLY - Return raw chart data without interpretation.
+        Uses VedicEngine, NO RAG, NO LLM interpretation.
         """
-        print("[CALCULATION] Generating chart data")
+        print("[CALCULATION_ONLY] Generating raw chart data")
         
         user_profile = state['user_profile']
         
@@ -231,8 +241,8 @@ class EnhancedLangGraphOrchestrator:
             return state
         
         try:
-            # ✅ NEW: Use REAL calculation tool
-            print("[CALCULATION] Calling VedicEngine...")
+            # Calculate birth chart
+            print("[CALCULATION_ONLY] Calling VedicEngine...")
             chart_tool = self.calculation_tools['vedic_birth_chart']
             chart_data = chart_tool.invoke({
                 "date_of_birth": user_profile.get('date_of_birth'),
@@ -248,34 +258,46 @@ class EnhancedLangGraphOrchestrator:
                 state['error'] = chart_data['error']
                 return state
             
-            print(f"[CALCULATION] ✓ Chart calculated: Lagna={chart_data['lagna']}, Rashi={chart_data['moon_sign']}")
+            print(f"[CALCULATION_ONLY] ✓ Chart: Lagna={chart_data['lagna']}, Rashi={chart_data['moon_sign']}")
             
-            # Format the response
-            state['answer'] = f"""Here's your Vedic birth chart:
+            # Use LLM to extract only what was asked for
+            extraction_prompt = f"""You are a data extraction assistant. The user asked: "{state['query']}"
 
-**Birth Details:**
-• Date: {user_profile.get('date_of_birth')}
-• Time: {user_profile.get('time_of_birth')}
-• Place: {user_profile.get('place_of_birth')}
+USER'S BIRTH DETAILS:
+• Date of Birth: {user_profile.get('date_of_birth')}
+• Time of Birth: {user_profile.get('time_of_birth')}
+• Place of Birth: {user_profile.get('place_of_birth')}
 
-**Chart Essentials:**
+COMPLETE BIRTH CHART DATA:
 • Lagna (Ascendant): {chart_data['lagna']}
 • Moon Sign (Rashi): {chart_data['moon_sign']}
 • Sun Sign: {chart_data['sun_sign']}
 • Moon Nakshatra: {chart_data['moon_nakshatra']}
 
-**Planetary Positions:**
-"""
-            
-            # Add planet positions
-            for planet_name in ['Sun', 'Moon', 'Mars', 'Mercury', 'Jupiter', 'Venus', 'Saturn']:
-                planet_data = chart_data['planets'][planet_name]
-                state['answer'] += f"• {planet_name}: {planet_data['rashi']} (House {planet_data['house']})\n"
-            
-            state['answer'] += f"\n• Rahu: {chart_data['planets']['Rahu']['rashi']} (House {chart_data['planets']['Rahu']['house']})"
-            state['answer'] += f"\n• Ketu: {chart_data['planets']['Ketu']['rashi']} (House {chart_data['planets']['Ketu']['house']})"
-            
-            state['answer'] += "\n\nWould you like me to interpret any specific aspect of your chart?"
+Planetary Positions:
+• Sun: {chart_data['planets']['Sun']['rashi']} (House {chart_data['planets']['Sun']['house']})
+• Moon: {chart_data['planets']['Moon']['rashi']} (House {chart_data['planets']['Moon']['house']})
+• Mars: {chart_data['planets']['Mars']['rashi']} (House {chart_data['planets']['Mars']['house']})
+• Mercury: {chart_data['planets']['Mercury']['rashi']} (House {chart_data['planets']['Mercury']['house']})
+• Jupiter: {chart_data['planets']['Jupiter']['rashi']} (House {chart_data['planets']['Jupiter']['house']})
+• Venus: {chart_data['planets']['Venus']['rashi']} (House {chart_data['planets']['Venus']['house']})
+• Saturn: {chart_data['planets']['Saturn']['rashi']} (House {chart_data['planets']['Saturn']['house']})
+• Rahu: {chart_data['planets']['Rahu']['rashi']} (House {chart_data['planets']['Rahu']['house']})
+• Ketu: {chart_data['planets']['Ketu']['rashi']} (House {chart_data['planets']['Ketu']['house']})
+
+INSTRUCTIONS:
+1. Extract ONLY the specific information the user asked for
+2. If they asked for birth details (date/time/place), provide those
+3. If they asked for "sun sign", return ONLY the sun sign
+4. If they asked for "moon sign", return ONLY the moon sign
+5. If they asked for "my chart" or "birth chart", return the complete formatted chart
+6. Keep the response concise and direct
+7. DO NOT add interpretation or predictions
+
+Provide a concise answer:"""
+
+            response = self.llm.invoke(extraction_prompt)
+            state['answer'] = response.content if hasattr(response, 'content') else str(response)
             
             # Store chart data for potential follow-up questions
             state['chart_data'] = chart_data
@@ -289,20 +311,18 @@ class EnhancedLangGraphOrchestrator:
         
         return state
     
-    def _handle_rag_node(self, state: NakshatraState) -> NakshatraState:
+    def _handle_rag_with_calculation_node(self, state: NakshatraState) -> NakshatraState:
         """
-        Node 3c: Handle RAG queries with REAL calculations for predictions.
-        ✅ UPDATED: Now uses actual calculation tools (no placeholders!)
-        ✅ PHASE 6: Added safety analysis for sensitive queries
+        Node 3c: RAG_WITH_CALCULATION - Personalized predictions.
+        Uses VedicEngine + RAG + LLM interpretation.
         
         Flow:
-        1. Analyze query for sensitive content (PHASE 6)
-        2. Determine if calculation is needed (for prediction queries)
-        3. Calculate if needed (REAL calculations now!)
-        4. Retrieve relevant knowledge
-        5. Synthesize personalized response
+        1. Analyze query for sensitive content (PHASE 6 safety)
+        2. Calculate birth chart, dashas, and transits
+        3. Retrieve relevant knowledge from vector DB
+        4. Synthesize personalized response with LLM
         """
-        print("[RAG] Unified flow: Safety Check -> Calc -> Retrieve -> Interpret")
+        print("[RAG_WITH_CALCULATION] Personalized prediction flow")
         
         # ✅ PHASE 6: Analyze query for sensitive content
         query_analysis = self.query_analyzer.analyze(state['query'])
@@ -327,21 +347,15 @@ class EnhancedLangGraphOrchestrator:
             return state
         
         user_profile = state['user_profile']
-        q = state['query'].lower().strip()
-        
-        # Determine if this RAG query is a "Prediction" (needs calculation)
-        prediction_keywords = ['when', 'will', 'future', 'timing', 'time for', 'outcome']
-        is_prediction = any(kw in q for kw in prediction_keywords) or 'my' in q
         
         try:
-            # ✅ UPDATED: Step 1 - REAL Calculation (if it looks like a prediction query)
-            if is_prediction and user_profile.get('date_of_birth'):
-                print("[RAG] Step 1: Query looks personal/predictive. Calculating chart data...")
+            # Step 1: Calculate user's chart (always needed for personalized predictions)
+            if user_profile.get('date_of_birth'):
+                print("[RAG_WITH_CALCULATION] Step 1: Calculating user's chart...")
                 
                 if not state.get('chart_data'):
                     try:
-                        # Calculate REAL birth chart
-                        print("[RAG] Calling VedicEngine for birth chart...")
+                        # Calculate birth chart
                         chart_tool = self.calculation_tools['vedic_birth_chart']
                         chart_data = chart_tool.invoke({
                             "date_of_birth": user_profile.get('date_of_birth'),
@@ -353,13 +367,9 @@ class EnhancedLangGraphOrchestrator:
                         
                         if "error" not in chart_data:
                             state['chart_data'] = chart_data
-                            print(f"[RAG] ✓ Chart calculated: Lagna={chart_data['lagna']}, Rashi={chart_data['moon_sign']}")
-                        else:
-                            print(f"[RAG] ✗ Chart calculation failed: {chart_data['error']}")
-                            state['chart_data'] = None
+                            print(f"[RAG_WITH_CALCULATION] ✓ Chart: Lagna={chart_data['lagna']}, Rashi={chart_data['moon_sign']}")
                         
-                        # Calculate REAL current dasha
-                        print("[RAG] Calling VedicEngine for dasha periods...")
+                        # Calculate current dasha
                         dasha_tool = self.calculation_tools['current_dasha']
                         dasha_data = dasha_tool.invoke({
                             "date_of_birth": user_profile.get('date_of_birth'),
@@ -370,41 +380,24 @@ class EnhancedLangGraphOrchestrator:
                         
                         if "error" not in dasha_data:
                             state['dasha_data'] = dasha_data
-                            print(f"[RAG] ✓ Dasha calculated: {dasha_data['dasha_sequence']}")
-                        else:
-                            print(f"[RAG] ✗ Dasha calculation failed: {dasha_data['error']}")
-                            state['dasha_data'] = None
+                            print(f"[RAG_WITH_CALCULATION] ✓ Dasha: {dasha_data['dasha_sequence']}")
                         
-                        # Calculate REAL current transits
-                        print("[RAG] Calculating current transits...")
+                        # Calculate current transits
                         transit_tool = self.calculation_tools['current_transits']
                         transit_data = transit_tool.invoke({})
                         
                         if "error" not in transit_data:
                             state['transit_data'] = transit_data
-                            print(f"[RAG] ✓ Transits calculated for {transit_data['date']}")
-                        else:
-                            print(f"[RAG] ✗ Transit calculation failed: {transit_data['error']}")
-                            state['transit_data'] = None
+                            print(f"[RAG_WITH_CALCULATION] ✓ Transits for {transit_data['date']}")
                         
                     except Exception as e:
-                        print(f"[RAG] ERROR during calculations: {e}")
-                        import traceback
-                        traceback.print_exc()
-                        # Graceful fallback - continue without chart data
-                        state['chart_data'] = None
-                        state['dasha_data'] = None
-                        state['transit_data'] = None
-                
-                if state.get('chart_data'):
-                    print(f"[RAG] [CALC] Chart loaded for: {user_profile.get('name')}")
-                else:
-                    print(f"[RAG] [WARN] Proceeding without chart data")
+                        print(f"[RAG_WITH_CALCULATION] Calculation error: {e}")
+                        # Continue without chart data
             else:
-                print("[RAG] Step 1: General query. Skipping specific calculations.")
+                print("[RAG_WITH_CALCULATION] No birth data - proceeding without chart")
 
             # Step 2: Retrieve Relevant Knowledge
-            print("[RAG] Step 2: Retrieving astrological knowledge...")
+            print("[RAG_WITH_CALCULATION] Step 2: Retrieving knowledge...")
             
             # Enhance query for better retrieval if we have chart data
             retrieval_query = state['query']
@@ -414,15 +407,15 @@ class EnhancedLangGraphOrchestrator:
 
             knowledge_chunks = self.hybrid_retriever.retrieve(
                 query=retrieval_query,
-                intent="NEEDS_RAG",
+                intent="RAG_WITH_CALCULATION",
                 top_k=5
             )
             
             state['knowledge_chunks'] = knowledge_chunks
-            print(f"[RAG] [SUCCESS] Retrieved {len(knowledge_chunks)} knowledge chunks")
+            print(f"[RAG_WITH_CALCULATION] Retrieved {len(knowledge_chunks)} chunks")
             
-            # Step 3: Build Prompt
-            if is_prediction and state.get('chart_data'):
+            # Step 3: Build Prompt (always use prediction prompt with chart data)
+            if state.get('chart_data'):
                 prompt = self._build_prediction_prompt(
                     query=state['query'],
                     chart_data=state['chart_data'],
@@ -434,7 +427,7 @@ class EnhancedLangGraphOrchestrator:
             else:
                 prompt = self.prompt_builder.build_prompt(
                     query=state['query'],
-                    intent="NEEDS_RAG",
+                    intent="RAG_WITH_CALCULATION",
                     user_profile=state['user_profile'],
                     knowledge_chunks=knowledge_chunks,
                     conversation_history=state.get('conversation_history', [])
@@ -444,16 +437,94 @@ class EnhancedLangGraphOrchestrator:
             response = self.llm.invoke(prompt)
             state['answer'] = response.content if hasattr(response, 'content') else str(response)
             
-            print(f"[RAG] [SUCCESS] Generated response ({len(state['answer'])} chars)")
+            print(f"[RAG_WITH_CALCULATION] Generated response ({len(state['answer'])} chars)")
             
         except Exception as e:
-            print(f"[ERROR] RAG path failed: {e}")
+            print(f"[ERROR] RAG_WITH_CALCULATION failed: {e}")
             import traceback
             traceback.print_exc()
             state['error'] = str(e)
             state['answer'] = f"Error during astrological analysis: {e}"
         
         return state
+    
+    def _handle_rag_only_node(self, state: NakshatraState) -> NakshatraState:
+        """
+        Node 3d: RAG_ONLY - General astrology theory questions.
+        Uses RAG + LLM interpretation ONLY. NO chart calculations.
+        
+        For questions like: "What does Mars in 7th house mean?", "Explain the 10th house"
+        """
+        print("[RAG_ONLY] General theory question - no chart calculation needed")
+        
+        try:
+            # Step 1: Retrieve knowledge from vector DB
+            print("[RAG_ONLY] Retrieving astrological knowledge...")
+            
+            knowledge_chunks = self.hybrid_retriever.retrieve(
+                query=state['query'],
+                intent="RAG_ONLY",
+                top_k=5
+            )
+            
+            state['knowledge_chunks'] = knowledge_chunks
+            print(f"[RAG_ONLY] Retrieved {len(knowledge_chunks)} knowledge chunks")
+            
+            # Step 2: Build prompt for general theory
+            prompt = self._build_theory_prompt(
+                query=state['query'],
+                knowledge_chunks=knowledge_chunks,
+                user_profile=state['user_profile']
+            )
+            
+            # Step 3: Generate response with LLM
+            response = self.llm.invoke(prompt)
+            state['answer'] = response.content if hasattr(response, 'content') else str(response)
+            
+            print(f"[RAG_ONLY] Generated response ({len(state['answer'])} chars)")
+            
+        except Exception as e:
+            print(f"[ERROR] RAG_ONLY path failed: {e}")
+            import traceback
+            traceback.print_exc()
+            state['error'] = str(e)
+            state['answer'] = f"Error during theory explanation: {e}"
+        
+        return state
+    
+    def _build_theory_prompt(self, query: str, knowledge_chunks: list, user_profile: dict) -> str:
+        """Build prompt for general astrology theory explanations."""
+        
+        # Format knowledge context
+        context = "\n\n".join([
+            f"Source: {chunk.metadata.get('source', 'Unknown') if hasattr(chunk, 'metadata') else 'Unknown'}\n{chunk.page_content if hasattr(chunk, 'page_content') else str(chunk)}"
+            for chunk in knowledge_chunks[:4]
+        ]) if knowledge_chunks else "No specific texts retrieved."
+        
+        prompt = f"""You are an expert Vedic astrologer explaining astrological concepts.
+
+USER PROFILE:
+• Name: {user_profile.get('name', 'User')}
+• Date of Birth: {user_profile.get('date_of_birth', 'Unknown')}
+• Time of Birth: {user_profile.get('time_of_birth', 'Unknown')}
+• Place of Birth: {user_profile.get('place_of_birth', 'Unknown')}
+
+USER'S QUESTION: "{query}"
+
+RELEVANT KNOWLEDGE FROM CLASSICAL TEXTS:
+{context}
+
+INSTRUCTIONS:
+1. Provide a clear, educational explanation of the astrological concept
+2. Use classical Vedic astrology principles
+3. Include practical examples where helpful
+4. Reference the classical texts when possible
+5. Keep the tone professional but accessible
+6. This is a GENERAL explanation, not specific to any person's chart
+
+Provide a detailed explanation:"""
+        
+        return prompt
     
     def _format_response_node(self, state: NakshatraState) -> NakshatraState:
         """Node 4: Format final response."""
@@ -503,6 +574,12 @@ class EnhancedLangGraphOrchestrator:
         # ✅ NEW: Enhanced prompt with rich chart data
         prompt = f"""You are an expert Vedic astrologer. Provide a personalized prediction based on the user's actual birth chart.
 
+USER PROFILE:
+• Name: {user_profile.get('name', 'User')}
+• Date of Birth: {user_profile.get('date_of_birth')}
+• Time of Birth: {user_profile.get('time_of_birth')}
+• Place of Birth: {user_profile.get('place_of_birth')}
+
 USER'S QUERY: "{query}"
 
 USER'S COMPLETE BIRTH CHART:
@@ -549,19 +626,22 @@ Provide a detailed, personalized prediction:"""
         return prompt
     
     def _route_by_intent(self, state: NakshatraState) -> str:
-        """3-way routing based on intent."""
+        """4-way routing based on intent."""
         
         if not state.get('authenticated'):
             return "error"
         
-        intent = state.get('intent', 'NEEDS_RAG')
+        intent = state.get('intent', 'RAG_WITH_CALCULATION')
         
         if intent == "CHITCHAT":
             return "chitchat"
-        elif intent == "NEEDS_CALCULATION":
-            return "calculation"
+        elif intent == "CALCULATION_ONLY":
+            return "calculation_only"
+        elif intent == "RAG_ONLY":
+            return "rag_only"
         else:
-            return "rag"
+            # Default: RAG_WITH_CALCULATION (most common)
+            return "rag_with_calculation"
     
     # ========================================================================
     # PUBLIC API

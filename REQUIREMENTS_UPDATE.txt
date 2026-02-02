@@ -1,0 +1,12 @@
+# Add these to your requirements.txt
+
+# Google Cloud Vertex AI (for Option 1)
+langchain-google-vertexai>=1.0.0
+google-cloud-aiplatform>=1.38.0
+google-auth>=2.23.0
+
+# Remove this if you had it:
+# langchain-google-genai  # NOT NEEDED - this is for AI Studio
+
+# Keep OpenAI for Option 2
+langchain-openai>=0.0.5

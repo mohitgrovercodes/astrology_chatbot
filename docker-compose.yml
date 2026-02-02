@@ -1,0 +1,57 @@
+# NakshatraAI API - Docker Compose Configuration
+# ================================================
+
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: nakshatraai-api
+    ports:
+      - "8000:8000"
+    environment:
+      # API Configuration
+      - DEBUG=false
+      - HOST=0.0.0.0
+      - PORT=8000
+
+      # Security
+      - VALID_API_KEYS=${VALID_API_KEYS}
+
+      # CORS
+      - ALLOWED_ORIGINS=*
+
+      # Rate Limiting
+      - RATE_LIMIT_PER_MINUTE=10
+
+      # Database
+      - MONGODB_URI=${MONGODB_URI}
+      - USE_DUMMY_USER_DB=false
+
+      # LLM - Google Cloud (Option 1)
+      - GOOGLE_CREDENTIALS_PATH=/app/credentials/google-credentials.json
+      - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
+      - GOOGLE_LOCATION=${GOOGLE_LOCATION:-us-central1}
+
+      # LLM - OpenAI (Option 2)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+      # LLM Provider
+      - LLM_PROVIDER=${LLM_PROVIDER:-google}
+      - LLM_MODEL=${LLM_MODEL:-gemini-2.0-flash-exp}
+    volumes:
+      - ./data:/app/data
+      - ./credentials:/app/credentials # Mount Google credentials directory
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - nakshatraai-network
+
+networks:
+  nakshatraai-network:
+    driver: bridge
