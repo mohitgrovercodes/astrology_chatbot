@@ -456,7 +456,7 @@ if __name__ == "__main__":
     if result.get('error'):
         print(f"Error: {result.get('message')}")
     else:
-        print(f"✓ Vedic chart calculated successfully")
+        print(f"[OK] Vedic chart calculated successfully")
         print(f"  Lagna: {result.get('lagna', {}).get('sign')}")
         print(f"  Computation time: {result.get('_computation', {}).get('time_ms')}ms")
         print(f"  Summary: {result.get('_summary')}")
@@ -474,7 +474,7 @@ if __name__ == "__main__":
     if result.get('error'):
         print(f"Error: {result.get('message')}")
     else:
-        print(f"✓ Western chart calculated successfully")
+        print(f"[OK] Western chart calculated successfully")
         sun_sign = result.get('key_points', {}).get('sun_sign')
         print(f"  Sun Sign: {sun_sign}")
         print(f"  Computation time: {result.get('_computation', {}).get('time_ms')}ms")

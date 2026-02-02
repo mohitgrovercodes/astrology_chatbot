@@ -73,7 +73,7 @@ class PageAnalyzer:
             from sentence_transformers import SentenceTransformer
             # Load a lightweight, efficient model for sentence similarity
             self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-            print("[✅] Sentence Transformer initialized (all-MiniLM-L6-v2)")
+            print("[[DONE]] Sentence Transformer initialized (all-MiniLM-L6-v2)")
         except ImportError:
             print("[WARN] sentence-transformers not installed. Semantic checks will be skipped.")
         except Exception as e:
@@ -95,7 +95,7 @@ class PageAnalyzer:
                 self.is_vertex_ai = isinstance(self.model, ChatVertexAI)
                 
                 provider_name = "Vertex AI" if self.is_vertex_ai else "AI Studio"
-                print(f"[✅] Using {provider_name} via LLMFactory with rate limiting")
+                print(f"[[DONE]] Using {provider_name} via LLMFactory with rate limiting")
                 
             except Exception as e:
                 print(f"[WARN] LLM initialization failed: {e}")

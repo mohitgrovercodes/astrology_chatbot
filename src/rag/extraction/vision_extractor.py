@@ -692,8 +692,8 @@ class VisionExtractor:
             # Log improvement
             if confidence_metadata:
                 logger.info(
-                    f"✓ Page {page_num} upgraded: confidence improved "
-                    f"{initial_confidence:.2f} → {confidence_metadata.overall_score:.2f}"
+                    f"[OK] Page {page_num} upgraded: confidence improved "
+                    f"{initial_confidence:.2f} -> {confidence_metadata.overall_score:.2f}"
                 )
         else:
             # No retry needed
@@ -1198,7 +1198,7 @@ class BatchExtractor:
                     skip_pages.add(page.metadata.page_number)
                     self._update_stats(stats, page, page.metadata.page_number)
                 
-                logger.info(f"✓ Loaded {len(pages)} pages from checkpoint")
+                logger.info(f"[OK] Loaded {len(pages)} pages from checkpoint")
                 logger.info(f"⏭️  Skipping pages: {sorted(skip_pages)}")
         
         # Determine if we should use parallel processing

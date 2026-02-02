@@ -72,11 +72,11 @@ def _format_vedic_for_llm(chart_data: Dict[str, Any], query: str) -> str:
         
         dignity = planet_data.get('dignity', {})
         if dignity.get('is_exalted'):
-            sections.append(f"  → Exalted (very strong)")
+            sections.append(f"  -> Exalted (very strong)")
         elif dignity.get('is_debilitated'):
-            sections.append(f"  → Debilitated (weak)")
+            sections.append(f"  -> Debilitated (weak)")
         elif dignity.get('is_own_sign'):
-            sections.append(f"  → In own sign (strong)")
+            sections.append(f"  -> In own sign (strong)")
     
     sections.append("")
     

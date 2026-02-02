@@ -104,7 +104,9 @@ def is_planet_in_domicile(planet: CelestialBody, sign: ZodiacSign) -> bool:
         False
     """
     rulers = DOMICILE_RULERS.get(sign, [])
-    return planet in rulers
+    if isinstance(rulers, list):
+        return planet in rulers
+    return planet == rulers
 
 
 def is_planet_in_exaltation(planet: CelestialBody, sign: ZodiacSign) -> bool:
@@ -124,7 +126,10 @@ def is_planet_in_exaltation(planet: CelestialBody, sign: ZodiacSign) -> bool:
         >>> is_planet_in_exaltation(CelestialBody.MOON, ZodiacSign.TAURUS)
         True
     """
-    return EXALTATION.get(planet) == sign
+    exaltation_data = EXALTATION.get(planet)
+    if not exaltation_data:
+        return False
+    return exaltation_data[0] == sign
 
 
 def is_planet_in_detriment(planet: CelestialBody, sign: ZodiacSign) -> bool:
@@ -145,7 +150,9 @@ def is_planet_in_detriment(planet: CelestialBody, sign: ZodiacSign) -> bool:
         True  # Mars rules Aries, opposite of Libra
     """
     detriment_signs = DETRIMENT.get(planet, [])
-    return sign in detriment_signs
+    if isinstance(detriment_signs, list):
+        return sign in detriment_signs
+    return sign == detriment_signs
 
 
 def is_planet_in_fall(planet: CelestialBody, sign: ZodiacSign) -> bool:
@@ -165,7 +172,10 @@ def is_planet_in_fall(planet: CelestialBody, sign: ZodiacSign) -> bool:
         >>> is_planet_in_fall(CelestialBody.SUN, ZodiacSign.LIBRA)
         True  # Sun exalted in Aries, fall in Libra
     """
-    return FALL.get(planet) == sign
+    exaltation_data = FALL.get(planet)
+    if not exaltation_data:
+        return False
+    return exaltation_data[0] == sign
 
 
 def check_triplicity(planet: CelestialBody, sign: ZodiacSign) -> bool:

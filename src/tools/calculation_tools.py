@@ -342,11 +342,11 @@ if __name__ == "__main__":
     if "error" in chart:
         print(f"❌ Error: {chart['error']}")
     else:
-        print(f"✓ Lagna: {chart['lagna']}")
-        print(f"✓ Moon Sign: {chart['moon_sign']}")
-        print(f"✓ Sun Sign: {chart['sun_sign']}")
-        print(f"✓ Moon Nakshatra: {chart['moon_nakshatra']}")
-        print(f"✓ Jupiter: {chart['planets']['Jupiter']['rashi']} in House {chart['planets']['Jupiter']['house']}")
+        print(f"[OK] Lagna: {chart['lagna']}")
+        print(f"[OK] Moon Sign: {chart['moon_sign']}")
+        print(f"[OK] Sun Sign: {chart['sun_sign']}")
+        print(f"[OK] Moon Nakshatra: {chart['moon_nakshatra']}")
+        print(f"[OK] Jupiter: {chart['planets']['Jupiter']['rashi']} in House {chart['planets']['Jupiter']['house']}")
     print()
     
     # Test 2: Dasha
@@ -362,10 +362,10 @@ if __name__ == "__main__":
     if "error" in dasha:
         print(f"❌ Error: {dasha['error']}")
     else:
-        print(f"✓ Mahadasha: {dasha['mahadasha']['planet']}")
+        print(f"[OK] Mahadasha: {dasha['mahadasha']['planet']}")
         print(f"  Period: {dasha['mahadasha']['start_date']} to {dasha['mahadasha']['end_date']}")
-        print(f"✓ Antardasha: {dasha['antardasha']['planet']}")
-        print(f"✓ Dasha Sequence: {dasha['dasha_sequence']}")
+        print(f"[OK] Antardasha: {dasha['antardasha']['planet']}")
+        print(f"[OK] Dasha Sequence: {dasha['dasha_sequence']}")
     print()
     
     # Test 3: Transits
@@ -376,12 +376,12 @@ if __name__ == "__main__":
     if "error" in transits:
         print(f"❌ Error: {transits['error']}")
     else:
-        print(f"✓ Date: {transits['date']}")
-        print(f"✓ Jupiter: {transits['transits']['Jupiter']}")
-        print(f"✓ Saturn: {transits['transits']['Saturn']}")
-        print(f"✓ Mars: {transits['transits']['Mars']}")
+        print(f"[OK] Date: {transits['date']}")
+        print(f"[OK] Jupiter: {transits['transits']['Jupiter']}")
+        print(f"[OK] Saturn: {transits['transits']['Saturn']}")
+        print(f"[OK] Mars: {transits['transits']['Mars']}")
     print()
     
     print("="*70)
-    print("✅ All tests complete!")
+    print("[DONE] All tests complete!")
     print("="*70)

@@ -39,7 +39,7 @@ from typing import Dict, List, Tuple, Optional
 
 from src.engines.core.celestial_bodies import CelestialBody
 from src.engines.core.ephemeris import PlanetPosition, HouseCusps, HouseSystem
-from src.engines.western.western_constants import HouseType, HOUSE_TYPES, ZodiacSign
+from src.engines.western.western_constants import HouseClassification, HOUSE_CLASSIFICATIONS, ZodiacSign
 from src.engines.western.western_signs import longitude_to_sign
 
 
@@ -60,23 +60,23 @@ class HousePlacement:
     house: int
     longitude: float
     sign: ZodiacSign
-    house_type: HouseType
+    house_type: HouseClassification
     distance_from_cusp: float
     
     @property
     def is_angular(self) -> bool:
         """Check if planet is in an angular house."""
-        return self.house_type == HouseType.ANGULAR
+        return self.house_type == HouseClassification.ANGULAR
     
     @property
     def is_succedent(self) -> bool:
         """Check if planet is in a succedent house."""
-        return self.house_type == HouseType.SUCCEDENT
+        return self.house_type == HouseClassification.SUCCEDENT
     
     @property
     def is_cadent(self) -> bool:
         """Check if planet is in a cadent house."""
-        return self.house_type == HouseType.CADENT
+        return self.house_type == HouseClassification.CADENT
     
     @property
     def is_near_cusp(self) -> bool:
@@ -107,7 +107,7 @@ class HouseOccupancy:
     cusp_sign: ZodiacSign
     planets: Tuple[CelestialBody, ...]
     is_empty: bool
-    house_type: HouseType
+    house_type: HouseClassification
     
     @property
     def planet_count(self) -> int:
@@ -236,7 +236,7 @@ def compute_house_placement(
         house=house,
         longitude=position.longitude,
         sign=longitude_to_sign(position.longitude),
-        house_type=HOUSE_TYPES[house],
+        house_type=HOUSE_CLASSIFICATIONS[house],
         distance_from_cusp=distance
     )
 
@@ -300,7 +300,7 @@ def compute_house_occupancy(
             cusp_sign=longitude_to_sign(cusp_lon),
             planets=tuple(planets_in_house),
             is_empty=len(planets_in_house) == 0,
-            house_type=HOUSE_TYPES[house]
+            house_type=HOUSE_CLASSIFICATIONS[house]
         )
     
     return occupancy

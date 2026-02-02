@@ -5,6 +5,7 @@ Calculation Routes
 Birth chart and astrological calculation endpoints.
 """
 
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from src.api.schemas.calculation import (
     ChartRequest, ChartResponse, WesternChartResponse, 
@@ -16,6 +17,7 @@ from src.api.middleware.rate_limit import check_rate_limit
 from src.api.dependencies import get_vedic_engine, get_western_engine
 from datetime import datetime
 import pytz
+import traceback
 from src.engines.vedic.vedic_constants import RASHI_SANSKRIT_NAMES
 from src.engines.core.ephemeris import (
     get_all_positions, get_house_cusps, get_ayanamsa_value,
@@ -330,15 +332,17 @@ async def calculate_western_chart(
         # Map Planets
         planets_mapped = {}
         for body, pos in chart.positions.items():
-            dignity = chart.dignities.dignities.get(body)
-            status = [s.value for s in dignity.status] if dignity else []
+            dignity = chart.get_planet_dignity(body)
+            # Use dignity_type value for status list
+            status = [dignity.dignity_type.value] if dignity else ["neutral"]
+            
             planets_mapped[body.name.title()] = WesternPlanetPosition(
                 sign=chart.get_planet_sign(body).name.title(),
                 house=chart.get_planet_house(body),
                 degree=pos.longitude % 30,
                 is_retrograde=pos.is_retrograde,
                 speed=pos.speed_longitude,
-                dignity_score=dignity.total_score if dignity else 0,
+                dignity_score=dignity.score if dignity else 0,
                 dignity_status=status
             )
             
@@ -355,12 +359,24 @@ async def calculate_western_chart(
         # Map Aspects
         aspects_mapped = []
         for asp in chart.aspects.aspects:
+            # Convert AspectStrength enum to numeric value for Pydantic
+            strength_map = {
+                "exact": 1.0,
+                "close": 0.75,
+                "moderate": 0.5,
+                "wide": 0.25
+            }
+            numeric_strength = strength_map.get(
+                asp.strength.value if hasattr(asp.strength, 'value') else "moderate",
+                0.5
+            )
+            
             aspects_mapped.append(WesternAspect(
-                planet1=asp.p1.name.title(),
-                planet2=asp.p2.name.title(),
+                planet1=asp.planet1.name.title() if asp.planet1 else "Unknown",
+                planet2=asp.planet2.name.title() if asp.planet2 else "Unknown",
                 aspect_type=asp.aspect_type.name.title(),
                 orb=asp.orb,
-                strength=asp.strength,
+                strength=numeric_strength,
                 is_major=asp.is_major
             ))
             
@@ -395,8 +411,8 @@ async def get_western_aspects(
         "aspect_count": chart.aspects.aspect_count,
         "aspects": [
             {
-                "p1": asp.p1.name.title(),
-                "p2": asp.p2.name.title(),
+                "p1": asp.planet1.name.title() if asp.planet1 else "Unknown",
+                "p2": asp.planet2.name.title() if asp.planet2 else "Unknown",
                 "type": asp.aspect_type.name.title(),
                 "orb": round(asp.orb, 2),
                 "exact": asp.is_exact

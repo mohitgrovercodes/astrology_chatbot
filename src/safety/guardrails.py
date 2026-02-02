@@ -5,7 +5,7 @@ Guardrails - Core Safety Logic
 Analyzes queries for sensitive topics and enhances responses with appropriate
 context, disclaimers, and empathetic framing.
 
-Philosophy: C → B → A
+Philosophy: C -> B -> A
 - C: Clarify first (ask clarifying questions for ambiguous sensitive queries)
 - B: Redirect to positive (frame around constructive aspects)
 - A: Provide with empathy (give astrological insight with care)
@@ -225,7 +225,7 @@ class QueryAnalyzer:
         matches.sort(key=lambda x: x[1], reverse=True)
         top_category, top_sensitivity, top_keywords = matches[0]
         
-        # Determine handling strategy based on C → B → A philosophy
+        # Determine handling strategy based on C -> B -> A philosophy
         config = self._compiled_patterns[top_category]
         
         if config["clarify"] and top_sensitivity >= 0.8:
@@ -234,7 +234,7 @@ class QueryAnalyzer:
             clarify_q = self._get_clarifying_question(top_category, query)
             positive_redirect = None
         elif top_sensitivity >= 0.5:
-            # B → A: Redirect positive, then empathetic
+            # B -> A: Redirect positive, then empathetic
             strategy = HandlingStrategy.EMPATHETIC_RESPONSE
             clarify_q = None
             positive_redirect = self._get_positive_redirect(top_category)

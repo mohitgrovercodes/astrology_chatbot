@@ -437,5 +437,5 @@ if __name__ == "__main__":
     print(f"   Warnings: {result.warnings}")
     
     print("\n" + "=" * 60)
-    print("✅ All tests complete!")
+    print("[DONE] All tests complete!")
     print("=" * 60)

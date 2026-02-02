@@ -440,7 +440,7 @@ Always be respectful of the sacred nature of Vedic astrology."""
                 print(f"[FOLLOW-UP] Detected follow-up question")
                 expanded_query = self._expand_followup_query(query, conversation_history)
                 if expanded_query and expanded_query != query:
-                    print(f"[EXPANSION] '{query}' → '{expanded_query}'")
+                    print(f"[EXPANSION] '{query}' -> '{expanded_query}'")
                     query = expanded_query
         
         # Helper to determine strategy
@@ -684,7 +684,7 @@ Always be respectful of the sacred nature of Vedic astrology."""
             print("[ERROR] Cannot switch persona - prompts module unavailable")
             return
         
-        print(f"[INFO] Switching persona: {self.persona_name} → {persona}")
+        print(f"[INFO] Switching persona: {self.persona_name} -> {persona}")
         self.persona_config = get_persona(persona)
         self.persona_name = persona
         

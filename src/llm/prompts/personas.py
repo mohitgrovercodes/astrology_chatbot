@@ -324,8 +324,8 @@ if __name__ == "__main__":
         persona = get_persona(name)
         default_marker = " [DEFAULT]" if name == "hybrid" else ""
         print(f"  {i}. {name}{default_marker}")
-        print(f"     → {persona.name}")
-        print(f"     → Tone: {', '.join(persona.tone_descriptors[:3])}")
+        print(f"     -> {persona.name}")
+        print(f"     -> Tone: {', '.join(persona.tone_descriptors[:3])}")
         print()
     
     # Show default persona details
@@ -351,8 +351,8 @@ if __name__ == "__main__":
     print("\n\nExample Phrases:")
     print("-" * 70)
     for phrase in default.example_phrases[:5]:
-        print(f"  → \"{phrase}\"")
+        print(f"  -> \"{phrase}\"")
     
     print("\n" + "=" * 70)
-    print("✅ Personas configuration loaded successfully!")
+    print("[DONE] Personas configuration loaded successfully!")
     print("=" * 70)

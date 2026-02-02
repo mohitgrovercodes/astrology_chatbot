@@ -52,9 +52,9 @@ Examples: "What does Mars in 7th house generally mean?", "Explain the 10th house
 
 ---
 IMPORTANT RULES:
-1. If query contains "my" or "me" or "I" with a prediction → RAG_WITH_CALCULATION
-2. If query asks for chart/positions/dashas without interpretation → CALCULATION_ONLY  
-3. If query is theoretical/educational with no personal reference → RAG_ONLY
+1. If query contains "my" or "me" or "I" with a prediction -> RAG_WITH_CALCULATION
+2. If query asks for chart/positions/dashas without interpretation -> CALCULATION_ONLY  
+3. If query is theoretical/educational with no personal reference -> RAG_ONLY
 
 USER QUERY: "{query}"
 
@@ -106,7 +106,7 @@ Respond with ONLY a JSON object:
         if self.use_cache and cache_key in self.cache:
             result = self.cache[cache_key].copy()
             result['cached'] = True
-            print(f"[INTENT] [CACHED] → {result['intent']}")
+            print(f"[INTENT] [CACHED] -> {result['intent']}")
             return result
         
         print(f"[INTENT] Classifying: '{query[:50]}...'")
@@ -138,7 +138,7 @@ Respond with ONLY a JSON object:
             if self.use_cache:
                 self.cache[cache_key] = {k: v for k, v in result.items() if k != 'cached'}
             
-            print(f"[INTENT] [LLM] → {result['intent']} (confidence: {result['confidence']:.2f})")
+            print(f"[INTENT] [LLM] -> {result['intent']} (confidence: {result['confidence']:.2f})")
             return result
             
         except Exception as e:
@@ -281,12 +281,12 @@ if __name__ == "__main__":
     for query, expected in test_cases:
         result = classifier.classify(query, {})
         actual = result['intent']
-        status = "✓" if actual == expected else "✗"
+        status = "[OK]" if actual == expected else "[FAIL]"
         print(f"{status} '{query}'")
         print(f"   Expected: {expected}, Got: {actual}")
         print()
     
     print("=" * 60)
-    print("✅ Fallback tests complete!")
+    print("[DONE] Fallback tests complete!")
     print("Note: Full LLM classification requires LLM instance.")
     print("=" * 60)

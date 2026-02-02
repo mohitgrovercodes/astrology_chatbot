@@ -1,2 +1,0 @@
-Requirement already satisfied: pymongo in d:\ai\imgprojects\astro_chatbot\astro_chatbot\venv\lib\site-packages (4.16.0)
-Requirement already satisfied: dnspython<3.0.0,>=2.6.1 in d:\ai\imgprojects\astro_chatbot\astro_chatbot\venv\lib\site-packages (from pymongo) (2.8.0)

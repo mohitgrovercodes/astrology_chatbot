@@ -133,7 +133,7 @@ def get_orchestrator():
             llm=llm
         )
         
-        print("[API] ✓ Orchestrator initialized")
+        print("[API] [OK] Orchestrator initialized")
     
     return _orchestrator_instance
 
@@ -154,7 +154,7 @@ def get_user_manager() -> UserManager:
         _user_manager_instance = UserManager(
             mongodb_uri=mongo_uri
         )
-        print("[API] ✓ User manager initialized")
+        print("[API] [OK] User manager initialized")
     
     return _user_manager_instance
 
@@ -168,7 +168,7 @@ def get_vedic_engine() -> VedicEngine:
     if _vedic_engine_instance is None:
         print("[API] Initializing Vedic engine...")
         _vedic_engine_instance = VedicEngine()
-        print("[API] ✓ Vedic engine initialized")
+        print("[API] [OK] Vedic engine initialized")
     
     return _vedic_engine_instance
 
@@ -182,7 +182,7 @@ def get_western_engine() -> WesternAstroEngine:
     if _western_engine_instance is None:
         print("[API] Initializing Western engine...")
         _western_engine_instance = WesternAstroEngine()
-        print("[API] ✓ Western engine initialized")
+        print("[API] [OK] Western engine initialized")
     
     return _western_engine_instance
 

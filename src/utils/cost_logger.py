@@ -724,7 +724,7 @@ if __name__ == "__main__":
         output_tokens=800,
         metadata={"test": "llm_call"}
     )
-    print("✅ LLM call logged")
+    print("[DONE] LLM call logged")
     
     # Test embedding call logging
     print("\nTesting embedding call logging...")
@@ -733,7 +733,7 @@ if __name__ == "__main__":
         tokens=2048,
         metadata={"batch_size": 10}
     )
-    print("✅ Embedding call logged")
+    print("[DONE] Embedding call logged")
     
     # Test vision call logging
     print("\nTesting vision call logging...")
@@ -743,7 +743,7 @@ if __name__ == "__main__":
         output_tokens=1000,
         metadata={"page": 5, "file": "test.pdf"}
     )
-    print("✅ Vision call logged")
+    print("[DONE] Vision call logged")
     
     # Get summary
     print("\n" + "=" * 70)
@@ -770,5 +770,5 @@ if __name__ == "__main__":
         print(f"    Cost: ${stats['cost']:.6f}")
     
     print("\n" + "=" * 70)
-    print("✅ Cost Logger test complete!")
+    print("[DONE] Cost Logger test complete!")
     print("=" * 70)

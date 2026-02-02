@@ -129,7 +129,7 @@ def export_to_csv(calls: list[APICallLog], output_file: str):
                 call.total_cost,
             ])
     
-    print(f"✅ Exported {len(calls)} calls to {output_file}")
+    print(f"[DONE] Exported {len(calls)} calls to {output_file}")
 
 
 def main():

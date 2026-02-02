@@ -489,14 +489,14 @@ if __name__ == "__main__":
         operation="test_manual",
         metadata={"test": True}
     )
-    print("✅ Manual logging works")
+    print("[DONE] Manual logging works")
     
     # Test batch tracker
     print("\nTesting BatchCostTracker...")
     with BatchCostTracker("gemini-2.5-flash", "test_batch") as tracker:
         for i in range(3):
             tracker.add_manual(input_tokens=500, output_tokens=250)
-    print("✅ Batch tracking works")
+    print("[DONE] Batch tracking works")
     
     # View summary
     from src.utils.cost_logger import get_cost_logger
@@ -509,4 +509,4 @@ if __name__ == "__main__":
     print(f"Total Calls: {summary.total_calls}")
     print(f"Total Cost: ${summary.total_cost:.6f}")
     
-    print("\n✅ All cost tracking utilities working!")
+    print("\n[DONE] All cost tracking utilities working!")

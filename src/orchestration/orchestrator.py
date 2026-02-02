@@ -1,12 +1,12 @@
 """
 Enhanced LangGraph Orchestrator with REAL Calculation Integration.
 
-✅ UPDATED: Now uses actual VedicEngine calculations (no placeholders!)
+UPDATED: Now uses actual VedicEngine calculations (no placeholders!)
 
 3-way routing:
-1. CHITCHAT → Quick response
-2. NEEDS_CALCULATION → Real birth chart calculation
-3. NEEDS_RAG → Knowledge + Real chart data + Interpretation/Prediction
+1. CHITCHAT -> Quick response
+2. NEEDS_CALCULATION -> Real birth chart calculation
+3. NEEDS_RAG -> Knowledge + Real chart data + Interpretation/Prediction
 """
 
 from typing import Dict, List, Optional, Any, TypedDict, Annotated
@@ -17,10 +17,10 @@ import json
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, AIMessage
 
-# ✅ NEW: Import calculation tools
+# NEW: Import calculation tools
 from src.tools.calculation_tools import get_calculation_tools
 
-# ✅ PHASE 6: Import safety module
+# PHASE 6: Import safety module
 from src.safety.guardrails import QueryAnalyzer, ResponseEnhancer
 from src.safety.input_validator import InputValidator
 
@@ -37,6 +37,9 @@ class NakshatraState(TypedDict):
     user_profile: Optional[Dict]
     authenticated: bool
     
+    # Intent classification
+    intent: Optional[str]  # CHITCHAT | CALCULATION_ONLY | RAG_WITH_CALCULATION | RAG_ONLY
+    confidence: float
     intent_reasoning: str
     cached: bool
     detected_language: str  # 'en', 'hi', 'ta', etc.
@@ -50,7 +53,7 @@ class NakshatraState(TypedDict):
     # RAG results
     knowledge_chunks: Optional[List]
     
-    # ✅ PHASE 6: Safety analysis
+    # PHASE 6: Safety analysis
     query_analysis: Optional[Dict]  # Sensitivity analysis from QueryAnalyzer
     
     # Response
@@ -72,7 +75,7 @@ class EnhancedLangGraphOrchestrator:
         user_manager,
         hybrid_retriever,
         prompt_builder,
-        calculation_tools: Optional[Dict] = None,  # ✅ CHANGED: Now optional
+        calculation_tools: Optional[Dict] = None,  # [DONE] CHANGED: Now optional
         llm=None,
         mongodb_uri: Optional[str] = None
     ):
@@ -82,21 +85,21 @@ class EnhancedLangGraphOrchestrator:
         self.hybrid_retriever = hybrid_retriever
         self.prompt_builder = prompt_builder
         
-        # ✅ NEW: Auto-load calculation tools if not provided
+        # NEW: Auto-load calculation tools if not provided
         if calculation_tools is None:
             print("[LANGGRAPH] Loading calculation tools...")
             calculation_tools = get_calculation_tools()
-            print(f"[LANGGRAPH] ✓ Loaded {len(calculation_tools)} calculation tools")
+            print(f"[LANGGRAPH] Loaded {len(calculation_tools)} calculation tools")
         
         self.calculation_tools = calculation_tools
         self.llm = llm
         
-        # ✅ Connect LLM to intent classifier for accurate classification
+        # [DONE] Connect LLM to intent classifier for accurate classification
         if hasattr(self.intent_classifier, 'set_llm') and llm is not None:
             self.intent_classifier.set_llm(llm)
-            print("[LANGGRAPH] ✓ LLM connected to intent classifier")
+            print("[LANGGRAPH] LLM connected to intent classifier")
         
-        # ✅ PHASE 6: Initialize safety components
+        # PHASE 6: Initialize safety components
         self.query_analyzer = QueryAnalyzer()
         self.response_enhancer = ResponseEnhancer()
         self.input_validator = InputValidator()
@@ -105,7 +108,7 @@ class EnhancedLangGraphOrchestrator:
         
         print("[LANGGRAPH] [SUCCESS] Enhanced orchestrator initialized")
         print("[LANGGRAPH] Routes: CHITCHAT | CALCULATION_ONLY | RAG_WITH_CALCULATION | RAG_ONLY")
-        print("[LANGGRAPH] ✓ Safety guardrails enabled (Phase 6)")
+        print("[LANGGRAPH] Safety guardrails enabled (Phase 6)")
     
     def _build_graph(self) -> StateGraph:
         """Build enhanced graph with 4-way routing."""
@@ -290,7 +293,7 @@ Language Code:"""
                 state['error'] = chart_data['error']
                 return state
             
-            print(f"[CALCULATION_ONLY] ✓ Chart: Lagna={chart_data['lagna']}, Rashi={chart_data['moon_sign']}")
+            print(f"[CALCULATION_ONLY] Chart: Lagna={chart_data['lagna']}, Rashi={chart_data['moon_sign']}")
             
             # Use LLM to extract only what was asked for
             extraction_prompt = f"""You are a data extraction assistant. The user asked: "{state['query']}"
@@ -356,7 +359,7 @@ Provide a concise answer:"""
         """
         print("[RAG_WITH_CALCULATION] Personalized prediction flow")
         
-        # ✅ PHASE 6: Analyze query for sensitive content
+        # PHASE 6: Analyze query for sensitive content
         query_analysis = self.query_analyzer.analyze(state['query'])
         state['query_analysis'] = {
             'category': query_analysis.category.value,
@@ -371,7 +374,7 @@ Provide a concise answer:"""
               f"Sensitivity: {query_analysis.sensitivity_level:.2f}, "
               f"Strategy: {query_analysis.handling_strategy.value}")
         
-        # Check if we should ask clarifying question first (C in C→B→A)
+        # Check if we should ask clarifying question first (C in C->B->A)
         should_clarify, clarifying_q = self.response_enhancer.should_ask_clarification(query_analysis)
         if should_clarify and clarifying_q:
             print(f"[SAFETY] High sensitivity detected - asking clarifying question first")
@@ -399,7 +402,7 @@ Provide a concise answer:"""
                         
                         if "error" not in chart_data:
                             state['chart_data'] = chart_data
-                            print(f"[RAG_WITH_CALCULATION] ✓ Chart: Lagna={chart_data['lagna']}, Rashi={chart_data['moon_sign']}")
+                            print(f"[RAG_WITH_CALCULATION] Chart: Lagna={chart_data['lagna']}, Rashi={chart_data['moon_sign']}")
                         
                         # Calculate current dasha
                         dasha_tool = self.calculation_tools['current_dasha']
@@ -412,7 +415,7 @@ Provide a concise answer:"""
                         
                         if "error" not in dasha_data:
                             state['dasha_data'] = dasha_data
-                            print(f"[RAG_WITH_CALCULATION] ✓ Dasha: {dasha_data['dasha_sequence']}")
+                            print(f"[RAG_WITH_CALCULATION] Dasha: {dasha_data['dasha_sequence']}")
                         
                         # Calculate current transits
                         transit_tool = self.calculation_tools['current_transits']
@@ -420,7 +423,7 @@ Provide a concise answer:"""
                         
                         if "error" not in transit_data:
                             state['transit_data'] = transit_data
-                            print(f"[RAG_WITH_CALCULATION] ✓ Transits for {transit_data['date']}")
+                            print(f"[RAG_WITH_CALCULATION] Transits for {transit_data['date']}")
                         
                     except Exception as e:
                         print(f"[RAG_WITH_CALCULATION] Calculation error: {e}")
@@ -597,14 +600,13 @@ Provide a detailed explanation:"""
         chart_data: Dict,
         dasha_data: Dict,
         transit_data: Dict,
-        transit_data: Dict,
         knowledge_chunks: List,
         user_profile: Dict,
         language: str = "en"
     ) -> str:
         """
         Build personalized prediction prompt with REAL chart context.
-        ✅ UPDATED: Now uses rich data structure from VedicEngine
+        [DONE] UPDATED: Now uses rich data structure from VedicEngine
         """
         
         # Format knowledge context
@@ -635,7 +637,7 @@ Provide a detailed explanation:"""
         except:
             system_prompt = "You are an expert Vedic astrologer."
 
-        # ✅ NEW: Enhanced prompt with rich chart data
+        # NEW: Enhanced prompt with rich chart data
         prompt = f"""{system_prompt}
 
 USER PROFILE:
@@ -760,7 +762,7 @@ if __name__ == "__main__":
     print("ENHANCED ORCHESTRATOR - Integration Test")
     print("=" * 70)
     print()
-    print("✅ This orchestrator now uses REAL VedicEngine calculations!")
+    print("This orchestrator now uses REAL VedicEngine calculations!")
     print()
     print("Changes made:")
     print("  1. Auto-loads calculation tools from src/tools/calculation_tools.py")

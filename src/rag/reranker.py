@@ -124,7 +124,7 @@ def main():
     # Test reranker initialization
     reranker = Reranker(method=args.method, model=args.model or "cross-encoder/ms-marco-MiniLM-L6-v2")
     
-    print(f"\n✅ Reranker initialized: {args.method}")
+    print(f"\n[DONE] Reranker initialized: {args.method}")
     print(f"Model: {reranker.model}")
     print(f"Client available: {reranker.client is not None}")
 

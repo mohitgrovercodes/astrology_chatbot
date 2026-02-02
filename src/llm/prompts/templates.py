@@ -58,11 +58,11 @@ Note: Not every answer needs all 7 parts. Use your judgment based on the questio
     if include_voice_guidelines:
         system_parts.append("""
 CRITICAL VOICE REMINDERS:
-✓ Use Sanskrit terms with immediate English clarification
-✓ Cite sources conversationally, not academically stiff
-✓ Express uncertainty gracefully ("tends to", "may indicate")
-✓ Acknowledge chart context ("However, the final result depends on...")
-✓ Balance precision with accessibility""")
+[OK] Use Sanskrit terms with immediate English clarification
+[OK] Cite sources conversationally, not academically stiff
+[OK] Express uncertainty gracefully ("tends to", "may indicate")
+[OK] Acknowledge chart context ("However, the final result depends on...")
+[OK] Balance precision with accessibility""")
     
     system_message = "\n\n".join(system_parts)
     
@@ -161,14 +161,14 @@ A follow-up question:
 
 Examples of FOLLOW-UP:
 - Previous: "Tell me about Saturn"
-  Current: "What about in the 7th house?" → FOLLOW-UP (referring to Saturn)
+  Current: "What about in the 7th house?" -> FOLLOW-UP (referring to Saturn)
 
 - Previous: "Effects of Mars in 1st house"
-  Current: "What if it's retrograde?" → FOLLOW-UP (referring to Mars in 1st)
+  Current: "What if it's retrograde?" -> FOLLOW-UP (referring to Mars in 1st)
 
 Examples of NOT FOLLOW-UP:
 - Previous: "Tell me about Saturn"
-  Current: "What does Jupiter signify?" → NOT follow-up (new topic)
+  Current: "What does Jupiter signify?" -> NOT follow-up (new topic)
 
 Respond in JSON format:
 {
@@ -220,9 +220,9 @@ The user has asked a question that is not directly about astrology (greetings, g
 Respond warmly and professionally, then gently guide the conversation back to astrology if appropriate.
 
 Examples:
-- "Hello!" → "Namaste! 🙏 Welcome to our astrology consultation. How may I assist you today? Feel free to ask about birth charts, planetary positions, dashas, or any astrological concepts."
-- "Thank you!" → "You're most welcome! I'm glad I could help. Do you have any other astrology questions?"
-- "How are you?" → "I'm here and ready to help with your astrology questions! What would you like to explore today?"
+- "Hello!" -> "Namaste! 🙏 Welcome to our astrology consultation. How may I assist you today? Feel free to ask about birth charts, planetary positions, dashas, or any astrological concepts."
+- "Thank you!" -> "You're most welcome! I'm glad I could help. Do you have any other astrology questions?"
+- "How are you?" -> "I'm here and ready to help with your astrology questions! What would you like to explore today?"
 
 Keep responses brief (1-2 sentences) and always leave the door open for astrological questions."""),
     
@@ -397,36 +397,36 @@ if __name__ == "__main__":
     print("1. Creating RAG Answer Template...")
     persona = get_default_persona()
     rag_template = PromptTemplateFactory.get_rag_template(persona)
-    print(f"   ✓ Template created with {len(rag_template.messages)} message components")
-    print(f"   ✓ Input variables: {rag_template.input_variables}")
+    print(f"   [OK] Template created with {len(rag_template.messages)} message components")
+    print(f"   [OK] Input variables: {rag_template.input_variables}")
     print()
     
     # Test summarizer
     print("2. Conversation Summarizer Template...")
     summarizer = PromptTemplateFactory.get_summarizer_template()
-    print(f"   ✓ Template created with {len(summarizer.messages)} message components")
-    print(f"   ✓ Input variables: {summarizer.input_variables}")
+    print(f"   [OK] Template created with {len(summarizer.messages)} message components")
+    print(f"   [OK] Input variables: {summarizer.input_variables}")
     print()
     
     # Test intent classifier
     print("3. Intent Classifier Template...")
     classifier = PromptTemplateFactory.get_intent_classifier_template()
-    print(f"   ✓ Template created with {len(classifier.messages)} message components")
-    print(f"   ✓ Input variables: {classifier.input_variables}")
+    print(f"   [OK] Template created with {len(classifier.messages)} message components")
+    print(f"   [OK] Input variables: {classifier.input_variables}")
     print()
     
     # Test follow-up detector
     print("4. Follow-up Detector Template...")
     followup = PromptTemplateFactory.get_followup_detector_template()
-    print(f"   ✓ Template created with {len(followup.messages)} message components")
-    print(f"   ✓ Input variables: {followup.input_variables}")
+    print(f"   [OK] Template created with {len(followup.messages)} message components")
+    print(f"   [OK] Input variables: {followup.input_variables}")
     print()
     
     # Test context expander
     print("5. Context Expander Template...")
     expander = PromptTemplateFactory.get_context_expander_template()
-    print(f"   ✓ Template created with {len(expander.messages)} message components")
-    print(f"   ✓ Input variables: {expander.input_variables}")
+    print(f"   [OK] Template created with {len(expander.messages)} message components")
+    print(f"   [OK] Input variables: {expander.input_variables}")
     print()
     
     # Show sample RAG prompt formatting
@@ -459,6 +459,6 @@ own sign, these effects are greatly modified."""
         print(f"     {preview}\n")
     
     print("=" * 70)
-    print("✅ All templates loaded successfully!")
+    print("[DONE] All templates loaded successfully!")
     print("=" * 70)
     print("\nReady to integrate into RAG engine.")

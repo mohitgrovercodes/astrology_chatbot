@@ -436,7 +436,7 @@ if __name__ == "__main__":
     
     try:
         config = get_config()
-        print("\n✅ Configuration loaded successfully!\n")
+        print("\n[DONE] Configuration loaded successfully!\n")
         
         print("Configuration Summary:")
         print(json.dumps(config.to_dict(), indent=2))
@@ -446,7 +446,7 @@ if __name__ == "__main__":
         print("=" * 60)
         
         validate_config()
-        print("\n✅ Configuration is valid!")
+        print("\n[DONE] Configuration is valid!")
         
     except Exception as e:
         print(f"\n❌ Configuration Error: {e}")

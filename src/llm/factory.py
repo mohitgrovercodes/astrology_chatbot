@@ -56,7 +56,7 @@ def initialize_vertex_ai(project_id: str = "445806945384", location: str = "us-c
     try:
         vertexai.init(project=project_id, location=location)
         _VERTEX_INITIALIZED = True
-        logger.info(f"✅ Vertex AI initialized: project={project_id}, location={location}")
+        logger.info(f"[DONE] Vertex AI initialized: project={project_id}, location={location}")
     except Exception as e:
         logger.error(f"Failed to initialize Vertex AI: {e}")
         raise
@@ -210,11 +210,11 @@ class LLMFactory:
             if hasattr(llm, 'callbacks'):
                 llm.callbacks = [cost_callback] if llm.callbacks is None else llm.callbacks + [cost_callback]
         
-        logger.info(f"✅ Created Vertex AI LLM: model={model}, temperature={temperature}, max_tokens={max_tokens}")
+        logger.info(f"[DONE] Created Vertex AI LLM: model={model}, temperature={temperature}, max_tokens={max_tokens}")
         
         # Wrap with rate limiter
         if use_rate_limiting:
-            logger.info(f"✅ Rate limiting enabled: {rate_limit_delay}s delay")
+            logger.info(f"[DONE] Rate limiting enabled: {rate_limit_delay}s delay")
             return RateLimitedLLM(llm, min_delay=rate_limit_delay, max_retries=3, base_backoff=2.0)
         
         return llm
@@ -264,7 +264,7 @@ if __name__ == "__main__":
     print("Available Providers:")
     available = LLMFactory.get_available_providers()
     for provider in available:
-        print(f"  ✅ {provider}")
+        print(f"  [DONE] {provider}")
     print()
     
     print("Creating default LLM (Gemini 2.5 Flash on Vertex AI)...")
@@ -273,9 +273,9 @@ if __name__ == "__main__":
         
         if isinstance(llm, RateLimitedLLM):
             actual_llm = llm.llm
-            print(f"✅ Created: RateLimitedLLM wrapping {type(actual_llm).__name__}")
+            print(f"[DONE] Created: RateLimitedLLM wrapping {type(actual_llm).__name__}")
         else:
-            print(f"✅ Created: {type(llm).__name__}")
+            print(f"[DONE] Created: {type(llm).__name__}")
         print()
         
         print("Testing invoke...")
@@ -289,5 +289,5 @@ if __name__ == "__main__":
         traceback.print_exc()
     
     print("=" * 60)
-    print("✅ Test complete!")
+    print("[DONE] Test complete!")
     print("=" * 60)

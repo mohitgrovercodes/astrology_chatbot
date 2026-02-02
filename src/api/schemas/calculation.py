@@ -97,7 +97,7 @@ class WesternAspect(BaseModel):
     planet2: str
     aspect_type: str
     orb: float
-    strength: float
+    strength: float = Field(..., description="Numeric strength: 1.0=exact, 0.75=close, 0.5=moderate, 0.25=wide")
     is_major: bool
 
 

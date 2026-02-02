@@ -653,7 +653,7 @@ Examples:
         os.makedirs(output_dir, exist_ok=True)
     
     print("\n" + "-" * 60)
-    print(f"✅ Ready to process:")
+    print(f"[DONE] Ready to process:")
     print(f"   File:      {input_file}")
     print(f"   Book:      {source_book}")
     print(f"   Tradition: {tradition}")

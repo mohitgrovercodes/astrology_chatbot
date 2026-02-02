@@ -150,73 +150,160 @@ class UserManager:
     
     def get_user_profile(self, user_id: str) -> Optional[UserProfile]:
         """
-        Load user profile from database.
-        
-        Args:
-            user_id: User identifier
-            
-        Returns:
-            UserProfile if user exists, None otherwise
+        Load user profile from database. 
+        Note: This is used internally by Orchestrator and expects flat data.
         """
+        raw_data = None
         if self.use_mongodb:
             try:
-                doc = self.users_collection.find_one({"user_id": user_id})
-                if not doc:
-                    return None
-                
-                return UserProfile(
-                    user_id=doc.get('user_id'),
-                    name=doc.get('name', 'User'),
-                    email=doc.get('email'),
-                    date_of_birth=doc.get('date_of_birth'),
-                    time_of_birth=doc.get('time_of_birth'),
-                    place_of_birth=doc.get('place_of_birth'),
-                    latitude=doc.get('latitude'),
-                    longitude=doc.get('longitude'),
-                    timezone=doc.get('timezone'),
-                    preferred_system=doc.get('preferred_system', 'vedic'),
-                    language=doc.get('language', 'en'),
-                    created_at=doc.get('created_at'),
-                    last_active=doc.get('last_active')
-                )
+                raw_data = self.users_collection.find_one({"user_id": user_id})
             except Exception as e:
                 print(f"[USER] Error loading profile: {e}")
                 return None
         else:
-            # Dummy data
-            if user_id not in self.users_db:
-                return None
+            raw_data = self.users_db.get(user_id)
+
+        if not raw_data:
+            return None
             
-            data = self.users_db[user_id]
-            return UserProfile(**data)
-    
+        # If it's already nested (new format), we need to flatten for UserProfile dataclass
+        if 'birth_data' in raw_data:
+            bd = raw_data.get('birth_data', {})
+            pref = raw_data.get('preferences', {})
+            flat_data = {
+                "user_id": raw_data.get("user_id"),
+                "name": raw_data.get("name"),
+                "email": raw_data.get("email"),
+                "date_of_birth": bd.get("date_of_birth"),
+                "time_of_birth": bd.get("time_of_birth"),
+                "place_of_birth": bd.get("place_of_birth"),
+                "latitude": bd.get("latitude"),
+                "longitude": bd.get("longitude"),
+                "timezone": bd.get("timezone"),
+                "preferred_system": pref.get("astrology_system", "vedic"),
+                "language": pref.get("language", "en"),
+                "created_at": raw_data.get("created_at"),
+                "last_active": raw_data.get("last_active")
+            }
+            return UserProfile(**flat_data)
+        
+        # It's already flat
+        return UserProfile(**raw_data)
+
+    def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get user data as a dictionary in nested format for API.
+        """
+        # We can leverage get_user_profile then convert to dict
+        profile = self.get_user_profile(user_id)
+        if not profile:
+            return None
+            
+        # Transform flat profile to nested dict for API
+        nested_data = {
+            "user_id": profile.user_id,
+            "name": profile.name,
+            "email": profile.email,
+            "birth_data": {
+                "date_of_birth": profile.date_of_birth,
+                "time_of_birth": profile.time_of_birth,
+                "place_of_birth": profile.place_of_birth,
+                "latitude": profile.latitude,
+                "longitude": profile.longitude,
+                "timezone": profile.timezone or "UTC"
+            },
+            "preferences": {
+                "astrology_system": profile.preferred_system,
+                "language": profile.language
+            },
+            "created_at": profile.created_at.isoformat() if isinstance(profile.created_at, datetime) else profile.created_at,
+            "updated_at": profile.last_active.isoformat() if isinstance(profile.last_active, datetime) else profile.last_active
+        }
+        return nested_data
+
+    def create_user(self, user_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Create a new user. 
+        """
+        # Determine if input is nested or flat
+        if 'birth_data' in user_data:
+            # Nested input (from API)
+            user_id = user_data.get("user_id")
+            if not user_id: raise ValueError("user_id is required")
+            
+            # Store it flat for internal consistency or nested for future-proofing?
+            # Let's flatten it for now to match DUMMY_USERS structure
+            bd = user_data.get('birth_data', {})
+            pref = user_data.get('preferences', {})
+            flat_data = {
+                "user_id": user_id,
+                "name": user_data.get("name"),
+                "email": user_data.get("email"),
+                "date_of_birth": bd.get("date_of_birth"),
+                "time_of_birth": bd.get("time_of_birth"),
+                "place_of_birth": bd.get("place_of_birth"),
+                "latitude": bd.get("latitude"),
+                "longitude": bd.get("longitude"),
+                "timezone": bd.get("timezone"),
+                "preferred_system": pref.get("astrology_system", "vedic"),
+                "language": pref.get("language", "en"),
+                "created_at": datetime.now(),
+                "last_active": datetime.now()
+            }
+            target_data = flat_data
+        else:
+            # Flat input
+            user_id = user_data.get("user_id")
+            if not user_id: raise ValueError("user_id is required")
+            user_data['created_at'] = user_data.get('created_at', datetime.now())
+            user_data['last_active'] = datetime.now()
+            target_data = user_data
+
+        if self.use_mongodb:
+            self.users_collection.insert_one(target_data)
+        else:
+            self.users_db[user_id] = target_data
+            
+        return self.get_user(user_id) # Returns nested
+
+    def update_user(self, user_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Update an existing user. Handles nested update_data from API.
+        """
+        # Support nested update_data by flattening it
+        final_update = {}
+        if 'birth_data' in update_data:
+            bd = update_data.pop('birth_data')
+            for k, v in bd.items():
+                final_update[k] = v
+        if 'preferences' in update_data:
+            pref = update_data.pop('preferences')
+            if 'astrology_system' in pref:
+                final_update['preferred_system'] = pref['astrology_system']
+            if 'language' in pref:
+                final_update['language'] = pref['language']
+        
+        final_update.update(update_data)
+        final_update['last_active'] = datetime.now()
+        
+        if self.use_mongodb:
+            self.users_collection.update_one({"user_id": user_id}, {"$set": final_update})
+        else:
+            if user_id not in self.users_db: raise ValueError(f"User {user_id} not found")
+            self.users_db[user_id].update(final_update)
+            
+        return self.get_user(user_id)
+
     def update_last_active(self, user_id: str):
         """Update user's last active timestamp."""
         if self.use_mongodb:
-            try:
-                self.users_collection.update_one(
-                    {"user_id": user_id},
-                    {"$set": {"last_active": datetime.now()}}
-                )
-            except Exception as e:
-                print(f"[USER] Error updating last_active: {e}")
+            self.users_collection.update_one({"user_id": user_id}, {"$set": {"last_active": datetime.now()}})
         else:
-            if user_id in self.users_db:
-                self.users_db[user_id]['last_active'] = datetime.now()
-    
+            if user_id in self.users_db: self.users_db[user_id]['last_active'] = datetime.now()
+
     def user_exists(self, user_id: str) -> bool:
         """
         Check if user exists in database.
-        
-        This is the ONLY authentication check:
-        - User in DB → authenticated
-        - User not in DB → not authenticated
-        
-        Args:
-            user_id: User identifier
-            
-        Returns:
-            True if user exists, False otherwise
         """
         if self.use_mongodb:
             try:
@@ -266,24 +353,24 @@ if __name__ == "__main__":
         
         if manager.user_exists(user_id):
             profile = manager.get_user_profile(user_id)
-            print(f"  ✓ Authenticated")
+            print(f"  [OK] Authenticated")
             print(f"  Name: {profile.name}")
             print(f"  System: {profile.preferred_system}")
-            print(f"  Birth data: {'✓ Complete' if profile.has_birth_data() else '✗ Incomplete'}")
+            print(f"  Birth data: {'[OK] Complete' if profile.has_birth_data() else '[FAIL] Incomplete'}")
             
             # Test update
             manager.update_last_active(user_id)
             print(f"  Last active updated")
         else:
-            print(f"  ✗ Not found in database")
+            print(f"  [FAIL] Not found in database")
         
         print()
     
     print("=" * 60)
-    print("✅ Tests complete!")
+    print("[DONE] Tests complete!")
     print("=" * 60)
     print()
     print("Authentication logic:")
-    print("  • User in DB → authenticated")
-    print("  • User not in DB → not authenticated")
+    print("  • User in DB -> authenticated")
+    print("  • User not in DB -> not authenticated")
     print("  • No subscription checks (handled externally)")
