@@ -39,12 +39,20 @@ def main():
     mongodb_uri = os.getenv('MONGODB_URI')
     user_manager = get_user_manager(mongodb_uri)
     
-    # 2. LLM
+    # 2. Dual LLM Setup (Performance Optimization)
+    # Fast LLM: For classification/detection (2x faster, lower cost)
+    fast_llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash-lite",
+        temperature=0.0  # Deterministic for classification
+    )
+    print("✓ Fast LLM: Gemini 2.5 Flash Lite (for classification)")
+    
+    # Quality LLM: For final responses (better quality)
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
         temperature=0.3
     )
-    print("✓ LLM: Gemini 2.5 Flash")
+    print("✓ Quality LLM: Gemini 2.5 Flash (for responses)")
     
     # 3. Embeddings (MUST MATCH the model used during ingestion!)
     embeddings = OpenAIEmbeddings(
@@ -76,14 +84,15 @@ def main():
     # 7. Prompt Builder
     prompt_builder = PromptBuilder()
     
-    # 8. LangGraph Orchestrator
+    # 8. LangGraph Orchestrator (with dual LLM)
     orchestrator = create_enhanced_orchestrator(
         intent_classifier=intent_classifier,
         user_manager=user_manager,
         hybrid_retriever=hybrid_retriever,
         prompt_builder=prompt_builder,
         calculation_tools=CALCULATION_TOOLS,
-        llm=llm,
+        llm=llm,  # Quality LLM for responses
+        fast_llm=fast_llm,  # Fast LLM for classification
         mongodb_uri=mongodb_uri
     )
     

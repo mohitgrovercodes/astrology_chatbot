@@ -77,9 +77,10 @@ class EnhancedLangGraphOrchestrator:
         prompt_builder,
         calculation_tools: Optional[Dict] = None,  # [DONE] CHANGED: Now optional
         llm=None,
+        fast_llm=None,  # NEW: Fast LLM for classification
         mongodb_uri: Optional[str] = None
     ):
-        """Initialize enhanced orchestrator."""
+        """Initialize enhanced orchestrator with dual LLM support."""
         self.intent_classifier = intent_classifier
         self.user_manager = user_manager
         self.hybrid_retriever = hybrid_retriever
@@ -92,12 +93,13 @@ class EnhancedLangGraphOrchestrator:
             print(f"[LANGGRAPH] Loaded {len(calculation_tools)} calculation tools")
         
         self.calculation_tools = calculation_tools
-        self.llm = llm
+        self.llm = llm  # Quality LLM for responses
+        self.fast_llm = fast_llm or llm  # Fast LLM for classification (fallback to quality LLM)
         
-        # [DONE] Connect LLM to intent classifier for accurate classification
-        if hasattr(self.intent_classifier, 'set_llm') and llm is not None:
-            self.intent_classifier.set_llm(llm)
-            print("[LANGGRAPH] LLM connected to intent classifier")
+        # [DONE] Connect fast LLM to intent classifier
+        if hasattr(self.intent_classifier, 'set_llm') and self.fast_llm is not None:
+            self.intent_classifier.set_llm(self.fast_llm)
+            print("[LANGGRAPH] Fast LLM connected to intent classifier")
         
         # PHASE 6: Initialize safety components
         self.query_analyzer = QueryAnalyzer()
@@ -192,29 +194,95 @@ class EnhancedLangGraphOrchestrator:
         print(f"[AUTH] [SUCCESS] Authenticated: {user_profile.name}")
         return state
 
+    def _detect_language_heuristic(self, text: str) -> Optional[str]:
+        """
+        Fast heuristic language detection based on Unicode script analysis and common words.
+        Returns None if ambiguous (triggers LLM fallback).
+        """
+        import re
+        
+        if not text or len(text.strip()) == 0:
+            return None
+        
+        # Count characters by script
+        devanagari_count = len(re.findall(r'[\u0900-\u097F]', text))  # Hindi
+        tamil_count = len(re.findall(r'[\u0B80-\u0BFF]', text))       # Tamil
+        total_chars = len(text.strip())
+        
+        if total_chars == 0:
+            return None
+        
+        # If >80% of text is one script, high confidence
+        if devanagari_count / total_chars > 0.8:
+            return 'hi'
+        if tamil_count / total_chars > 0.8:
+            return 'ta'
+        
+        # Hinglish Check: Look for common Hindi words transliterated in Latin script
+        # If found, return None to trigger robust LLM detection
+        hinglish_markers = r'\b(kya|hai|kab|kaise|ka|ki|ke|me|si|se|ko|bhi|hi|tha|thi|the|hu|ho|bhava|rashi|kundli|nakshatra)\b'
+        if re.search(hinglish_markers, text.lower()):
+            return None  # Ambiguous, trigger LLM
+        
+        # If no special scripts and alphabetic, assume English
+        if devanagari_count == 0 and tamil_count == 0:
+            # Check if text has Latin characters
+            if re.search(r'[a-zA-Z]', text):
+                return 'en'
+        
+        # Mixed or ambiguous → return None to trigger LLM fallback
+        return None
+    
     def _detect_language_node(self, state: NakshatraState) -> NakshatraState:
-        """Node 1.5: Detect query language."""
+        """Node 1.5: Detect query language using heuristics with LLM fallback."""
         query = state['query']
         print(f"[LANG] Detecting language for: '{query[:30]}...'")
         
-        # Use LLM for robust detection (handles Hinglish/Tamilish better than regex)
-        detection_prompt = f"""Identify the language of the following text. 
-Return ONLY the ISO 639-1 code (e.g., 'en', 'hi', 'ta').
-If it's multi-lingual (like Hinglish), return the primary language or 'hi'.
+        # Step 1: Try fast heuristic detection
+        detected_lang = self._detect_language_heuristic(query)
+        
+        if detected_lang:
+            # Heuristic succeeded!
+            state['detected_language'] = detected_lang
+            state['original_query'] = query
+            print(f"[LANG] Detected: {detected_lang} (heuristic)")
+            return state
+        
+        # Step 2: Heuristic failed/ambiguous → Use LLM fallback
+        print(f"[LANG] Heuristic ambiguous, using LLM fallback...")
+        
+        # Use fast LLM for robust detection (handles Hinglish/Tamilish better than regex)
+        detection_prompt = f"""Identify the language and SCRIPT of the following text. 
+Return ONLY one of these codes:
+- 'en': English (Latin script)
+- 'hi': Hindi (Devanagari script)
+- 'hi-lat': Hinglish (Hindi words written in Latin script)
+- 'ta': Tamil (Tamil script)
+- 'ta-lat': Tamil in Latin script
+
 Text: "{query}"
-Language Code:"""
+Code:"""
         
         try:
-            response = self.llm.invoke(detection_prompt)
-            lang = response.content.strip().lower()[:2] if hasattr(response, 'content') else str(response).strip().lower()[:2]
+            response = self.fast_llm.invoke(detection_prompt)  # Use fast LLM!
+            lang = response.content.strip().lower()
             
-            # Support known codes, default to 'en'
-            if lang not in ['en', 'hi', 'ta', 'te', 'mr', 'bn', 'gu', 'kn', 'ml']:
-                lang = 'en'
+            # Map codes
+            valid_codes = ['en', 'hi', 'hi-lat', 'ta', 'ta-lat']
+            if lang not in valid_codes:
+                # Try prefix match
+                matched = False
+                for code in valid_codes:
+                    if lang.startswith(code):
+                        lang = code
+                        matched = True
+                        break
+                if not matched:
+                    lang = 'en'
                 
             state['detected_language'] = lang
             state['original_query'] = query
-            print(f"[LANG] Detected: {lang}")
+            print(f"[LANG] Detected: {lang} (LLM)")
         except Exception as e:
             print(f"[LANG] Detection error: {e}")
             state['detected_language'] = 'en'
@@ -243,22 +311,55 @@ Language Code:"""
         return state
     
     def _handle_chitchat_node(self, state: NakshatraState) -> NakshatraState:
-        """Node 3a: Handle conversational queries."""
-        print("[CHITCHAT] Quick response")
+        """Node 3a: Handle conversational queries with multilingual support."""
+        print(f"[CHITCHAT] Response for language: {state.get('detected_language', 'en')}")
         
         user_name = state['user_profile'].get('name', 'User')
         q = state['query'].lower().strip()
+        lang = state.get('detected_language', 'en')
         
-        # Simple pattern matching for common chitchat
-        if any(word in q for word in ['hi', 'hello', 'hey', 'namaste']):
-            state['answer'] = f"Namaste, {user_name}! I'm NakshatraAI, your professional astrology consultant. How may I assist you today?"
-        elif any(word in q for word in ['who are you', 'what are you']):
-            state['answer'] = f"I'm NakshatraAI, a professional Vedic astrology consultant. I can analyze your birth chart, predict timing for life events, and provide guidance based on classical astrological principles."
-        elif any(word in q for word in ['thanks', 'thank you']):
-            state['answer'] = f"You're welcome, {user_name}! Feel free to ask anything about your chart or astrological concepts."
-        else:
-            state['answer'] = f"Hello {user_name}! I'm here to help with astrological guidance. What would you like to know?"
-        
+        # Fast path for English common chitchat
+        if lang == 'en':
+            if any(word in q for word in ['hi', 'hello', 'hey', 'namaste']):
+                state['answer'] = f"Namaste, {user_name}! I'm NakshatraAI, your professional astrology consultant. How may I assist you today?"
+                return state
+            elif any(word in q for word in ['who are you', 'what are you']):
+                state['answer'] = f"I'm NakshatraAI, a professional Vedic astrology consultant. I can analyze your birth chart, predict timing for life events, and provide guidance based on classical astrological principles."
+                return state
+            elif any(word in q for word in ['thanks', 'thank you']):
+                state['answer'] = f"You're welcome, {user_name}! Feel free to ask anything about your chart or astrological concepts."
+                return state
+
+        # Multilingual/Complex path: Use fast LLM with persona
+        try:
+            from src.ai.personas import get_persona
+            persona = get_persona(state['user_profile'].get('preferred_system', 'vedic'))
+            system_prompt = persona.get_system_prompt(user_name=user_name, language=lang)
+            
+            # Map language code to descriptive name
+            lang_map = {
+                'en': 'English',
+                'hi': 'Hindi (Devanagari script)',
+                'hi-lat': 'Hinglish (Hindi text in Latin script)',
+                'ta': 'Tamil (Tamil script)',
+                'ta-lat': 'Tanglish (Tamil text in Latin script)'
+            }
+            lang_name = lang_map.get(lang, 'English')
+            
+            prompt = f"""{system_prompt}
+
+USER QUERY: "{state['query']}"
+
+Respond to the user's greeting or conversational query in {lang_name}. 
+Keep it brief, professional, and welcoming. 
+Avoid providing astrological analysis here unless requested."""
+            
+            response = self.fast_llm.invoke(prompt)
+            state['answer'] = response.content if hasattr(response, 'content') else str(response)
+        except Exception as e:
+            print(f"[CHITCHAT] LLM error: {e}")
+            state['answer'] = f"Namaste {user_name}! I am here to help with your astrology queries. How can I assist you today?"
+            
         return state
     
     def _handle_calculation_only_node(self, state: NakshatraState) -> NakshatraState:
@@ -592,6 +693,16 @@ I prefer to say "I don't know" rather than provide information not grounded in c
         
         context = "\n\n".join(context_parts)
         
+        # Map language code to descriptive name for LLM
+        lang_map = {
+            'en': 'English',
+            'hi': 'Hindi (Devanagari script)',
+            'hi-lat': 'Hinglish (Hindi text in Latin script)',
+            'ta': 'Tamil (Tamil script)',
+            'ta-lat': 'Tanglish (Tamil text in Latin script)'
+        }
+        lang_name = lang_map.get(language, 'English')
+        
         prompt = f"""You are an expert Vedic astrologer explaining astrological concepts.
 
 USER PROFILE:
@@ -614,7 +725,7 @@ CRITICAL INSTRUCTIONS:
 4. Include practical examples where helpful
 5. Keep the tone professional but accessible
 6. This is a GENERAL explanation, not specific to any person's chart
-7. Respond entirely in {language}
+7. Respond entirely in {lang_name}
 8. **End your response with a "Sources" section** listing all referenced texts
 
 Example citation format:
@@ -692,9 +803,18 @@ Provide a detailed, grounded explanation:"""
                 language=language
             )
         except:
-            system_prompt = "You are an expert Vedic astrologer."
+            system_prompt = "You are an expert Vedic astrologer explaining predictions."
+        
+        # Map language code to descriptive name for LLM
+        lang_map = {
+            'en': 'English',
+            'hi': 'Hindi (Devanagari script)',
+            'hi-lat': 'Hinglish (Hindi text in Latin script)',
+            'ta': 'Tamil (Tamil script)',
+            'ta-lat': 'Tanglish (Tamil text in Latin script)'
+        }
+        lang_name = lang_map.get(language, 'English')
 
-        # NEW: Enhanced prompt with rich chart data
         prompt = f"""{system_prompt}
 
 USER PROFILE:
@@ -705,13 +825,8 @@ USER PROFILE:
 
 USER'S QUERY: "{query}"
 
-USER'S COMPLETE BIRTH CHART:
-• Lagna (Ascendant): {chart_data.get('lagna')}
-• Moon Sign (Rashi): {chart_data.get('moon_sign')}
-• Sun Sign: {chart_data.get('sun_sign')}
-• Moon Nakshatra: {chart_data.get('moon_nakshatra')}
-
-KEY PLANETARY POSITIONS:
+BIRTH CHART DATA (Sidereal/Lahiri):
+• Ascendant (Lagna): {chart_data['ascendant']['rashi']} ({chart_data['ascendant']['degrees']:.2f}°)
 • Sun: {chart_data['planets']['Sun']['rashi']} in House {chart_data['planets']['Sun']['house']} ({chart_data['planets']['Sun']['nakshatra']})
 • Moon: {chart_data['planets']['Moon']['rashi']} in House {chart_data['planets']['Moon']['house']} ({chart_data['planets']['Moon']['nakshatra']})
 • Mars: {chart_data['planets']['Mars']['rashi']} in House {chart_data['planets']['Mars']['house']}
@@ -744,7 +859,7 @@ CRITICAL INSTRUCTIONS:
 6. Provide a PERSONALIZED prediction with timing based on dasha/transits
 7. Be specific about THEIR chart - mention actual signs, houses, and planets
 8. If timing is relevant, provide approximate time frames based on dasha periods
-9. Respond entirely in {language}
+9. Respond entirely in {lang_name}
 
 Provide a detailed, personalized prediction:"""
         
@@ -843,6 +958,7 @@ def create_enhanced_orchestrator(
     prompt_builder,
     calculation_tools=None,
     llm=None,
+    fast_llm=None,  # NEW
     mongodb_uri=None
 ):
     """
@@ -857,5 +973,6 @@ def create_enhanced_orchestrator(
         prompt_builder=prompt_builder,
         calculation_tools=calculation_tools,
         llm=llm,
+        fast_llm=fast_llm,  # NEW
         mongodb_uri=mongodb_uri
     )

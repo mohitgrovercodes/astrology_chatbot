@@ -28,6 +28,59 @@ class LLMIntentClassifier:
         "RAG_ONLY"
     ]
     
+    # High-confidence pattern cache (exact matches only, 95%+ confidence)
+    # Checked BEFORE calling LLM for instant classification
+    SAFE_PATTERN_CACHE = {
+        # CHITCHAT (100% confidence - greetings and thanks)
+        "hi": "CHITCHAT",
+        "hello": "CHITCHAT",
+        "hey": "CHITCHAT",
+        "namaste": "CHITCHAT",
+        "good morning": "CHITCHAT",
+        "good evening": "CHITCHAT",
+        "thanks": "CHITCHAT",
+        "thank you": "CHITCHAT",
+        "bye": "CHITCHAT",
+        "goodbye": "CHITCHAT",
+        
+        # CALCULATION_ONLY (95%+ confidence - raw data requests)
+        "show my birth chart": "CALCULATION_ONLY",
+        "show my kundali": "CALCULATION_ONLY",
+        "show my chart": "CALCULATION_ONLY",
+        "what is my lagna": "CALCULATION_ONLY",
+        "what is my ascendant": "CALCULATION_ONLY",
+        "what is my moon sign": "CALCULATION_ONLY",
+        "what is my sun sign": "CALCULATION_ONLY",
+        "what are my current dashas": "CALCULATION_ONLY",
+        "show my dashas": "CALCULATION_ONLY",
+        "display my chart": "CALCULATION_ONLY",
+        "give me my chart": "CALCULATION_ONLY",
+        
+        # RAG_ONLY (95%+ confidence - general theory, no personal words)
+        "what are panapara houses": "RAG_ONLY",
+        "what are kendra houses": "RAG_ONLY",
+        "what is a raj yoga": "RAG_ONLY",
+        "what is raj yoga": "RAG_ONLY",
+        "explain the 10th house": "RAG_ONLY",
+        "explain the 7th house": "RAG_ONLY",
+        "what does mars in 7th house mean": "RAG_ONLY",
+        "what does jupiter in 10th house mean": "RAG_ONLY",
+        "define mahadasha": "RAG_ONLY",
+        "what is antardasha": "RAG_ONLY",
+        "what is vimshottari dasha": "RAG_ONLY",
+        "explain saturn return": "RAG_ONLY",
+        
+        # RAG_WITH_CALCULATION (95%+ confidence - "when will I" pattern)
+        "when will i get married": "RAG_WITH_CALCULATION",
+        "when will i get a job": "RAG_WITH_CALCULATION",
+        "when will i have children": "RAG_WITH_CALCULATION",
+        "when will i buy a house": "RAG_WITH_CALCULATION",
+        "how is my career": "RAG_WITH_CALCULATION",
+        "how is my health": "RAG_WITH_CALCULATION",
+        "how is my marriage": "RAG_WITH_CALCULATION",
+        "predict my future": "RAG_WITH_CALCULATION",
+    }
+    
     CLASSIFICATION_PROMPT = """You are an intent classifier for a Vedic astrology chatbot. The user ALWAYS has birth details available.
 
 Classify the user's query into exactly ONE of these categories:
@@ -101,12 +154,26 @@ Respond with ONLY a JSON object:
         """
         q = query.lower().strip()
         
-        # Check cache first (simplified - birth data always available)
+        # Step 1: Check SAFE_PATTERN_CACHE first (instant, no LLM call!)
+        if q in self.SAFE_PATTERN_CACHE:
+            intent = self.SAFE_PATTERN_CACHE[q]
+            result = {
+                'intent': intent,
+                'confidence': 0.98,  # High confidence for exact matches
+                'reasoning': f'Pattern cache: exact match for {intent}',
+                'cached': True,
+                'cache_type': 'pattern'  # Track cache type
+            }
+            print(f"[INTENT] [PATTERN_CACHE] -> {intent} (instant)")
+            return result
+        
+        # Step 2: Check LLM result cache
         cache_key = q
         if self.use_cache and cache_key in self.cache:
             result = self.cache[cache_key].copy()
             result['cached'] = True
-            print(f"[INTENT] [CACHED] -> {result['intent']}")
+            result['cache_type'] = 'llm_result'
+            print(f"[INTENT] [LLM_CACHE] -> {result['intent']}")
             return result
         
         print(f"[INTENT] Classifying: '{query[:50]}...'")
