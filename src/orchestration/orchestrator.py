@@ -916,6 +916,72 @@ Provide a detailed, personalized prediction:"""
         final_state['processing_time'] = (datetime.now() - start_time).total_seconds()
         
         return final_state
+    
+    def process_query_stream(
+        self,
+        query: str,
+        user_id: str,
+        conversation_history: Optional[List[Dict]] = None
+    ):
+        """
+        Process query with streaming response generation.
+        
+        Yields:
+            dict: Chunks with 'chunk' key for streaming tokens, 
+                  final dict with 'answer' and metadata
+        """
+        start_time = datetime.now()
+        
+        initial_state: NakshatraState = {
+            "query": query,
+            "user_id": user_id,
+            "conversation_history": conversation_history or [],
+            "user_profile": None,
+            "authenticated": False,
+            "intent": None,
+            "confidence": 0.0,
+            "intent_reasoning": "",
+            "cached": False,
+            "detected_language": "en",
+            "original_query": query,
+            "chart_data": None,
+            "dasha_data": None,
+            "transit_data": None,
+            "knowledge_chunks": None,
+            "answer": "",
+            "error": None,
+            "processing_time": 0.0,
+            "messages": []
+        }
+        
+        # Run through graph (non-streaming for routing & preparation)
+        final_state = self.graph.invoke(initial_state)
+        
+        # If answer is already in state (e.g., cached chitchat), return immediately
+        if final_state.get('answer') and final_state.get('cached'):
+            final_state['processing_time'] = (datetime.now() - start_time).total_seconds()
+            yield final_state
+            return
+        
+        # For RAG responses, re-generate with streaming
+        # Get the last message that was prepared
+        messages = final_state.get('messages', [])
+        if messages:
+            # Stream the response
+            for chunk in self.llm.stream(messages):
+                if hasattr(chunk, 'content') and chunk.content:
+                    yield {'chunk': chunk.content}
+            
+            # Reconstruct full answer from streaming
+            final_state['answer'] = ''.join([
+                chunk.content for chunk in self.llm.stream(messages)
+                if hasattr(chunk, 'content') and chunk.content
+            ])
+        
+        # Calculate processing time and yield final state
+        final_state['processing_time'] = (datetime.now() - start_time).total_seconds()
+        yield final_state
+
 
 
 # ========================================================================

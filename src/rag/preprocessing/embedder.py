@@ -63,7 +63,7 @@ class Embedder:
             self.api_key = api_key or config.get_api_key('openai')
         else:
             self.model = model or "text-embedding-3-large"
-            self.dimensions = 1536  # Use 1536 to match collection (not default 3072)
+            self.dimensions = 3072  
             self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
 
         self.client = None

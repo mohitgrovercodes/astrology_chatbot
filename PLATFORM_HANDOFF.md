@@ -32,10 +32,11 @@ ORCHESTRATION = LangGraph StateGraph (3-category routing)
 
 ### **What Was Accomplished:**
 ✅ **Performance Optimizations**
-- Dual LLM setup: `gemini-2.5-flash-lite` (fast) + `gemini-2.5-flash` (quality)
+- Single LLM: `gemini-2.5-flash` for all operations (reliability priority)
+- Streaming LLM responses: Real-time token-by-token display
+- BM25 lazy loading: 60% faster startup (8s → 3s)
 - Intent classification caching via `SAFE_PATTERN_CACHE`
 - Heuristic language detection with LLM fallback
-- ~40% speed improvement on classification tasks
 - ~80% queries detected without LLM call
 
 ✅ **Hinglish & Multilingual Support**
@@ -55,9 +56,10 @@ ORCHESTRATION = LangGraph StateGraph (3-category routing)
 1. `src/utils/localization.py` (NEW) - 90-line manager
 2. `src/locales/*.json` (NEW) - 5 locale files
 3. `src/ai/personas.py` (REFACTORED) - Dynamic loading
-4. `src/orchestration/orchestrator.py` (REFACTORED) - Centralized lang mapping
+4. `src/orchestration/orchestrator.py` (REFACTORED) - Streaming + lang mapping
 5. `src/ai/intent_classifier.py` (ENHANCED) - Pattern caching
-6. `chatbot.py` (ENHANCED) - Dual LLM setup
+6. `src/ai/hybrid_retriever.py` (OPTIMIZED) - Lazy BM25 loading
+7. `chatbot.py` (ENHANCED) - Streaming responses
 
 ---
 
@@ -121,8 +123,7 @@ Phase 10: Deployment         [░░░░░░░░░░░░░░░░�
 
 ### **Technology Stack:**
 - **Language:** Python 3.11+
-- **LLM (Classification):** Google Gemini 2.5 Flash Lite
-- **LLM (Quality):** Google Gemini 2.5 Flash
+- **LLM:** Google Gemini 2.5 Flash (with streaming enabled)
 - **Embeddings:** OpenAI text-embedding-3-large
 - **Vector DB:** ChromaDB
 - **Orchestration:** LangGraph

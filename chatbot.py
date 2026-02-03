@@ -39,27 +39,21 @@ def main():
     mongodb_uri = os.getenv('MONGODB_URI')
     user_manager = get_user_manager(mongodb_uri)
     
-    # 2. Dual LLM Setup (Performance Optimization)
-    # Fast LLM: For classification/detection (2x faster, lower cost)
-    fast_llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash-lite",
-        temperature=0.0  # Deterministic for classification
-    )
-    print("✓ Fast LLM: Gemini 2.5 Flash Lite (for classification)")
-    
-    # Quality LLM: For final responses (better quality)
+    # 2. LLM Setup - Single model for reliability with streaming
+    # Using gemini-2.5-flash for both classification and responses
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
-        temperature=0.3
+        temperature=0.3,
+        streaming=True  # Enable streaming for real-time responses
     )
-    print("✓ Quality LLM: Gemini 2.5 Flash (for responses)")
+    print("✓ LLM: Gemini 2.5 Flash (streaming enabled)")
     
     # 3. Embeddings (MUST MATCH the model used during ingestion!)
     embeddings = OpenAIEmbeddings(
         model="text-embedding-3-large",
-        dimensions=1536  # Reduce from 3072 to match collection
+        dimensions=3072  # Reduce from 3072 to match collection
     )
-    print("✓ Embeddings: OpenAI text-embedding-3-large (1536-dim)")
+    print("✓ Embeddings: OpenAI text-embedding-3-large (3072-dim)")
     
     # 4. Vector Store
     vector_store = Chroma(
@@ -71,7 +65,7 @@ def main():
     
     # 5. Intent Classifier (4 categories)
     intent_classifier = EnhancedIntentClassifier(
-        llm=llm,  # Pass LLM instance directly
+        llm=llm,  # Use same LLM for classification
         use_cache=True
     )
     
@@ -84,15 +78,14 @@ def main():
     # 7. Prompt Builder
     prompt_builder = PromptBuilder()
     
-    # 8. LangGraph Orchestrator (with dual LLM)
+    # 8. LangGraph Orchestrator (single LLM for reliability)
     orchestrator = create_enhanced_orchestrator(
         intent_classifier=intent_classifier,
         user_manager=user_manager,
         hybrid_retriever=hybrid_retriever,
         prompt_builder=prompt_builder,
         calculation_tools=CALCULATION_TOOLS,
-        llm=llm,  # Quality LLM for responses
-        fast_llm=fast_llm,  # Fast LLM for classification
+        llm=llm,  # Single LLM instance
         mongodb_uri=mongodb_uri
     )
     
@@ -153,33 +146,46 @@ def main():
             print("\n✨ May the stars guide your path! Om Shanti! 🙏\n")
             break
         
-        # Process query
+        # Process query with streaming
         print("🤔 Thinking...")
         
         try:
-            result = orchestrator.process_query(
+            # Check if streaming is supported
+            result = orchestrator.process_query_stream(
                 query=query,
                 user_id=user_id,
                 conversation_history=conversation_history
             )
             
-            # Display response
-            answer = result['answer']
-            intent = result['intent']
-            cached = result.get('cached', False)
-            processing_time = result.get('processing_time', 0)
+            # Display streaming response
+            print("\n✨ NakshatraAI: ", end="", flush=True)
             
-            print(f"\n✨ NakshatraAI: {answer}\n")
-            
-            # Metadata
-            cache_status = "[CACHED]" if cached else "[LLM]"
-            print(f"[Intent: {intent}, {cache_status}, Time: {processing_time:.2f}s]")
-            print()
+            full_answer = ""
+            for chunk in result:
+                if 'chunk' in chunk:
+                    print(chunk['chunk'], end="", flush=True)
+                    full_answer += chunk['chunk']
+                elif 'answer' in chunk:
+                    # Final result with metadata
+                    intent = chunk['intent']
+                    cached = chunk.get('cached', False)
+                    processing_time = chunk.get('processing_time', 0)
+                    
+                    print("\n")  # New line after response
+                    
+                    # Metadata
+                    cache_status = "[CACHED]" if cached else "[STREAMED]"
+                    print(f"[Intent: {intent}, {cache_status}, Time: {processing_time:.2f}s]")
+                    print()
+                    
+                    # Use final answer if streaming didn't provide chunks
+                    if not full_answer:
+                        full_answer = chunk['answer']
             
             # Update history
             conversation_history.append({
                 "user": query,
-                "assistant": answer
+                "assistant": full_answer
             })
             
             # Keep only last 5 turns

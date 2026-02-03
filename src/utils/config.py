@@ -50,7 +50,7 @@ class EmbeddingsConfig(BaseSettings):
     """Embeddings configuration from YAML."""
     provider: str = "openai"
     model: str = "text-embedding-3-large"
-    dimensions: int = 1536  # Use 1536 instead of default 3072 to save costs and match collection
+    dimensions: int = 3072  
     batch_size: int = 100
     
     model_config = SettingsConfigDict(extra='allow')

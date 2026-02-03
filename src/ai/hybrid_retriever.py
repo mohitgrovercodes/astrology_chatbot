@@ -23,23 +23,32 @@ class HybridRetriever:
         self.llm = llm
         self.bm25_index = None
         self.bm25_documents = []
-        self._build_bm25_index()
+        self._bm25_built = False  # Track if BM25 was built
+        # Don't build BM25 index immediately - do it on first use
+        print("[HYBRID] Retriever initialized (BM25 will build on first RAG query)")
     
-    def _build_bm25_index(self):
-        """Build BM25 index."""
+    
+    def _ensure_bm25_built(self):
+        """Lazy build BM25 index on first use."""
+        if self._bm25_built:
+            return
+        
         try:
             from rank_bm25 import BM25Okapi
-            print("[BM25] Building index...")
+            print("[BM25] Building index (first time)...")
             docs = self.vector_store.similarity_search("", k=10000)
             if docs:
                 tokenized = [doc.page_content.lower().split() for doc in docs]
                 self.bm25_index = BM25Okapi(tokenized)
                 self.bm25_documents = docs
                 print(f"[BM25] Built with {len(docs)} docs")
+            self._bm25_built = True
         except ImportError:
             print("[BM25] rank-bm25 not installed, skipping")
+            self._bm25_built = True  # Don't try again
         except Exception as e:
             print(f"[BM25] Error: {e}")
+            self._bm25_built = True  # Don't try again
     
     def retrieve(self, query: str, intent: str = "DEFAULT", top_k: int = 5, filters: Optional[Dict] = None, language: str = "en") -> List[Document]:
         """Main retrieval method with cross-lingual support."""
@@ -53,6 +62,9 @@ class HybridRetriever:
             search_query = self._translate_to_english(query)
             print(f"[HYBRID] Translated: '{search_query}'")
 
+        # Ensure BM25 index is built (lazy initialization)
+        self._ensure_bm25_built()
+        
         sem_w, key_w, hyde_w = self.WEIGHTS_BY_INTENT.get(intent, self.WEIGHTS_BY_INTENT["DEFAULT"])
         
         semantic = self._semantic_search(search_query, k=15, filters=filters)
