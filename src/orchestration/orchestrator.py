@@ -11,7 +11,9 @@ UPDATED: Now uses actual VedicEngine calculations (no placeholders!)
 
 from typing import Dict, List, Optional, Any, TypedDict, Annotated
 from datetime import datetime
-import operator
+from src.utils.localization import get_localization_manager
+
+# Types for state managementor
 import json
 
 from langgraph.graph import StateGraph, END
@@ -197,40 +199,48 @@ class EnhancedLangGraphOrchestrator:
     def _detect_language_heuristic(self, text: str) -> Optional[str]:
         """
         Fast heuristic language detection based on Unicode script analysis and common words.
-        Returns None if ambiguous (triggers LLM fallback).
+        Uses rules dynamically loaded from LocalizationManager.
         """
         import re
         
         if not text or len(text.strip()) == 0:
             return None
-        
-        # Count characters by script
-        devanagari_count = len(re.findall(r'[\u0900-\u097F]', text))  # Hindi
-        tamil_count = len(re.findall(r'[\u0B80-\u0BFF]', text))       # Tamil
+            
+        loc_manager = get_localization_manager()
         total_chars = len(text.strip())
         
-        if total_chars == 0:
-            return None
+        # Check Unicode ranges for all supported languages
+        for lang_code in loc_manager.get_supported_languages():
+            rules = loc_manager.get_detection_rules(lang_code)
+            ranges = rules.get('unicode_ranges', [])
+            
+            if not ranges:
+                continue
+                
+            script_count = 0
+            for start, end in ranges:
+                pattern = f'[\u{start}-\u{end}]'
+                script_count += len(re.findall(pattern, text))
+                
+            if script_count / total_chars > 0.8:
+                return lang_code
         
-        # If >80% of text is one script, high confidence
-        if devanagari_count / total_chars > 0.8:
-            return 'hi'
-        if tamil_count / total_chars > 0.8:
-            return 'ta'
+        # Check transliteration markers (e.g., hinglish_markers)
+        for lang_code in loc_manager.get_supported_languages():
+            rules = loc_manager.get_detection_rules(lang_code)
+            markers = rules.get('heuristic_markers', [])
+            
+            if not markers:
+                continue
+                
+            pattern = r'\b(' + '|'.join(markers) + r')\b'
+            if re.search(pattern, text.lower()):
+                return None  # Matches a marker -> signal ambiguity for LLM fallback
         
-        # Hinglish Check: Look for common Hindi words transliterated in Latin script
-        # If found, return None to trigger robust LLM detection
-        hinglish_markers = r'\b(kya|hai|kab|kaise|ka|ki|ke|me|si|se|ko|bhi|hi|tha|thi|the|hu|ho|bhava|rashi|kundli|nakshatra)\b'
-        if re.search(hinglish_markers, text.lower()):
-            return None  # Ambiguous, trigger LLM
+        # If no special scripts and alphabetic, assume English as safe default
+        if re.search(r'[a-zA-Z]', text):
+            return 'en'
         
-        # If no special scripts and alphabetic, assume English
-        if devanagari_count == 0 and tamil_count == 0:
-            # Check if text has Latin characters
-            if re.search(r'[a-zA-Z]', text):
-                return 'en'
-        
-        # Mixed or ambiguous → return None to trigger LLM fallback
         return None
     
     def _detect_language_node(self, state: NakshatraState) -> NakshatraState:
@@ -251,24 +261,23 @@ class EnhancedLangGraphOrchestrator:
         # Step 2: Heuristic failed/ambiguous → Use LLM fallback
         print(f"[LANG] Heuristic ambiguous, using LLM fallback...")
         
-        # Use fast LLM for robust detection (handles Hinglish/Tamilish better than regex)
+        loc_manager = get_localization_manager()
+        lang_options = "\n".join([f"- '{code}': {name}" for code, name in loc_manager.get_language_map().items()])
+        
+        # Use fast LLM for robust detection
         detection_prompt = f"""Identify the language and SCRIPT of the following text. 
 Return ONLY one of these codes:
-- 'en': English (Latin script)
-- 'hi': Hindi (Devanagari script)
-- 'hi-lat': Hinglish (Hindi words written in Latin script)
-- 'ta': Tamil (Tamil script)
-- 'ta-lat': Tamil in Latin script
+{lang_options}
 
 Text: "{query}"
 Code:"""
         
         try:
-            response = self.fast_llm.invoke(detection_prompt)  # Use fast LLM!
+            response = self.fast_llm.invoke(detection_prompt)
             lang = response.content.strip().lower()
             
-            # Map codes
-            valid_codes = ['en', 'hi', 'hi-lat', 'ta', 'ta-lat']
+            # Use valid codes from manager
+            valid_codes = loc_manager.get_supported_languages()
             if lang not in valid_codes:
                 # Try prefix match
                 matched = False
@@ -337,14 +346,8 @@ Code:"""
             system_prompt = persona.get_system_prompt(user_name=user_name, language=lang)
             
             # Map language code to descriptive name
-            lang_map = {
-                'en': 'English',
-                'hi': 'Hindi (Devanagari script)',
-                'hi-lat': 'Hinglish (Hindi text in Latin script)',
-                'ta': 'Tamil (Tamil script)',
-                'ta-lat': 'Tanglish (Tamil text in Latin script)'
-            }
-            lang_name = lang_map.get(lang, 'English')
+            loc_manager = get_localization_manager()
+            lang_name = loc_manager.get_language_name(lang)
             
             prompt = f"""{system_prompt}
 
@@ -694,14 +697,8 @@ I prefer to say "I don't know" rather than provide information not grounded in c
         context = "\n\n".join(context_parts)
         
         # Map language code to descriptive name for LLM
-        lang_map = {
-            'en': 'English',
-            'hi': 'Hindi (Devanagari script)',
-            'hi-lat': 'Hinglish (Hindi text in Latin script)',
-            'ta': 'Tamil (Tamil script)',
-            'ta-lat': 'Tanglish (Tamil text in Latin script)'
-        }
-        lang_name = lang_map.get(language, 'English')
+        loc_manager = get_localization_manager()
+        lang_name = loc_manager.get_language_name(language)
         
         prompt = f"""You are an expert Vedic astrologer explaining astrological concepts.
 
@@ -806,14 +803,8 @@ Provide a detailed, grounded explanation:"""
             system_prompt = "You are an expert Vedic astrologer explaining predictions."
         
         # Map language code to descriptive name for LLM
-        lang_map = {
-            'en': 'English',
-            'hi': 'Hindi (Devanagari script)',
-            'hi-lat': 'Hinglish (Hindi text in Latin script)',
-            'ta': 'Tamil (Tamil script)',
-            'ta-lat': 'Tanglish (Tamil text in Latin script)'
-        }
-        lang_name = lang_map.get(language, 'English')
+        loc_manager = get_localization_manager()
+        lang_name = loc_manager.get_language_name(language)
 
         prompt = f"""{system_prompt}
 
