@@ -46,17 +46,20 @@ def main():
     )
     print("✓ LLM: Gemini 2.5 Flash")
     
-    # 3. Embeddings
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
-    print("✓ Embeddings: OpenAI text-embedding-3-large")
+    # 3. Embeddings (MUST MATCH the model used during ingestion!)
+    embeddings = OpenAIEmbeddings(
+        model="text-embedding-3-large",
+        dimensions=1536  # Reduce from 3072 to match collection
+    )
+    print("✓ Embeddings: OpenAI text-embedding-3-large (1536-dim)")
     
     # 4. Vector Store
     vector_store = Chroma(
-        collection_name="astrology_knowledge",
+        collection_name="astro_collection1",
         embedding_function=embeddings,
         persist_directory="./data/vectordb"
     )
-    print("✓ Vector Store: ChromaDB")
+    print("✓ Vector Store: ChromaDB (astro_collection1)")
     
     # 5. Intent Classifier (4 categories)
     intent_classifier = EnhancedIntentClassifier(

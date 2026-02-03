@@ -63,15 +63,31 @@ class PreprocessingPipeline:
         self.use_llm_cleaning = use_llm_cleaning
         self.output_dir = Path(output_dir) if output_dir else None
         
-        # Initialize phase processors
+        # Initialize phase processors (Phases 2-5: Eager initialization)
         self.cleaner = StructuralCleaner(use_llm=use_llm_cleaning)
         # Phase 3: Use Lite model if LLM is enabled (Cost Optimization)
         self.analyzer = PageAnalyzer(use_llm=use_llm, model_name="gemini-2.5-flash-lite")
         self.segmenter = SemanticSegmenter(source_book=source_book)
         # Phase 5: Compulsory LLM usage with Flash model (Quality Assurance)
         self.enricher = ChunkEnricher(use_llm=True, tradition=tradition, model_name="gemini-2.5-flash")
-        self.embedder = Embedder()
-        self.vector_db_builder = VectorDBBuilder()
+        
+        # Phases 6-7: Lazy initialization (only created when accessed)
+        self._embedder = None
+        self._vector_db_builder = None
+    
+    @property
+    def embedder(self):
+        """Lazy initialization of Embedder (Phase 6)."""
+        if self._embedder is None:
+            self._embedder = Embedder()
+        return self._embedder
+    
+    @property
+    def vector_db_builder(self):
+        """Lazy initialization of VectorDBBuilder (Phase 7)."""
+        if self._vector_db_builder is None:
+            self._vector_db_builder = VectorDBBuilder()
+        return self._vector_db_builder
     
     def _save_checkpoint(self, data, phase_name: str, input_path: Path):
         """Save intermediate output."""
@@ -404,6 +420,7 @@ class PreprocessingPipeline:
         reset_collection: bool = False,
         start_page: int = None,
         end_page: int = None,
+        skip_resume_check: bool = False,
     ) -> EnrichedDocument:
         """
         Run the complete pipeline from Phase 1/2 to Phase 7.
@@ -413,6 +430,7 @@ class PreprocessingPipeline:
             skip_embedding: Skip Phase 6 embedding
             skip_vectordb: Skip Phase 7 vector database creation
             reset_collection: Clear existing collection before inserting
+            skip_resume_check: Skip checking if input is enriched (for large files)
             
         Returns:
             Final EnrichedDocument
@@ -441,24 +459,26 @@ class PreprocessingPipeline:
             )
             
         # Determine starting phase based on input JSON structure
-        # (Naive check: load json header to guess type)
-        input_data = {}
-        if not input_file.lower().endswith('.pdf'):
+        # (Can be skipped for large files to avoid slow parsing)
+        enriched_doc = None
+        
+        if not skip_resume_check and not input_file.lower().endswith('.pdf'):
+            print("[INFO] Checking input file format...")
+            input_data = {}
             try:
                 with open(input_file, 'r', encoding='utf-8') as f:
                     input_data = json.load(f)
-            except Exception:
+            except Exception as e:
+                print(f"[WARN] Could not parse input JSON for resume check: {e}")
                 pass
 
-        # Resume Logic
-        enriched_doc = None
+            # Resume Logic: If input has 'chunks' -> It is EnrichedDocument (Resume at Phase 6)
+            if "chunks" in input_data:
+                print(f"[INFO] Detected EnrichedDocument (Phase 5 output). Resuming at Phase 6...")
+                from schemas import EnrichedDocument
+                enriched_doc = EnrichedDocument(**input_data)
         
-        # If input has 'chunks' -> It is EnrichedDocument (Resume at Phase 6)
-        if "chunks" in input_data:
-            print(f"\n[INFO] Detected EnrichedDocument (Phase 5 output). Resuming at Phase 6...")
-            from schemas import EnrichedDocument
-            enriched_doc = EnrichedDocument(**input_data)
-        else:
+        if enriched_doc is None:
             # Phase 2
             cleaned_doc = self.run_phase2(current_input)
             
@@ -473,9 +493,6 @@ class PreprocessingPipeline:
             
             # Phase 5
             enriched_doc = self.run_phase5(semantic_doc)
-        
-        # Phase 6
-        final_doc = self.run_phase6(enriched_doc, skip_embedding)
         
         # Phase 6
         final_doc = self.run_phase6(enriched_doc, skip_embedding)

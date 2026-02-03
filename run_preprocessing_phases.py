@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Run Preprocessing Phases 2-5 on Extracted Data
+Run Preprocessing Phases 2-5 (including 3.5) on Extracted Data
 Uses existing extraction output from Phase 1
+
+Phases executed:
+  - Phase 2: Structural Cleaning
+  - Phase 3: Cross-Page Analysis
+  - Phase 3.5: Structural Profiling (Book DNA Discovery)
+  - Phase 4: Semantic Segmentation
+  - Phase 5: Chunk Enrichment
 """
 
 import os
@@ -31,7 +38,7 @@ except ImportError:
 
 def main():
     print("="*70)
-    print("TEXT PREPROCESSING PIPELINE (Phases 2-5)")
+    print("TEXT PREPROCESSING PIPELINE (Phases 2-5 + 3.5)")
     print("="*70)
     print()
     
@@ -52,7 +59,7 @@ def main():
     else:
         # Interactive mode
         print("\n" + "="*60)
-        print("🔧 Preprocessing Phases Runner (Phases 2-5)")
+        print("🔧 Preprocessing Phases Runner (Phases 2-5 + 3.5)")
         print("="*60)
         
         while True:
@@ -131,20 +138,21 @@ def main():
         source_book=source_book,
         tradition=tradition,
         use_llm=use_llm,  # Enable LLM for enrichment
-        use_llm_cleaning=use_llm, # Enable LLM for structural cleaning (Phase 2)
+        use_llm_cleaning=False,  # DISABLED: LLM returns malformed JSON (unescaped newlines)
         output_dir=output_dir
     )
     print("[OK] Pipeline initialized")
     print()
     
-    # Run phases 2-5
-    print("[RUN] Running preprocessing phases 2-5...")
+    # Run phases 2-5 (including 3.5: Profiling)
+    print("[RUN] Running preprocessing phases 2-5 (including 3.5: Profiling)...")
     print()
     
     try:
         enriched_doc = pipeline.run_full_pipeline(
             input_file=input_json,
-            skip_embedding=True  # Skip Phase 6 (embedding)
+            skip_embedding=True,  # Skip Phase 6 (embedding)
+            skip_resume_check=True  # Skip slow JSON parsing (we know the input format)
         )
         
         print()

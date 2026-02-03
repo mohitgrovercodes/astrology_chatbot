@@ -517,11 +517,34 @@ Provide a concise answer:"""
                 language=state.get('detected_language', 'en')
             )
             
-            # Step 3: Generate response with LLM
+            # GROUNDING SAFEGUARD: If no sources, refuse to answer
+            if prompt is None:
+                user_name = state['user_profile'].get('name', 'User')
+                state['answer'] = f"""Namaste, {user_name}.
+
+I apologize, but I could not find relevant information in the classical astrology texts to answer your question about "{state['query']}".
+
+**Why this happened:**
+• The knowledge base may not contain information on this specific topic
+• The query might need to be rephrased for better results
+• The vectorDB may not have been loaded correctly
+
+**What you can do:**
+1. Try rephrasing your question with more specific terms
+2. Check if the knowledge base has been properly ingested
+3. Ask about a related topic that may be covered in the texts
+
+I prefer to say "I don't know" rather than provide information not grounded in classical sources.
+
+🙏 Thank you for understanding."""
+                print("[RAG_ONLY] [GROUNDED] Refused to answer without sources")
+                return state
+            
+            # Step 3: Generate response with LLM (only if we have sources!)
             response = self.llm.invoke(prompt)
             state['answer'] = response.content if hasattr(response, 'content') else str(response)
             
-            print(f"[RAG_ONLY] Generated response ({len(state['answer'])} chars)")
+            print(f"[RAG_ONLY] Generated grounded response ({len(state['answer'])} chars)")
             
         except Exception as e:
             print(f"[ERROR] RAG_ONLY path failed: {e}")
@@ -535,6 +558,10 @@ Provide a concise answer:"""
     def _build_theory_prompt(self, query: str, knowledge_chunks: list, user_profile: dict, language: str = "en") -> str:
         """Build prompt for general astrology theory explanations."""
         
+        # GROUNDING SAFEGUARD: Refuse to answer without sources
+        if not knowledge_chunks or len(knowledge_chunks) == 0:
+            return None  # Signal to caller: no sources, don't answer
+        
         # Get persona based on language
         try:
             from src.ai.personas import get_persona
@@ -546,11 +573,24 @@ Provide a concise answer:"""
         except:
             system_prompt = "You are an expert Vedic astrologer explaining astrological concepts."
         
-        # Format knowledge context
-        context = "\n\n".join([
-            f"Source: {chunk.metadata.get('source', 'Unknown') if hasattr(chunk, 'metadata') else 'Unknown'}\n{chunk.page_content if hasattr(chunk, 'page_content') else str(chunk)}"
-            for chunk in knowledge_chunks[:4]
-        ]) if knowledge_chunks else "No specific texts retrieved."
+        # Format knowledge context WITH SOURCE ATTRIBUTION
+        context_parts = []
+        for i, chunk in enumerate(knowledge_chunks[:4], 1):
+            source = chunk.metadata.get('source_book', 'Unknown') if hasattr(chunk, 'metadata') else 'Unknown'
+            chapter = chunk.metadata.get('chapter', '') if hasattr(chunk, 'metadata') else ''
+            verse = chunk.metadata.get('verse_number', '') if hasattr(chunk, 'metadata') else ''
+            
+            source_citation = f"[Source {i}: {source}"
+            if chapter:
+                source_citation += f", Chapter {chapter}"
+            if verse:
+                source_citation += f", Verse {verse}"
+            source_citation += "]"
+            
+            content = chunk.page_content if hasattr(chunk, 'page_content') else str(chunk)
+            context_parts.append(f"{source_citation}\n{content}")
+        
+        context = "\n\n".join(context_parts)
         
         prompt = f"""You are an expert Vedic astrologer explaining astrological concepts.
 
@@ -567,16 +607,20 @@ RELEVANT KNOWLEDGE FROM CLASSICAL TEXTS:
 
 {system_prompt}
 
-INSTRUCTIONS:
-1. Provide a clear, educational explanation of the astrological concept
-2. Use classical Vedic astrology principles
-3. Include practical examples where helpful
-4. Reference the classical texts when possible
+CRITICAL INSTRUCTIONS:
+1. **GROUNDING REQUIREMENT**: Base your answer ONLY on the provided classical texts above
+2. **CITATION REQUIRED**: After each key point, cite the source using [Source X] notation
+3. **NO HALLUCINATION**: If the sources don't contain enough information, say so explicitly
+4. Include practical examples where helpful
 5. Keep the tone professional but accessible
 6. This is a GENERAL explanation, not specific to any person's chart
 7. Respond entirely in {language}
+8. **End your response with a "Sources" section** listing all referenced texts
 
-Provide a detailed explanation:"""
+Example citation format:
+"Panapara houses are the 2nd, 5th, 8th, and 11th houses [Source 1]. They represent fixed resources and accumulation [Source 2]."
+
+Provide a detailed, grounded explanation:"""
         
         return prompt
     
@@ -609,11 +653,24 @@ Provide a detailed explanation:"""
         [DONE] UPDATED: Now uses rich data structure from VedicEngine
         """
         
-        # Format knowledge context
-        context = "\n\n".join([
-            f"Source: {chunk.get('source', 'Unknown')}\n{chunk.get('content', '')}"
-            for chunk in knowledge_chunks[:3]
-        ]) if knowledge_chunks else "No specific texts retrieved."
+        # Format knowledge context WITH SOURCE ATTRIBUTION (same as _build_theory_prompt)
+        context_parts = []
+        for i, chunk in enumerate(knowledge_chunks[:3], 1):
+            source = chunk.metadata.get('source_book', 'Unknown') if hasattr(chunk, 'metadata') else 'Unknown'
+            chapter = chunk.metadata.get('chapter', '') if hasattr(chunk, 'metadata') else ''
+            verse = chunk.metadata.get('verse_number', '') if hasattr(chunk, 'metadata') else ''
+            
+            source_citation = f"[Source {i}: {source}"
+            if chapter:
+                source_citation += f", Chapter {chapter}"
+            if verse:
+                source_citation += f", Verse {verse}"
+            source_citation += "]"
+            
+            content = chunk.page_content if hasattr(chunk, 'page_content') else str(chunk)
+            context_parts.append(f"{source_citation}\n{content}")
+        
+        context = "\n\n".join(context_parts) if context_parts else "No specific texts retrieved."
         
         # Extract dasha info safely
         maha_planet = dasha_data.get('mahadasha', {}).get('planet', 'Unknown')
@@ -678,16 +735,18 @@ CURRENT TRANSITS (as of {transit_date}):
 RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
 {context}
 
-INSTRUCTIONS:
+CRITICAL INSTRUCTIONS:
 1. Analyze the user's SPECIFIC chart placements (not generic interpretations)
 2. Consider the current dasha period and its relationship with natal chart
 3. Factor in current transits and their impact on natal positions
-4. Use classical astrological principles from the provided context
-5. Provide a PERSONALIZED prediction with timing based on dasha/transits
-6. Be specific about THEIR chart - mention actual signs, houses, and planets
-7. If timing is relevant, provide approximate time frames based on dasha periods
+4. **GROUNDING**: Base interpretations on the provided classical texts above
+5. **CITATIONS**: Reference sources when making key interpretations using [Source X]
+6. Provide a PERSONALIZED prediction with timing based on dasha/transits
+7. Be specific about THEIR chart - mention actual signs, houses, and planets
+8. If timing is relevant, provide approximate time frames based on dasha periods
+9. Respond entirely in {language}
 
-Provide a detailed, personalized prediction in {language}:"""
+Provide a detailed, personalized prediction:"""
         
         return prompt
     

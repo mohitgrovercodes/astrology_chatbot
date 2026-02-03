@@ -76,7 +76,7 @@ class AstrologyRetriever:
             self.collection_name = collection_name or config.rag.collection_name
             self.db_path = Path(db_path or config.env.chroma_persist_dir)
         else:
-            self.collection_name = collection_name or "saravali_vol1"
+            self.collection_name = collection_name or "astro_collection1"
             self.db_path = Path(db_path or "data/vectordb")
         
         # Initialize ChromaDB

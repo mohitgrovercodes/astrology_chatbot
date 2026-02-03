@@ -3,25 +3,28 @@
 Simplified Local Ingestion Script for Astrology Bot.
 
 Reads '_embedded.json' files and pushes them directly into a 
-local ChromaDB instance using config-defined paths.
+local ChromaDB instance.
 """
 
 import os
+import sys
 import json
 import argparse
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from src.utils.config import get_config
-from src.utils.logger import get_logger
-import chromadb
+# Add project root to path for absolute imports
+script_dir = Path(__file__).parent
+project_root = script_dir.parent.parent
+sys.path.insert(0, str(project_root))
 
-logger = get_logger(__name__)
+import chromadb
 
 def ingest_local(
     input_dir: str,
     collection_name: Optional[str] = None,
-    wipe: bool = False
+    wipe: bool = False,
+    chroma_dir: Optional[str] = None
 ):
     """
     Ingest embedded chunks from a directory into local ChromaDB.
@@ -30,39 +33,45 @@ def ingest_local(
         input_dir: Directory containing processed _embedded.json files
         collection_name: Optional override for the target collection
         wipe: If True, deletes and recreates the collection
+        chroma_dir: ChromaDB persist directory (default: ./chroma_db)
     """
-    config = get_config()
     source_path = Path(input_dir)
     
     if not source_path.exists():
-        logger.error(f"Source directory not found: {input_dir}")
+        print(f"[ERROR] Source directory not found: {input_dir}")
         return
 
     # Initialize Chroma Client
-    db_path = os.path.abspath(config.env.chroma_persist_dir)
-    logger.info(f"Connecting to local ChromaDB at: {db_path}")
+    if not chroma_dir:
+        chroma_dir = os.environ.get("CHROMA_PERSIST_DIR", "./data/vectordb")
+    
+    db_path = os.path.abspath(chroma_dir)
+    print(f"[INFO] Connecting to local ChromaDB at: {db_path}")
+    
     
     client = chromadb.PersistentClient(path=db_path)
     
-    target_collection = collection_name or config.rag.collection_name
+    if not collection_name:
+        collection_name = os.environ.get("COLLECTION_NAME", "astrology_default")
     
     if wipe:
         try:
-            client.delete_collection(name=target_collection)
-            logger.warning(f"Collection '{target_collection}' WIPED.")
+            client.delete_collection(name=collection_name)
+            print(f"[WARN] Collection '{collection_name}' WIPED.")
         except Exception:
-            logger.info(f"Collection '{target_collection}' did not exist, starting fresh.")
+            print(f"[INFO] Collection '{collection_name}' did not exist, starting fresh.")
             
-    collection = client.get_or_create_collection(name=target_collection)
-    logger.info(f"Active Collection: {target_collection} (Current chunks: {collection.count()})")
+    collection = client.get_or_create_collection(name=collection_name)
+    print(f"[INFO] Active Collection: {collection_name} (Current chunks: {collection.count()})")
 
     # Locate files
     json_files = list(source_path.glob("**/*_embedded.json"))
     if not json_files:
-        logger.warning(f"No '_embedded.json' files found in {input_dir}")
+        print(f"[WARN] No '_embedded.json' files found in {input_dir}")
         return
         
-    logger.info(f"Found {len(json_files)} embedded files. Starting ingestion...")
+    print(f"[INFO] Found {len(json_files)} embedded files. Starting ingestion...")
+
 
     total_added = 0
     for file_path in json_files:
@@ -76,7 +85,7 @@ def ingest_local(
             elif isinstance(data, list):
                 chunks = data
             else:
-                logger.error(f"Skipping {file_path.name}: Unexpected structure (no 'chunks' key or list)")
+                print(f"[ERROR] Skipping {file_path.name}: Unexpected structure (no 'chunks' key or list)")
                 continue
 
             ids, texts, embeddings, metadatas = [], [], [], []
@@ -124,23 +133,25 @@ def ingest_local(
                     metadatas=metadatas
                 )
                 total_added += len(ids)
-                logger.info(f"OK: Ingested {len(ids)} chunks from {file_path.name}")
+                print(f"[OK] Ingested {len(ids)} chunks from {file_path.name}")
 
         except Exception as e:
-            logger.error(f"Error processing {file_path.name}: {e}")
+            print(f"[ERROR] Error processing {file_path.name}: {e}")
 
-    logger.info("=" * 40)
-    logger.info(f"INGESTION COMPLETE")
-    logger.info(f"Total Chunks Added: {total_added}")
-    logger.info(f"Final Collection Size: {collection.count()}")
-    logger.info("=" * 40)
+    print("=" * 40)
+    print(f"INGESTION COMPLETE")
+    print(f"Total Chunks Added: {total_added}")
+    print(f"Final Collection Size: {collection.count()}")
+    print("=" * 40)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Local Ingestion for Astrology RAG")
     parser.add_argument("dir", help="Directory containing _embedded.json files")
     parser.add_argument("--collection", help="Override collection name")
     parser.add_argument("--wipe", action="store_true", help="Wipe existing collection")
+    parser.add_argument("--chroma-dir", help="ChromaDB persist directory")
     
     args = parser.parse_args()
     
-    ingest_local(args.dir, args.collection, args.wipe)
+    ingest_local(args.dir, args.collection, args.wipe, args.chroma_dir)
+
