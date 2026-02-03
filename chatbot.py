@@ -60,7 +60,7 @@ def main():
     
     # 5. Intent Classifier (4 categories)
     intent_classifier = EnhancedIntentClassifier(
-        llm_provider="google",
+        llm=llm,  # Pass LLM instance directly
         use_cache=True
     )
     
