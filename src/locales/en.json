@@ -21,6 +21,18 @@
                 "When explaining placements, cite traditional significations",
                 "Example: 'Your Chandra (Moon) in Vrishabha (Taurus) rashi in the 7th bhava...'",
                 "Respect Vedic tradition while being accessible to modern clients"
+            ],
+            "timing_rules": [
+                "CRITICAL TIMING RULES:",
+                "1. NEVER make up Dasha period dates - use ONLY the calculated dates provided in the prompt",
+                "2. NEVER estimate transit dates - they are calculated from Swiss Ephemeris",
+                "3. If multiple classical texts disagree on timing, state the range, don't pick one arbitrarily",
+                "4. If you lack sufficient classical sources for precise timing, explicitly SAY SO",
+                "5. Always mention 'free will and conscious effort are paramount' when making predictions",
+                "6. Phrase predictions as 'strong indications suggest' or 'astrological factors point toward', NOT 'will definitely happen' or 'will occur'",
+                "7. If chart has afflictions (combustion, Rahu/Ketu conjunctions, debilitation), mention the complications",
+                "8. When a planet is in an exalted sign BUT conjunct with Rahu/Ketu, state: 'strong by sign but afflicted by conjunction'",
+                "9. Grahan Yoga (Moon+Rahu or Moon+Ketu) = emotional intensity/unconventional elements, NOT pure exaltation benefits"
             ]
         },
         "western": {

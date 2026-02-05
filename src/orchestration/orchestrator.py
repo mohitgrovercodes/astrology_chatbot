@@ -63,7 +63,7 @@ class NakshatraState(TypedDict):
     error: Optional[str]
     processing_time: float
     
-    messages: Annotated[List, operator.add]
+    # messages: Annotated[List, operator.add]
 
 
 class EnhancedLangGraphOrchestrator:
@@ -219,7 +219,7 @@ class EnhancedLangGraphOrchestrator:
                 
             script_count = 0
             for start, end in ranges:
-                pattern = f'[\u{start}-\u{end}]'
+                pattern = f'[\\u{start}-\\u{end}]'
                 script_count += len(re.findall(pattern, text))
                 
             if script_count / total_chars > 0.8:
@@ -817,21 +817,24 @@ USER PROFILE:
 USER'S QUERY: "{query}"
 
 BIRTH CHART DATA (Sidereal/Lahiri):
-• Ascendant (Lagna): {chart_data['ascendant']['rashi']} ({chart_data['ascendant']['degrees']:.2f}°)
-• Sun: {chart_data['planets']['Sun']['rashi']} in House {chart_data['planets']['Sun']['house']} ({chart_data['planets']['Sun']['nakshatra']})
-• Moon: {chart_data['planets']['Moon']['rashi']} in House {chart_data['planets']['Moon']['house']} ({chart_data['planets']['Moon']['nakshatra']})
-• Mars: {chart_data['planets']['Mars']['rashi']} in House {chart_data['planets']['Mars']['house']}
-• Mercury: {chart_data['planets']['Mercury']['rashi']} in House {chart_data['planets']['Mercury']['house']}
-• Jupiter: {chart_data['planets']['Jupiter']['rashi']} in House {chart_data['planets']['Jupiter']['house']}
-• Venus: {chart_data['planets']['Venus']['rashi']} in House {chart_data['planets']['Venus']['house']}
-• Saturn: {chart_data['planets']['Saturn']['rashi']} in House {chart_data['planets']['Saturn']['house']}
-• Rahu: {chart_data['planets']['Rahu']['rashi']} in House {chart_data['planets']['Rahu']['house']}
-• Ketu: {chart_data['planets']['Ketu']['rashi']} in House {chart_data['planets']['Ketu']['house']}
+• Ascendant (Lagna): {chart_data.get('ascendant', {}).get('rashi', 'Not available')} ({chart_data.get('ascendant', {}).get('degrees', 0.0):.2f}°)
+• Sun: {chart_data.get('planets', {}).get('Sun', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Sun', {}).get('house', '?')} ({chart_data.get('planets', {}).get('Sun', {}).get('nakshatra', 'Not available')})
+• Moon: {chart_data.get('planets', {}).get('Moon', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Moon', {}).get('house', '?')} ({chart_data.get('planets', {}).get('Moon', {}).get('nakshatra', 'Not available')})
+• Mars: {chart_data.get('planets', {}).get('Mars', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Mars', {}).get('house', '?')}
+• Mercury: {chart_data.get('planets', {}).get('Mercury', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Mercury', {}).get('house', '?')}
+• Jupiter: {chart_data.get('planets', {}).get('Jupiter', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Jupiter', {}).get('house', '?')}
+• Venus: {chart_data.get('planets', {}).get('Venus', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Venus', {}).get('house', '?')}
+• Saturn: {chart_data.get('planets', {}).get('Saturn', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Saturn', {}).get('house', '?')}
+• Rahu: {chart_data.get('planets', {}).get('Rahu', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Rahu', {}).get('house', '?')}
+• Ketu: {chart_data.get('planets', {}).get('Ketu', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Ketu', {}).get('house', '?')}
 
-CURRENT VIMSHOTTARI DASHA PERIODS:
-• Mahadasha: {maha_planet}
-• Antardasha: {antar_planet}
+CURRENT VIMSHOTTARI DASHA PERIODS (CALCULATED FROM MOON NAKSHATRA):
+• Mahadasha: {maha_planet} ({dasha_data.get('mahadasha', {}).get('start_date', 'Unknown')} to {dasha_data.get('mahadasha', {}).get('end_date', 'Unknown')})
+• Antardasha: {antar_planet} ({dasha_data.get('antardasha', {}).get('start_date', 'Unknown')} to {dasha_data.get('antardasha', {}).get('end_date', 'Unknown')})
+• Pratyantardasha: {dasha_data.get('pratyantardasha', {}).get('planet', 'Unknown')} ({dasha_data.get('pratyantardasha', {}).get('start_date', 'Unknown')} to {dasha_data.get('pratyantardasha', {}).get('end_date', 'Unknown')})
 • Dasha Sequence: {dasha_sequence}
+
+CRITICAL: These are EXACT CALCULATED dates based on Swiss Ephemeris. Use ONLY these dates for timing predictions. DO NOT estimate or approximate periods like "late 2027" or "early 2028".
 
 CURRENT TRANSITS (as of {transit_date}):
 • Jupiter: {jupiter_transit}
@@ -957,29 +960,10 @@ Provide a detailed, personalized prediction:"""
         # Run through graph (non-streaming for routing & preparation)
         final_state = self.graph.invoke(initial_state)
         
-        # If answer is already in state (e.g., cached chitchat), return immediately
-        if final_state.get('answer') and final_state.get('cached'):
-            final_state['processing_time'] = (datetime.now() - start_time).total_seconds()
-            yield final_state
-            return
-        
-        # For RAG responses, re-generate with streaming
-        # Get the last message that was prepared
-        messages = final_state.get('messages', [])
-        if messages:
-            # Stream the response
-            for chunk in self.llm.stream(messages):
-                if hasattr(chunk, 'content') and chunk.content:
-                    yield {'chunk': chunk.content}
-            
-            # Reconstruct full answer from streaming
-            final_state['answer'] = ''.join([
-                chunk.content for chunk in self.llm.stream(messages)
-                if hasattr(chunk, 'content') and chunk.content
-            ])
-        
-        # Calculate processing time and yield final state
+        # Calculate processing time
         final_state['processing_time'] = (datetime.now() - start_time).total_seconds()
+        
+        # Always yield the final state with the answer
         yield final_state
 
 

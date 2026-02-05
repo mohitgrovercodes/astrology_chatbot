@@ -55,7 +55,7 @@ class PageAnalyzer:
     ]
     
     
-    def __init__(self, use_llm: bool = True, model_name: str = "gemini-2.5-flash-lite"):
+    def __init__(self, use_llm: bool = True, model_name: str = "gemini-2.5-flash"):
         """
         Initialize page analyzer.
         
@@ -87,7 +87,7 @@ class PageAnalyzer:
                     model=model_name,
                     temperature=0.0,
                     use_rate_limiting=True,
-                    rate_limit_delay=1.0
+                    rate_limit_delay=5.0
                 )
                 
                 # Determine which provider was used

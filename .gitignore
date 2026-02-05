@@ -56,3 +56,7 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+
+#embeddings
+embeddings/

@@ -57,11 +57,11 @@ def main():
     
     # 4. Vector Store
     vector_store = Chroma(
-        collection_name="astro_collection1",
+        collection_name="astrology_default",
         embedding_function=embeddings,
         persist_directory="./data/vectordb"
     )
-    print("✓ Vector Store: ChromaDB (astro_collection1)")
+    print("✓ Vector Store: ChromaDB (astrology_default)")
     
     # 5. Intent Classifier (4 categories)
     intent_classifier = EnhancedIntentClassifier(
@@ -96,9 +96,9 @@ def main():
     print()
     print("4-Category Intent System:")
     print("  • CHITCHAT - General conversation")
-    print("  • NEEDS_CALCULATION - Pure calculation (show chart)")
-    print("  • NEEDS_PREDICTION - Prediction/Timing (Calculate + Interpret)")
-    print("  • NEEDS_KNOWLEDGE - Astrological concepts (RAG)")
+    print("  • CALCULATION_ONLY - Pure calculation (show chart)")
+    print("  • RAG_WITH_CALCULATION - Prediction/Timing (Calculate + Interpret)")
+    print("  • RAG_ONLY - Astrological concepts (RAG)")
     print()
     print("=" * 60)
     
@@ -181,6 +181,8 @@ def main():
                     # Use final answer if streaming didn't provide chunks
                     if not full_answer:
                         full_answer = chunk['answer']
+                        # Print the answer since it wasn't streamed
+                        print(full_answer)
             
             # Update history
             conversation_history.append({

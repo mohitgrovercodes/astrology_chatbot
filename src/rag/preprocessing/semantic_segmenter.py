@@ -43,9 +43,11 @@ class SemanticSegmenter:
         Initialize semantic segmenter.
         Loads book-specific profile if available, else uses default.
         """
-        self.source_book = source_book or "Unknown Source"
+        self.source_book = source_book or "Varahmihira Horasastram Vol 1"
         self.config = self._load_profile(self.source_book)
-        
+        if isinstance(self.config, list):
+            self.config = self.config[0]
+
         # Apply strategy from profile
         strategy = self.config.get("parsing_strategy", {})
         self.verse_pattern = strategy.get("verse_pattern", r'॥\s*(\d+(?:\s*[-–]\s*\d+)?)\s*॥')

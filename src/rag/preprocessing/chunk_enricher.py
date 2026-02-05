@@ -94,7 +94,7 @@ class ChunkEnricher:
     # Approximate chars per token
     CHARS_PER_TOKEN = 4
     
-    def __init__(self, use_llm: bool = True, tradition: str = "vedic", parallel_workers: int = 10, model_name: str = "gemini-2.5-flash"):
+    def __init__(self, use_llm: bool = True, tradition: str = "vedic", parallel_workers: int =1, model_name: str = "gemini-2.5-flash"):
         self.use_llm = use_llm
         self.tradition = tradition
         self.parallel_workers = parallel_workers
@@ -108,7 +108,7 @@ class ChunkEnricher:
                     model=model_name,
                     temperature=0.1,
                     use_rate_limiting=True,
-                    rate_limit_delay=1.0 
+                    rate_limit_delay=5.0  # Optimized: 5s delay is safer than 2s but faster than 12s 
                 )
                 
                 # Determine which provider was used

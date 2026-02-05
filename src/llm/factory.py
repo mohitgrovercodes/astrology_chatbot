@@ -69,7 +69,7 @@ def initialize_vertex_ai(project_id: str = "445806945384", location: str = "us-c
 class RateLimitedLLM:
     """Wrapper for LLM with rate limiting to prevent 429 errors."""
     
-    def __init__(self, llm: BaseChatModel, min_delay: float = 1.5, max_retries: int = 3, base_backoff: float = 2.0):
+    def __init__(self, llm: BaseChatModel, min_delay: float = 2.0, max_retries: int = 3, base_backoff: float = 4.0):
         self.llm = llm
         self.min_delay = min_delay
         self.max_retries = max_retries

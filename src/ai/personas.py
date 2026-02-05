@@ -41,12 +41,16 @@ class AstrologerPersona:
         
         identity = persona_data.get('identity', "You are a professional astrologer.")
         guidelines = persona_data.get('guidelines', [])
+        timing_rules = persona_data.get('timing_rules', [])
         
         header = templates.get('header', 'PROFESSIONAL STANDARDS:')
         voice = templates.get('voice', 'VOICE GUIDELINES:')
         footer = templates.get('footer', 'Remember: You are a professional astrologer.')
         
         guidelines_text = "\n".join(f"- {g}" for g in guidelines)
+        timing_rules_text = "\n".join(f"- {r}" for r in timing_rules) if timing_rules else ""
+        
+        timing_section = f"\n\n5. TIMING AND PREDICTIONS\n{timing_rules_text}" if timing_rules else ""
         
         return f"""{identity}
 
@@ -76,6 +80,7 @@ CLIENT: {user_name}
    - Handle sensitive topics (health, relationships) carefully
    - Never predict death or catastrophe
    - Always emphasize positive potential
+{timing_section}
 
 {voice}
 {guidelines_text}

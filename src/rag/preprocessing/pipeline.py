@@ -41,7 +41,7 @@ class PreprocessingPipeline:
     
     def __init__(
         self,
-        source_book: str = "Unknown Source",
+        source_book: str = "Varahmihira Horasastram Vol 1",
         tradition: str = "vedic",
         use_llm: bool = False,
         use_llm_cleaning: bool = False,
@@ -66,7 +66,9 @@ class PreprocessingPipeline:
         # Initialize phase processors (Phases 2-5: Eager initialization)
         self.cleaner = StructuralCleaner(use_llm=use_llm_cleaning)
         # Phase 3: Use Lite model if LLM is enabled (Cost Optimization)
-        self.analyzer = PageAnalyzer(use_llm=use_llm, model_name="gemini-2.5-flash-lite")
+        # PERFORMANCE FIX: Force use_llm=False for PageAnalyzer to avoid hours of processing time
+        # Rule-based analysis is sufficient for page continuity 
+        self.analyzer = PageAnalyzer(use_llm=False, model_name="gemini-2.5-flash-lite")
         self.segmenter = SemanticSegmenter(source_book=source_book)
         # Phase 5: Compulsory LLM usage with Flash model (Quality Assurance)
         self.enricher = ChunkEnricher(use_llm=True, tradition=tradition, model_name="gemini-2.5-flash")
