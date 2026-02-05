@@ -60,3 +60,5 @@ Thumbs.db
 
 #embeddings
 embeddings/
+extraction_output/
+preprocessing_output/

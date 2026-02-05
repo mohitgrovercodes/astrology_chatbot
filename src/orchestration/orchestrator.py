@@ -785,6 +785,14 @@ Provide a detailed, grounded explanation:"""
         antar_planet = dasha_data.get('antardasha', {}).get('planet', 'Unknown')
         dasha_sequence = dasha_data.get('dasha_sequence', f"{maha_planet}/{antar_planet}")
         
+        # DEBUG: Print dasha data to verify it has dates
+        print(f"[DEBUG] Dasha data in prompt:")
+        print(f"  Mahadasha: {maha_planet} ({dasha_data.get('mahadasha', {}).get('start_date', 'NO DATE')} to {dasha_data.get('mahadasha', {}).get('end_date', 'NO DATE')})")
+        print(f"  Antardasha: {antar_planet} ({dasha_data.get('antardasha', {}).get('start_date', 'NO DATE')} to {dasha_data.get('antardasha', {}).get('end_date', 'NO DATE')})")
+        calc_details = dasha_data.get('calculation_details', {})
+        print(f"  Calculation details: Moon={calc_details.get('moon_longitude', 'MISSING')}, Nakshatra={calc_details.get('moon_nakshatra', 'MISSING')}")
+        
+        
         # Extract transit info safely
         jupiter_transit = transit_data.get('transits', {}).get('Jupiter', 'Unknown')
         saturn_transit = transit_data.get('transits', {}).get('Saturn', 'Unknown')
@@ -828,13 +836,23 @@ BIRTH CHART DATA (Sidereal/Lahiri):
 • Rahu: {chart_data.get('planets', {}).get('Rahu', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Rahu', {}).get('house', '?')}
 • Ketu: {chart_data.get('planets', {}).get('Ketu', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Ketu', {}).get('house', '?')}
 
-CURRENT VIMSHOTTARI DASHA PERIODS (CALCULATED FROM MOON NAKSHATRA):
+
+VIMSHOTTARI DASHA CALCULATION (Transparent & Auditable):
+
+Step 1 - Moon's Position at Birth:
+• Moon Longitude: {dasha_data.get('calculation_details', {}).get('moon_longitude', 'Not available')}
+• Moon Nakshatra: {dasha_data.get('calculation_details', {}).get('moon_nakshatra', 'Not available')}
+• First Dasha Lord (Nakshatra Ruler): {dasha_data.get('calculation_details', {}).get('first_dasha_lord', 'Not available')}
+• Balance of First Dasha at Birth: {dasha_data.get('calculation_details', {}).get('balance_at_birth_years', 'Not available')} years
+
+Step 2 - Current Dasha Periods (Calculated from Moon Nakshatra):
 • Mahadasha: {maha_planet} ({dasha_data.get('mahadasha', {}).get('start_date', 'Unknown')} to {dasha_data.get('mahadasha', {}).get('end_date', 'Unknown')})
 • Antardasha: {antar_planet} ({dasha_data.get('antardasha', {}).get('start_date', 'Unknown')} to {dasha_data.get('antardasha', {}).get('end_date', 'Unknown')})
 • Pratyantardasha: {dasha_data.get('pratyantardasha', {}).get('planet', 'Unknown')} ({dasha_data.get('pratyantardasha', {}).get('start_date', 'Unknown')} to {dasha_data.get('pratyantardasha', {}).get('end_date', 'Unknown')})
 • Dasha Sequence: {dasha_sequence}
 
-CRITICAL: These are EXACT CALCULATED dates based on Swiss Ephemeris. Use ONLY these dates for timing predictions. DO NOT estimate or approximate periods like "late 2027" or "early 2028".
+CRITICAL: These dates are CALCULATED using Swiss Ephemeris, not estimated. The calculation follows classical Vimshottari Dasha rules: Moon's Nakshatra → Nakshatra Lord → Dasha sequence. Use ONLY these exact dates for timing predictions.
+
 
 CURRENT TRANSITS (as of {transit_date}):
 • Jupiter: {jupiter_transit}

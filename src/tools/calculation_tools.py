@@ -194,6 +194,37 @@ def calculate_current_dasha(
         current_antar = current_periods.get("antardasha")
         current_pratyantar = current_periods.get("pratyantardasha")
         
+        
+        # Get Moon details for Dasha calculation transparency
+        try:
+            moon_longitude = chart.positions[CelestialBody.MOON].longitude
+            moon_nakshatra_name = NAKSHATRA_NAMES[chart.moon_nakshatra.value]
+            
+            # Get Dasha balance info - may not always be available
+            try:
+                dasha_balance = chart.dasha.dasha_balance
+                first_dasha_lord = dasha_balance.first_lord.name
+                balance_years = f"{dasha_balance.remaining_years:.2f}"
+            except (AttributeError, KeyError):
+                # If dasha_balance not available, use current Mahadasha lord
+                first_dasha_lord = current_maha.lord.name if current_maha else "Unknown"
+                balance_years = "N/A"
+            
+            calculation_details = {
+                "moon_longitude": f"{moon_longitude:.2f}°",
+                "moon_nakshatra": moon_nakshatra_name,
+                "first_dasha_lord": first_dasha_lord,
+                "balance_at_birth_years": balance_years
+            }
+        except Exception as e:
+            print(f"[WARNING] Could not extract calculation details: {e}")
+            calculation_details = {
+                "moon_longitude": "Not available",
+                "moon_nakshatra": "Not available",
+                "first_dasha_lord": "Not available",
+                "balance_at_birth_years": "Not available"
+            }
+        
         result = {
             "mahadasha": {
                 "planet": current_maha.lord.name if current_maha else "Unknown",
@@ -212,7 +243,9 @@ def calculate_current_dasha(
                 "start_date": current_pratyantar.start_date.strftime("%Y-%m-%d") if current_pratyantar else "Unknown",
                 "end_date": current_pratyantar.end_date.strftime("%Y-%m-%d") if current_pratyantar else "Unknown"
             },
-            "dasha_sequence": f"{current_maha.lord.name if current_maha else 'Unknown'}/{current_antar.lord.name if current_antar else 'Unknown'}/{current_pratyantar.lord.name if current_pratyantar else 'Unknown'}"
+            "dasha_sequence": f"{current_maha.lord.name if current_maha else 'Unknown'}/{current_antar.lord.name if current_antar else 'Unknown'}/{current_pratyantar.lord.name if current_pratyantar else 'Unknown'}",
+            # Calculation transparency fields
+            "calculation_details": calculation_details
         }
         
         return result
