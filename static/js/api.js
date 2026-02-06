@@ -69,7 +69,7 @@ class APIClient {
     /**
      * Send chat message
      */
-    async sendMessage(query, userId = 'user003', conversationHistory = []) {
+    async sendMessage(query, userId = 'user006', conversationHistory = []) {
         return this.request('/chat', {
             method: 'POST',
             body: JSON.stringify({
