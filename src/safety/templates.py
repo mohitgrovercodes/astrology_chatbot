@@ -145,14 +145,7 @@ DISCLAIMER_GENERAL = """
 # REFRAME TEMPLATES
 # ============================================================================
 
-REFRAME_INTRO = """Let me reframe that question in a way that works better with how astrology actually functions:
-
-**Original question**: "{original}"
-**Better framing**: "{reframed}"
-
-Here's what I can tell you about this:
-
-"""
+REFRAME_INTRO = """"""
 
 REFRAME_SUGGESTIONS = {
     "wealth": {

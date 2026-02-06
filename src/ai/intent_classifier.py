@@ -111,6 +111,9 @@ IMPORTANT RULES:
 
 USER QUERY: "{query}"
 
+PREVIOUS CONTEXT:
+{context}
+
 Respond with ONLY a JSON object:
 {{"intent": "CATEGORY_NAME", "confidence": 0.95, "reasoning": "Brief explanation"}}
 """
@@ -183,8 +186,15 @@ Respond with ONLY a JSON object:
             print("[INTENT] [WARN] No LLM available, using fallback")
             return self._fallback_classify(query, user_profile)
         
+        # Format conversation history
+        context_str = "None"
+        if conversation_history:
+            # Take last 2 turns
+            history_subset = conversation_history[-2:]
+            context_str = "\n".join([f"User: {turn.get('user', '')}\nBot: {turn.get('assistant', '')[:100]}..." for turn in history_subset])
+        
         # Build prompt (birth data always available per user requirement)
-        prompt = self.CLASSIFICATION_PROMPT.format(query=query)
+        prompt = self.CLASSIFICATION_PROMPT.format(query=query, context=context_str)
         
         try:
             # Call LLM

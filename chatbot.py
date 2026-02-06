@@ -102,9 +102,9 @@ def main():
     print("=" * 60)
     
     # Get user ID
-    user_id = input("\nEnter user_id (or press Enter for user001): ").strip()
+    user_id = input("\nEnter user_id (or press Enter for user011): ").strip()
     if not user_id:
-        user_id = "user001"
+        user_id = "user011"
     
     print(f"\n🔐 Authenticating as: {user_id}")
     
@@ -125,8 +125,6 @@ def main():
     print(f"  Birth Data: {'✓ Complete' if profile.has_birth_data() else '✗ Missing'}")
     print()
     
-    # Conversation history
-    conversation_history = []
     
     print("=" * 60)
     print("Chat started. Type 'quit' to exit.")
@@ -144,6 +142,15 @@ def main():
         if query.lower() in ['quit', 'exit', 'bye']:
             print("\n✨ May the stars guide your path! Om Shanti! 🙏\n")
             break
+            
+        # Log user message
+        try:
+            user_manager.add_message(user_id, "user", query)
+        except Exception as e:
+            print(f"[ERROR] Failed to save message: {e}")
+        
+        # Get history from DB
+        conversation_history = user_manager.get_history(user_id, limit=5)
         
         # Process query with streaming
         print("🤔 Thinking...")
@@ -183,16 +190,9 @@ def main():
                         # Print the answer since it wasn't streamed
                         print(full_answer)
             
-            # Update history
-            conversation_history.append({
-                "user": query,
-                "assistant": full_answer
-            })
+            # Save assistant response to DB
+            user_manager.add_message(user_id, "assistant", full_answer, intent=result.get('intent'))
             
-            # Keep only last 5 turns
-            if len(conversation_history) > 5:
-                conversation_history = conversation_history[-5:]
-        
         except Exception as e:
             print(f"\n❌ Error: {e}\n")
             import traceback

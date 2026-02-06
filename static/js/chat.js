@@ -11,7 +11,7 @@ class ChatManager {
         this.statusText = document.getElementById('statusText');
 
         this.conversationHistory = [];
-        this.userId = localStorage.getItem('nakshatra_user_id') || 'user006';
+        this.userId = localStorage.getItem('nakshatra_user_id') || 'user011';
 
         this.init();
     }

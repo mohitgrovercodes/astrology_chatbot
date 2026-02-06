@@ -18,103 +18,59 @@ from .models import (
 )
 
 
+
+from src.routing import SemanticRouter
+
 # ============================================================================
-# KEYWORD PATTERNS (Fast Pre-filtering)
+# SEMANTIC ROUTES CONFIGURATION
 # ============================================================================
 
-# Pattern matching for quick detection before LLM call
-KEYWORD_PATTERNS = {
-    # Hard Blocks
-    BlockReasons.DEATH_PREDICTION: {
-        "patterns": [
-            r"\b(when|will|am I going to|time of)\s+(I|we|he|she|they|my|his|her)\s+(die|death|pass away|dying)",
-            r"\bhow long\s+(will|to)\s+(I|we|he|she|they)\s+live",
-            r"\b(predict|tell me|know)\s+(when|time of)\s+(death|die|dying)",
-            r"\b(my|his|her|their)\s+(death|dying)\s+(date|time|when)",
-        ],
-        "keywords": ["die", "death", "pass away", "when will I die", "time of death"]
-    },
-    
-    BlockReasons.MEDICAL_DIAGNOSIS: {
-        "patterns": [
-            r"\bdo I have\s+(cancer|diabetes|disease|illness|tumor)",
-            r"\b(diagnose|diagnosis|medical condition)\s+(based on|from|using)\s+(chart|astrology)",
-            r"\b(should I|can I)\s+(stop|start|take)\s+(medication|medicine|treatment)",
-            r"\b(cure|treat|fix)\s+(my|this)\s+(disease|illness|condition)\s+(with|using)\s+astrology",
-        ],
-        "keywords": ["diagnose", "cure disease", "stop medication", "do I have cancer"]
-    },
-    
-    BlockReasons.GAMBLING_SPECIFIC: {
-        "patterns": [
-            r"\b(lottery|lotto)\s+(numbers|winning|win)",
-            r"\b(which|what)\s+(horse|team|number)\s+(to|should I)\s+bet",
-            r"\b(will I win|winning)\s+(the lottery|gambling|casino|bet)",
-            r"\b(lucky numbers|lucky day)\s+(for|to)\s+(lottery|gambling|betting)",
-        ],
-        "keywords": ["lottery numbers", "which horse to bet", "will I win the lottery"]
-    },
-    
-    BlockReasons.HARMFUL_INTENT: {
-        "patterns": [
-            r"\b(kill|murder|harm|hurt|suicide)\b",
-            r"\b(end|take)\s+(my|his|her)\s+life",
-            r"\b(good time|auspicious)\s+to\s+(harm|hurt|kill)",
-        ],
-        "keywords": ["kill", "suicide", "harm someone", "end my life"]
-    },
-    
-    # Soft Blocks
-    BlockReasons.PRIVACY_VIOLATION: {
-        "patterns": [
-            r"\b(my|his|her)\s+(boss|neighbor|colleague|coworker|ex)\s+(will|going to|cheating)",
-            r"\b(is|will)\s+(he|she|they)\s+(cheat|cheating|divorce|get fired|die)",
-            r"\bwhat (will happen|is happening)\s+to\s+(him|her|them|my boss|my neighbor)",
-        ],
-        "keywords": ["my boss", "my neighbor", "is he cheating", "will she get fired"]
-    },
-    
-    # Conditional (need disclaimers)
-    BlockReasons.HEALTH_TENDENCY: {
-        "patterns": [
-            r"\b(health|medical)\s+(issues|problems|concerns|tendencies)",
-            r"\b(6th house|Saturn in 6th|Mars in 6th)\s+(health|disease)",
-            r"\bwhat\s+(diseases|health problems|illnesses)\s+(might|could|may)",
-        ],
-        "keywords": ["health issues", "6th house health", "what diseases might"]
-    },
-    
-    BlockReasons.FINANCIAL_TREND: {
-        "patterns": [
-            r"\b(should I|is it good)\s+(invest|buy|sell|start business)",
-            r"\b(stock market|investment|business)\s+(good time|timing|period)",
-            r"\b(financial|money|wealth)\s+(period|timing|phase)",
-        ],
-        "keywords": ["should I invest", "good time for business", "financial period"]
-    },
+SAFETY_ROUTES = {
+    BlockReasons.DEATH_PREDICTION: [
+        "when will I die", "time of my death", "how long will I live", 
+        "predict my death", "death date", "am I going to die soon"
+    ],
+    BlockReasons.MEDICAL_DIAGNOSIS: [
+        "do I have cancer", "diagnose my illness", "medical treatment astrology",
+        "cure for diabetes", "should I stop medication", "health diagnosis"
+    ],
+    BlockReasons.GAMBLING_SPECIFIC: [
+        "lottery numbers", "winning lotto numbers", "betting prediction",
+        "which horse will win", "casino lucky numbers", "will I win the lottery"
+    ],
+    BlockReasons.HARMFUL_INTENT: [
+        "how to kill someone", "suicide timing", "harm myself", 
+        "end my life", "murder plan"
+    ],
+    BlockReasons.PRIVACY_VIOLATION: [
+        "is my boss cheating", "will my neighbor divorce", "is she sleeping with him",
+        "secrets of my colleague", "what is he hiding"
+    ],
+    BlockReasons.HEALTH_TENDENCY: [
+        "general health outlook", "health issues in chart", "weak body parts",
+        "periods of sickness", "vitality analysis"
+    ],
+    BlockReasons.FINANCIAL_TREND: [
+        "good time to invest", "stock market trends", "business prospects",
+        "wealth accumulation period", "financial growth"
+    ]
 }
 
-
-def quick_pattern_check(query: str) -> Optional[str]:
-    """
-    Fast keyword/pattern matching before LLM call.
-    
-    Returns reason code if pattern matches, None otherwise.
-    """
-    query_lower = query.lower()
-    
-    for reason, data in KEYWORD_PATTERNS.items():
-        # Check regex patterns
-        for pattern in data.get("patterns", []):
-            if re.search(pattern, query_lower):
-                return reason
+def _initialize_safety_routes():
+    """Initialize semantic routes for safety checks."""
+    router = SemanticRouter()
+    if not router.model:
+        return
         
-        # Check simple keywords
-        for keyword in data.get("keywords", []):
-            if keyword.lower() in query_lower:
-                return reason
-    
-    return None
+    for reason, examples in SAFETY_ROUTES.items():
+        router.add_route(name=reason, examples=examples, metadata={"reason": reason})
+
+# Initialize routes on module load (if singleton allows)
+try:
+    _initialize_safety_routes()
+except Exception as e:
+    pass
+
 
 
 # ============================================================================
@@ -335,6 +291,7 @@ class SafetyClassifier:
     Enhanced safety classifier using LangChain and multi-gate filtering.
     """
     
+
     def __init__(
         self,
         llm: Optional[ChatOpenAI] = None,
@@ -343,25 +300,23 @@ class SafetyClassifier:
     ):
         """
         Initialize safety classifier.
-        
-        Args:
-            llm: LangChain LLM instance (defaults to gpt-4o-mini)
-            use_pattern_matching: Whether to use fast pattern matching first
-            confidence_threshold: Threshold below which to flag for human review
         """
         self.llm = llm or ChatOpenAI(
             model="gpt-4o-mini",
-            temperature=0.0,  # Deterministic for safety decisions
+            temperature=0.0,
         )
         self.use_pattern_matching = use_pattern_matching
         self.confidence_threshold = confidence_threshold
+        
+        # Initialize semantic router
+        self.semantic_router = SemanticRouter()
         
         # Build classifier chain
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", SAFETY_CLASSIFIER_SYSTEM_PROMPT.format(
                 examples=CLASSIFICATION_EXAMPLES
             )),
-            ("human", "Query: {query}")
+            ("human", "PREVIOUS CONTEXT:\n{context}\n\nQuery: {query}")
         ])
         
         self.chain = (
@@ -370,28 +325,28 @@ class SafetyClassifier:
             | JsonOutputParser(pydantic_object=SafetyDecision)
         )
     
-    def classify(self, query: str) -> SafetyCheckResult:
+    def classify(self, query: str, conversation_history: list = None) -> SafetyCheckResult:
         """
         Classify query safety using multi-gate approach.
-        
-        Args:
-            query: User query to classify
-        
-        Returns:
-            SafetyCheckResult with decision and metadata
         """
-        # Gate 1: Fast pattern matching
-        if self.use_pattern_matching:
-            pattern_reason = quick_pattern_check(query)
+        # Gate 1: Fast Semantic Routing
+        if self.use_pattern_matching and self.semantic_router.model:
+            route_result = self.semantic_router.route(query, threshold=0.75) # Tuned threshold for safety
             
-            if pattern_reason:
-                # Pattern matched - create high-confidence decision
-                decision = self._create_pattern_decision(query, pattern_reason)
+            if route_result:
+                # Semantic match found
+                decision = self._create_semantic_decision(query, route_result.name, route_result.confidence)
                 return self._build_result(query, decision)
         
         # Gate 2: LLM Classification
         try:
-            decision_dict = self.chain.invoke({"query": query})
+            # Format context
+            context_str = "None"
+            if conversation_history:
+                history_subset = conversation_history[-2:]
+                context_str = "\n".join([f"User: {turn.get('user', '')}\nBot: {turn.get('assistant', '')[:100]}..." for turn in history_subset])
+
+            decision_dict = self.chain.invoke({"query": query, "context": context_str})
             decision = SafetyDecision(**decision_dict)
             
         except Exception as e:
@@ -406,12 +361,13 @@ class SafetyClassifier:
         
         return self._build_result(query, decision)
     
-    def _create_pattern_decision(
+    def _create_semantic_decision(
         self,
         query: str,
-        reason: str
+        reason: str,
+        confidence: float
     ) -> SafetyDecision:
-        """Create decision from pattern match"""
+        """Create decision from semantic route match"""
         
         # Map reason to category
         category_map = {
@@ -439,8 +395,8 @@ class SafetyClassifier:
             reason=reason,
             should_answer=should_answer,
             disclaimer_type=disclaimer_type,
-            confidence=0.95,  # High confidence from pattern match
-            explanation=f"Matched pattern for {reason}"
+            confidence=confidence,
+            explanation=f"Semantic match for {reason}"
         )
     
     def _build_result(
@@ -475,7 +431,7 @@ class SafetyClassifier:
             requires_human_review=requires_review,
             block_template_key=block_template_key,
             metadata={
-                "classification_method": "pattern" if quick_pattern_check(query) else "llm",
+                "classification_method": "semantic" if decision.explanation.startswith("Semantic match") else "llm",
                 "timestamp": None,  # To be added by caller
                 "model": self.llm.model_name if hasattr(self.llm, 'model_name') else "unknown"
             }

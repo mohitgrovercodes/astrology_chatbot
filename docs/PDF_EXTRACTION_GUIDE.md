@@ -241,9 +241,51 @@ for page in result.pages:
 
 ---
 
+## 👨‍💻 Usage Cookbook (End-to-End Examples)
+
+### 1. Simple Batch Processing
+
+```python
+from src.rag.extraction.vision_pipeline import VisionPipeline, PipelineConfig
+
+config = PipelineConfig(
+    pdf_dpi=200,
+    gemini_model="gemini-1.5-flash",
+    output_dir="./output",
+    enable_parallel=True
+)
+
+pipeline = VisionPipeline(config)
+result = pipeline.process_pdf(
+    pdf_path="book.pdf",
+    start_page=1,
+    end_page=10
+)
+```
+
+### 2. generate_rag_chunks.py
+
+```python
+# After extraction, create chunks for embedding
+chunks = pipeline.create_rag_chunks(result)
+
+# Output structure:
+# [
+#   {
+#     "chunk_id": "chunk_001",
+#     "text": "...",
+#     "source_page": 5,
+#     "topic": "Planetary Strength"
+#   }
+# ]
+```
+
+---
+
 ## Troubleshooting
 
 ### Low Confidence Scores
+...
 
 **Symptom:** Many pages have confidence < 0.90  
 **Solutions:**

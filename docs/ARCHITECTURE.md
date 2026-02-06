@@ -1,7 +1,7 @@
 # NakshatraAI Architecture V2 - Simplified + LangGraph
 
-**Date:** February 2, 2026  
-**Version:** 2.1  
+**Date:** February 6, 2026
+**Version:** 2.2 (Including Phase 11 Semantic Routing)
 **Status:** In Production / Scaling Phase
 
 ---
@@ -117,7 +117,7 @@ User Query
          ↓
 ┌─────────────────┐
 │ 2. Classify     │ → CHITCHAT | NEEDS_CALCULATION | NEEDS_RAG
-│    Intent       │    (LLM with semantic cache)
+│    Intent       │    (Semantic Router + LLM Fallback)
 └────────┬────────┘
          ↓
     [Router]
@@ -177,17 +177,18 @@ User Query
         ┌──────────────┴────────────────┐
         ↓                               ↓
 ┌───────────────┐            ┌──────────────────────┐
-│CALCULATION    │            │RAG PIPELINE          │
-│ENGINE         │            │                      │
-│               │            │┌────────────────┐    │
-│• pyswisseph   │            ││Hybrid Retrieval│    │
-│• Birth Charts │            ││                │    │
-│• Dashas       │            ││Semantic+BM25   │    │
-│• Transits     │            ││+HyDE           │    │
-│               │            │└────────────────┘    │
-│(Your existing │            │        ↓             │
-│ engines)      │            │┌────────────────┐    │
-└───────────────┘            ││ChromaDB        │    │
+│CALCULATION    │            ┌──────────────────────┐
+│ENGINE         │            │RAG PIPELINE          │
+│               │            │                      │
+│• pyswisseph   │            │┌────────────────┐    │
+│• Birth Charts │            ││Hybrid Retrieval│    │
+│• Dashas       │            ││                │    │
+│• Transits     │            ││Semantic+BM25   │    │
+│               │            ││+HyDE           │    │
+│(Your existing │            │└────────────────┘    │
+│ engines)      │            │        ↓             │
+└───────────────┘            │┌────────────────┐    │
+                             ││ChromaDB        │    │
                              │└────────────────┘    │
                              └──────────────────────┘
                                        │
@@ -233,57 +234,50 @@ We use a **Hierarchical Splitter** instead of a token-limited one:
 
 ---
 
+## 🧠 Semantic Routing (Phase 11 Update)
+
+We replaced the brittle Regex/Keyword matching system with a **Semantic AI Router**.
+
+### Technical Architecture
+- **Engine**: `sentence-transformers/all-MiniLM-L6-v2`
+    - **Size**: ~80MB (Quantized)
+    - **Latency**: <50ms on CPU
+    - **Location**: Runs locally in `src/routing/` (No API calls required)
+- **Component**: `SemanticRouter` (Singleton pattern in `src/routing/semantic_router.py`)
+- **Mechanism**: Cosine Similarity between `Query Embedding` and `Route Canonical Embeddings`.
+
+### Configured Routes
+
+**1. Chitchat (`orchestrator.py`)**
+- **Threshold**: 0.70
+- **Examples**: "wassup", "sup", "namaste", "vanakkam".
+- **Impact**: Catches slang and variations that regex missed.
+
+**2. Safety (`classifier.py`)**
+- **Threshold**: 0.75
+- **Categories**: DEATH_PREDICTION, MEDICAL, GAMBLING, HARMFUL, PRIVACY.
+- **Impact**: Robust detection of harmful intent without needing exhaustive keyword lists. (e.g., "end my life" is caught even without "suicide" keyword).
+
+---
+
 ## 📊 Intent Classification Logic
 
 ### The 3 Categories Explained
 
 #### 1. CHITCHAT
 **Definition:** General conversation that doesn't need astrology knowledge or calculations.
-
-**Examples:**
-- "hi", "hello", "namaste"
-- "who are you?"
-- "what can you do?"
-- "thanks", "goodbye"
-
-**System Response:** Pre-defined conversational templates (no LLM needed for most)
-
-**Processing:** < 100ms
-
----
+**Processing:** < 100ms (Semantic Route or Fallback ID)
 
 #### 2. NEEDS_CALCULATION
 **Definition:** User wants to GENERATE or CALCULATE specific astrological data.
-
-**Examples:**
-- "Calculate my birth chart"
-- "Show my kundali"
-- "What is my lagna?"
-- "Generate my dasha periods"
-- "Show current transits"
-
-**Key Indicators:** "calculate", "generate", "show", "what is my [specific position]"
-
-**System Response:** Deterministic engine (pyswisseph) → Formatted output
-
+**Examples:** "Calculate my birth chart", "Show my dasha"
+**Response:** Deterministic engine (pyswisseph)
 **Processing:** 500ms - 2s
-
----
 
 #### 3. NEEDS_RAG
 **Definition:** User wants astrological KNOWLEDGE, INTERPRETATION, or PREDICTION.
-
-**Examples:**
-- "What does Jupiter in 5th house mean?" (interpretation)
-- "When will I get married?" (prediction)
-- "Tell me about Saturn retrograde" (learning)
-- "Is Mars placement good for career?" (analysis)
-- "What is Vimshottari dasha?" (concept explanation)
-
-**Key Indicators:** "what does", "when will", "is it good", "tell me about", "explain"
-
-**System Response:** Hybrid retrieval → Retrieved knowledge + LLM generation
-
+**Examples:** "What does Jupiter mean?", "When will I get married?"
+**Response:** Hybrid retrieval + LLM
 **Processing:** 3-5s
 
 ---
@@ -293,49 +287,15 @@ We use a **Hierarchical Splitter** instead of a token-limited one:
 ```
 Query arrives
     ↓
-Is it conversational/social?
-    ├─ Yes → CHITCHAT
-    └─ No ↓
-         Is it asking to compute/generate specific data?
-         ├─ Yes → NEEDS_CALCULATION
-         └─ No ↓
-              Does it need astrological knowledge?
-              ├─ Yes → NEEDS_RAG
-              └─ No → Default to NEEDS_RAG
+[Semantic Router] Check Chitchat/Safety (Latency < 50ms)
+    ├─ Match? → Return Result Immediately
+    └─ No Match ↓
+[LLM Classification] Check Intent (Latency ~800ms)
+    ├─ Calculation? → NEEDS_CALCULATION
+    └─ Knowledge? → NEEDS_RAG
 ```
 
-**Rule:** When in doubt, default to NEEDS_RAG (most common for astrology queries)
-
----
-
-## 🔧 LangGraph State Definition
-
-```python
-class NakshatraState(TypedDict):
-    # Input
-    query: str
-    user_id: str
-    conversation_history: List[Dict]
-    
-    # User context
-    user_profile: Optional[Dict]
-    authenticated: bool
-    
-    # Intent classification
-    intent: str  # CHITCHAT | NEEDS_RAG | NEEDS_CALCULATION
-    confidence: float
-    intent_reasoning: str
-    cached: bool
-    
-    # Processing results
-    birth_chart: Optional[Dict]
-    knowledge_chunks: Optional[List]
-    
-    # Response
-    answer: str
-    error: Optional[str]
-    processing_time: float
-```
+**Rule:** Semantic Routing takes precedence for speed and safety. LLM Classification handles the nuance between Calculation and RAG.
 
 ---
 
@@ -343,113 +303,23 @@ class NakshatraState(TypedDict):
 
 | Path | Avg Time | Bottleneck |
 |------|----------|------------|
-| CHITCHAT | <100ms | None (templates) |
-| NEEDS_CALCULATION | 500ms-2s | pyswisseph computation |
-| NEEDS_RAG (cached intent) | 2-3s | LLM generation |
-| NEEDS_RAG (new intent) | 3-5s | Intent classification + LLM |
+| CHITCHAT (Semantic) | <50ms | None |
+| CHITCHAT (LLM) | ~800ms | LLM Latency |
+| NEEDS_CALCULATION | 1-2s | pyswisseph computation |
+| NEEDS_RAG | 3-5s | Retrieval + Generation |
 
 **Optimization Strategy:**
-- CHITCHAT: Pre-defined templates → instant
-- NEEDS_CALCULATION: Cache common charts
-- NEEDS_RAG: Semantic cache for intents, aggressive retrieval caching
-
----
-
-## 🎨 Comparison: V1 vs V2
-
-| Aspect | V1 (7 Categories) | V2 (3 Categories) |
-|--------|-------------------|-------------------|
-| **Intent Categories** | GREETING, OFF_TOPIC, UNCLEAR, CALCULATION, INTERPRETATION, PREDICTION, LEARNING | CHITCHAT, NEEDS_CALCULATION, NEEDS_RAG |
-| **Routing Logic** | Python if/elif | LangGraph conditional edges |
-| **State Management** | Manual dict passing | LangGraph StateGraph |
-| **Clarity** | Unclear boundaries | Clear capability mapping |
-| **Maintainability** | Complex | Simple |
-| **Visualization** | Hard to visualize | LangGraph auto-visualizes |
-| **Extensibility** | Add more if/elif | Add more nodes/edges |
-
----
-
-## 🚀 Implementation Files
-
-### New Files (V2)
-
-```
-src/ai/
-├── simplified_intent_classifier.py  # 3-category classifier
-└── (existing files remain)
-
-src/orchestration/
-├── langgraph_orchestrator.py        # NEW: Proper LangGraph
-└── orchestrator.py                  # DEPRECATED: V1 orchestrator
-```
-
-### Migration Path
-
-1. **Phase 1:** Test simplified intent classifier
-2. **Phase 2:** Test LangGraph orchestrator with dummy data
-3. **Phase 3:** Switch chatbot.py to use V2
-4. **Phase 4:** Deprecate V1 orchestrator
-5. **Phase 5:** Update API layer to use V2
-
----
-
-## 💡 Key Insights
-
-### Why 3 Categories Work Better
-
-1. **Capability Mapping:** Each category maps to a system capability
-   - CHITCHAT → Conversation
-   - NEEDS_CALCULATION → Engine
-   - NEEDS_RAG → Knowledge + LLM
-
-2. **Clear Boundaries:** No confusion between categories
-   - V1: Is "When will I marry?" PREDICTION or INTERPRETATION?
-   - V2: It needs knowledge → NEEDS_RAG ✓
-
-3. **Simpler Prompts:** LLM has 3 clear choices, not 7 fuzzy ones
-
-4. **Future-Proof:** Add new capabilities by adding nodes, not categories
-
-### Why LangGraph Matters
-
-1. **State Management:** Automatic state threading through nodes
-2. **Visualization:** Can visualize the graph structure
-3. **Debugging:** See state at each node
-4. **Extension:** Add new nodes/edges without touching routing logic
-5. **Best Practice:** Using the framework as designed
+- **Semantic First**: Offload 30-40% of queries (greetings, safety) to local embedding model.
+- **Caching**: Cache RAG intents and calculation results.
 
 ---
 
 ## 📋 Next Steps
 
-### Immediate (Phase 6)
-- [ ] Test simplified intent classifier
-- [ ] Test LangGraph orchestrator
-- [ ] Integrate with existing chatbot
-- [ ] Add safety checks as nodes
-
-### Near-term (Phase 7)
-- [ ] Update FastAPI to use V2
-- [ ] Add monitoring nodes
-- [ ] Add error handling nodes
-- [ ] Document graph structure
+### Immediate (Phase 12)
+- [ ] Implement FastAPI layer (replace CLI)
+- [ ] Containerize with Docker (include sentence-transformers model)
 
 ### Long-term
-- [ ] Add caching nodes
-- [ ] Add analytics nodes
-- [ ] Add A/B testing capabilities
-- [ ] Optimize node execution
-
----
-
-## 🎯 Success Metrics
-
-**V2 should achieve:**
-- Intent accuracy: > 95% (clearer categories)
-- Response time: Same or better than V1
-- Code maintainability: Easier to understand and modify
-- Extensibility: Can add features without major refactor
-
----
-
-**Architecture V2 is production-ready and represents best practices for LLM orchestration!** ✅
+- [ ] Add analytics nodes for router performance
+- [ ] Fine-tune RAG model on astrology texts

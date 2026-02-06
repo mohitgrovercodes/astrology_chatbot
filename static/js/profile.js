@@ -7,7 +7,7 @@ class ProfileManager {
     constructor() {
         this.profileModal = document.getElementById('profileModal');
         this.profileForm = document.getElementById('profileForm');
-        this.userId = localStorage.getItem('nakshatra_user_id') || 'user006';
+        this.userId = localStorage.getItem('nakshatra_user_id') || 'user011';
 
         this.init();
     }

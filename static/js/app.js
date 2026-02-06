@@ -23,6 +23,24 @@ class App {
 
         // Check API health
         this.checkHealth();
+
+        // Validate user session
+        this.checkUser();
+    }
+
+    async checkUser() {
+        const userId = localStorage.getItem('nakshatra_user_id');
+        if (!userId) return; // Will default to user011 in other files
+
+        try {
+            await apiClient.getUser(userId);
+            console.log(`✅ User ${userId} validated`);
+        } catch (error) {
+            console.warn(`⚠️ User ${userId} not found, resetting to default user011`);
+            localStorage.setItem('nakshatra_user_id', 'user011');
+            // Reload to apply changes across all components
+            window.location.reload();
+        }
     }
 
     toggleTheme() {

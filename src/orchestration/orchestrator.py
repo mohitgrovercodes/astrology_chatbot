@@ -26,6 +26,8 @@ from src.tools.calculation_tools import get_calculation_tools
 # PHASE 10.5: Import new safety framework
 from src.safety import create_safety_classifier, get_template, get_disclaimer
 from src.safety.input_validator import InputValidator
+# PHASE 11: Semantic Routing
+from src.routing import SemanticRouter
 
 
 class NakshatraState(TypedDict):
@@ -114,6 +116,20 @@ class EnhancedLangGraphOrchestrator:
         # PHASE 10.5: Initialize new safety components
         self.safety_classifier = create_safety_classifier(llm=self.fast_llm)
         self.input_validator = InputValidator()
+        
+        # PHASE 11: Initialize Semantic Router for Chitchat
+        self.semantic_router = SemanticRouter()
+        if self.semantic_router.model:
+            self.semantic_router.add_route(
+                name="chitchat",
+                examples=[
+                    "hi", "hello", "hey", "namaste", "namaskaram", "vanakkam", "hola",
+                    "good morning", "good evening", "good afternoon", "how are you",
+                    "who are you", "what are you", "thanks", "thank you", "bye", "goodbye",
+                    "wassup", "sup", "yo", "nice to meet you", "greetings"
+                ],
+                metadata={"type": "chitchat"}
+            )
         
         self.graph = self._build_graph()
         
@@ -317,10 +333,27 @@ Code:"""
         """Node 2: Classify intent."""
         print(f"[INTENT] Classifying query: '{state['query'][:50]}...'")
         
+        # PHASE 11: Semantic Chitchat Router
+        # Check for simple greetings semantically
+        chitchat_match = None
+        if self.semantic_router.model:
+            chitchat_match = self.semantic_router.route(state['query'], threshold=0.7)
+            
+        if chitchat_match and chitchat_match.name == "chitchat":
+            print(f"[INTENT] Semantic Chitchat Match: '{state['query']}' ({chitchat_match.confidence:.2f})")
+            state['intent'] = 'CHITCHAT'
+            state['confidence'] = chitchat_match.confidence
+            state['intent_reasoning'] = "Semantic Chitchat Match"
+            state['is_safe'] = True
+            return state
+
         # PHASE 10.5: Multi-Gate Safety Check
         # Check before ANY LLM classification
         if self.safety_classifier:
-            safety_result = self.safety_classifier.classify(state['query'])
+            safety_result = self.safety_classifier.classify(
+                state['query'], 
+                state.get('conversation_history', [])
+            )
             
             # Store safety metadata
             state['safety_result'] = safety_result.decision.model_dump()
@@ -329,12 +362,18 @@ Code:"""
             
             # 1. HARD / SOFT BLOCK: Refuse immediately
             if safety_result.is_blocked:
-                print(f"[GUARD] 🚫 BLOCKING REQUEST: {safety_result.decision.category} ({safety_result.decision.reason})")
-                state['intent'] = 'safety_block'
-                state['answer'] = get_template(safety_result.get_template_key())
-                state['is_safe'] = False
-                state['confidence'] = safety_result.decision.confidence
-                return state
+                # Double Check: If soft block is "out_of_scope", check if it's actually chitchat via LLM fallback
+                if safety_result.decision.category == "SOFT_BLOCK":
+                    print("[GUARD] Soft block detected. Checking if actually chitchat...")
+                    # Let it fall through to intent classifier which handles chitchat better
+                    pass 
+                else:
+                    print(f"[GUARD] 🚫 BLOCKING REQUEST: {safety_result.decision.category} ({safety_result.decision.reason})")
+                    state['intent'] = 'safety_block'
+                    state['answer'] = get_template(safety_result.get_template_key())
+                    state['is_safe'] = False
+                    state['confidence'] = safety_result.decision.confidence
+                    return state
                 
             # 2. REFRAME: Transform query and proceed
             if safety_result.decision.category == "REFRAME":
@@ -345,7 +384,7 @@ Code:"""
                 # Continue process with better query
                 
             # 3. CONDITIONAL: Mark for disclaimer (handled in format_response)
-            if safety_result.needs_disclaimer:
+            if safety_result.decision.disclaimer_type:
                 print(f"[GUARD] ⚠️ CONDITIONAL: Needs {safety_result.decision.disclaimer_type} disclaimer")
                 state['disclaimer_type'] = safety_result.decision.disclaimer_type
         
@@ -388,26 +427,43 @@ Code:"""
         # Multilingual/Complex path: Use fast LLM with persona
         try:
             from src.ai.personas import get_persona
-            persona = get_persona(state['user_profile'].get('preferred_system', 'vedic'))
-            system_prompt = persona.get_system_prompt(user_name=user_name, language=lang)
+            # Always default to 'vedic' for persona tone, or use user profile preference
+            persona_type = state['user_profile'].get('preferred_system', 'vedic')
+            persona = get_persona(persona_type)
+            
+            system_prompt = persona.get_system_prompt(
+                user_name=user_name,
+                language=lang
+            )
             
             # Map language code to descriptive name
             loc_manager = get_localization_manager()
             lang_name = loc_manager.get_language_name(lang)
             
-            prompt = f"""{system_prompt}
-
-USER QUERY: "{state['query']}"
-
-Respond to the user's greeting or conversational query in {lang_name}. 
-Keep it brief, professional, and welcoming. 
-Avoid providing astrological analysis here unless requested."""
+            if '-lat' in lang:
+                script_instruction = f"IMPORTANT: You must writing in {lang_name} using ROMAN ALPHABET (English Script). Do NOT use native script."
+            else:
+                script_instruction = f"Respond entirely in {lang_name} (Native Script)."
             
-            response = self.fast_llm.invoke(prompt)
-            state['answer'] = response.content if hasattr(response, 'content') else str(response)
+            prompt = f"""{system_prompt}
+            
+User: "{state['query']}"
+
+INSTRUCTIONS:
+1. Provide a warm, empathetic, professional response.
+2. If the user greets, greet back warmly.
+3. If the question is outside astrology, politely explain your scope.
+4. {script_instruction}
+5. Keep it brief (under 50 words).
+
+Response:"""
+            
+            llm_response = self.fast_llm.invoke(prompt)
+            state['answer'] = llm_response.content if hasattr(llm_response, 'content') else str(llm_response)
+            
         except Exception as e:
-            print(f"[CHITCHAT] LLM error: {e}")
-            state['answer'] = f"Namaste {user_name}! I am here to help with your astrology queries. How can I assist you today?"
+            print(f"[CHITCHAT] Error generating response: {e}")
+            state['answer'] = f"Namaste, {user_name}! How can I help you with your astrology chart?"
             
         return state
     
@@ -509,27 +565,9 @@ Provide a concise answer:"""
         """
         print("[RAG_WITH_CALCULATION] Personalized prediction flow")
         
-        # PHASE 6: Analyze query for sensitive content
-        query_analysis = self.query_analyzer.analyze(state['query'])
-        state['query_analysis'] = {
-            'category': query_analysis.category.value,
-            'sensitivity_level': query_analysis.sensitivity_level,
-            'handling_strategy': query_analysis.handling_strategy.value,
-            'requires_disclaimer': query_analysis.requires_disclaimer,
-            'clarifying_question': query_analysis.clarifying_question,
-            'positive_redirect': query_analysis.positive_redirect
-        }
+        # PHASE 10.5: Safety handled upstream in _classify_intent_node
+        # Legacy Phase 6 safety check removed.
         
-        print(f"[SAFETY] Category: {query_analysis.category.value}, "
-              f"Sensitivity: {query_analysis.sensitivity_level:.2f}, "
-              f"Strategy: {query_analysis.handling_strategy.value}")
-        
-        # Check if we should ask clarifying question first (C in C->B->A)
-        should_clarify, clarifying_q = self.response_enhancer.should_ask_clarification(query_analysis)
-        if should_clarify and clarifying_q:
-            print(f"[SAFETY] High sensitivity detected - asking clarifying question first")
-            state['answer'] = clarifying_q
-            return state
         
         user_profile = state['user_profile']
         
@@ -609,6 +647,7 @@ Provide a concise answer:"""
                     transit_data=state.get('transit_data', {}),
                     knowledge_chunks=knowledge_chunks,
                     user_profile=user_profile,
+                    conversation_history=state.get('conversation_history', []),
                     language=state.get('detected_language', 'en')
                 )
             else:
@@ -941,6 +980,7 @@ Retain the astrological data but remove the violating content (e.g., remove deat
     # HELPER METHODS
     # ========================================================================
     
+
     def _detect_persona_preference(self, query: str) -> str:
         """
         Detect if user prefers Western or Vedic persona based on query.
@@ -992,14 +1032,38 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         transit_data: Dict,
         knowledge_chunks: List,
         user_profile: Dict,
-        language: str = "en"
+        language: str = "hi-lat"
     ) -> str:
         """
         Build personalized prediction prompt with REAL chart context.
         [DONE] UPDATED: Now uses rich data structure from VedicEngine
+        [DONE] UPDATED: Greeting suppression and Two-Tier response flow
         """
         
-        # Format knowledge context WITH SOURCE ATTRIBUTION (same as _build_theory_prompt)
+        # Check if conversation is ongoing (to suppress greetings)
+        # We need to know if there's history passed to the orchestrator, 
+        # but this method doesn't receive full history. 
+        # Ideally, we'd pass a flag. For now, we'll assume if this method is called,
+        # it's part of a flow that might have history.
+        # But wait, self.process_query passes history to graph, but graph nodes might not pass it here?
+        # Actually, let's just add the instruction conditionally if we can determine context.
+        # Or better yet, just add a generic instruction to the system prompt if not first turn.
+        # Since we don't have history length here easily without changing signature, 
+        # let's add it to the BASE INSTRUCTIONS for all turns except maybe the very first?
+        # A safer bet is to change the signature to accept `is_first_turn` or `conversation_history`.
+        # Let's add `conversation_history` to the signature.
+    
+    def _build_prediction_prompt(
+        self,
+        query: str,
+        chart_data: Dict,
+        dasha_data: Dict,
+        transit_data: Dict,
+        knowledge_chunks: List,
+        user_profile: Dict,
+        conversation_history: List = None,  # Added argument
+        language: str = "hi-lat"
+    ) -> str:
         context_parts = []
         for i, chunk in enumerate(knowledge_chunks[:3], 1):
             source = chunk.metadata.get('source_book', 'Unknown') if hasattr(chunk, 'metadata') else 'Unknown'
@@ -1052,11 +1116,19 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         # PHASE 10: Inject Constitution
         constitution = get_constitution_injection()
         system_prompt = f"{system_prompt}\n\n{constitution}"
+
+        # GREETING CONTROL: Suppress greetings if conversation is ongoing
+        if conversation_history and len(conversation_history) > 0:
+            system_prompt += "\n\nNOTE: This is an ongoing conversation. Do NOT start with greetings like 'Namaste', 'Hello', or 'Hari Om'. Get straight to the answer."
         
         # Map language code to descriptive name for LLM
         loc_manager = get_localization_manager()
         lang_name = loc_manager.get_language_name(language)
-        
+        if '-lat' in language:
+            script_instruction = f"IMPORTANT: You must writing in {lang_name} using ROMAN ALPHABET (English Script). Do NOT use native script."
+        else:
+            script_instruction = f"Respond entirely in {lang_name} (Native Script)."
+            
         # Detect if user wants detailed explanation
         wants_detail = self._user_wants_detail(query)
         
@@ -1068,34 +1140,33 @@ Retain the astrological data but remove the violating content (e.g., remove deat
 3. **TIMING**: Include approximate timeframes based on dasha periods provided
 4. **GROUNDING**: Base on chart data + classical texts above - Do NOT cite books unless they appear in sources
 5. **FORBIDDEN**: Do NOT cite any book unless it appears in the retrieved sources above
-6. Respond entirely in {lang_name}
+6. {script_instruction}
 7. At the end, list the book names from retrieved sources (if any)
 
 Provide a detailed, comprehensive prediction:"""
         else:
-            # Default: Brief response
-            instructions = f"""🚨 CRITICAL INSTRUCTIONS - MUST FOLLOW:
-1. **MAXIMUM 100-150 WORDS** - Your ENTIRE response must be between 100-150 words maximum, nothing more
-2. **SPECIFIC TO THEIR CHART**: Mention key placements (houses, signs, planets) from the chart data above
-3. **TIMING**: Include approximate timeframe based on dasha periods
-4. **GROUNDING**: Base on chart data + classical texts - DO NOT cite books unless they appear in sources
-5. **FORBIDDEN**: Do NOT cite any book unless it appears in the retrieved sources above
-6. **FORMAT**: Write 2-3 concise sentences covering key predictions
-7. Respond entirely in {lang_name}
-8. At the end: "**Sources:** [book names if any, otherwise 'Chart analysis']"
+            # Default: Brief response with follow-up offer
+            instructions = f"""🚨 CRITICAL INSTRUCTIONS - BRIEF RESPONSE MODE:
+1. **CONCISE ANSWER**: Provide a direct, astrological answer in 2-3 sentences.
+2. **KEY FACTORS**: Mention ONLY the most important chart factor (e.g., "Due to Jupiter in your 7th house...").
+3. **NO FLUFF**: Do not write long introductions or general philosophy.
+4. **SOURCES**: Cite sources ONLY if used.
+5. {script_instruction}
+6. **MANDATORY ENDING**: You MUST end your response by asking: "Would you like a detailed explanation of the planetary positions and reasoning?" (in the target language).
 
-✅ CORRECT FORMAT (THIS IS YOUR TARGET):
-[2-3 concise sentences with key predictions and timing, 100-150 words total]
+✅ CORRECT FORMAT:
+[Direct answer + key astrological reason]. [Timing if relevant].
 
-**Sources:** [Book names from sources, or "Chart analysis"]
+SOURCES: [Book Name] (Optional)
 
-❌ DO NOT write long paragraphs, detailed analyses, bullet lists, or multiple sections  
-❌ DO NOT exceed 150 words
-❌ DO NOT cite books not in retrieved sources
-❌ DO NOT write greetings like "Hari Om" or long introductions
-❌ User can ask "tell me more" if they want detailed explanation
+[Question asking if user wants detailed breakdown]
 
-Provide brief 100-150 word prediction:"""
+❌ DO NOT write long paragraphs
+❌ DO NOT list all planetary positions
+❌ DO NOT say greetings
+❌ User can say "yes" or "explian" to get the full details you skipped.
+
+Provide brief response:"""
 
         prompt = f"""{system_prompt}
 
@@ -1202,7 +1273,11 @@ RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
             "error": None,
             "processing_time": 0.0,
             "messages": [],
-            "persona_type": self._detect_persona_preference(query),
+            "messages": [],
+            # PHASE 9 Fix: Use explicit user preference or default to 'vedic'. Do NOT detect from query.
+            "persona_type": "vedic", 
+            
+            # PHASE 10: Validation Init
             
             # PHASE 10: Validation Init
             "validation_attempts": 0,
@@ -1249,7 +1324,7 @@ RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
             "confidence": 0.0,
             "intent_reasoning": "",
             "cached": False,
-            "detected_language": "en",
+            "detected_language": "hi-lat",
             "original_query": query,
             "chart_data": None,
             "dasha_data": None,
@@ -1259,7 +1334,11 @@ RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
             "error": None,
             "processing_time": 0.0,
             "messages": [],
-            "persona_type": self._detect_persona_preference(query),  # PHASE 9
+            "messages": [],
+            # PHASE 9 Fix: Use explicit user preference or default to 'vedic'. Do NOT detect from query.
+            "persona_type": "vedic",
+            
+            # PHASE 10: Validation Init
             
             # PHASE 10: Validation Init
             "validation_attempts": 0,
