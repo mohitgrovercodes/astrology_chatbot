@@ -106,7 +106,7 @@ class UserManager:
             'name': 'Kartikey Kichara',
             'email':'kkichara@gmail.com',
             'date_of_birth': '2003-05-04',
-            'time_of_birth': '18:50:00',
+            'time_of_birth': '20:45:00',
             'place_of_birth': 'Bhilwara,India',
             'latitude': 25.3407,
             'longitude': 74.6313,

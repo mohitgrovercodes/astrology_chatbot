@@ -85,8 +85,7 @@ def main():
         hybrid_retriever=hybrid_retriever,
         prompt_builder=prompt_builder,
         calculation_tools=CALCULATION_TOOLS,
-        llm=llm,  # Single LLM instance
-        mongodb_uri=mongodb_uri
+        llm=llm  # Single LLM instance
     )
     
     print()

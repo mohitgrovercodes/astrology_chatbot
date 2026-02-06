@@ -79,8 +79,7 @@ class EnhancedLangGraphOrchestrator:
         prompt_builder,
         calculation_tools: Optional[Dict] = None,  # [DONE] CHANGED: Now optional
         llm=None,
-        fast_llm=None,  # NEW: Fast LLM for classification
-        mongodb_uri: Optional[str] = None
+        fast_llm=None  # NEW: Fast LLM for classification
     ):
         """Initialize enhanced orchestrator with dual LLM support."""
         self.intent_classifier = intent_classifier
@@ -684,9 +683,10 @@ I prefer to say "I don't know" rather than provide information not grounded in c
             chapter = chunk.metadata.get('chapter', '') if hasattr(chunk, 'metadata') else ''
             verse = chunk.metadata.get('verse_number', '') if hasattr(chunk, 'metadata') else ''
             
-            source_citation = f"[Source {i}: {source}"
+            # Format with book name prominently
+            source_citation = f"[{source}"
             if chapter:
-                source_citation += f", Chapter {chapter}"
+                source_citation += f" - Chapter {chapter}"
             if verse:
                 source_citation += f", Verse {verse}"
             source_citation += "]"
@@ -699,6 +699,43 @@ I prefer to say "I don't know" rather than provide information not grounded in c
         # Map language code to descriptive name for LLM
         loc_manager = get_localization_manager()
         lang_name = loc_manager.get_language_name(language)
+        
+        # Detect if user wants detailed explanation
+        wants_detail = self._user_wants_detail(query)
+        
+        if wants_detail:
+            # User asked for details - provide comprehensive explanation
+            instructions = f"""INSTRUCTIONS:
+1. **GROUNDING**: Base answer ONLY on the provided texts above
+2. **DETAILED EXPLANATION**: Provide a comprehensive, detailed explanation with examples
+3. **CITE BOOK NAMES**: Only cite books that appear in the sources above
+4. **FORBIDDEN**: Do NOT cite any book unless it appears in the retrieved sources
+5. Respond entirely in {lang_name}
+6. At the end, list the book names from the retrieved sources
+
+Provide a detailed, thorough explanation:"""
+        else:
+            # Default: Brief response
+            instructions = f"""🚨 CRITICAL INSTRUCTIONS - MUST FOLLOW:
+1. **MAXIMUM 100-150 WORDS** - Your ENTIRE response must be between 100-150 words maximum, nothing more
+2. **GROUNDING**: Base answer ONLY on the provided texts above - DO NOT mention any book names unless they appear in the sources above
+3. **CITE BOOK NAMES FROM SOURCES**: Only cite books that are explicitly shown in the knowledge above
+4. **FORBIDDEN**: Do NOT cite Brihat Parasara Hora Shastra, Jataka Parijata, Uttara Kalamrita, or any other text UNLESS it appears in the sources above
+5. **FORMAT**: Write 2-3 concise sentences covering the key points
+6. Respond entirely in {lang_name}
+7. At the end: "**Sources:** [book names if any, otherwise skip this line]"
+
+✅ CORRECT FORMAT (THIS IS YOUR TARGET):
+[2-3 concise sentences with key information, 100-150 words total]
+
+**Sources:** [Only books from retrieved sources, if any]
+
+❌ DO NOT write long paragraphs, detailed explanations, bullet lists, or multiple sections
+❌ DO NOT exceed 150 words
+❌ DO NOT cite books not in the retrieved sources
+❌ User can ask "tell me more" if they want elaboration
+
+Provide brief 100-150 word answer:"""
         
         prompt = f"""You are an expert Vedic astrologer explaining astrological concepts.
 
@@ -715,20 +752,7 @@ RELEVANT KNOWLEDGE FROM CLASSICAL TEXTS:
 
 {system_prompt}
 
-CRITICAL INSTRUCTIONS:
-1. **GROUNDING REQUIREMENT**: Base your answer ONLY on the provided classical texts above
-2. **CITATION REQUIRED**: After each key point, cite the source using [Source X] notation
-3. **NO HALLUCINATION**: If the sources don't contain enough information, say so explicitly
-4. Include practical examples where helpful
-5. Keep the tone professional but accessible
-6. This is a GENERAL explanation, not specific to any person's chart
-7. Respond entirely in {lang_name}
-8. **End your response with a "Sources" section** listing all referenced texts
-
-Example citation format:
-"Panapara houses are the 2nd, 5th, 8th, and 11th houses [Source 1]. They represent fixed resources and accumulation [Source 2]."
-
-Provide a detailed, grounded explanation:"""
+{instructions}"""
         
         return prompt
     
@@ -745,6 +769,33 @@ Provide a detailed, grounded explanation:"""
     # ========================================================================
     # HELPER METHODS
     # ========================================================================
+    
+    def _user_wants_detail(self, query: str) -> bool:
+        """
+        Detect if user is asking for more detail/elaboration.
+        
+        Returns:
+            True if query contains phrases requesting more information
+        """
+        query_lower = query.lower()
+        detail_phrases = [
+            'tell me more',
+            'more detail',
+            'more information',
+            'elaborate',
+            'explain in detail',
+            'explain more',
+            'detailed explanation',
+            'full explanation',
+            'complete explanation',
+            'विस्तार से',  # Hindi: in detail
+            'और बताओ',    # Hindi: tell more
+            'aur batao',   # Hinglish: tell more
+            'detail me',
+            'details',
+        ]
+        
+        return any(phrase in query_lower for phrase in detail_phrases)
     
     def _build_prediction_prompt(
         self,
@@ -768,9 +819,10 @@ Provide a detailed, grounded explanation:"""
             chapter = chunk.metadata.get('chapter', '') if hasattr(chunk, 'metadata') else ''
             verse = chunk.metadata.get('verse_number', '') if hasattr(chunk, 'metadata') else ''
             
-            source_citation = f"[Source {i}: {source}"
+            # Format with book name prominently
+            source_citation = f"[{source}"
             if chapter:
-                source_citation += f", Chapter {chapter}"
+                source_citation += f" - Chapter {chapter}"
             if verse:
                 source_citation += f", Verse {verse}"
             source_citation += "]"
@@ -813,6 +865,46 @@ Provide a detailed, grounded explanation:"""
         # Map language code to descriptive name for LLM
         loc_manager = get_localization_manager()
         lang_name = loc_manager.get_language_name(language)
+        
+        # Detect if user wants detailed explanation
+        wants_detail = self._user_wants_detail(query)
+        
+        if wants_detail:
+            # User asked for details - provide comprehensive prediction
+            instructions = f"""INSTRUCTIONS:
+1. **DETAILED PREDICTION**: Provide a comprehensive, detailed prediction with reasoning
+2. **SPECIFIC TO THEIR CHART**: Use actual placements (houses, signs, planets) from the chart data above
+3. **TIMING**: Include approximate timeframes based on dasha periods provided
+4. **GROUNDING**: Base on chart data + classical texts above - Do NOT cite books unless they appear in sources
+5. **FORBIDDEN**: Do NOT cite any book unless it appears in the retrieved sources above
+6. Respond entirely in {lang_name}
+7. At the end, list the book names from retrieved sources (if any)
+
+Provide a detailed, comprehensive prediction:"""
+        else:
+            # Default: Brief response
+            instructions = f"""🚨 CRITICAL INSTRUCTIONS - MUST FOLLOW:
+1. **MAXIMUM 100-150 WORDS** - Your ENTIRE response must be between 100-150 words maximum, nothing more
+2. **SPECIFIC TO THEIR CHART**: Mention key placements (houses, signs, planets) from the chart data above
+3. **TIMING**: Include approximate timeframe based on dasha periods
+4. **GROUNDING**: Base on chart data + classical texts - DO NOT cite books unless they appear in sources
+5. **FORBIDDEN**: Do NOT cite any book unless it appears in the retrieved sources above
+6. **FORMAT**: Write 2-3 concise sentences covering key predictions
+7. Respond entirely in {lang_name}
+8. At the end: "**Sources:** [book names if any, otherwise 'Chart analysis']"
+
+✅ CORRECT FORMAT (THIS IS YOUR TARGET):
+[2-3 concise sentences with key predictions and timing, 100-150 words total]
+
+**Sources:** [Book names from sources, or "Chart analysis"]
+
+❌ DO NOT write long paragraphs, detailed analyses, bullet lists, or multiple sections  
+❌ DO NOT exceed 150 words
+❌ DO NOT cite books not in retrieved sources
+❌ DO NOT write greetings like "Hari Om" or long introductions
+❌ User can ask "tell me more" if they want detailed explanation
+
+Provide brief 100-150 word prediction:"""
 
         prompt = f"""{system_prompt}
 
@@ -862,18 +954,7 @@ CURRENT TRANSITS (as of {transit_date}):
 RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
 {context}
 
-CRITICAL INSTRUCTIONS:
-1. Analyze the user's SPECIFIC chart placements (not generic interpretations)
-2. Consider the current dasha period and its relationship with natal chart
-3. Factor in current transits and their impact on natal positions
-4. **GROUNDING**: Base interpretations on the provided classical texts above
-5. **CITATIONS**: Reference sources when making key interpretations using [Source X]
-6. Provide a PERSONALIZED prediction with timing based on dasha/transits
-7. Be specific about THEIR chart - mention actual signs, houses, and planets
-8. If timing is relevant, provide approximate time frames based on dasha periods
-9. Respond entirely in {lang_name}
-
-Provide a detailed, personalized prediction:"""
+{instructions}"""
         
         return prompt
     
@@ -1017,8 +1098,7 @@ def create_enhanced_orchestrator(
     prompt_builder,
     calculation_tools=None,
     llm=None,
-    fast_llm=None,  # NEW
-    mongodb_uri=None
+    fast_llm=None  # NEW
 ):
     """
     Factory function to create an EnhancedLangGraphOrchestrator.
@@ -1032,6 +1112,5 @@ def create_enhanced_orchestrator(
         prompt_builder=prompt_builder,
         calculation_tools=calculation_tools,
         llm=llm,
-        fast_llm=fast_llm,  # NEW
-        mongodb_uri=mongodb_uri
+        fast_llm=fast_llm  # NEW
     )

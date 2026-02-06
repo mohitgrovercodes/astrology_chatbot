@@ -279,7 +279,10 @@ class PageAnalyzer:
         if chapter2:
             confidence = max(0, confidence - 0.5)
         
-        return confidence >= 0.5, min(confidence, 1.0)
+        # Ensure confidence is clamped to valid range [0.0, 1.0]
+        confidence = max(0.0, min(confidence, 1.0))
+        
+        return confidence >= 0.5, confidence
     
     def analyze_continuation_llm(
         self,
