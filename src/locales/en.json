@@ -1,13 +1,61 @@
 {
     "language_name": "English",
     "detection": {
-        "heuristic_markers": [],
+        "heuristic_markers": [
+            "hai",
+            "hein",
+            "hoon",
+            "tha",
+            "thi",
+            "the",
+            "raha",
+            "rahi",
+            "rahe",
+            "kya",
+            "kyun",
+            "kab",
+            "kahan",
+            "kaise",
+            "kaun",
+            "mera",
+            "meri",
+            "mere",
+            "apka",
+            "apki",
+            "apke",
+            "shubh",
+            "labh",
+            "yog",
+            "dosh",
+            "kundli",
+            "patrika",
+            "graha",
+            "rashi",
+            "bataye",
+            "bataya",
+            "puchi",
+            "pucha",
+            "bol",
+            "bolo",
+            "kariye",
+            "karo",
+            "nahi",
+            "mat",
+            "bas",
+            "theek",
+            "acha",
+            "phir",
+            "kabhi"
+        ],
         "unicode_ranges": []
     },
     "prompt_templates": {
         "header": "PROFESSIONAL STANDARDS:",
         "voice": "VOICE GUIDELINES:",
-        "footer": "Remember: You are a professional astrologer helping clients understand their chart and navigate their path with wisdom and compassion."
+        "footer": "Remember: You are a professional astrologer helping clients understand their chart and navigate their path with wisdom and compassion.",
+        "brief_style": "BRIEF RESPONSE STYLE: Provide a concise, high-level summary (2-3 paragraphs). Avoid overwhelmed detail unless requested.",
+        "detailed_style": "DETAILED RESPONSE STYLE: Provide deep analysis, citing specific planetary degrees, house lords, and multi-layered dasha analysis.",
+        "offer_details": "Would you like a more detailed breakdown of these planetary influences and their specific timings?"
     },
     "personas": {
         "vedic": {
@@ -50,6 +98,14 @@
                 "Focus on growth and self-understanding",
                 "Example: 'Your Moon in Taurus in the 7th house suggests...'",
                 "Balance traditional wisdom with modern psychological insights"
+            ],
+            "timing_rules": [
+                "1. Focus on secondary progressions and transits of outer planets (Saturn, Uranus, Neptune, Pluto).",
+                "2. Use a maximum orb of 1 degree for applying transits.",
+                "3. Interpret Saturn cycles (Returns, Squares) as maturity milestones.",
+                "4. Jupiter transits indicate expansion and opportunity.",
+                "5. Mars transits indicate energy and potential conflict areas.",
+                "6. Always frame timing as 'energetic windows' rather than 'fated dates'."
             ]
         }
     }

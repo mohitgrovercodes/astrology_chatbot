@@ -1,55 +1,46 @@
 """
-Safety & Guardrails Module - Phase 6
-====================================
+Safety Module for Astrology Chatbot
 
-Core Philosophy: Behave like a HUMAN ASTROLOGER
-- Never block queries
-- Clarify first (C), redirect to positive (B), then provide with empathy (A)
-- Natural disclaimers, not legal boilerplate
-- Guide, don't refuse
-
-Components:
-- QueryAnalyzer: Identifies sensitive topics and appropriate handling
-- ResponseEnhancer: Adds natural disclaimers and empathetic framing
-- InputValidator: Flexible birth data validation
-- DISCLAIMERS: Contextual disclaimer templates
+Handles safety classification, response templates, and guardrails.
 """
 
-from src.safety.guardrails import (
-    QueryAnalyzer,
-    ResponseEnhancer,
-    SensitivityCategory,
-    QueryAnalysis
+from .models import (
+    SafetyDecision,
+    SafetyCheckResult,
+    BlockReasons,
+    DisclaimerTypes,
 )
 
-from src.safety.disclaimers import (
-    DISCLAIMERS,
+from .classifier import (
+    SafetyClassifier,
+    create_safety_classifier,
+)
+
+from .templates import (
+    RESPONSE_TEMPLATES,
+    get_template,
     get_disclaimer,
-    get_clarifying_question,
-    get_positive_redirect
-)
-
-from src.safety.input_validator import (
-    InputValidator,
-    ValidationResult,
-    validate_birth_data
+    format_reframe_response,
+    DEFAULT_BLOCK_MESSAGE,
+    DEFAULT_ERROR_MESSAGE,
 )
 
 __all__ = [
-    # Core classes
-    "QueryAnalyzer",
-    "ResponseEnhancer",
-    "InputValidator",
+    # Models
+    "SafetyDecision",
+    "SafetyCheckResult",
+    "BlockReasons",
+    "DisclaimerTypes",
     
-    # Data types
-    "SensitivityCategory",
-    "QueryAnalysis",
-    "ValidationResult",
+    # Classifier
+    "SafetyClassifier",
+    "create_safety_classifier",
     
-    # Utilities
-    "DISCLAIMERS",
+    # Templates
+    "RESPONSE_TEMPLATES",
+    "get_template",
     "get_disclaimer",
-    "get_clarifying_question",
-    "get_positive_redirect",
-    "validate_birth_data",
+    "format_reframe_response",
+    "DEFAULT_BLOCK_MESSAGE",
+    "DEFAULT_ERROR_MESSAGE",
 ]

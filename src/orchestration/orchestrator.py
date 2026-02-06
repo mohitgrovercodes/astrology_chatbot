@@ -9,9 +9,10 @@ UPDATED: Now uses actual VedicEngine calculations (no placeholders!)
 3. NEEDS_RAG -> Knowledge + Real chart data + Interpretation/Prediction
 """
 
-from typing import Dict, List, Optional, Any, TypedDict, Annotated
 from datetime import datetime
 from src.utils.localization import get_localization_manager
+from src.safety.constitution import get_constitution_injection # PHASE 10
+from typing import Dict, List, Optional, Any, TypedDict, Annotated, Tuple
 
 # Types for state managementor
 import json
@@ -22,8 +23,8 @@ from langchain_core.messages import HumanMessage, AIMessage
 # NEW: Import calculation tools
 from src.tools.calculation_tools import get_calculation_tools
 
-# PHASE 6: Import safety module
-from src.safety.guardrails import QueryAnalyzer, ResponseEnhancer
+# PHASE 10.5: Import new safety framework
+from src.safety import create_safety_classifier, get_template, get_disclaimer
 from src.safety.input_validator import InputValidator
 
 
@@ -46,6 +47,7 @@ class NakshatraState(TypedDict):
     cached: bool
     detected_language: str  # 'en', 'hi', 'ta', etc.
     original_query: str     # Keep original for final response
+    persona_type: str       # 'vedic' | 'western' (Phase 9)
     
     # Calculation results (for PREDICTION flow)
     chart_data: Optional[Dict]  # Birth chart
@@ -55,13 +57,20 @@ class NakshatraState(TypedDict):
     # RAG results
     knowledge_chunks: Optional[List]
     
-    # PHASE 6: Safety analysis
-    query_analysis: Optional[Dict]  # Sensitivity analysis from QueryAnalyzer
+    # PHASE 10.5: Advanced Safety Metadata
+    safety_result: Optional[Dict]     # Full SafetyCheckResult
+    disclaimer_type: Optional[str]    # For CONDITIONAL responses
+    is_reframed: bool                 # Track if query was transformed
     
     # Response
     answer: str
     error: Optional[str]
     processing_time: float
+    
+    # PHASE 10: Verification Loop
+    validation_attempts: int
+    validation_feedback: Optional[str]
+    is_safe: bool
     
     # messages: Annotated[List, operator.add]
 
@@ -102,9 +111,8 @@ class EnhancedLangGraphOrchestrator:
             self.intent_classifier.set_llm(self.fast_llm)
             print("[LANGGRAPH] Fast LLM connected to intent classifier")
         
-        # PHASE 6: Initialize safety components
-        self.query_analyzer = QueryAnalyzer()
-        self.response_enhancer = ResponseEnhancer()
+        # PHASE 10.5: Initialize new safety components
+        self.safety_classifier = create_safety_classifier(llm=self.fast_llm)
         self.input_validator = InputValidator()
         
         self.graph = self._build_graph()
@@ -126,6 +134,7 @@ class EnhancedLangGraphOrchestrator:
         workflow.add_node("handle_calculation_only", self._handle_calculation_only_node)
         workflow.add_node("handle_rag_with_calculation", self._handle_rag_with_calculation_node)
         workflow.add_node("handle_rag_only", self._handle_rag_only_node)
+        workflow.add_node("validate_response", self._validate_response_node)  # PHASE 10: Validation
         workflow.add_node("format_response", self._format_response_node)
         
         # Entry point
@@ -144,15 +153,21 @@ class EnhancedLangGraphOrchestrator:
                 "calculation_only": "handle_calculation_only",
                 "rag_with_calculation": "handle_rag_with_calculation",
                 "rag_only": "handle_rag_only",
+                "safety_block": "format_response",  # PHASE 10: Blocked requests go to format
                 "error": END
             }
         )
         
-        # All paths go to format_response
+        # RAG paths go to VALIDATION first
+        workflow.add_edge("handle_rag_with_calculation", "validate_response")
+        workflow.add_edge("handle_rag_only", "validate_response")
+        
+        # Validation goes to Format
+        workflow.add_edge("validate_response", "format_response")
+        
+        # Direct paths (Skip validation for now)
         workflow.add_edge("handle_chitchat", "format_response")
         workflow.add_edge("handle_calculation_only", "format_response")
-        workflow.add_edge("handle_rag_with_calculation", "format_response")
-        workflow.add_edge("handle_rag_only", "format_response")
         
         # End
         workflow.add_edge("format_response", END)
@@ -301,6 +316,38 @@ Code:"""
     def _classify_intent_node(self, state: NakshatraState) -> NakshatraState:
         """Node 2: Classify intent."""
         print(f"[INTENT] Classifying query: '{state['query'][:50]}...'")
+        
+        # PHASE 10.5: Multi-Gate Safety Check
+        # Check before ANY LLM classification
+        if self.safety_classifier:
+            safety_result = self.safety_classifier.classify(state['query'])
+            
+            # Store safety metadata
+            state['safety_result'] = safety_result.decision.model_dump()
+            state['disclaimer_type'] = safety_result.decision.disclaimer_type
+            state['is_reframed'] = False
+            
+            # 1. HARD / SOFT BLOCK: Refuse immediately
+            if safety_result.is_blocked:
+                print(f"[GUARD] 🚫 BLOCKING REQUEST: {safety_result.decision.category} ({safety_result.decision.reason})")
+                state['intent'] = 'safety_block'
+                state['answer'] = get_template(safety_result.get_template_key())
+                state['is_safe'] = False
+                state['confidence'] = safety_result.decision.confidence
+                return state
+                
+            # 2. REFRAME: Transform query and proceed
+            if safety_result.decision.category == "REFRAME":
+                print(f"[GUARD] 🔄 REFRAMING QUERY: {state['query']} -> {safety_result.processed_query}")
+                state['original_query'] = state['query']
+                state['query'] = safety_result.processed_query
+                state['is_reframed'] = True
+                # Continue process with better query
+                
+            # 3. CONDITIONAL: Mark for disclaimer (handled in format_response)
+            if safety_result.needs_disclaimer:
+                print(f"[GUARD] ⚠️ CONDITIONAL: Needs {safety_result.decision.disclaimer_type} disclaimer")
+                state['disclaimer_type'] = safety_result.decision.disclaimer_type
         
         result = self.intent_classifier.classify(
             query=state['query'],
@@ -676,6 +723,10 @@ I prefer to say "I don't know" rather than provide information not grounded in c
         except:
             system_prompt = "You are an expert Vedic astrologer explaining astrological concepts."
         
+        # PHASE 10: Inject Constitution
+        constitution = get_constitution_injection()
+        system_prompt = f"{system_prompt}\n\n{constitution}"
+        
         # Format knowledge context WITH SOURCE ATTRIBUTION
         context_parts = []
         for i, chunk in enumerate(knowledge_chunks[:4], 1):
@@ -756,20 +807,156 @@ RELEVANT KNOWLEDGE FROM CLASSICAL TEXTS:
         
         return prompt
     
+    def _verify_response_safety(self, query: str, answer: str, chart_data: Optional[Dict] = None) -> Tuple[bool, str]:
+        """
+        [CRITIC] Verify if the answer adheres to the Astrologer's Constitution.
+        Returns: (is_safe, feedback)
+        """
+        constitution = get_constitution_injection()
+        
+        data_context = ""
+        if chart_data:
+            # Format minimal chart data for checking
+            planets = chart_data.get('planets', {})
+            formatted_planets = ", ".join([f"{p}: {d.get('current_sign', 'Unknown')}" for p, d in planets.items()])
+            data_context = f"\nCALCULATED CHART DATA (TRUTH): {formatted_planets}\n"
+        
+        prompt = f"""You are the Guardian of the Astrologer's Constitution.
+Your job is to specificially check if the following AI response violates any Immutable Rules.
+
+THE CONSTITUTION:
+{constitution}
+{data_context}
+USER QUERY: "{query}"
+AI RESPONSE: "{answer}"
+
+TASK:
+1. Check for DEATH predictions (Violates Rule 2).
+2. Check for FATALISM (Violates Rule 2).
+3. Check for SYCOPHANCY (Agreeing with user against facts - Rule 3).
+4. Check for SCOPE violations (Medical/Financial advice - Rule 4).
+5. Check for HALLUCINATED PLACEMENTS. If Chart Data is provided above, ensure the response does NOT contradict it (e.g., saying Sun is in Aries when Data says Libra).
+
+OUTPUT FORMAT:
+Return ONLY "SAFE" if no violations found.
+Return "UNSAFE: <reason>" if violations found.
+"""
+        try:
+            # Use fast LLM if available, else main LLM
+            llm_to_use = self.fast_llm or self.llm
+            if not llm_to_use:
+                return True, "No LLM for validation"
+                
+            response = llm_to_use.invoke(prompt).content.strip() if hasattr(llm_to_use.invoke(prompt), 'content') else str(llm_to_use.invoke(prompt).content)
+            
+            if response.startswith("SAFE"):
+                return True, ""
+            else:
+                return False, response.replace("UNSAFE:", "").strip()
+                
+        except Exception as e:
+            print(f"[CRITIC] Validation failed: {e}")
+            return True, f"Validation error: {e}"  # Fail open to avoid blocking users on technical error
+            
+    def _validate_response_node(self, state: NakshatraState) -> NakshatraState:
+        """
+        Node 3.5: The Critic - Verification Loop.
+        Checks generated answer against safety constitution.
+        """
+        print("[CRITIC] Validating response safety...")
+        
+        # Skip validation for calculation-only or if already validated
+        if state.get('intent') == 'CALCULATION_ONLY' or state.get('is_safe', False) is True: 
+            return state
+
+        answer = state.get('answer', '')
+        query = state.get('query', '')
+        chart_data = state.get('chart_data')
+        
+        is_safe, feedback = self._verify_response_safety(query, answer, chart_data)
+        
+        state['is_safe'] = is_safe
+        state['validation_attempts'] += 1
+        
+        if not is_safe:
+            print(f"[CRITIC] ❌ Unsafe response detected: {feedback}")
+            state['validation_feedback'] = feedback
+            
+            # Simple Self-Correction (Rewrite)
+            # If this is the first failure, try to fix it.
+            if state['validation_attempts'] <= 1:
+                print("[CRITIC] Attempting to rewrite safely...")
+                constitution = get_constitution_injection()
+                rewrite_prompt = f"""The following response violated the Astrologer's Constitution.
+VIOLATION: {feedback}
+
+THE CONSTITUTION:
+{constitution}
+
+ORIGINAL QUERY: "{query}"
+UNSAFE RESPONSE: "{answer}"
+
+TASK: Rewrite the response to be strict, safe, and adhering to the Constitution. 
+Retain the astrological data but remove the violating content (e.g., remove death prediction, reframe fatalism, refuse medical advice).
+"""
+                try:
+                    state['answer'] = self._call_llm(state, rewrite_prompt)
+                    state['is_safe'] = True # Assume fixed (single loop for now)
+                    print("[CRITIC] ✅ Response rewritten.")
+                except Exception as e:
+                    state['error'] = f"Rewriting failed: {e}"
+                    state['answer'] = "I cannot answer this query due to safety guidelines."
+            else:
+                # If we failed twice, block it.
+                state['answer'] = "I must decline to answer this request as it violates my safety constitution regarding harmful or fatalistic predictions."
+        else:
+            print("[CRITIC] ✅ Response is SAFE.")
+            
+        return state
+
     def _format_response_node(self, state: NakshatraState) -> NakshatraState:
         """Node 4: Format final response."""
         
         if not state.get('error'):
-            intent = state.get('intent', 'UNKNOWN')
-            cache = "CACHED" if state.get('cached', False) else "LLM"
-            state['answer'] += f"\n\n[Intent: {intent}, {cache}]"
-        
+            final_response = state.get('answer', '')
+            
+            # PHASE 10.5: Disclaimer Injection
+            disclaimer_type = state.get('disclaimer_type')
+            if disclaimer_type:
+                disclaimer_text = get_disclaimer(disclaimer_type)
+                final_response = f"{final_response}\n\n{disclaimer_text}"
+                
+            # PHASE 10.5: Reframe Intro Injection
+            if state.get('is_reframed', False):
+                from src.safety.templates import format_reframe_response
+                reframe_intro = format_reframe_response(state.get('original_query', ''), state.get('query', ''))
+                final_response = f"{reframe_intro}{final_response}"
+            
+            state['answer'] = final_response
+            print("[FORMATTING] Formatted final response.")
+            
         return state
     
     # ========================================================================
     # HELPER METHODS
     # ========================================================================
     
+    def _detect_persona_preference(self, query: str) -> str:
+        """
+        Detect if user prefers Western or Vedic persona based on query.
+        Default is 'vedic'.
+        """
+        q = query.lower()
+        western_triggers = [
+            'western', 'tropical', 'psychological', 'archetype', 
+            'evolutionary', 'sun sign', 'rising sign'
+        ]
+        
+        if any(trigger in q for trigger in western_triggers):
+            return 'western'
+            
+        return 'vedic'
+
     def _user_wants_detail(self, query: str) -> bool:
         """
         Detect if user is asking for more detail/elaboration.
@@ -861,6 +1048,10 @@ RELEVANT KNOWLEDGE FROM CLASSICAL TEXTS:
             )
         except:
             system_prompt = "You are an expert Vedic astrologer explaining predictions."
+        
+        # PHASE 10: Inject Constitution
+        constitution = get_constitution_injection()
+        system_prompt = f"{system_prompt}\n\n{constitution}"
         
         # Map language code to descriptive name for LLM
         loc_manager = get_localization_manager()
@@ -972,6 +1163,8 @@ RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
             return "calculation_only"
         elif intent == "RAG_ONLY":
             return "rag_only"
+        elif intent == "safety_block":  # PHASE 10
+            return "safety_block"
         else:
             # Default: RAG_WITH_CALCULATION (most common)
             return "rag_with_calculation"
@@ -1008,8 +1201,20 @@ RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
             "answer": "",
             "error": None,
             "processing_time": 0.0,
-            "messages": []
+            "messages": [],
+            "persona_type": self._detect_persona_preference(query),
+            
+            # PHASE 10: Validation Init
+            "validation_attempts": 0,
+            "validation_feedback": None,
+            "is_safe": True,
+            
+            # PHASE 10.5: Advanced Safety
+            "safety_result": None,
+            "disclaimer_type": None,
+            "is_reframed": False
         }
+
         
         # Run through graph
         final_state = self.graph.invoke(initial_state)
@@ -1053,7 +1258,13 @@ RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
             "answer": "",
             "error": None,
             "processing_time": 0.0,
-            "messages": []
+            "messages": [],
+            "persona_type": self._detect_persona_preference(query),  # PHASE 9
+            
+            # PHASE 10: Validation Init
+            "validation_attempts": 0,
+            "validation_feedback": None,
+            "is_safe": True
         }
         
         # Run through graph (non-streaming for routing & preparation)
