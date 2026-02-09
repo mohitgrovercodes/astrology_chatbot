@@ -6,15 +6,22 @@ Production services for astrology data management.
 
 from .astrology_service import AstrologyDataService
 from .cache_manager import CacheManager, CacheConfig
-from .rag_context_formatter import RAGContextFormatter
-from .backend_data_adapter import BackendDataAdapter, BackendAstroData, process_backend_data_for_rag
+from .backend_data_adapter import (
+    BackendDataAdapter,
+    BackendAstroData,
+    RAGContextFormatter,
+    process_backend_data_for_rag
+)
 
 __all__ = [
+    # Backend services (for backend team)
     "AstrologyDataService",
     "CacheManager",
     "CacheConfig",
-    "RAGContextFormatter",
+    
+    # Chatbot services (for chatbot)
     "BackendDataAdapter",
     "BackendAstroData",
+    "RAGContextFormatter",
     "process_backend_data_for_rag",
 ]
