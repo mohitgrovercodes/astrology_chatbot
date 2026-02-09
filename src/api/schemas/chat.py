@@ -85,3 +85,37 @@ class ChatResponse(BaseModel):
                 "timestamp": "2026-02-02T14:00:00Z"
             }
         }
+
+# =============================================================================
+# INTEGRATION SCHEMAS (For Backend API)
+# =============================================================================
+
+class UserContext(BaseModel):
+    """User birth details from backend."""
+    birth_date: str = Field(..., example="1990-05-15")
+    birth_time: str = Field(..., example="14:30:00")
+    latitude: float = Field(..., example=28.6139)
+    longitude: float = Field(..., example=77.2090)
+    timezone: str = Field(default="Asia/Kolkata")
+    astrology_system: str = Field(default="vedic")
+
+
+class IntegrationChatRequest(BaseModel):
+    """Chat request matching backend format."""
+    message: str = Field(..., description="User query")
+    session_id: str = Field(..., description="Unique session ID")
+    user_context: UserContext
+
+
+class Source(BaseModel):
+    """Knowledge source attribution."""
+    content: str
+    metadata: Dict
+
+
+class IntegrationChatResponse(BaseModel):
+    """Chat response matching backend format."""
+    answer: str
+    sources: List[Source] = []
+    session_id: str
+    metadata: Dict = Field(default_factory=dict)

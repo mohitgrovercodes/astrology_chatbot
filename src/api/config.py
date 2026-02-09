@@ -7,7 +7,7 @@ Centralized configuration for the FastAPI application.
 
 from pydantic_settings import BaseSettings
 from pydantic import Field
-from typing import List
+from typing import List, Optional
 import os
 
 
@@ -26,6 +26,15 @@ class Settings(BaseSettings):
     API_KEY_HEADER: str = "X-API-Key"
     VALID_API_KEYS: str = ""  # Comma-separated string, parsed in __init__
     _parsed_api_keys: List[str] = []  # Internal parsed list
+    
+    # Security - Internal Service Authentication
+    INTERNAL_SERVICE_SECRET: str = Field(default="change-me", validation_alias="internal_service_secret")
+    
+    # Redis Session Management
+    REDIS_HOST: str = Field(default="localhost", validation_alias="redis_host")
+    REDIS_PORT: int = Field(default=6379, validation_alias="redis_port")
+    REDIS_PASSWORD: Optional[str] = Field(default=None, validation_alias="redis_password")
+    SESSION_EXPIRY_HOURS: int = 24
     
     # CORS
     ALLOWED_ORIGINS: List[str] = ["*"]  # Restrict in production
@@ -87,6 +96,15 @@ class Settings(BaseSettings):
     # Orchestrator
     ENABLE_CACHING: bool = True
     MAX_CONVERSATION_HISTORY: int = 10
+    
+    # Additional LLM Settings (for backward compatibility)
+    OLLAMA_BASE_URL: str = Field(default="http://localhost:11434", validation_alias="ollama_base_url")
+    FAST_LLM_PROVIDER: str = Field(default="openai", validation_alias="fast_llm_provider")
+    FAST_LLM_MODEL: str = Field(default="gpt-4o-mini", validation_alias="fast_llm_model")
+    
+    # Legacy Authentication (for backward compatibility)
+    ASTRO_USERNAME: str = Field(default="", validation_alias="astro_username")
+    ASTRO_PASSWORD: str = Field(default="", validation_alias="astro_password")
     
     class Config:
         env_file = ".env"

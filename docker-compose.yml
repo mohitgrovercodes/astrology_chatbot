@@ -17,6 +17,13 @@ services:
 
       # Security
       - VALID_API_KEYS=${VALID_API_KEYS}
+      - INTERNAL_SERVICE_SECRET=${INTERNAL_SERVICE_SECRET}
+
+      # Redis Session Management
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - SESSION_EXPIRY_HOURS=${SESSION_EXPIRY_HOURS:-24}
 
       # CORS
       - ALLOWED_ORIGINS=*
@@ -36,9 +43,16 @@ services:
       # LLM - OpenAI (Option 2)
       - OPENAI_API_KEY=${OPENAI_API_KEY}
 
-      # LLM Provider
-      - LLM_PROVIDER=${LLM_PROVIDER:-google}
-      - LLM_MODEL=${LLM_MODEL:-gemini-2.0-flash-exp}
+      # LLM Provider Configuration
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}
+      - FAST_LLM_PROVIDER=${FAST_LLM_PROVIDER:-openai}
+      - FAST_LLM_MODEL=${FAST_LLM_MODEL:-gpt-4o-mini}
+
+      # Orchestrator Settings
+      - ENABLE_CACHING=${ENABLE_CACHING:-true}
+      - MAX_CONVERSATION_HISTORY=${MAX_CONVERSATION_HISTORY:-10}
     volumes:
       - ./data:/app/data
       - ./credentials:/app/credentials # Mount Google credentials directory
@@ -49,6 +63,17 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - nakshatraai-network
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    container_name: nakshatraai-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
     networks:
       - nakshatraai-network
 

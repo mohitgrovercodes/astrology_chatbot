@@ -72,27 +72,39 @@ class CostTrackerCallback(BaseCallbackHandler):
                 return
 
             # Extract token usage from response
+            input_tokens = 0
+            output_tokens = 0
+            
             if response.llm_output and "token_usage" in response.llm_output:
                 usage = response.llm_output["token_usage"]
                 input_tokens = usage.get("prompt_tokens", 0)
                 output_tokens = usage.get("completion_tokens", 0)
             elif hasattr(response, "usage_metadata") and response.usage_metadata:
-                # Vertex AI / Google GenAI format variations
+                # Vertex AI / Google GenAI / Newer LangChain format
                 usage_meta = response.usage_metadata
                 
-                # Check for various attribute names (Vertex vs Standard)
                 if hasattr(usage_meta, "prompt_token_count"):
                     input_tokens = usage_meta.prompt_token_count
                     output_tokens = getattr(usage_meta, "candidates_token_count", 0) or getattr(usage_meta, "total_token_count", 0) - input_tokens
                 elif isinstance(usage_meta, dict):
-                    # Sometimes it comes as a dict
                     input_tokens = usage_meta.get("input_tokens") or usage_meta.get("prompt_token_count", 0)
                     output_tokens = usage_meta.get("output_tokens") or usage_meta.get("candidates_token_count", 0)
                 else:
-                    # Standard object attributes
                     input_tokens = getattr(usage_meta, "input_tokens", 0)
                     output_tokens = getattr(usage_meta, "output_tokens", 0)
-            else:
+            
+            # Ollama Specific Fallback: Sometimes info is in generation_info of the first generation
+            if input_tokens == 0 and output_tokens == 0 and response.generations:
+                try:
+                    first_gen_info = response.generations[0][0].generation_info
+                    if first_gen_info:
+                        input_tokens = first_gen_info.get("prompt_eval_count", 0)
+                        output_tokens = first_gen_info.get("eval_count", 0)
+                except (IndexError, AttributeError):
+                    pass
+
+            # Final check
+            if input_tokens == 0 and output_tokens == 0:
                 # No token usage info available
                 logger.warning(f"No token usage info in LLM response for {self.model}")
                 return

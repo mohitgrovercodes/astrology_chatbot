@@ -51,6 +51,8 @@ except ImportError:
     print("[WARN] ConversationStore not found. History will be in-memory only.")
     STORAGE_AVAILABLE = False
 
+from src.rag.memory_retriever import MemoryRetriever
+
 
 @dataclass
 class RAGResponse:
@@ -178,6 +180,13 @@ Always be respectful of the sacred nature of Vedic astrology."""
             print(f"[OK] Persona loaded: {self.persona_config.name}")
         else:
             print(f"[WARN] Using legacy system prompt (prompts module unavailable)")
+
+        # Initialize Long-Term Memory (Persistent ChromaDB)
+        self.memory_retriever = MemoryRetriever(
+            persist_directory=db_path,
+            collection_name="conversation_memories"
+        )
+        print("[OK] Long-term memory retriever initialized (conversation_memories)")
             self.persona_config = None
             self.persona_name = "legacy"
         
@@ -450,6 +459,15 @@ Always be respectful of the sacred nature of Vedic astrology."""
         final_hyde = use_hyde if use_hyde is not None else (intent == "conceptual")
         final_hybrid = use_hybrid if use_hybrid is not None else (intent == "keyword")
         
+        # Phase 5: Retrieve Long-Term Memories (semantic search over old sessions)
+        long_term_memory = ""
+        if user_profile and user_profile.get('user_id'):
+            user_id = user_profile['user_id']
+            memories = self.memory_retriever.retrieve_memories(user_id, query, k=2)
+            if memories:
+                print(f"[MEMORY] Found {len(memories)} relevant past interactions")
+                long_term_memory = "\n".join([f"- {m['content']}" for m in memories])
+
         # Log strategy decision
         strategy_name = "Custom Override"
         if use_hyde is None and use_hybrid is None:
@@ -494,8 +512,8 @@ Always be respectful of the sacred nature of Vedic astrology."""
             chunks = self.retriever.expand_context(chunks, max_related=2)
             print(f"[CONTEXT] Expanded to {len(chunks)} chunks")
         
-        # Build prompt
-        prompt = self._build_prompt(query, chunks, conversation_history, user_profile)
+        # Build prompt (inject long-term memory here)
+        prompt = self._build_prompt(query, chunks, conversation_history, user_profile, long_term_memory=long_term_memory)
         
         # Generate answer
         print(f"[GENERATION] Generating answer...")
@@ -530,7 +548,8 @@ Always be respectful of the sacred nature of Vedic astrology."""
         query: str,
         chunks: List[RetrievedChunk],
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        user_profile: Optional[Dict[str, Any]] = None, # Added Profile
+        user_profile: Optional[Dict[str, Any]] = None,
+        long_term_memory: str = "" # Added field
     ):
         """
         Build prompt for LLM using templates.
@@ -547,6 +566,10 @@ Always be respectful of the sacred nature of Vedic astrology."""
         if PROMPTS_AVAILABLE and self.persona_config:
             # Format context from retrieved chunks
             context = format_context_from_chunks(chunks)
+            
+            # Inject long-term memory into context if present
+            if long_term_memory:
+                context = f"--- LONG-TERM MEMORIES (FROM PAST SESSIONS) ---\n{long_term_memory}\n\n{context}"
             
             # Format conversation history (keep last 10 turns)
             chat_history = []

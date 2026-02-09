@@ -24,6 +24,7 @@ class UserProfile:
     timezone: Optional[str] = None
     preferred_system: str = "vedic"
     language: str = "hi-lat"
+    birth_chart_cache: Optional[str] = None
     created_at: Optional[datetime] = None
     last_active: Optional[datetime] = None
     
@@ -40,10 +41,18 @@ class UserProfile:
         """Convert to dictionary."""
         data = asdict(self)
         # Convert datetime to string for JSON serialization
+        # Defensive check: if already a string (from SQLite), don't call .isoformat()
         if self.created_at:
-            data['created_at'] = self.created_at.isoformat()
+            if hasattr(self.created_at, 'isoformat'):
+                data['created_at'] = self.created_at.isoformat()
+            else:
+                data['created_at'] = str(self.created_at)
+                
         if self.last_active:
-            data['last_active'] = self.last_active.isoformat()
+            if hasattr(self.last_active, 'isoformat'):
+                data['last_active'] = self.last_active.isoformat()
+            else:
+                data['last_active'] = str(self.last_active)
         return data
 
 
@@ -191,51 +200,33 @@ class UserManager:
         Initialize user manager.
         """
         self.use_sqlite = use_sqlite
-        self.sqlite = None
+        self.db = None
         
         if self.use_sqlite:
-            try:
-                from src.db.sqlite_client import SQLiteClient
-                self.sqlite = SQLiteClient()
-                print("[USER] Connected to SQLite Database")
-                
-                # Check migration
-                self._check_migration()
-                
-            except ImportError as e:
-                print(f"[USER] SQLite import failed: {e}, falling back to dummy data")
-                self.use_sqlite = False
-                self.users_db = self.DUMMY_USERS
-            except Exception as e:
-                print(f"[USER] SQLite connection failed: {e}, using dummy data")
-                self.use_sqlite = False
-                self.users_db = self.DUMMY_USERS
+            # Use dummy database (in-memory) instead of SQLite
+            from src.db.dummy_user_db import DummyUserDB
+            self.db = DummyUserDB()
+            print("[USER] Using in-memory dummy user database")
         else:
-            self.users_db = self.DUMMY_USERS
-            print("[USER] Using dummy user database")
+            # Fallback to dummy database
+            from src.db.dummy_user_db import DummyUserDB
+            self.db = DummyUserDB()
+            print("[USER] Using in-memory dummy user database")
 
     def _check_migration(self):
-        """Migrate dummy users if not exists."""
-        for user_id, data in self.DUMMY_USERS.items():
-            if not self.sqlite.user_exists(user_id):
-                print(f"[MIGRATION] Porting {user_id} to SQLite...")
-                # Flatten potential nested data if coming from dummy
-                # (DUMMY_USERS is largely flat except timestamps)
-                self.create_user(data)
+        """No migration needed with in-memory database."""
+        pass
 
     def get_user_profile(self, user_id: str) -> Optional[UserProfile]:
         """
         Load user profile from database. 
         """
         raw_data = None
-        if self.use_sqlite and self.sqlite:
-            try:
-                raw_data = self.sqlite.get_user(user_id)
-            except Exception as e:
-                print(f"[USER] Error loading profile: {e}")
-                return None
-        else:
-            raw_data = self.users_db.get(user_id)
+        if self.db:
+            raw_data = self.db.get_user(user_id)
+        
+        if not raw_data:
+            return None
 
         if not raw_data:
             return None
@@ -331,10 +322,8 @@ class UserManager:
              flat_data['system'] = user_data.get("preferred_system", "vedic")
              flat_data['language'] = user_data.get("language", "hi-lat")
 
-        if self.use_sqlite and self.sqlite:
-            self.sqlite.upsert_user(flat_data)
-        else:
-            self.users_db[user_id] = flat_data
+        if self.db:
+            self.db.upsert_user(flat_data)
             
         return self.get_user(user_id)
 
@@ -365,46 +354,34 @@ class UserManager:
             if 'astrology_system' in pref: flat_update['system'] = pref['astrology_system']
             if 'language' in pref: flat_update['language'] = pref['language']
 
-        if self.use_sqlite and self.sqlite:
-            self.sqlite.upsert_user(flat_update) # Upsert handles partial updates via merge logic on app side usually, but upsert_user here replaces fields. 
-            # Ideally execute update query. For now relying on upsert constraints or just careful calls.
-            # Actually our upsert_user is an INSERT OR REPLACE logic or ON CONFLICT UPDATE.
-            # So we only need to pass changed fields + user_id? 
-            # Wait, upsert overwrites. We need to preserve old data if not passed.
-            # Simplified: Since we don't have partial update SQL, let's rely on the fact we usually get full profile from UI form.
-            # Or better, just implement a smart upsert in client.
-            # For now:
-            self.sqlite.upsert_user(flat_update) 
-        else:
-            # Dummy update (simplified)
-            pass
+        if self.db:
+            self.db.upsert_user(flat_update)
+        
+        return self.get_user(user_id)
             
         return self.get_user(user_id)
 
     def update_last_active(self, user_id: str):
         """Update user's last active timestamp."""
-        if self.use_sqlite and self.sqlite:
-            self.sqlite.update_last_active(user_id)
-        else:
-            if user_id in self.users_db: self.users_db[user_id]['last_active'] = datetime.now()
+        if self.db:
+            self.db.update_last_active(user_id)
 
     def user_exists(self, user_id: str) -> bool:
         """Check if user exists."""
-        if self.use_sqlite and self.sqlite:
-            return self.sqlite.user_exists(user_id)
-        else:
-            return user_id in self.users_db
+        if self.db:
+            return self.db.user_exists(user_id)
+        return False
             
     # Conversation History Methods
     def add_message(self, user_id: str, role: str, content: str, intent: str = None):
         """Save a message to history."""
-        if self.use_sqlite and self.sqlite:
-            self.sqlite.add_message(user_id, role, content, intent)
+        if self.db:
+            self.db.add_message(user_id, role, content, intent)
             
     def get_history(self, user_id: str, limit: int = 10) -> List[Dict]:
         """Get recent chat history."""
-        if self.use_sqlite and self.sqlite:
-            return self.sqlite.get_conversation_history(user_id, limit)
+        if self.db:
+            return self.db.get_conversation_history(user_id, limit)
         return []
 
 

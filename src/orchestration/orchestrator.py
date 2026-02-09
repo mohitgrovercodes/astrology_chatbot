@@ -21,13 +21,17 @@ from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, AIMessage
 
 # NEW: Import calculation tools
-from src.tools.calculation_tools import get_calculation_tools
+from src.tools.calculation_tools import get_calculation_tools, format_chart_for_llm
 
 # PHASE 10.5: Import new safety framework
 from src.safety import create_safety_classifier, get_template, get_disclaimer
 from src.safety.input_validator import InputValidator
 # PHASE 11: Semantic Routing
 from src.routing import SemanticRouter
+
+# PERSISTENCE & CACHING
+from src.engines.vedic.vedic_engine import VedicEngine, VedicChart
+import json
 
 
 class NakshatraState(TypedDict):
@@ -196,6 +200,12 @@ class EnhancedLangGraphOrchestrator:
     
     def _authenticate_node(self, state: NakshatraState) -> NakshatraState:
         """Node 1: Authenticate user."""
+        # Check if profile is already provided (e.g., from external context)
+        if state.get('user_profile'):
+            print(f"[AUTH] Using provided user profile for: {state['user_id']}")
+            state['authenticated'] = True
+            return state
+            
         print(f"[AUTH] Authenticating user: {state['user_id']}")
         
         # Check if user exists
@@ -467,6 +477,72 @@ Response:"""
             
         return state
     
+    def _get_or_calculate_chart(self, user_id: str, user_profile: Dict) -> Tuple[Optional[Dict], Optional[VedicChart]]:
+        """
+        Helper to get chart data, prioritizing the cache.
+        Returns (tool_dict, full_chart_object).
+        """
+        cached_json = user_profile.get('birth_chart_cache')
+        
+        if cached_json:
+            try:
+                print(f"[CACHE] Found cached chart for {user_id}. Deserializing...")
+                chart_data_dict = json.loads(cached_json)
+                # Reconstruct the full VedicChart object for deeper calculations if needed
+                full_chart = VedicChart.from_dict(chart_data_dict)
+                
+                # We also need the tool-compatible dict formatting for the LLM
+                # (The tool 'calculate_vedic_birth_chart' provides this formatting)
+                # For now, we'll re-calculate the tool-dict from the full_chart to ensure consistency
+                from src.tools.calculation_tools import calculate_vedic_birth_chart
+                # Mock the tool logic to get the formatted dict from existing chart
+                # Actually, simpler: have a helper in calculation_tools to format a chart
+                return None, full_chart # We'll let the node handle the dict conversion
+            except Exception as e:
+                print(f"[CACHE] [WARN] Failed to load cached chart: {e}")
+        
+        # No cache or error: Calculate fresh
+        print(f"[CACHE] No cache found. Calculating fresh chart for {user_id}...")
+        try:
+            # Standardize field names (UserProfile uses date_of_birth)
+            dob = user_profile.get('date_of_birth')
+            tob = user_profile.get('time_of_birth', '12:00:00')
+            lat = user_profile.get('latitude')
+            lon = user_profile.get('longitude')
+            tz = user_profile.get('timezone', 'Asia/Kolkata')
+            
+            if not dob or lat is None or lon is None:
+                print(f"[CACHE] [WARN] Missing birth data for {user_id}: dob={dob}, lat={lat}, lon={lon}")
+                return None, None
+                
+            # Combine date and time
+            try:
+                dt_str = f"{dob} {tob}"
+                birth_datetime = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                # Fallback if only date is provided or format is slightly different
+                birth_datetime = datetime.fromisoformat(dob) if isinstance(dob, str) else dob
+            
+            # We use the VedicEngine directly to get the full object
+            engine = VedicEngine()
+            full_chart = engine.generate_chart(
+                birth_date=birth_datetime,
+                latitude=lat,
+                longitude=lon,
+                timezone_str=tz
+            )
+            
+            # Save to cache if sqlite is available
+            if self.user_manager.use_sqlite and self.user_manager.sqlite:
+                chart_json = json.dumps(full_chart.to_dict())
+                self.user_manager.sqlite.update_user_chart(user_id, chart_json)
+                print(f"[CACHE] Chart saved to SQLite for {user_id}")
+            
+            return None, full_chart
+        except Exception as e:
+            print(f"[CACHE] [ERROR] Fresh calculation failed: {e}")
+            return None, None
+
     def _handle_calculation_only_node(self, state: NakshatraState) -> NakshatraState:
         """
         Node 3b: CALCULATION_ONLY - Return raw chart data without interpretation.
@@ -482,22 +558,15 @@ Response:"""
             return state
         
         try:
-            # Calculate birth chart
-            print("[CALCULATION_ONLY] Calling VedicEngine...")
-            chart_tool = self.calculation_tools['vedic_birth_chart']
-            chart_data = chart_tool.invoke({
-                "date_of_birth": user_profile.get('date_of_birth'),
-                "time_of_birth": user_profile.get('time_of_birth'),
-                "latitude": user_profile.get('latitude'),
-                "longitude": user_profile.get('longitude'),
-                "timezone": user_profile.get('timezone', 'Asia/Kolkata')
-            })
+            # Calculate or load from cache
+            _, full_chart = self._get_or_calculate_chart(state['user_id'], user_profile)
             
-            # Check for errors
-            if "error" in chart_data:
-                state['answer'] = f"Error calculating chart: {chart_data['error']}"
-                state['error'] = chart_data['error']
+            if not full_chart:
+                state['answer'] = "Could not generate or load your birth chart. Please check your birth details."
                 return state
+            
+            # Use formatting helper (unified with the tool)
+            chart_data = format_chart_for_llm(full_chart)
             
             print(f"[CALCULATION_ONLY] Chart: Lagna={chart_data['lagna']}, Rashi={chart_data['moon_sign']}")
             
@@ -578,19 +647,13 @@ Provide a concise answer:"""
                 
                 if not state.get('chart_data'):
                     try:
-                        # Calculate birth chart
-                        chart_tool = self.calculation_tools['vedic_birth_chart']
-                        chart_data = chart_tool.invoke({
-                            "date_of_birth": user_profile.get('date_of_birth'),
-                            "time_of_birth": user_profile.get('time_of_birth'),
-                            "latitude": user_profile.get('latitude'),
-                            "longitude": user_profile.get('longitude'),
-                            "timezone": user_profile.get('timezone', 'Asia/Kolkata')
-                        })
+                        # Calculate or load from cache
+                        _, full_chart = self._get_or_calculate_chart(state['user_id'], user_profile)
                         
-                        if "error" not in chart_data:
-                            state['chart_data'] = chart_data
-                            print(f"[RAG_WITH_CALCULATION] Chart: Lagna={chart_data['lagna']}, Rashi={chart_data['moon_sign']}")
+                        if full_chart:
+                            # Use formatting helper
+                            state['chart_data'] = format_chart_for_llm(full_chart)
+                            print(f"[RAG_WITH_CALCULATION] Chart: Lagna={state['chart_data']['lagna']}, Rashi={state['chart_data']['moon_sign']}")
                         
                         # Calculate current dasha
                         dasha_tool = self.calculation_tools['current_dasha']
@@ -1248,7 +1311,8 @@ RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
         self,
         query: str,
         user_id: str,
-        conversation_history: Optional[List[Dict]] = None
+        conversation_history: Optional[List[Dict]] = None,
+        user_profile_override: Optional[Dict] = None
     ) -> Dict:
         """Process query through enhanced orchestrator."""
         start_time = datetime.now()
@@ -1257,8 +1321,8 @@ RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
             "query": query,
             "user_id": user_id,
             "conversation_history": conversation_history or [],
-            "user_profile": None,
-            "authenticated": False,
+            "user_profile": user_profile_override,
+            "authenticated": user_profile_override is not None,
             "intent": None,
             "confidence": 0.0,
             "intent_reasoning": "",

@@ -48,5 +48,25 @@ async def verify_api_key(x_api_key: Optional[str] = Header(None)) -> str:
     return x_api_key
 
 
+async def verify_internal_service(x_internal_service: Optional[str] = Header(None)) -> bool:
+    """
+    Verify the Internal Service shared secret.
+    """
+    if not x_internal_service:
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: Internal Service Authentication Required"
+        )
+        
+    if x_internal_service != settings.INTERNAL_SERVICE_SECRET:
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: Invalid Internal Service Secret"
+        )
+        
+    return True
+
+
 # Dependency for protected routes
 APIKeyDep = Depends(verify_api_key)
+InternalServiceDep = Depends(verify_internal_service)

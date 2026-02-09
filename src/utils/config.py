@@ -30,6 +30,7 @@ class LLMConfig(BaseSettings):
     """LLM configuration from YAML."""
     default_provider: str
     default_model: str
+    fast_model: Optional[str] = None
     temperature: float = 0.3
     max_tokens: int = 2048
     providers: Dict[str, LLMProviderConfig]
@@ -40,7 +41,7 @@ class LLMConfig(BaseSettings):
     @classmethod
     def validate_provider(cls, v: str) -> str:
         """Validate provider is one of the supported ones."""
-        valid_providers = ['openai', 'google', 'xai', 'anthropic']
+        valid_providers = ['openai', 'google', 'ollama']
         if v not in valid_providers:
             raise ValueError(f"Provider must be one of {valid_providers}, got: {v}")
         return v
@@ -124,12 +125,18 @@ class EnvConfig(BaseSettings):
     # LLM Provider API Keys
     openai_api_key: Optional[str] = None
     google_api_key: Optional[str] = None
-    xai_api_key: Optional[str] = None
-    anthropic_api_key: Optional[str] = None
     
     # Default LLM Configuration (can override YAML)
-    default_llm_provider: Optional[str] = None
-    default_llm_model: Optional[str] = None
+    # Support both LLM_PROVIDER (standard) and DEFAULT_LLM_PROVIDER (legacy)
+    default_llm_provider: Optional[str] = Field(None, validation_alias="LLM_PROVIDER")
+    default_llm_model: Optional[str] = Field(None, validation_alias="LLM_MODEL")
+    
+    # Fast LLM Configuration (classification, language detection, etc.)
+    fast_llm_provider: Optional[str] = Field(None, validation_alias="FAST_LLM_PROVIDER")
+    fast_llm_model: Optional[str] = Field(None, validation_alias="FAST_LLM_MODEL")
+    
+    # Ollama Settings
+    ollama_base_url: str = Field("http://localhost:11434", validation_alias="OLLAMA_BASE_URL")
     
     # Embeddings Configuration (can override YAML)
     openai_embedding_model: str = "text-embedding-3-large"
@@ -242,6 +249,12 @@ class AppConfig:
         
         if self.env.default_llm_model:
             self.llm.default_model = self.env.default_llm_model
+
+        # Override Fast LLM if set in env
+        if self.env.fast_llm_provider:
+             # We can store this in a new field in llm config if we want to be clean
+             # For now, let's just make it available via env
+             pass
         
         # Override embeddings if set in env
         if self.env.openai_embedding_model:
@@ -259,7 +272,7 @@ class AppConfig:
         Get API key for a specific provider.
         
         Args:
-            provider: Provider name (openai, google, xai, anthropic)
+            provider: Provider name (openai, google, ollama)
             
         Returns:
             API key string or None if not set
@@ -272,8 +285,7 @@ class AppConfig:
         key_map = {
             'openai': self.env.openai_api_key,
             'google': self.env.google_api_key,
-            'xai': self.env.xai_api_key,
-            'anthropic': self.env.anthropic_api_key,
+            'ollama': 'no-key-required'
         }
         
         if provider not in key_map:
@@ -305,8 +317,10 @@ class AppConfig:
             List of provider names with valid API keys
         """
         available = []
-        for provider in ['openai', 'google', 'xai', 'anthropic']:
-            if self.validate_provider_setup(provider):
+        for provider in ['openai', 'google', 'ollama']:
+            if provider == 'ollama':
+                available.append(provider)
+            elif self.validate_provider_setup(provider):
                 available.append(provider)
         return available
     
@@ -347,8 +361,6 @@ class AppConfig:
             "api_keys": {
                 "openai": mask_api_key(self.env.openai_api_key),
                 "google": mask_api_key(self.env.google_api_key),
-                "xai": mask_api_key(self.env.xai_api_key),
-                "anthropic": mask_api_key(self.env.anthropic_api_key),
             },
             "chroma_persist_dir": self.env.chroma_persist_dir,
             "log_level": self.logging.level,
@@ -410,12 +422,13 @@ def validate_config() -> None:
             "Please set it in your .env file."
         )
     
-    # Check that default provider has API key
+    # Check that default provider has API key (Ollama is local/keyless)
     default_provider = config.llm.default_provider
-    if not config.validate_provider_setup(default_provider):
+    if default_provider != 'ollama' and not config.validate_provider_setup(default_provider):
         raise ValueError(
             f"Default LLM provider '{default_provider}' is not configured. "
-            f"Please set {default_provider.upper()}_API_KEY in your .env file."
+            f"Please set {default_provider.upper()}_API_KEY in your .env file, "
+            f"or switch to 'ollama' by setting LLM_PROVIDER=ollama."
         )
     
     # Check that ChromaDB directory exists or can be created

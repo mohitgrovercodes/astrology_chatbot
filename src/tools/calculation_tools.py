@@ -134,6 +134,8 @@ def calculate_vedic_birth_chart(
         
         return result
         
+        return result
+        
     except Exception as e:
         return {
             "error": str(e),
@@ -141,6 +143,70 @@ def calculate_vedic_birth_chart(
             "moon_sign": "Error",
             "sun_sign": "Error"
         }
+
+def format_chart_for_llm(chart: VedicEngine) -> Dict[str, Any]:
+    """Helper to format a VedicChart object into the dictionary the LLM expects."""
+    from src.engines.vedic.vedic_constants import RASHI_SANSKRIT_NAMES, NAKSHATRA_NAMES
+    
+    return {
+        "lagna": chart.lagna.rashi_name,
+        "lagna_degree": f"{chart.lagna.rashi_name} {chart.lagna.degree}°{chart.lagna.minute}'",
+        "moon_sign": chart.rashi_name,
+        "sun_sign": RASHI_SANSKRIT_NAMES[chart.sun_sign.value],
+        "moon_nakshatra": NAKSHATRA_NAMES[chart.moon_nakshatra.value],
+        "planets": {
+            "Sun": {
+                "rashi": RASHI_SANSKRIT_NAMES[chart.get_planet_rashi(CelestialBody.SUN).value],
+                "nakshatra": NAKSHATRA_NAMES[chart.get_planet_nakshatra(CelestialBody.SUN).value],
+                "house": chart.get_planet_house(CelestialBody.SUN)
+            },
+            "Moon": {
+                "rashi": RASHI_SANSKRIT_NAMES[chart.get_planet_rashi(CelestialBody.MOON).value],
+                "nakshatra": NAKSHATRA_NAMES[chart.get_planet_nakshatra(CelestialBody.MOON).value],
+                "house": chart.get_planet_house(CelestialBody.MOON)
+            },
+            "Mars": {
+                "rashi": RASHI_SANSKRIT_NAMES[chart.get_planet_rashi(CelestialBody.MARS).value],
+                "house": chart.get_planet_house(CelestialBody.MARS)
+            },
+            "Mercury": {
+                "rashi": RASHI_SANSKRIT_NAMES[chart.get_planet_rashi(CelestialBody.MERCURY).value],
+                "house": chart.get_planet_house(CelestialBody.MERCURY)
+            },
+            "Jupiter": {
+                "rashi": RASHI_SANSKRIT_NAMES[chart.get_planet_rashi(CelestialBody.JUPITER).value],
+                "house": chart.get_planet_house(CelestialBody.JUPITER)
+            },
+            "Venus": {
+                "rashi": RASHI_SANSKRIT_NAMES[chart.get_planet_rashi(CelestialBody.VENUS).value],
+                "house": chart.get_planet_house(CelestialBody.VENUS)
+            },
+            "Saturn": {
+                "rashi": RASHI_SANSKRIT_NAMES[chart.get_planet_rashi(CelestialBody.SATURN).value],
+                "house": chart.get_planet_house(CelestialBody.SATURN)
+            },
+            "Rahu": {
+                "rashi": RASHI_SANSKRIT_NAMES[chart.get_planet_rashi(CelestialBody.RAHU).value],
+                "house": chart.get_planet_house(CelestialBody.RAHU)
+            },
+            "Ketu": {
+                "rashi": RASHI_SANSKRIT_NAMES[chart.get_planet_rashi(CelestialBody.KETU).value],
+                "house": chart.get_planet_house(CelestialBody.KETU)
+            }
+        },
+        "houses": {
+            f"House_{i}": chart.house_cusps.cusps[i-1] if i <= len(chart.house_cusps.cusps) else 0.0
+            for i in range(1, 13)
+        },
+        "birth_info": {
+            "date": chart.birth_data.date.strftime("%Y-%m-%d"),
+            "time": chart.birth_data.date.strftime("%H:%M:%S"),
+            "latitude": chart.birth_data.latitude,
+            "longitude": chart.birth_data.longitude,
+            "timezone": chart.birth_data.timezone_str,
+            "ayanamsa": "Lahiri"
+        }
+    }
 
 
 # =============================================================================

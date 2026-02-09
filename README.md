@@ -4,16 +4,15 @@
 > Combining deterministic astronomical calculations with LLM-powered interpretations.
 
 [![Status](https://img.shields.io/badge/status-active-brightgreen)]()
-[![Progress](https://img.shields.io/badge/progress-Phase%2011%20Complete-blue)]()
+[![Progress](https://img.shields.io/badge/progress-Phase%2012%20Complete-blue)]()
 
 ---
 
 ## 🚀 Quick Links
 
 - **[Project Status & Roadmap](docs/project_status_master.md)** - detailed progress report.
-- **[Handoff Document](docs/handoff_feb06_2026.md)** - for developers picking up the project.
+- **[API Reference](docs/API_REFERENCE.md)** - detailed API documentation & integration guide.
 - **[Architecture](docs/ARCHITECTURE.md)** - system design overview.
-- **[API Documentation](docs/API_README.md)** - API references.
 
 ---
 
@@ -21,6 +20,9 @@
 
 An expert-level **Astrology AI Chatbot** designed for integration into mobile applications. The system features:
 
+- **Backend Integration Ready**: Specialized `/chat` endpoint with Redis-based session management.
+- **24h Session Persistence**: Maintains conversation context for up to 20 messages.
+- **Internal Service Auth**: Secured via high-security shared secret headers.
 - **Semantic AI Routing**: Uses embeddings to understand intent (no fragile regex).
 - **Dual-Engine Calculations**: Vedic (Parasara) + Western (Tropical).
 - **RAG Pipeline**: Grounded in classical texts (BPHS, etc.) to prevent hallucinations.

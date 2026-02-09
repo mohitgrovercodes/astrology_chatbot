@@ -23,27 +23,17 @@ pydantic-settings>=2.1.0,<3.0.0
 langchain>=0.3.0,<0.4.0
 langchain-core>=0.3.0,<0.4.0
 langchain-community>=0.3.0,<0.4.0
-langchain-google-genai>=2.0.0,<3.0.0
 langchain-chroma>=0.2.0,<0.3.0
 langgraph>=0.2.0,<0.3.0
 langchain-openai>=0.2.0,<0.3.0
+langchain-ollama>=0.2.0,<0.3.0
 
 # ----------------------------------------------------------------------------
 # OPENAI (For Embeddings in RAG Pipeline)
 # ----------------------------------------------------------------------------
 openai>=1.50.0,<2.0.0
 
-# ----------------------------------------------------------------------------
-# GEMINI SDK (Vision + Text)
-# ----------------------------------------------------------------------------
-google-generativeai>=0.8.3,<0.9.0
 
-# ----------------------------------------------------------------------------
-# VERTEX AI (For GCP Credits - Production)
-# ----------------------------------------------------------------------------
-langchain-google-vertexai>=2.0.0,<3.0.0
-google-cloud-aiplatform>=1.97.0,<2.0.0
-google-auth>=2.23.0,<3.0.0  # For service account authentication
 
 # ----------------------------------------------------------------------------
 # VECTOR DATABASE
@@ -79,6 +69,7 @@ sentence-transformers>=2.2.0  # For local cross-encoder
 # DATABASE (MongoDB for User Management)
 # ----------------------------------------------------------------------------
 pymongo>=4.6.0,<5.0.0  # MongoDB driver for user authentication
+redis>=5.0.0,<6.0.0     # Redis client for session management
 
 # ----------------------------------------------------------------------------
 # MULTI-LLM SUPPORT (Optional Alternative Providers)

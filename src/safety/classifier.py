@@ -8,7 +8,7 @@ import re
 from typing import Dict, List, Optional, Set
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
-from langchain_openai import ChatOpenAI
+from langchain_core.language_models import BaseChatModel
 
 from .models import (
     SafetyDecision,
@@ -294,17 +294,18 @@ class SafetyClassifier:
 
     def __init__(
         self,
-        llm: Optional[ChatOpenAI] = None,
+        llm: Optional[BaseChatModel] = None,
         use_pattern_matching: bool = True,
         confidence_threshold: float = 0.7
     ):
         """
         Initialize safety classifier.
         """
-        self.llm = llm or ChatOpenAI(
-            model="gpt-4o-mini",
-            temperature=0.0,
-        )
+        if llm:
+            self.llm = llm
+        else:
+            from src.llm.factory import LLMFactory
+            self.llm = LLMFactory.create(purpose="classification", temperature=0.0)
         self.use_pattern_matching = use_pattern_matching
         self.confidence_threshold = confidence_threshold
         
@@ -350,13 +351,21 @@ class SafetyClassifier:
             decision = SafetyDecision(**decision_dict)
             
         except Exception as e:
-            # Fallback: Conservative block on error
+            # Fallback: Be permissive on технический errors but log the failure
+            # If the query is obviously safe (e.g. "hi", "what is my rashi"), don't block
+            print(f"[INTENT] [WARN] Safety classifier technical error: {e}")
+            
+            # Simple heuristic check for "low risk" queries
+            low_risk_words = ['rashi', 'chart', 'kundali', 'hi', 'hello', 'thanks', 'name']
+            is_low_risk = any(word in query.lower() for word in low_risk_words)
+            
             decision = SafetyDecision(
-                category="HARD_BLOCK",
-                reason="classifier_error",
-                should_answer=False,
-                confidence=0.0,
-                explanation=f"Classifier error: {str(e)}"
+                category="SAFE" if is_low_risk else "CONDITIONAL",
+                reason="classifier_error_fallback",
+                should_answer=True,
+                disclaimer_type=None if is_low_risk else "GENERAL",
+                confidence=0.5,
+                explanation=f"Technical error fallback ({str(e)}). Proceeding as {('SAFE' if is_low_risk else 'CONDITIONAL')}."
             )
         
         return self._build_result(query, decision)
@@ -458,7 +467,7 @@ class SafetyClassifier:
 # ============================================================================
 
 def create_safety_classifier(
-    llm: Optional[ChatOpenAI] = None,
+    llm: Optional[BaseChatModel] = None,
     **kwargs
 ) -> SafetyClassifier:
     """

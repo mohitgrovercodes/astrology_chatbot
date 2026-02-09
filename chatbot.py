@@ -9,7 +9,6 @@ warnings.filterwarnings('ignore', category=FutureWarning, module='langchain_goog
 
 import os
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
 
@@ -23,14 +22,20 @@ from src.ai.hybrid_retriever import HybridRetriever
 from src.ai.prompt_builder import PromptBuilder
 from src.orchestration.orchestrator import create_enhanced_orchestrator
 from src.tools.calculation_tools import CALCULATION_TOOLS
+import argparse
 
 
 def main():
-    """Main chatbot loop."""
     print("=" * 60)
-    print("🌟 NakshatraAI - Professional Astrology Consultant (V2)")
+    print("NakshatraAI - Professional Astrology Consultant (V2)")
     print("=" * 60)
     print()
+    
+    # Parse CLI Arguments
+    parser = argparse.ArgumentParser(description="NakshatraAI Chatbot")
+    parser.add_argument("--provider", type=str, help="LLM Provider (google, openai, ollama)")
+    parser.add_argument("--model", type=str, help="LLM Model name")
+    args = parser.parse_args()
     
     # Initialize components
     print("Initializing NakshatraAI V2...")
@@ -39,21 +44,39 @@ def main():
     mongodb_uri = os.getenv('MONGODB_URI')
     user_manager = get_user_manager(mongodb_uri)
     
-    # 2. LLM Setup - Single model for reliability with streaming
-    # Using gemini-2.5-flash for both classification and responses
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        temperature=0.3,
-        streaming=True  # Enable streaming for real-time responses
+    # 2. LLM Setup - Centralized Factory
+    # Supports switching via CLI args or LLM_PROVIDER env var
+    from src.llm.factory import LLMFactory
+    
+    provider_override = args.provider
+    model_override = args.model
+    
+    # Quality LLM for final responses
+    llm = LLMFactory.create(
+        provider=provider_override,
+        model=model_override,
+        purpose="general", 
+        streaming=True
     )
-    print("✓ LLM: Gemini 2.5 Flash (streaming enabled)")
+    
+    # Fast LLM for classification and intent routing
+    # This prevents OOM errors by using a smaller model for simple logic
+    fast_llm = LLMFactory.create(
+        purpose="classification"
+    )
+    
+    # Get actual config used (in case of defaults)
+    active_provider = provider_override or os.getenv("LLM_PROVIDER", "google")
+    print(f"[OK] Quality LLM: {active_provider}")
+    if model_override:
+        print(f"[OK] Quality Model: {model_override}")
     
     # 3. Embeddings (MUST MATCH the model used during ingestion!)
     embeddings = OpenAIEmbeddings(
         model="text-embedding-3-large",
         dimensions=3072  # Reduce from 3072 to match collection
     )
-    print("✓ Embeddings: OpenAI text-embedding-3-large (3072-dim)")
+    print("[OK] Embeddings: OpenAI text-embedding-3-large (3072-dim)")
     
     # 4. Vector Store
     vector_store = Chroma(
@@ -61,11 +84,11 @@ def main():
         embedding_function=embeddings,
         persist_directory="./data/vectordb"
     )
-    print("✓ Vector Store: ChromaDB (astrology_default)")
+    print("[OK] Vector Store: ChromaDB (astrology_default)")
     
     # 5. Intent Classifier (4 categories)
     intent_classifier = EnhancedIntentClassifier(
-        llm=llm,  # Use same LLM for classification
+        llm=fast_llm,  # Use FAST LLM for classification
         use_cache=True
     )
     
@@ -78,14 +101,15 @@ def main():
     # 7. Prompt Builder
     prompt_builder = PromptBuilder()
     
-    # 8. LangGraph Orchestrator (single LLM for reliability)
+    # 8. LangGraph Orchestrator
     orchestrator = create_enhanced_orchestrator(
         intent_classifier=intent_classifier,
         user_manager=user_manager,
         hybrid_retriever=hybrid_retriever,
         prompt_builder=prompt_builder,
         calculation_tools=CALCULATION_TOOLS,
-        llm=llm  # Single LLM instance
+        llm=llm,          # Quality LLM for interpreting
+        fast_llm=fast_llm  # Fast LLM for classification/routing
     )
     
     print()
@@ -167,13 +191,14 @@ def main():
             print("\n✨ NakshatraAI: ", end="", flush=True)
             
             full_answer = ""
+            intent = "unknown"
             for chunk in result:
                 if 'chunk' in chunk:
                     print(chunk['chunk'], end="", flush=True)
                     full_answer += chunk['chunk']
                 elif 'answer' in chunk:
                     # Final result with metadata
-                    intent = chunk['intent']
+                    intent = chunk.get('intent', 'unknown')
                     cached = chunk.get('cached', False)
                     processing_time = chunk.get('processing_time', 0)
                     
@@ -191,7 +216,7 @@ def main():
                         print(full_answer)
             
             # Save assistant response to DB
-            user_manager.add_message(user_id, "assistant", full_answer, intent=result.get('intent'))
+            user_manager.add_message(user_id, "assistant", full_answer, intent=intent)
             
         except Exception as e:
             print(f"\n❌ Error: {e}\n")

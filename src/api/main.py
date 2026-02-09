@@ -8,7 +8,6 @@ Production-ready REST API for NakshatraAI Astrology Chatbot.
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from datetime import datetime
 import time
 
@@ -24,9 +23,6 @@ app = FastAPI(
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json"
 )
-
-# Mount static files for Web UI
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # CORS Middleware
 app.add_middleware(
@@ -65,11 +61,6 @@ app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
 app.include_router(user.router, prefix="/api/v1", tags=["User"])
 app.include_router(calculation.router, prefix="/api/v1", tags=["Calculation"])
 
-# Root endpoint - Redirect to Web UI
-@app.get("/")
-async def root():
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/static/index.html")
 
 # Startup event
 @app.on_event("startup")

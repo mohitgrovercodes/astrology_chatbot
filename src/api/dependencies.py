@@ -25,49 +25,26 @@ _orchestrator_instance: Optional[object] = None
 _user_manager_instance: Optional[UserManager] = None
 _vedic_engine_instance: Optional[VedicEngine] = None
 _western_engine_instance: Optional[WesternAstroEngine] = None
+_redis_client_instance: Optional[object] = None
+
+
+def get_redis_client():
+    """Get singleton Redis client."""
+    global _redis_client_instance
+    if _redis_client_instance is None:
+        from src.db.redis_client import RedisClient
+        _redis_client_instance = RedisClient()
+    return _redis_client_instance
 
 
 def get_llm():
     """
     Get LLM instance.
     
-    Supports:
-    - Google Cloud (Vertex AI) with service account credentials
-    - OpenAI with API key
+    Uses Centralized LLM Factory to support switching providers.
     """
-    if settings.LLM_PROVIDER == "gemini" or settings.LLM_PROVIDER == "google":
-        # Use Google Cloud Vertex AI with credentials
-        from langchain_google_vertexai import ChatVertexAI
-        import google.auth
-        
-        # Load credentials from file or default
-        if settings.GOOGLE_CREDENTIALS_PATH:
-            print(f"[API] Loading Google credentials from: {settings.GOOGLE_CREDENTIALS_PATH}")
-            credentials, project = google.auth.load_credentials_from_file(
-                settings.GOOGLE_CREDENTIALS_PATH
-            )
-        else:
-            print("[API] Using default Google credentials")
-            credentials, project = google.auth.default()
-        
-        # Override project if specified
-        project_id = settings.GOOGLE_PROJECT_ID or project
-        
-        return ChatVertexAI(
-            model_name=settings.LLM_MODEL,
-            credentials=credentials,
-            project=project_id,
-            temperature=0.3,
-            location=settings.GOOGLE_LOCATION
-        )
-    else:
-        # Use OpenAI
-        from langchain_openai import ChatOpenAI
-        return ChatOpenAI(
-            model=settings.LLM_MODEL,
-            temperature=0.3,
-            openai_api_key=settings.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")
-        )
+    from src.llm.factory import LLMFactory
+    return LLMFactory.create(purpose="general")
 
 
 def get_embeddings():

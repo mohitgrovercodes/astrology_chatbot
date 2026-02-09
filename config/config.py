@@ -40,7 +40,7 @@ class LLMConfig(BaseSettings):
     @classmethod
     def validate_provider(cls, v: str) -> str:
         """Validate provider is one of the supported ones."""
-        valid_providers = ['openai', 'google', 'xai', 'anthropic']
+        valid_providers = ['openai', 'google']
         if v not in valid_providers:
             raise ValueError(f"Provider must be one of {valid_providers}, got: {v}")
         return v
@@ -124,8 +124,6 @@ class EnvConfig(BaseSettings):
     # LLM Provider API Keys
     openai_api_key: Optional[str] = None
     google_api_key: Optional[str] = None
-    xai_api_key: Optional[str] = None
-    anthropic_api_key: Optional[str] = None
     
     # Default LLM Configuration (can override YAML)
     default_llm_provider: Optional[str] = None
@@ -259,7 +257,7 @@ class AppConfig:
         Get API key for a specific provider.
         
         Args:
-            provider: Provider name (openai, google, xai, anthropic)
+            provider: Provider name (openai, google, ollama)
             
         Returns:
             API key string or None if not set
@@ -272,8 +270,6 @@ class AppConfig:
         key_map = {
             'openai': self.env.openai_api_key,
             'google': self.env.google_api_key,
-            'xai': self.env.xai_api_key,
-            'anthropic': self.env.anthropic_api_key,
         }
         
         if provider not in key_map:
@@ -305,7 +301,7 @@ class AppConfig:
             List of provider names with valid API keys
         """
         available = []
-        for provider in ['openai', 'google', 'xai', 'anthropic']:
+        for provider in ['openai', 'google', 'ollama']:
             if self.validate_provider_setup(provider):
                 available.append(provider)
         return available
@@ -347,8 +343,6 @@ class AppConfig:
             "api_keys": {
                 "openai": mask_api_key(self.env.openai_api_key),
                 "google": mask_api_key(self.env.google_api_key),
-                "xai": mask_api_key(self.env.xai_api_key),
-                "anthropic": mask_api_key(self.env.anthropic_api_key),
             },
             "chroma_persist_dir": self.env.chroma_persist_dir,
             "log_level": self.logging.level,

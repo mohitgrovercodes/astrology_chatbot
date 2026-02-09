@@ -1,7 +1,7 @@
 """
 LLM Factory for Astrology AI Chatbot.
 
-Supports both Vertex AI (Gemini) and OpenAI.
+Supports OpenAI and Ollama.
 Includes built-in rate limiting to prevent 429 errors.
 """
 
@@ -9,21 +9,6 @@ import os
 import time
 from typing import Optional, List
 from langchain_core.language_models.chat_models import BaseChatModel
-
-# Vertex AI
-try:
-    from langchain_google_vertexai import ChatVertexAI
-    import vertexai
-    VERTEX_AI_AVAILABLE = True
-except ImportError:
-    VERTEX_AI_AVAILABLE = False
-
-# OpenAI
-try:
-    from langchain_openai import ChatOpenAI
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
 
 # Config and utilities
 try:
@@ -40,36 +25,19 @@ except ImportError:
     COST_TRACKING_AVAILABLE = False
 
 
-# ============================================
-# Vertex AI Initialization
-# ============================================
-
-_VERTEX_INITIALIZED = False
-
-def initialize_vertex_ai(project_id: str = "445806945384", location: str = "us-central1"):
-    """Initialize Vertex AI globally."""
-    global _VERTEX_INITIALIZED
-    
-    if _VERTEX_INITIALIZED:
-        return
-    
-    try:
-        vertexai.init(project=project_id, location=location)
-        _VERTEX_INITIALIZED = True
-        logger.info(f"[DONE] Vertex AI initialized: project={project_id}, location={location}")
-    except Exception as e:
-        logger.error(f"Failed to initialize Vertex AI: {e}")
-        raise
 
 
 # ============================================
 # Rate-Limited LLM Wrapper
 # ============================================
 
-class RateLimitedLLM:
+from langchain_core.runnables import Runnable
+
+class RateLimitedLLM(Runnable):
     """Wrapper for LLM with rate limiting to prevent 429 errors."""
     
     def __init__(self, llm: BaseChatModel, min_delay: float = 2.0, max_retries: int = 3, base_backoff: float = 4.0):
+        super().__init__()
         self.llm = llm
         self.min_delay = min_delay
         self.max_retries = max_retries
@@ -86,12 +54,12 @@ class RateLimitedLLM:
         
         self._last_call_time = time.time()
     
-    def invoke(self, *args, **kwargs):
+    def invoke(self, input, config=None, **kwargs):
         """Invoke LLM with rate limiting and retry logic."""
         for attempt in range(self.max_retries):
             try:
                 self._wait_if_needed()
-                return self.llm.invoke(*args, **kwargs)
+                return self.llm.invoke(input, config=config, **kwargs)
                 
             except Exception as e:
                 error_str = str(e).lower()
@@ -106,7 +74,27 @@ class RateLimitedLLM:
                     raise
         
         raise RuntimeError(f"Failed after {self.max_retries} retries")
-    
+
+    def stream(self, input, config=None, **kwargs):
+        """Stream LLM responses with rate limiting."""
+        self._wait_if_needed()
+        yield from self.llm.stream(input, config=config, **kwargs)
+
+    async def ainvoke(self, input, config=None, **kwargs):
+        """Async invoke."""
+        # Note: Rate limiting is blocking here, ideally use async sleep
+        import asyncio
+        for attempt in range(self.max_retries):
+            try:
+                # Basic sync wait for now to keep logic simple
+                self._wait_if_needed()
+                return await self.llm.ainvoke(input, config=config, **kwargs)
+            except Exception as e:
+                if attempt < self.max_retries - 1:
+                    await asyncio.sleep(self.base_backoff * (2 ** attempt))
+                else:
+                    raise
+
     def __getattr__(self, name):
         """Delegate to underlying LLM."""
         return getattr(self.llm, name)
@@ -117,7 +105,7 @@ class RateLimitedLLM:
 # ============================================
 
 class LLMFactory:
-    """Factory for creating LLM instances (Vertex AI or OpenAI)."""
+    """Factory for creating LLM instances (Vertex AI, OpenAI, or Ollama)."""
     
     @classmethod
     def create(
@@ -128,60 +116,80 @@ class LLMFactory:
         max_tokens: Optional[int] = None,
         use_rate_limiting: bool = True,
         rate_limit_delay: float = 1.5,
+        purpose: str = "general",
         **kwargs
     ) -> BaseChatModel:
         """
         Create an LLM instance.
         
         Args:
-            provider: 'google' or 'openai' (default: google)
-            model: Model name (default: gemini-2.5-flash for google, gpt-4o-mini for openai)
+            provider: 'openai', or 'ollama' (defaults to config.llm.default_provider)
+            model: Model name. If None, selected based on provider and purpose.
             temperature: Sampling temperature
             max_tokens: Max output tokens
             use_rate_limiting: Enable rate limiting (default: True)
             rate_limit_delay: Minimum seconds between requests
+            purpose: 'general', 'classification', 'reasoning' (affects default model)
         
         Returns:
             LLM instance (wrapped with rate limiter)
         """
-        # Determine provider
-        provider = (provider or "google").lower()
-        
-        # Get config or use defaults
+        # Get config
         if CONFIG_AVAILABLE:
             config = get_config()
+            default_provider = config.llm.default_provider or "ollama"
+            
+            # Use configured defaults if not overridden
+            # Determine provider (legacy support for 'google'/'openai' prefix)
+            provider = (provider or default_provider).lower()
+            
+            # FAST LLM Support: Check if we should use a specific fast model for this purpose
+            is_fast_purpose = purpose in ["classification", "language_detection"]
+            fast_provider = config.env.fast_llm_provider
+            fast_model = config.env.fast_llm_model or getattr(config.llm, 'fast_model', None)
+
             if not model:
-                model = config.llm.default_model if provider == "google" else "gpt-4o-mini"
+                # Use Fast LLM if specified for classification/routing
+                if is_fast_purpose and (fast_provider or fast_model):
+                    provider = (fast_provider or provider).lower()
+                    model = fast_model
+                
+                # If still no model, select based on provider and purpose
+                if not model:
+                    if provider == "openai":
+                        if purpose == "classification":
+                            model = "gpt-4o-mini"
+                        else:
+                            model = config.llm.default_model or "gpt-4o-mini"
+                    elif provider == "ollama":
+                        if purpose == "classification":
+                            model = getattr(config.llm, 'fast_model', "qwen2.5:1.5b")
+                        elif purpose == "reasoning":
+                            model = config.llm.default_model or "qwen3:8b"
+                        else:
+                            model = config.llm.default_model or "qwen3:8b"
+            
             temperature = temperature if temperature is not None else config.llm.temperature
             max_tokens = max_tokens or config.llm.max_tokens
+            
         else:
+            # Fallback without config
+            provider = (provider or "ollama").lower()
             if not model:
-                model = "gemini-2.5-flash" if provider == "google" else "gpt-4o-mini"
+                if provider == "openai":
+                    model = "gpt-4o-mini"
+                elif provider == "ollama":
+                    model = "qwen3:8b"
+                else:
+                    model = "gpt-4o-mini"
             temperature = temperature if temperature is not None else 0.3
             max_tokens = max_tokens or 2048
         
         # Create LLM based on provider
-        if provider == "google" or provider == "vertex":
-            if not VERTEX_AI_AVAILABLE:
-                raise ImportError("Vertex AI not available. Install: pip install google-cloud-aiplatform langchain-google-vertexai")
-            
-            # Initialize Vertex AI
-            if not _VERTEX_INITIALIZED:
-                initialize_vertex_ai()
-            
-            # Create Vertex AI LLM
-            logger.info(f"Creating Vertex AI LLM: model={model}")
-            llm = ChatVertexAI(
-                model_name=model,
-                temperature=temperature,
-                max_output_tokens=max_tokens,
-                project=os.environ.get("GOOGLE_CLOUD_PROJECT", "445806945384"),
-                location=os.environ.get("VERTEX_AI_LOCATION", "us-central1"),
-                **kwargs
-            )
-        
-        elif provider == "openai":
-            if not OPENAI_AVAILABLE:
+        if provider == "openai":
+            try:
+                from langchain_openai import ChatOpenAI
+            except ImportError:
                 raise ImportError("OpenAI not available. Install: pip install langchain-openai")
             
             # Get API key
@@ -199,18 +207,57 @@ class LLMFactory:
                 **kwargs
             )
         
+        elif provider == "ollama":
+            try:
+                from langchain_ollama import ChatOllama
+            except ImportError:
+                raise ImportError("Ollama not available. Install: pip install langchain-ollama")
+                
+            try:
+                base_url = kwargs.pop("base_url", None)
+                if not base_url and CONFIG_AVAILABLE:
+                    base_url = get_config().env.ollama_base_url
+                
+                # Defensive cleaning of URL
+                if base_url:
+                    base_url = base_url.split('(')[0].strip()
+                
+                logger.info(f"Creating Ollama LLM: model={model}, base_url={base_url}")
+                llm = ChatOllama(
+                    model=model,
+                    temperature=temperature,
+                    base_url=base_url or "http://localhost:11434",
+                    **kwargs
+                )
+            except Exception as e:
+                if "404" in str(e) or "not found" in str(e).lower():
+                    logger.error(f"Ollama model '{model}' not found. Please run 'ollama pull {model}'.")
+                    if purpose == "classification":
+                        logger.warning("Falling back to qwen2.5:1.5b for classification...")
+                        model = "qwen2.5:1.5b"
+                        llm = ChatOllama(
+                            model=model,
+                            temperature=temperature,
+                            base_url=base_url or "http://localhost:11434",
+                            **kwargs
+                        )
+                    else:
+                        raise
+                else:
+                    raise
+        
         else:
-            raise ValueError(f"Unknown provider: {provider}. Use 'google' or 'openai'")
+            raise ValueError(f"Unknown provider: {provider}. Use 'openai' or 'ollama'")
         
         # Add cost tracking
         if COST_TRACKING_AVAILABLE:
             cost_callback = CostTrackerCallback(
-                provider="google", model=model, operation="llm_generation", metadata={"factory": True}
+                provider=provider, model=model, operation="llm_generation", metadata={"factory": True}
             )
             if hasattr(llm, 'callbacks'):
                 llm.callbacks = [cost_callback] if llm.callbacks is None else llm.callbacks + [cost_callback]
         
-        logger.info(f"[DONE] Created Vertex AI LLM: model={model}, temperature={temperature}, max_tokens={max_tokens}")
+        logger.info(f"[DONE] Created {provider.upper()} LLM: model={model}, temperature={temperature}, max_tokens={max_tokens}")
         
         # Wrap with rate limiter
         if use_rate_limiting:
@@ -221,17 +268,24 @@ class LLMFactory:
     
     @classmethod
     def create_default(cls) -> BaseChatModel:
-        """Create LLM with defaults (Gemini 2.5 Flash)."""
+        """Create LLM with defaults (Qwen3:8B)."""
         return cls.create()
     
     @classmethod
     def get_available_providers(cls) -> List[str]:
         """Get list of available providers."""
         providers = []
-        if VERTEX_AI_AVAILABLE:
-            providers.append("google")
-        if OPENAI_AVAILABLE:
-            providers.append("openai")
+             
+        try:
+             import langchain_openai
+             providers.append("openai")
+        except ImportError: pass
+
+        try:
+             import langchain_ollama
+             providers.append("ollama")
+        except ImportError: pass
+        
         return providers
 
 
@@ -245,7 +299,7 @@ def create_llm(provider: Optional[str] = None, model: Optional[str] = None, **kw
 
 
 def create_default_llm() -> BaseChatModel:
-    """Create default LLM (Gemini 2.5 Flash on Vertex AI)."""
+    """Create default LLM (Qwen3:8B on Ollama)."""
     return LLMFactory.create_default()
 
 
@@ -257,7 +311,7 @@ if __name__ == "__main__":
     import sys
     
     print("=" * 60)
-    print("LLM FACTORY TEST (Vertex AI Only)")
+    print("LLM FACTORY TEST")
     print("=" * 60)
     print()
     
@@ -267,7 +321,7 @@ if __name__ == "__main__":
         print(f"  [DONE] {provider}")
     print()
     
-    print("Creating default LLM (Gemini 2.5 Flash on Vertex AI)...")
+    print("Creating default LLM (Qwen3:8B on Ollama)...")
     try:
         llm = create_default_llm()
         

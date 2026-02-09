@@ -136,6 +136,48 @@ Headers: X-API-Key: your-api-key
 Body: { UserUpdate }
 ```
 
+### Chat (Backend Integration)
+**Endpoint:** `POST /api/v1/chat`  
+**Authentication:** `X-Internal-Service` header (Internal shared secret)
+
+This endpoint is optimized for backend-to-backend integration with Redis-based session management.
+
+**Request Body:**
+```json
+{
+  "message": "When will I get married?",
+  "session_id": "unique-session-id-123",
+  "user_context": {
+    "birth_date": "1990-05-15",
+    "birth_time": "14:30:00",
+    "latitude": 28.6139,
+    "longitude": 77.2090,
+    "timezone": "Asia/Kolkata",
+    "astrology_system": "vedic"
+  }
+}
+```
+
+**Response Body:**
+```json
+{
+  "answer": "Based on your birth chart...",
+  "sources": [
+    {
+      "content": "Reference text from classic...",
+      "metadata": { "source": "BPHS", "page": 123 }
+    }
+  ],
+  "session_id": "unique-session-id-123",
+  "metadata": {
+    "tokens_used": 450,
+    "model": "gpt-4o-mini",
+    "processing_time": 0.85,
+    "intent": "MARRIAGE_PREDICTION"
+  }
+}
+```
+
 ### Chart Calculation
 ```bash
 POST /api/v1/calculate/chart
@@ -151,16 +193,36 @@ Body:
 }
 ```
 
+---
+
 ## Authentication
 
-All endpoints (except /health and /ping) require API key authentication.
+### 1. Public API Keys
+All public endpoints require `X-API-Key` authentication.
 
 **Header:** `X-API-Key: your-api-key`
 
 Configure valid API keys in `.env`:
-```
+```env
 VALID_API_KEYS=key1,key2,key3
 ```
+
+### 2. Internal Service Secret
+The backend integration endpoint uses a high-security shared secret.
+
+**Header:** `X-Internal-Service: your-shared-secret`
+
+Configure this in `.env`:
+```env
+INTERNAL_SERVICE_SECRET=super-secret-123
+```
+
+## Redis Session Management
+
+The backend integration endpoint utilizes Redis for:
+- **24-Hour Expiry**: Conversation history is automatically cleared after 24 hours of inactivity.
+- **20 Message Limit**: Only the last 20 messages are kept for context to maintain performance.
+- **Context Persistence**: User birth details are cached per session.
 
 ## Rate Limiting
 
