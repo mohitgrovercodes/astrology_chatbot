@@ -138,6 +138,29 @@ Respond with ONLY a JSON object:
         self.llm = llm
         print("[INTENT] LLM connected to classifier")
     
+    def _is_nonsensical(self, query: str) -> bool:
+        """
+        Check if query is nonsensical (random numbers, gibberish, etc.).
+        
+        Returns:
+            True if query appears to be nonsensical
+        """
+        q = query.strip()
+        
+        # Check if query is just numbers
+        if q.isdigit() and len(q) > 4:
+            return True
+        
+        # Check if query is too short to be meaningful
+        if len(q) < 2:
+            return True
+        
+        # Check if query has no letters (only numbers/symbols)
+        if not any(c.isalpha() for c in q):
+            return True
+        
+        return False
+    
     def classify(
         self,
         query: str,
@@ -155,6 +178,17 @@ Respond with ONLY a JSON object:
         Returns:
             Dict with intent, confidence, reasoning, and cached flag
         """
+        # Pre-validation: Check for nonsensical input
+        if self._is_nonsensical(query):
+            result = {
+                'intent': 'CHITCHAT',
+                'confidence': 0.95,
+                'reasoning': 'Input appears to be nonsensical or random',
+                'cached': False
+            }
+            print(f"[INTENT] [VALIDATION] -> CHITCHAT (nonsensical input)")
+            return result
+        
         q = query.lower().strip()
         
         # Step 1: Check SAFE_PATTERN_CACHE first (instant, no LLM call!)

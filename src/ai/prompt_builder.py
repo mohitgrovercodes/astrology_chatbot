@@ -37,12 +37,18 @@ class PromptBuilder:
         
         sections = [system_prompt]
         
-        # User Profile
-        sections.append(f"""USER PROFILE:
+        # User Profile - Enhanced with more details
+        profile_section = f"""USER PROFILE (Use this information to answer questions about the user):
 • Name: {user_profile.get('name', 'User')}
 • Date of Birth: {user_profile.get('date_of_birth', 'Unknown')}
 • Time of Birth: {user_profile.get('time_of_birth', 'Unknown')}
-• Place of Birth: {user_profile.get('place_of_birth', 'Unknown')}""")
+• Place of Birth: {user_profile.get('place_of_birth', 'Unknown')}
+• Latitude: {user_profile.get('latitude', 'Unknown')}
+• Longitude: {user_profile.get('longitude', 'Unknown')}
+• Timezone: {user_profile.get('timezone', 'Unknown')}
+• Preferred System: {user_profile.get('preferred_system', 'vedic').title()}
+• Language: {user_profile.get('language', 'en')}"""
+        sections.append(profile_section)
         
         # Conversation context
         if conversation_history:

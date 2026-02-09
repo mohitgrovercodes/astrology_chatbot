@@ -29,7 +29,7 @@ class DummyUserDB:
         """Create sample users for testing."""
         sample_users = [
             {
-                "user_id": "user_123",
+                "user_id": "user001",
                 "name": "Arjun Kumar",
                 "email": "arjun@example.com",
                 "birth_date": "1990-05-15",
@@ -45,7 +45,7 @@ class DummyUserDB:
                 "last_active": datetime.now().isoformat()
             },
             {
-                "user_id": "user_456",
+                "user_id": "user002",
                 "name": "Priya Sharma",
                 "email": "priya@example.com",
                 "birth_date": "1995-08-22",
@@ -61,17 +61,33 @@ class DummyUserDB:
                 "last_active": datetime.now().isoformat()
             },
             {
-                "user_id": "test_user",
-                "name": "Test User",
-                "email": "test@example.com",
+                "user_id": "user003",
+                "name": "Sophia Anderson",
+                "email": "sophia@example.com",
                 "birth_date": "1988-12-10",
                 "birth_time": "18:45:00",
+                "birth_place": "New York, USA",
+                "latitude": 40.7128,
+                "longitude": -74.0060,
+                "timezone": "America/New_York",
+                "system": "western",
+                "language": "en",
+                "birth_chart_cache": None,
+                "created_at": "2026-02-01T00:00:00",
+                "last_active": datetime.now().isoformat()
+            },
+            {
+                "user_id": "user011",
+                "name": "Test User",
+                "email": "test@example.com",
+                "birth_date": "1992-03-25",
+                "birth_time": "10:30:00",
                 "birth_place": "Bangalore, India",
                 "latitude": 12.9716,
                 "longitude": 77.5946,
                 "timezone": "Asia/Kolkata",
                 "system": "vedic",
-                "language": "en",
+                "language": "hi-lat",
                 "birth_chart_cache": None,
                 "created_at": "2026-02-01T00:00:00",
                 "last_active": datetime.now().isoformat()

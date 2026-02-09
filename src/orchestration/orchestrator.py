@@ -532,11 +532,11 @@ Response:"""
                 timezone_str=tz
             )
             
-            # Save to cache if sqlite is available
-            if self.user_manager.use_sqlite and self.user_manager.sqlite:
+            # Save to cache if db is available
+            if self.user_manager.db:
                 chart_json = json.dumps(full_chart.to_dict())
-                self.user_manager.sqlite.update_user_chart(user_id, chart_json)
-                print(f"[CACHE] Chart saved to SQLite for {user_id}")
+                self.user_manager.db.update_user_chart(user_id, chart_json)
+                print(f"[CACHE] Chart saved to database for {user_id}")
             
             return None, full_chart
         except Exception as e:
