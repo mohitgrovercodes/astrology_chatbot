@@ -11,7 +11,7 @@ from pathlib import Path
 import logging
 
 # Add project root to path
-project_root = Path(__file__).parent
+project_root = Path(__file__).parent.parent  # Go up from scripts/ to project root
 sys.path.insert(0, str(project_root))
 
 from dotenv import load_dotenv

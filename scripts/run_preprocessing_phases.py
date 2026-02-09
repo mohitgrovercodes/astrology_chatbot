@@ -23,7 +23,7 @@ if sys.platform == 'win32':
     sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
 
 # Setup paths - add preprocessing directory to path
-project_root = Path(__file__).parent
+project_root = Path(__file__).parent.parent  # Go up from scripts/ to project root
 preprocessing_dir = project_root / "src" / "rag" / "preprocessing"
 sys.path.insert(0, str(preprocessing_dir))
 sys.path.insert(0, str(project_root))

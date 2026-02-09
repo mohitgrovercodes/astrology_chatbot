@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 
 # Add src to path to allow imports
-project_root = Path(__file__).parent
+project_root = Path(__file__).parent.parent  # Go up from scripts/ to project root
 sys.path.insert(0, str(project_root))
 
 # Load environment variables
