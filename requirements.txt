@@ -61,6 +61,12 @@ rank-bm25>=0.2.2  # Hybrid search (BM25)
 tiktoken>=0.5.0   # Tokenization for sub-chunking
 
 # ----------------------------------------------------------------------------
+# LANGUAGE DETECTION (Phase 1: Universal Language Support)
+# ----------------------------------------------------------------------------
+langdetect>=1.0.9,<2.0.0  # Fast language detection for 50+ languages
+
+
+# ----------------------------------------------------------------------------
 # RERANKING
 # ----------------------------------------------------------------------------
 sentence-transformers>=2.2.0  # For local cross-encoder

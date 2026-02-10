@@ -236,104 +236,29 @@ class EnhancedLangGraphOrchestrator:
         print(f"[AUTH] [SUCCESS] Authenticated: {user_profile.name}")
         return state
 
-    def _detect_language_heuristic(self, text: str) -> Optional[str]:
-        """
-        Fast heuristic language detection based on Unicode script analysis and common words.
-        Uses rules dynamically loaded from LocalizationManager.
-        """
-        import re
-        
-        if not text or len(text.strip()) == 0:
-            return None
-            
-        loc_manager = get_localization_manager()
-        total_chars = len(text.strip())
-        
-        # Check Unicode ranges for all supported languages
-        for lang_code in loc_manager.get_supported_languages():
-            rules = loc_manager.get_detection_rules(lang_code)
-            ranges = rules.get('unicode_ranges', [])
-            
-            if not ranges:
-                continue
-                
-            script_count = 0
-            for start, end in ranges:
-                pattern = f'[\\u{start}-\\u{end}]'
-                script_count += len(re.findall(pattern, text))
-                
-            if script_count / total_chars > 0.8:
-                return lang_code
-        
-        # Check transliteration markers (e.g., hinglish_markers)
-        for lang_code in loc_manager.get_supported_languages():
-            rules = loc_manager.get_detection_rules(lang_code)
-            markers = rules.get('heuristic_markers', [])
-            
-            if not markers:
-                continue
-                
-            pattern = r'\b(' + '|'.join(markers) + r')\b'
-            if re.search(pattern, text.lower()):
-                return None  # Matches a marker -> signal ambiguity for LLM fallback
-        
-        # If no special scripts and alphabetic, assume English as safe default
-        if re.search(r'[a-zA-Z]', text):
-            return 'en'
-        
-        return None
-    
     def _detect_language_node(self, state: NakshatraState) -> NakshatraState:
-        """Node 1.5: Detect query language using heuristics with LLM fallback."""
+        """Node 1.5: Detect query language using library-based detection with LLM fallback."""
+        from src.locales.language_detector import get_language_detector
+        
         query = state['query']
         print(f"[LANG] Detecting language for: '{query[:30]}...'")
         
-        # Step 1: Try fast heuristic detection
-        detected_lang = self._detect_language_heuristic(query)
-        
-        if detected_lang:
-            # Heuristic succeeded!
-            state['detected_language'] = detected_lang
-            state['original_query'] = query
-            print(f"[LANG] Detected: {detected_lang} (heuristic)")
-            return state
-        
-        # Step 2: Heuristic failed/ambiguous → Use LLM fallback
-        print(f"[LANG] Heuristic ambiguous, using LLM fallback...")
-        
-        loc_manager = get_localization_manager()
-        lang_options = "\n".join([f"- '{code}': {name}" for code, name in loc_manager.get_language_map().items()])
-        
-        # Use fast LLM for robust detection
-        detection_prompt = f"""Identify the language and SCRIPT of the following text. 
-Return ONLY one of these codes:
-{lang_options}
-
-Text: "{query}"
-Code:"""
+        # Use new LanguageDetector with LLM fallback
+        detector = get_language_detector(llm=self.fast_llm)
         
         try:
-            response = self.fast_llm.invoke(detection_prompt)
-            lang = response.content.strip().lower()
+            # Get language with confidence
+            detected_lang, confidence = detector.detect_with_confidence(query)
             
-            # Use valid codes from manager
-            valid_codes = loc_manager.get_supported_languages()
-            if lang not in valid_codes:
-                # Try prefix match
-                matched = False
-                for code in valid_codes:
-                    if lang.startswith(code):
-                        lang = code
-                        matched = True
-                        break
-                if not matched:
-                    lang = 'en'
-                
-            state['detected_language'] = lang
+            state['detected_language'] = detected_lang
             state['original_query'] = query
-            print(f"[LANG] Detected: {lang} (LLM)")
+            
+            # Log detection method
+            method = "library" if confidence > 0.7 else "LLM fallback"
+            print(f"[LANG] Detected: {detected_lang} ({method}, confidence: {confidence:.2f})")
+            
         except Exception as e:
-            print(f"[LANG] Detection error: {e}")
+            print(f"[LANG] Detection error: {e}, defaulting to 'en'")
             state['detected_language'] = 'en'
             state['original_query'] = query
             
