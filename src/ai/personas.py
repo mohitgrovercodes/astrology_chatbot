@@ -31,13 +31,18 @@ class AstrologerPersona:
         self.system = system
         self.loc_manager = get_localization_manager()
     
-    def get_system_prompt(self, user_name: str = "the client", language: str = "en") -> str:
+    def get_system_prompt(self, user_name: str = "the client", language: str = "en", llm=None) -> str:
         """
         Generate system prompt in specific language using localization manager.
+        
+        Args:
+            user_name: Name of the client
+            language: Language code (e.g., 'en', 'hi', 'es')
+            llm: Optional LLM for dynamic persona generation
         """
         # Load templates and persona-specific data
         templates = self.loc_manager.get_prompt_templates(language)
-        persona_data = self.loc_manager.get_persona_data(language, self.key)
+        persona_data = self.loc_manager.get_persona_data(language, self.key, llm=llm)
         
         identity = persona_data.get('identity', "You are a professional astrologer.")
         guidelines = persona_data.get('guidelines', [])

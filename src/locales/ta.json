@@ -1,14 +1,5 @@
 {
     "language_name": "Tamil (Tamil script)",
-    "detection": {
-        "heuristic_markers": [],
-        "unicode_ranges": [
-            [
-                "0B80",
-                "0BFF"
-            ]
-        ]
-    },
     "prompt_templates": {
         "header": "தொழில்முறை தரநிலைகள் (Professional Standards):",
         "voice": "குரல் வழிகாட்டுதல்கள் (Voice Guidelines):",

@@ -1,9 +1,5 @@
 {
     "language_name": "Tanglish (Tamil text in Latin script)",
-    "detection": {
-        "heuristic_markers": [],
-        "unicode_ranges": []
-    },
     "prompt_templates": {
         "header": "Professional Standards (Thozhilmurai Tharanilaigal):",
         "voice": "Voice Guidelines (Vazhikattudhalgal):",

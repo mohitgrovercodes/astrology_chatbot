@@ -368,7 +368,8 @@ class EnhancedLangGraphOrchestrator:
             
             system_prompt = persona.get_system_prompt(
                 user_name=user_name,
-                language=lang
+                language=lang,
+                llm=self.fast_llm
             )
             
             # Map language code to descriptive name
@@ -745,7 +746,8 @@ I prefer to say "I don't know" rather than provide information not grounded in c
             persona = get_persona(user_profile.get('preferred_system', 'vedic'))
             system_prompt = persona.get_system_prompt(
                 user_name=user_profile.get('name', 'User'),
-                language=language
+                language=language,
+                llm=self.fast_llm
             )
         except:
             system_prompt = "You are an expert Vedic astrologer explaining astrological concepts."
@@ -1096,7 +1098,8 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             persona = get_persona(user_profile.get('preferred_system', 'vedic'))
             system_prompt = persona.get_system_prompt(
                 user_name=user_profile.get('name', 'User'),
-                language=language
+                language=language,
+                llm=self.fast_llm
             )
         except:
             system_prompt = "You are an expert Vedic astrologer explaining predictions."

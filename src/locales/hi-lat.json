@@ -1,32 +1,5 @@
 {
     "language_name": "Hinglish (Hindi text in Latin script)",
-    "detection": {
-        "heuristic_markers": [
-            "kya",
-            "hai",
-            "kab",
-            "kaise",
-            "ka",
-            "ki",
-            "ke",
-            "me",
-            "si",
-            "se",
-            "ko",
-            "bhi",
-            "hi",
-            "tha",
-            "thi",
-            "the",
-            "hu",
-            "ho",
-            "bhava",
-            "rashi",
-            "kundli",
-            "nakshatra"
-        ],
-        "unicode_ranges": []
-    },
     "prompt_templates": {
         "header": "Professional Standards (पेशेवर मानक):",
         "voice": "Voice Guidelines (दिशा-निर्देश):",

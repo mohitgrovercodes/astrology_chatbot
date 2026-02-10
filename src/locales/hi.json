@@ -1,14 +1,5 @@
 {
     "language_name": "Hindi (Devanagari script)",
-    "detection": {
-        "heuristic_markers": [],
-        "unicode_ranges": [
-            [
-                "0900",
-                "097F"
-            ]
-        ]
-    },
     "prompt_templates": {
         "header": "पेशेवर मानक (Professional Standards):",
         "voice": "आवाज दिशा-निर्देश (Voice Guidelines):",

@@ -1,0 +1,25 @@
+{
+  "overall": {
+    "avg_similarity": -0.26620313099452425,
+    "avg_coverage": 0.32857142857142857
+  },
+  "by_difficulty": {
+    "simple": {
+      "count": 2,
+      "avg_similarity": -0.33778305053710933,
+      "avg_coverage": 0.25
+    },
+    "domain": {
+      "count": 3,
+      "avg_similarity": -0.3518585443496704,
+      "avg_coverage": 0.13333333333333333
+    },
+    "sanskrit": {
+      "count": 2,
+      "avg_similarity": -0.06614009141921998,
+      "avg_coverage": 0.7
+    }
+  },
+  "grade": "D (Poor)",
+  "recommendation": "STRONGLY recommend multilingual embeddings"
+}
