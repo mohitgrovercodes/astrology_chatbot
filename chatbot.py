@@ -35,6 +35,7 @@ def main():
     parser = argparse.ArgumentParser(description="NakshatraAI Chatbot")
     parser.add_argument("--provider", type=str, help="LLM Provider (google, openai, ollama)")
     parser.add_argument("--model", type=str, help="LLM Model name")
+    parser.add_argument("--stateless", action="store_true", help="Run in stateless mode (No DB, No Engine)")
     args = parser.parse_args()
     
     # Initialize components
@@ -102,12 +103,17 @@ def main():
     prompt_builder = PromptBuilder()
     
     # 8. LangGraph Orchestrator
+    # If stateless mode is on, we pass None/Empty to simulate production detachment
+    um_for_orch = None if args.stateless else user_manager
+    hr_for_orch = None if args.stateless else hybrid_retriever
+    ct_for_orch = {} if args.stateless else CALCULATION_TOOLS
+
     orchestrator = create_enhanced_orchestrator(
         intent_classifier=intent_classifier,
-        user_manager=user_manager,
-        hybrid_retriever=hybrid_retriever,
+        user_manager=um_for_orch,
+        hybrid_retriever=hr_for_orch,
         prompt_builder=prompt_builder,
-        calculation_tools=CALCULATION_TOOLS,
+        calculation_tools=ct_for_orch,
         llm=llm,          # Quality LLM for interpreting
         fast_llm=fast_llm  # Fast LLM for classification/routing
     )
@@ -126,21 +132,25 @@ def main():
     print("=" * 60)
     
     # Get user ID
-    user_id = input("\nEnter user_id (or press Enter for user011): ").strip()
-    if not user_id:
-        user_id = "user011"
-    
-    print(f"\n🔐 Authenticating as: {user_id}")
-    
-    # Check if user exists
-    if not user_manager.user_exists(user_id):
-        print(f"❌ User '{user_id}' not found!")
-        print("\nAvailable test users:")
-        print("  • user001 - Arjun Kumar (Vedic)")
-        print("  • user002 - Priya Sharma (Vedic)")
-        print("  • user003 - Sophia Anderson (Western)")
-        print("\nRun: python add_test_user.py to add your own user")
-        return
+    if args.stateless:
+        user_id = "stateless_demo_user"
+        print(f"\n🚀 Running in STATELESS mode for: {user_id}")
+    else:
+        user_id = input("\nEnter user_id (or press Enter for user011): ").strip()
+        if not user_id:
+            user_id = "user011"
+        
+        print(f"\n🔐 Authenticating as: {user_id}")
+        
+        # Check if user exists
+        if not user_manager.user_exists(user_id):
+            print(f"❌ User '{user_id}' not found!")
+            print("\nAvailable test users:")
+            print("  • user001 - Arjun Kumar (Vedic)")
+            print("  • user002 - Priya Sharma (Vedic)")
+            print("  • user003 - Sophia Anderson (Western)")
+            print("\nRun: python add_test_user.py to add your own user")
+            return
     
     # Load profile
     profile = user_manager.get_user_profile(user_id)
@@ -167,15 +177,40 @@ def main():
             print("\n✨ May the stars guide your path! Om Shanti! 🙏\n")
             break
             
-        # Log user message
-        try:
-            user_manager.add_message(user_id, "user", query)
-        except Exception as e:
-            print(f"[ERROR] Failed to save message: {e}")
-        
-        # Get history from DB
-        conversation_history = user_manager.get_history(user_id, limit=5)
-        
+        if not args.stateless:
+            # Log user message
+            try:
+                user_manager.add_message(user_id, "user", query)
+            except Exception as e:
+                print(f"[ERROR] Failed to save message: {e}")
+            
+            # Get history from DB
+            conversation_history = user_manager.get_history(user_id, limit=5)
+        else:
+            conversation_history = [] # In real stateless, this would be provided by API
+
+        # Simulating session data (e.g., from Redis/Backend)
+        if args.stateless:
+            # Mock data injection for demo
+            session_data = {
+                "name": "Stateless Arjun",
+                "chart_data": {
+                    "lagna": "Aries", 
+                    "moon_sign": "Leo", 
+                    "planets": {"Sun": {"rashi": "Leo", "house": 5}}
+                },
+                "dasha_data": {"dasha_sequence": "Mars/Rahu"},
+                "transit_data": {"date": "2024-02-10", "transits": {"Jupiter": "Aries"}}
+            }
+        else:
+            # Simulating session data (e.g., from Redis/Backend)
+            # In a real app, the backend would provide this 
+            # Session data OVERWRITES the DB name for personalization
+            session_data = {
+                "name": f"Expert User {user_id}",
+                "custom_note": "Premium Session"
+            } if user_id == "user011" else {}
+
         # Process query with streaming
         print("🤔 Thinking...")
         
@@ -184,7 +219,8 @@ def main():
             result = orchestrator.process_query_stream(
                 query=query,
                 user_id=user_id,
-                conversation_history=conversation_history
+                conversation_history=conversation_history,
+                session_data=session_data
             )
             
             # Display streaming response
@@ -216,7 +252,8 @@ def main():
                         print(full_answer)
             
             # Save assistant response to DB
-            user_manager.add_message(user_id, "assistant", full_answer, intent=intent)
+            if not args.stateless:
+                user_manager.add_message(user_id, "assistant", full_answer, intent=intent)
             
         except Exception as e:
             print(f"\n❌ Error: {e}\n")

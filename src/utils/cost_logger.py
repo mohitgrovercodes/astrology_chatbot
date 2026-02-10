@@ -77,6 +77,23 @@ PRICING_TABLE = {
     ),
     
     
+    # OpenAI Models
+    "gpt-4o-mini": ModelPricing(
+        model_name="gpt-4o-mini",
+        model_type=ModelType.LLM,
+        input_price_per_1k=0.00015,
+        output_price_per_1k=0.00060,
+        context_window=128_000,
+        notes="Standard pricing"
+    ),
+    "gpt-4o": ModelPricing(
+        model_name="gpt-4o",
+        model_type=ModelType.LLM,
+        input_price_per_1k=0.00250,
+        output_price_per_1k=0.01000,
+        context_window=128_000,
+    ),
+    
     # OpenAI Embedding Models
     "text-embedding-3-large": ModelPricing(
         model_name="text-embedding-3-large",

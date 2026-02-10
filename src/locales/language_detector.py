@@ -78,53 +78,54 @@ class LanguageDetector:
     ROMANIZATION_MARKERS = {
         # Hindi/Hindustani (most common romanized Indian language)
         'hi': [
+            'namaste', 'namaskar', 'shubh', 'kaise', 'batao', 'bataye',
             'hai', 'hein', 'hoon', 'hain', 'ho', 'tha', 'thi', 'the', 'thee',
             'kya', 'kyun', 'kaise', 'kab', 'kahan', 'kaun', 'koi',
             'mera', 'meri', 'mere', 'tera', 'teri', 'tere', 'apka', 'apki', 'apke',
             'nahi', 'nahin', 'mat', 'karo', 'kariye', 'karna', 'karte',
-            'batao', 'bataye', 'batana', 'dekho', 'dekhe', 'suno', 'suniye',
             'acha', 'achha', 'theek', 'thik', 'bas', 'phir', 'kabhi',
             'yeh', 'woh', 'yahan', 'wahan', 'jab', 'tab',
-            'kundli', 'graha', 'rashi', 'nakshatra', 'dasha', 'bhava'
+            'kundli', 'graha', 'rashi', 'nakshatra', 'dasha', 'bhava', 'jyotish'
         ],
         # Tamil
         'ta': [
-            'enna', 'epdi', 'eppadi', 'eppo', 'enga', 'yaar', 'yaaru',
+            'vanakkam', 'wanakkam', 'wadakkam', 'namaskaram', 'epdi', 'eppadi',
+            'enna', 'eppo', 'enga', 'yaar', 'yaaru',
             'naan', 'nee', 'neenu', 'avan', 'aval', 'avanga',
             'enakku', 'unakku', 'avanukkku', 'avalukku',
             'vandhu', 'vanthu', 'irukku', 'irukkum', 'irundha',
             'pannanum', 'pannum', 'panna', 'sollu', 'sollanum', 'paaru', 'paarunga',
-            'illa', 'illai', 'aama', 'sari', 'nalla', 'romba'
+            'illa', 'illai', 'aama', 'sari', 'nalla', 'romba', 'rasi'
         ],
         # Telugu
         'te': [
-            'enti', 'ela', 'elaa', 'eppudu', 'ekkada', 'evaru',
+            'namaskaram', 'namaskaramulu', 'enti', 'ela', 'elaa', 'eppudu', 'ekkada', 'evaru',
             'nenu', 'neenu', 'meeru', 'vaadu', 'aame', 'vaalla',
             'naaku', 'neeku', 'meeruku', 'vaadiki', 'aameki',
             'cheppu', 'cheppandi', 'choodandi', 'vinu', 'vinandi',
             'chesthe', 'chesthanu', 'cheyandi', 'undhi', 'undi', 'unnaru',
-            'kaadu', 'ledhu', 'avunu', 'sare', 'baagundi', 'chaala'
+            'kaadu', 'ledhu', 'avunu', 'sare', 'baagundi', 'chaala', 'jathakam'
         ],
         # Marathi
         'mr': [
-            'kay', 'kasa', 'kasaa', 'kasa', 'kuthey', 'kon', 'konacha',
+            'namaskar', 'kay', 'kasa', 'kasaa', 'kuthey', 'kon', 'konacha',
             'mi', 'tu', 'to', 'ti', 'tumhi', 'aamhi',
             'mala', 'tula', 'tyala', 'tila', 'tumhala',
             'sang', 'sanga', 'sangaa', 'kar', 'kara', 'bagh', 'bagha',
-            'nahi', 'naahi', 'hoy', 'hoay', 'bara', 'chaan', 'khup'
+            'nahi', 'naahi', 'hoy', 'hoay', 'bara', 'chaan', 'khup', 'patrika'
         ],
         # Bengali
         'bn': [
-            'ki', 'kemon', 'kemone', 'kothay', 'ke', 'kara',
+            'nomoshkar', 'namaskar', 'ki', 'kemon', 'kemone', 'kothay', 'ke', 'kara',
             'ami', 'tumi', 'apni', 'se', 'tara', 'ora',
             'amar', 'tomar', 'apnar', 'tar', 'oder',
             'bolo', 'bolun', 'dekho', 'dekhun', 'shuno', 'shunun',
             'koro', 'korun', 'ache', 'achhe', 'chhilo', 'hobe',
-            'na', 'naa', 'haan', 'thik', 'bhalo', 'khub'
+            'na', 'naa', 'haan', 'thik', 'bhalo', 'khub', 'kushthi'
         ],
         # Gujarati
         'gu': [
-            'shu', 'kem', 'kevi', 'kyare', 'kyan', 'kon', 'kona',
+            'namaste', 'kem', 'cho', 'shu', 'kevi', 'kyare', 'kyan', 'kon', 'kona',
             'hun', 'tu', 'tame', 'te', 'teo', 'ame',
             'mane', 'tane', 'tamne', 'tene', 'amne',
             'kaho', 'karo', 'juo', 'jovo', 'sambhalo',
@@ -132,7 +133,7 @@ class LanguageDetector:
         ],
         # Kannada
         'kn': [
-            'yenu', 'hege', 'yaavaga', 'elli', 'yaaru', 'yavanu',
+            'namaskara', 'yenu', 'hege', 'yaavaga', 'elli', 'yaaru', 'yavanu',
             'naanu', 'ninu', 'nivu', 'avanu', 'avalu', 'avaru',
             'nanage', 'ninage', 'nivige', 'avanige', 'avalige',
             'heli', 'helri', 'nodi', 'keli', 'kelri', 'maadi', 'maadri',
@@ -140,7 +141,7 @@ class LanguageDetector:
         ],
         # Malayalam
         'ml': [
-            'enthu', 'engane', 'eppol', 'evide', 'aar', 'aarude',
+            'namaskaram', 'enthu', 'engane', 'eppol', 'evide', 'aar', 'aarude',
             'njan', 'njaan', 'nee', 'ningal', 'avan', 'aval', 'avar',
             'enikku', 'ninakku', 'ningalkku', 'avannu', 'avalkkku',
             'parayoo', 'cheyyoo', 'nokku', 'kelkku', 'varoo',
@@ -148,7 +149,7 @@ class LanguageDetector:
         ],
         # Punjabi
         'pa': [
-            'ki', 'kiven', 'kive', 'kado', 'kithe', 'kaun', 'kida',
+            'sat', 'sri', 'akal', 'ki', 'kiven', 'kive', 'kado', 'kithe', 'kaun', 'kida',
             'main', 'tu', 'tusi', 'oh', 'ohna', 'assi',
             'menu', 'tenu', 'tussi', 'ohnu', 'ohna',
             'dass', 'dassi', 'karo', 'dekho', 'sun', 'suno',

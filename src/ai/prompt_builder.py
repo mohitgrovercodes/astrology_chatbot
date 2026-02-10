@@ -82,9 +82,14 @@ class PromptBuilder:
     def _format_conversation(self, turns: List[Dict]) -> str:
         lines = []
         for t in turns:
-            if 'user' in t:
+            # Handle standard role/content format
+            if 'role' in t and 'content' in t:
+                role_label = "User" if t['role'] == "user" else "You"
+                lines.append(f"{role_label}: {t['content']}")
+            # Handle legacy format
+            elif 'user' in t:
                 lines.append(f"User: {t['user']}")
-            if 'assistant' in t:
+            elif 'assistant' in t:
                 lines.append(f"You: {t['assistant'][:150]}...")
         return "\n".join(lines) if lines else "No previous context"
     
@@ -122,8 +127,18 @@ class PromptBuilder:
             base = "पेशेवर, मिलनसार और स्पष्ट रहें। स्रोतों का हवाला दें।"
         elif language == "ta":
             base = "தொழில்முறை, அன்பான மற்றும் தெளிவாக இருங்கள். ஆதாரங்களைக் குறிப்பிடவும்."
-            
-        lang_instruction = f" Respond entirely in {language}." if language != "en" else ""
+        
+        # Determine language name and script instruction
+        from .language_detector import get_language_detector
+        detector = get_language_detector()
+        lang_name = detector.get_language_name(language)
+        
+        if "-lat" in language:
+            lang_instruction = f" Respond entirely in {lang_name} using ROMAN ALPHABET (English Script). Do NOT use native script."
+        elif language != "en":
+            lang_instruction = f" Respond entirely in {lang_name}."
+        else:
+            lang_instruction = ""
         
         if intent == "PREDICTION":
             pred = " Focus on timing. Emphasize free will."

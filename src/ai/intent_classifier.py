@@ -222,10 +222,21 @@ Respond with ONLY a JSON object:
         
         # Format conversation history
         context_str = "None"
-        if conversation_history:
-            # Take last 2 turns
-            history_subset = conversation_history[-2:]
-            context_str = "\n".join([f"User: {turn.get('user', '')}\nBot: {turn.get('assistant', '')[:100]}..." for turn in history_subset])
+        if conversation_history and len(conversation_history) > 0:
+            # Database returns: [{'role': 'user', 'content': '...'}, {'role': 'assistant', 'content': '...'}]
+            # Format into readable context
+            recent_messages = conversation_history[-4:]  # Last 4 messages (2 turns)
+            context_lines = []
+            for msg in recent_messages:
+                role = msg.get('role', 'unknown')
+                content = msg.get('content', '')[:150]  # Truncate long messages
+                if role == 'user':
+                    context_lines.append(f"User: {content}")
+                elif role == 'assistant':
+                    context_lines.append(f"Bot: {content}")
+            
+            if context_lines:
+                context_str = "\n".join(context_lines)
         
         # Build prompt (birth data always available per user requirement)
         prompt = self.CLASSIFICATION_PROMPT.format(query=query, context=context_str)

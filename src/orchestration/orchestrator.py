@@ -41,6 +41,7 @@ class NakshatraState(TypedDict):
     query: str
     user_id: str
     conversation_history: List[Dict]
+    session_data: Optional[Dict]     # NEW: Transient session data (e.g., from Redis)
     
     # User context
     user_profile: Optional[Dict]
@@ -109,6 +110,13 @@ class EnhancedLangGraphOrchestrator:
             print(f"[LANGGRAPH] Loaded {len(calculation_tools)} calculation tools")
         
         self.calculation_tools = calculation_tools
+        
+        # [PHASE 6] Auto-load LLM if not provided
+        if llm is None:
+            from src.llm.factory import LLMFactory
+            print("[LANGGRAPH] Auto-loading default LLM...")
+            llm = LLMFactory.create()
+            
         self.llm = llm  # Quality LLM for responses
         self.fast_llm = fast_llm or llm  # Fast LLM for classification (fallback to quality LLM)
         
@@ -199,41 +207,65 @@ class EnhancedLangGraphOrchestrator:
     # ========================================================================
     
     def _authenticate_node(self, state: NakshatraState) -> NakshatraState:
-        """Node 1: Authenticate user."""
+        """Node 1: Authenticate user and merge session data."""
         # Check if profile is already provided (e.g., from external context)
         if state.get('user_profile'):
             print(f"[AUTH] Using provided user profile for: {state['user_id']}")
             state['authenticated'] = True
-            return state
+        else:
+            print(f"[AUTH] Authenticating user: {state['user_id']}")
             
-        print(f"[AUTH] Authenticating user: {state['user_id']}")
-        
-        # Check if user exists
-        if not self.user_manager.user_exists(state['user_id']):
-            print(f"[AUTH] [FAIL] User not found: {state['user_id']}")
-            state['authenticated'] = False
-            state['error'] = "User not found. Please register first."
-            state['answer'] = state['error']
-            return state
-        
-        # Load profile
-        user_profile = self.user_manager.get_user_profile(state['user_id'])
-        
-        if user_profile is None:
-            print(f"[AUTH] [FAIL] Could not load profile")
-            state['authenticated'] = False
-            state['error'] = "Could not load user profile."
-            state['answer'] = state['error']
-            return state
-        
-        # Success
-        state['authenticated'] = True
-        state['user_profile'] = user_profile.to_dict()
-        
-        # Update last active
-        self.user_manager.update_last_active(state['user_id'])
-        
-        print(f"[AUTH] [SUCCESS] Authenticated: {user_profile.name}")
+            # Use UserManager ONLY if it exists (Bypassed in stateless production)
+            if self.user_manager and self.user_manager.user_exists(state['user_id']):
+                # Load profile from DB
+                user_profile = self.user_manager.get_user_profile(state['user_id'])
+                if user_profile:
+                    state['user_profile'] = user_profile.to_dict()
+                    state['authenticated'] = True
+                    print(f"[AUTH] [FALLBACK] Loaded profile from database for {state['user_id']}")
+                    # Update last active
+                    self.user_manager.update_last_active(state['user_id'])
+            else:
+                if not self.user_manager:
+                    print(f"[AUTH] [INFO] Stateless mode: No UserManager provided")
+                else:
+                    print(f"[AUTH] [INFO] User not in DB: {state['user_id']}")
+                state['user_profile'] = {}
+                state['authenticated'] = False
+
+        # SESSION DATA OVERWRITES DB DATA (Priority Tier)
+        session_data = state.get('session_data')
+        if session_data:
+            print(f"[AUTH] [PRIORITY] Merging session mapping for {state['user_id']}")
+            if not state['user_profile']:
+                state['user_profile'] = {}
+            
+            # Merge session keys (overwrites DB fields if conflict)
+            state['user_profile'].update(session_data)
+            
+            # Promoting internal state keys (Priority injection)
+            internal_keys = ['chart_data', 'dasha_data', 'transit_data', 'detected_language', 'persona_type']
+            for key in internal_keys:
+                if key in session_data:
+                    print(f"[AUTH] [PRIORITY] Using injected context: {key}")
+                    state[key] = session_data[key]
+            
+            # If session data provides name, we consider user at least partially authenticated for context
+            if 'name' in session_data:
+                state['authenticated'] = True
+
+        # TIERED HISTORY MANAGEMENT
+        # Tier 1 (Priority): Use injected history
+        # Tier 2 (Fallback): Load from database
+        if state.get('conversation_history') is None:
+            if self.user_manager:
+                print(f"[AUTH] [FALLBACK] Loading conversation history from database for {state['user_id']}")
+                state['conversation_history'] = self.user_manager.get_history(state['user_id'], limit=5)
+            else:
+                state['conversation_history'] = []
+        else:
+            print(f"[AUTH] [PRIORITY] Using injected conversation history ({len(state['conversation_history'])} messages)")
+
         return state
 
     def _detect_language_node(self, state: NakshatraState) -> NakshatraState:
@@ -381,16 +413,27 @@ class EnhancedLangGraphOrchestrator:
             else:
                 script_instruction = f"Respond entirely in {lang_name} (Native Script)."
             
+            # PHASE 6: Tiered History Support
+            history_context = ""
+            if state.get('conversation_history'):
+                history_turns = state['conversation_history'][-3:]
+                from src.ai.prompt_builder import PromptBuilder
+                builder = PromptBuilder()
+                formatted_history = builder._format_conversation(history_turns)
+                history_context = f"\nCONVERSATION CONTEXT:\n{formatted_history}\n"
+
             prompt = f"""{system_prompt}
             
+{history_context}
 User: "{state['query']}"
 
 INSTRUCTIONS:
 1. Provide a warm, empathetic, professional response.
 2. If the user greets, greet back warmly.
-3. If the question is outside astrology, politely explain your scope.
-4. {script_instruction}
-5. Keep it brief (under 50 words).
+3. If the user asks about previous messages or personal context (like "Where am I going?"), ANSWER DIRECTLY based on CONVERSATION CONTEXT.
+4. If the question is entirely outside astrology and NOT in history, politely explain your scope.
+5. {script_instruction}
+6. Keep it brief (under 50 words).
 
 Response:"""
             
@@ -403,16 +446,23 @@ Response:"""
             
         return state
     
-    def _get_or_calculate_chart(self, user_id: str, user_profile: Dict) -> Tuple[Optional[Dict], Optional[VedicChart]]:
+    def _get_or_calculate_chart(self, user_id: str, user_profile: Dict, state: Optional[NakshatraState] = None) -> Tuple[Optional[Dict], Optional[VedicChart]]:
         """
-        Helper to get chart data, prioritizing the cache.
-        Returns (tool_dict, full_chart_object).
+        Helper to get chart data, prioritizing:
+        1. Injected state data (Stateless Production Mode)
+        2. Cached data in user_profile
+        3. Fresh calculation (Development/Fallback)
         """
+        # TIER 1: Priority Injection (Redis/API)
+        if state and state.get('chart_data'):
+            print(f"[CALC] [PRIORITY] Using injected chart data for {user_id}")
+            return state['chart_data'], None
+
+        # TIER 2: Database Cache (Fallback)
         cached_json = user_profile.get('birth_chart_cache')
-        
         if cached_json:
             try:
-                print(f"[CACHE] Found cached chart for {user_id}. Deserializing...")
+                print(f"[CALC] [FALLBACK] Using cached chart for {user_id}. Deserializing...")
                 chart_data_dict = json.loads(cached_json)
                 # Reconstruct the full VedicChart object for deeper calculations if needed
                 full_chart = VedicChart.from_dict(chart_data_dict)
@@ -484,43 +534,46 @@ Response:"""
             return state
         
         try:
-            # Calculate or load from cache
-            _, full_chart = self._get_or_calculate_chart(state['user_id'], user_profile)
+            # Calculate or load from cache (Bypass if state['chart_data'] exists)
+            chart_data_from_helper, full_chart = self._get_or_calculate_chart(state['user_id'], user_profile, state)
             
-            if not full_chart:
+            # If we got a dict back directly (bypass mode), use it
+            if isinstance(chart_data_from_helper, dict) and not full_chart:
+                chart_data = chart_data_from_helper
+            elif full_chart:
+                # Standard conversion from object
+                chart_data = format_chart_for_llm(full_chart)
+            else:
                 state['answer'] = "Could not generate or load your birth chart. Please check your birth details."
                 return state
-            
-            # Use formatting helper (unified with the tool)
-            chart_data = format_chart_for_llm(full_chart)
             
             print(f"[CALCULATION_ONLY] Chart: Lagna={chart_data['lagna']}, Rashi={chart_data['moon_sign']}")
             
             # Use LLM to extract only what was asked for
             extraction_prompt = f"""You are a data extraction assistant. The user asked: "{state['query']}"
-
+ 
 USER'S BIRTH DETAILS:
 • Date of Birth: {user_profile.get('date_of_birth')}
 • Time of Birth: {user_profile.get('time_of_birth')}
 • Place of Birth: {user_profile.get('place_of_birth')}
-
+ 
 COMPLETE BIRTH CHART DATA:
-• Lagna (Ascendant): {chart_data['lagna']}
-• Moon Sign (Rashi): {chart_data['moon_sign']}
-• Sun Sign: {chart_data['sun_sign']}
-• Moon Nakshatra: {chart_data['moon_nakshatra']}
-
+• Lagna (Ascendant): {chart_data.get('lagna', 'Unknown')}
+• Moon Sign (Rashi): {chart_data.get('moon_sign', 'Unknown')}
+• Sun Sign: {chart_data.get('sun_sign', 'Unknown')}
+• Moon Nakshatra: {chart_data.get('moon_nakshatra', 'Unknown')}
+ 
 Planetary Positions:
-• Sun: {chart_data['planets']['Sun']['rashi']} (House {chart_data['planets']['Sun']['house']})
-• Moon: {chart_data['planets']['Moon']['rashi']} (House {chart_data['planets']['Moon']['house']})
-• Mars: {chart_data['planets']['Mars']['rashi']} (House {chart_data['planets']['Mars']['house']})
-• Mercury: {chart_data['planets']['Mercury']['rashi']} (House {chart_data['planets']['Mercury']['house']})
-• Jupiter: {chart_data['planets']['Jupiter']['rashi']} (House {chart_data['planets']['Jupiter']['house']})
-• Venus: {chart_data['planets']['Venus']['rashi']} (House {chart_data['planets']['Venus']['house']})
-• Saturn: {chart_data['planets']['Saturn']['rashi']} (House {chart_data['planets']['Saturn']['house']})
-• Rahu: {chart_data['planets']['Rahu']['rashi']} (House {chart_data['planets']['Rahu']['house']})
-• Ketu: {chart_data['planets']['Ketu']['rashi']} (House {chart_data['planets']['Ketu']['house']})
-
+• Sun: {chart_data.get('planets', {}).get('Sun', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Sun', {}).get('house', '?')})
+• Moon: {chart_data.get('planets', {}).get('Moon', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Moon', {}).get('house', '?')})
+• Mars: {chart_data.get('planets', {}).get('Mars', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Mars', {}).get('house', '?')})
+• Mercury: {chart_data.get('planets', {}).get('Mercury', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Mercury', {}).get('house', '?')})
+• Jupiter: {chart_data.get('planets', {}).get('Jupiter', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Jupiter', {}).get('house', '?')})
+• Venus: {chart_data.get('planets', {}).get('Venus', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Venus', {}).get('house', '?')})
+• Saturn: {chart_data.get('planets', {}).get('Saturn', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Saturn', {}).get('house', '?')})
+• Rahu: {chart_data.get('planets', {}).get('Rahu', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Rahu', {}).get('house', '?')})
+• Ketu: {chart_data.get('planets', {}).get('Ketu', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Ketu', {}).get('house', '?')})
+ 
 INSTRUCTIONS:
 1. Extract ONLY the specific information the user asked for
 2. If they asked for birth details (date/time/place), provide those
@@ -574,33 +627,44 @@ Provide a concise answer:"""
                 if not state.get('chart_data'):
                     try:
                         # Calculate or load from cache
-                        _, full_chart = self._get_or_calculate_chart(state['user_id'], user_profile)
+                        chart_data_from_helper, full_chart = self._get_or_calculate_chart(state['user_id'], user_profile, state)
                         
-                        if full_chart:
-                            # Use formatting helper
+                        if isinstance(chart_data_from_helper, dict):
+                            state['chart_data'] = chart_data_from_helper
+                        elif full_chart:
                             state['chart_data'] = format_chart_for_llm(full_chart)
-                            print(f"[RAG_WITH_CALCULATION] Chart: Lagna={state['chart_data']['lagna']}, Rashi={state['chart_data']['moon_sign']}")
+                            
+                        if state.get('chart_data'):
+                            print(f"[RAG_WITH_CALCULATION] Chart ready: Lagna={state['chart_data']['lagna']}")
                         
-                        # Calculate current dasha
-                        dasha_tool = self.calculation_tools['current_dasha']
-                        dasha_data = dasha_tool.invoke({
-                            "date_of_birth": user_profile.get('date_of_birth'),
-                            "time_of_birth": user_profile.get('time_of_birth'),
-                            "latitude": user_profile.get('latitude'),
-                            "longitude": user_profile.get('longitude')
-                        })
+                        # Calculate current dasha (Priority check)
+                        if not state.get('dasha_data'):
+                            print("[RAG_WITH_CALCULATION] [FALLBACK] Calculating dasha...")
+                            dasha_tool = self.calculation_tools['current_dasha']
+                            dasha_data = dasha_tool.invoke({
+                                "date_of_birth": user_profile.get('date_of_birth'),
+                                "time_of_birth": user_profile.get('time_of_birth'),
+                                "latitude": user_profile.get('latitude'),
+                                "longitude": user_profile.get('longitude')
+                            })
+                            
+                            if "error" not in dasha_data:
+                                state['dasha_data'] = dasha_data
+                                print(f"[RAG_WITH_CALCULATION] [FALLBACK] Dasha: {dasha_data['dasha_sequence']}")
+                        else:
+                            print("[RAG_WITH_CALCULATION] [PRIORITY] Using injected dasha data")
                         
-                        if "error" not in dasha_data:
-                            state['dasha_data'] = dasha_data
-                            print(f"[RAG_WITH_CALCULATION] Dasha: {dasha_data['dasha_sequence']}")
-                        
-                        # Calculate current transits
-                        transit_tool = self.calculation_tools['current_transits']
-                        transit_data = transit_tool.invoke({})
-                        
-                        if "error" not in transit_data:
-                            state['transit_data'] = transit_data
-                            print(f"[RAG_WITH_CALCULATION] Transits for {transit_data['date']}")
+                        # Calculate current transits (Priority check)
+                        if not state.get('transit_data'):
+                            print("[RAG_WITH_CALCULATION] [FALLBACK] Calculating transits...")
+                            transit_tool = self.calculation_tools['current_transits']
+                            transit_data = transit_tool.invoke({})
+                            
+                            if "error" not in transit_data:
+                                state['transit_data'] = transit_data
+                                print(f"[RAG_WITH_CALCULATION] [FALLBACK] Transits for {transit_data['date']}")
+                        else:
+                            print("[RAG_WITH_CALCULATION] [PRIORITY] Using injected transit data")
                         
                     except Exception as e:
                         print(f"[RAG_WITH_CALCULATION] Calculation error: {e}")
@@ -608,21 +672,26 @@ Provide a concise answer:"""
             else:
                 print("[RAG_WITH_CALCULATION] No birth data - proceeding without chart")
 
-            # Step 2: Retrieve Relevant Knowledge
+            # Step 2: Retrieve Relevant Knowledge (Bypass if retriever is missing)
             print("[RAG_WITH_CALCULATION] Step 2: Retrieving knowledge...")
             
-            # Enhance query for better retrieval if we have chart data
-            retrieval_query = state['query']
-            if state.get('chart_data'):
-                c = state['chart_data']
-                retrieval_query += f" (Lagna: {c.get('lagna')}, Rashi: {c.get('moon_sign')})"
+            knowledge_chunks = state.get('knowledge_chunks') or []
+            
+            if not knowledge_chunks and self.hybrid_retriever:
+                # Enhance query for better retrieval if we have chart data
+                retrieval_query = state['query']
+                if state.get('chart_data'):
+                    c = state['chart_data']
+                    retrieval_query += f" (Lagna: {c.get('lagna')}, Rashi: {c.get('moon_sign')})"
 
-            knowledge_chunks = self.hybrid_retriever.retrieve(
-                query=retrieval_query,
-                intent="RAG_WITH_CALCULATION",
-                top_k=5,
-                language=state.get('detected_language', 'en')
-            )
+                knowledge_chunks = self.hybrid_retriever.retrieve(
+                    query=retrieval_query,
+                    intent="RAG_WITH_CALCULATION",
+                    top_k=5,
+                    language=state.get('detected_language', 'en')
+                )
+            elif not knowledge_chunks:
+                print("[RAG_WITH_CALCULATION] [WARN] No retriever provided and no chunks injected. Proceeding with zero knowledge.")
             
             state['knowledge_chunks'] = knowledge_chunks
             print(f"[RAG_WITH_CALCULATION] Retrieved {len(knowledge_chunks)} chunks")
@@ -674,15 +743,17 @@ Provide a concise answer:"""
         print("[RAG_ONLY] General theory question - no chart calculation needed")
         
         try:
-            # Step 1: Retrieve knowledge from vector DB
-            print("[RAG_ONLY] Retrieving astrological knowledge...")
-            
-            knowledge_chunks = self.hybrid_retriever.retrieve(
-                query=state['query'],
-                intent="RAG_ONLY",
-                top_k=5,
-                language=state.get('detected_language', 'en')
-            )
+            knowledge_chunks = state.get('knowledge_chunks') or []
+
+            if not knowledge_chunks and self.hybrid_retriever:
+                knowledge_chunks = self.hybrid_retriever.retrieve(
+                    query=state['query'],
+                    intent="RAG_ONLY",
+                    top_k=5,
+                    language=state.get('detected_language', 'en')
+                )
+            elif not knowledge_chunks:
+                 print("[RAG_ONLY] [WARN] No retriever provided and no chunks injected.")
             
             state['knowledge_chunks'] = knowledge_chunks
             print(f"[RAG_ONLY] Retrieved {len(knowledge_chunks)} knowledge chunks")
@@ -1073,6 +1144,11 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         
         context = "\n\n".join(context_parts) if context_parts else "No specific texts retrieved."
         
+        # PHASE 6: Safe extraction for stateless mode (handle None)
+        dasha_data = dasha_data or {}
+        transit_data = transit_data or {}
+        chart_data = chart_data or {}
+        
         # Extract dasha info safely
         maha_planet = dasha_data.get('mahadasha', {}).get('planet', 'Unknown')
         antar_planet = dasha_data.get('antardasha', {}).get('planet', 'Unknown')
@@ -1240,7 +1316,8 @@ RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
         query: str,
         user_id: str,
         conversation_history: Optional[List[Dict]] = None,
-        user_profile_override: Optional[Dict] = None
+        user_profile_override: Optional[Dict] = None,
+        session_data: Optional[Dict] = None
     ) -> Dict:
         """Process query through enhanced orchestrator."""
         start_time = datetime.now()
@@ -1248,7 +1325,8 @@ RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
         initial_state: NakshatraState = {
             "query": query,
             "user_id": user_id,
-            "conversation_history": conversation_history or [],
+            "conversation_history": conversation_history, # Preserved as None for tiered lookup
+            "session_data": session_data,
             "user_profile": user_profile_override,
             "authenticated": user_profile_override is not None,
             "intent": None,
@@ -1295,7 +1373,8 @@ RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
         self,
         query: str,
         user_id: str,
-        conversation_history: Optional[List[Dict]] = None
+        conversation_history: Optional[List[Dict]] = None,
+        session_data: Optional[Dict] = None
     ):
         """
         Process query with streaming response generation.
@@ -1309,7 +1388,8 @@ RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
         initial_state: NakshatraState = {
             "query": query,
             "user_id": user_id,
-            "conversation_history": conversation_history or [],
+            "conversation_history": conversation_history, # Preserved as None for tiered lookup
+            "session_data": session_data,
             "user_profile": None,
             "authenticated": False,
             "intent": None,
