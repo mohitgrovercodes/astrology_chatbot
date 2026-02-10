@@ -124,8 +124,9 @@ class AstrologyRetriever:
         query: str,
         top_k: int = 5,
         filters: Optional[Dict[str, Any]] = None,
+        language: Optional[str] = None,
     ) -> List[RetrievedChunk]:
-        """Core semantic retrieval."""
+        """Core semantic retrieval with language filtering."""
         if not self.collection:
             logger.error(f"Retrieval unavailable: Collection '{self.collection_name}' not loaded.")
             return []
@@ -134,13 +135,28 @@ class AstrologyRetriever:
             logger.error("Retrieval unavailable: Embedder client not initialized (Check OPENAI_API_KEY).")
             return []
             
-        where_clause = self._build_where_clause(filters) if filters else None
+        where_clause = self._build_where_clause(filters) if filters else {}
+        
+        # APPLY LANGUAGE FILTERING
+        # If language is provided, filter by that language. 
+        # Typically we want to pull [detected_language] AND 'en' (as a primary source).
+        if language:
+            # Map hi-lat back to hi for retrieval filtering if necessary, 
+            # but usually it's just 'hi' in metadata.
+            target_lang = language.split('-')[0]
+            lang_filter = {"language": {"$in": [target_lang, "en"]}}
+            
+            if where_clause:
+                where_clause = {"$and": [where_clause, lang_filter]}
+            else:
+                where_clause = lang_filter
+                
         query_embedding = self.embedder.embed_texts([query])[0]
         
         results = self.collection.query(
             query_embeddings=[query_embedding],
             n_results=top_k,
-            where=where_clause,
+            where=where_clause if where_clause else None,
             include=["documents", "metadatas", "distances"]
         )
         
@@ -151,10 +167,11 @@ class AstrologyRetriever:
         query: str,
         top_k: int = 5,
         filters: Optional[Dict[str, Any]] = None,
+        language: Optional[str] = None,
         semantic_weight: float = 0.7,
     ) -> List[RetrievedChunk]:
-        """Reciprocal Rank Fusion (RRF) Hybrid Search."""
-        semantic_results = self.retrieve(query, top_k=top_k * 2, filters=filters)
+        """Reciprocal Rank Fusion (RRF) Hybrid Search with language filtering."""
+        semantic_results = self.retrieve(query, top_k=top_k * 2, filters=filters, language=language)
         
         bm25_results = []
         if self.bm25_index:
@@ -200,23 +217,32 @@ class AstrologyRetriever:
         top_k: int = 5,
         filters: Optional[Dict[str, Any]] = None,
         llm = None,
+        language: Optional[str] = None,
     ) -> List[RetrievedChunk]:
-        """HyDE augmented search (Hypothetical Document Embedding)."""
+        """HyDE augmented search (Hypothetical Document Embedding) with language filtering."""
         if not llm:
-            return self.retrieve(query, top_k, filters)
+            return self.retrieve(query, top_k, filters, language=language)
             
         try:
             prompt = f"Provide a factual summary derived from Vedic astrology regarding: {query}\n\nSummary (brief):"
             hypo_doc = llm.invoke(prompt).content
             logger.info(f"HYDE: Generated hypothetical doc ({len(hypo_doc)} chars)")
             
-            hyde_emb = self.embedder.embed_texts([hypo_doc])[0]
-            where = self._build_where_clause(filters) if filters else None
+            where = self._build_where_clause(filters) if filters else {}
+            
+            # Apply language filter to HyDE as well
+            if language:
+                target_lang = language.split('-')[0]
+                lang_filter = {"language": {"$in": [target_lang, "en"]}}
+                if where:
+                    where = {"$and": [where, lang_filter]}
+                else:
+                    where = lang_filter
             
             results = self.collection.query(
                 query_embeddings=[hyde_emb],
                 n_results=top_k,
-                where=where,
+                where=where if where else None,
                 include=["documents", "metadatas", "distances"]
             )
             return self._parse_results(results)

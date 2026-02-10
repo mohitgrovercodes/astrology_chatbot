@@ -19,58 +19,32 @@ class LanguageDetector:
     Production-grade language detector with library + LLM hybrid approach.
     """
     
-    # ISO 639-1 to full language name mapping
+    # THE 8 FIXED SUPPORTED LANGUAGES (AS PER ARCHITECTURAL REQUIREMENT)
     LANGUAGE_NAMES = {
         'en': 'English',
-        # Major Indian Languages (22 Scheduled Languages)
         'hi': 'Hindi',
-        'bn': 'Bengali',
-        'te': 'Telugu',
         'mr': 'Marathi',
-        'ta': 'Tamil',
-        'ur': 'Urdu',
-        'gu': 'Gujarati',
-        'kn': 'Kannada',
-        'ml': 'Malayalam',
-        'or': 'Odia',
         'pa': 'Punjabi',
-        'as': 'Assamese',
-        'mai': 'Maithili',
-        'sa': 'Sanskrit',
-        'ks': 'Kashmiri',
-        'ne': 'Nepali',
-        'sd': 'Sindhi',
-        'kok': 'Konkani',
-        'mni': 'Manipuri',
-        'doi': 'Dogri',
-        'sat': 'Santali',
-        'bo': 'Bodo',
-        # Other major languages
-        'es': 'Spanish',
-        'fr': 'French',
-        'de': 'German',
-        'it': 'Italian',
-        'pt': 'Portuguese',
-        'ru': 'Russian',
-        'ar': 'Arabic',
-        'zh-cn': 'Chinese (Simplified)',
-        'zh-tw': 'Chinese (Traditional)',
-        'ja': 'Japanese',
-        'ko': 'Korean',
-        'vi': 'Vietnamese',
-        'th': 'Thai',
-        'id': 'Indonesian',
-        'ms': 'Malay',
-        'tr': 'Turkish',
-        'nl': 'Dutch',
-        'pl': 'Polish',
-        'sv': 'Swedish',
-        'no': 'Norwegian',
-        'da': 'Danish',
-        'fi': 'Finnish',
-        'el': 'Greek',
-        'he': 'Hebrew',
-        'fa': 'Persian',
+        'ta': 'Tamil',
+        'te': 'Telugu',
+        'ml': 'Malayalam',
+        # Romanized Variants
+        'hi-lat': 'Hinglish',
+        'mr-lat': 'Marathi (Romanized)',
+        'pa-lat': 'Punjabi (Romanized)',
+        'ta-lat': 'Tanglish',
+        'te-lat': 'Telugu (Romanized)',
+        'ml-lat': 'Malayalam (Romanized)'
+    }
+
+    # Internal whitelist for allowed ISO-639 codes (plus Hinglish)
+    ALLOWED_CODES = set(LANGUAGE_NAMES.keys())
+
+    # Common English phrases that are often mis-detected by langdetect
+    ENGLISH_BYPASS = {
+        'ok', 'okay', 'yes', 'no', 'thanks', 'thank you', 'hello', 'hi',
+        'tell me', 'more', 'detail', 'explain', 'suggest', 'what', 'how',
+        'where', 'when', 'who', 'why', 'please', 'help', 'ni hao', 'hola'
     }
     
     # Romanization markers for Indian languages
@@ -141,11 +115,12 @@ class LanguageDetector:
         ],
         # Malayalam
         'ml': [
-            'namaskaram', 'enthu', 'engane', 'eppol', 'evide', 'aar', 'aarude',
+            'namaskaram', 'entha', 'enthu', 'engane', 'eppol', 'evide', 'aar', 'aarude',
             'njan', 'njaan', 'nee', 'ningal', 'avan', 'aval', 'avar',
             'enikku', 'ninakku', 'ningalkku', 'avannu', 'avalkkku',
             'parayoo', 'cheyyoo', 'nokku', 'kelkku', 'varoo',
-            'illa', 'alle', 'athe', 'sheriyaanu', 'nannaayi', 'valare'
+            'illa', 'alle', 'athe', 'sheriyaanu', 'nannaayi', 'valare',
+            'sugamano', 'vishesham', 'kore', 'naalu', 'aayi', 'poda', 'podam'
         ],
         # Punjabi
         'pa': [
@@ -177,37 +152,54 @@ class LanguageDetector:
         
     def detect(self, text: str) -> str:
         """
-        Detect language and return ISO 639-1 code.
-        
-        Args:
-            text: Text to detect language for
-            
-        Returns:
-            ISO 639-1 language code (e.g., 'en', 'hi', 'es')
-            Returns 'en' as safe default on failure
+        Detect language and return one of the 8 fixed ISO codes.
         """
-        if not text or len(text.strip()) < 3:
+        if not text or len(text.strip()) < 2:
             return 'en'
-            
+
+        q_clean = text.lower().strip()
+        
+        # 1. English Bypass for common phrases
+        words = set(re.findall(r'\w+', q_clean))
+        if words.intersection(self.ENGLISH_BYPASS):
+            return 'en'
+
         try:
-            # CRITICAL: Check romanization FIRST before library
-            # Library may misdetect romanized text as other Latin-script languages
+            # 2. Romanization Check
             romanized_lang = self._detect_romanization(text)
             if romanized_lang:
-                return f"{romanized_lang}-lat"
+                # Map base code to -lat variant
+                lat_code = f"{romanized_lang}-lat"
+                if lat_code in self.ALLOWED_CODES:
+                    return lat_code
+                
+                # Fallback: if somehow the -lat isn't in allowed but base is (shouldn't happen with new config)
+                if romanized_lang in self.ALLOWED_CODES:
+                    return romanized_lang
+                    
+                return 'en'
             
-            # Step 2: Use library-based detection
+            # 3. Library Detection
             lang_code = detect(text)
-            return self._normalize_code(lang_code)
+            normalized = self._normalize_code(lang_code)
+            
+            # Strict Filtering: Force fallback to 'en' if not in the 8 allowed
+            if normalized in self.ALLOWED_CODES:
+                return normalized
+            
+            return 'en'
             
         except LangDetectException:
-            # Step 3: Fallback to LLM for ambiguous cases
+            # Step 4: Fallback to LLM (if enabled)
             if self.llm:
-                print("[LANG_DETECTOR] Library detection failed, using LLM fallback...")
-                return self._llm_detect(text)
+                detected = self._llm_detect(text)
+                if detected in self.ALLOWED_CODES:
+                    return detected
+                # Handle LLM returning hi-lat as separate code
+                if detected == 'hi-lat':
+                    return 'hi-lat'
+                return 'en'
             
-            # Final fallback
-            print("[LANG_DETECTOR] [WARN] Detection failed, defaulting to 'en'")
             return 'en'
     
     def detect_with_confidence(self, text: str) -> Tuple[str, float]:
@@ -318,23 +310,16 @@ class LanguageDetector:
     
     def _llm_detect(self, text: str) -> str:
         """
-        Use LLM for edge cases like code-switching and ambiguous text.
-        
-        Args:
-            text: Text to detect
-            
-        Returns:
-            ISO 639-1 language code
+        Use LLM for edge cases, restricted to the 8 supported languages.
         """
         if not self.llm:
             return 'en'
             
         prompt = f"""Identify the PRIMARY language of the following text.
-If the text mixes languages (e.g., Hinglish), identify the DOMINANT language.
+RESTRICT your answer to one of these codes: {', '.join(self.LANGUAGE_NAMES.keys())}.
 
-Return ONLY the ISO 639-1 code (2-letter code like 'en', 'hi', 'ta', 'es', 'fr', etc.).
-If the text uses Roman script for a non-Latin language (e.g., "Namaste kaise ho"), 
-append '-lat' (e.g., 'hi-lat').
+NOTE: If the text is an Indian language (Hindi, Marathi, Tamil, etc.) written in ROMAN SCRIPT (English alphabet), 
+append '-lat' to the code (e.g., 'hi-lat', 'ta-lat', 'mr-lat').
 
 Text: "{text}"
 
@@ -343,18 +328,10 @@ Language code:"""
         try:
             response = self.llm.invoke(prompt)
             detected = response.content.strip().lower() if hasattr(response, 'content') else str(response).strip().lower()
-            
-            # Clean up response (sometimes LLM adds explanation)
-            detected = detected.split()[0].split('\n')[0]
-            
-            # Validate it's a reasonable code
-            if len(detected) >= 2 and len(detected) <= 6:
-                return detected
-                
-        except Exception as e:
-            print(f"[LANG_DETECTOR] LLM detection error: {e}")
-            
-        return 'en'
+            detected = detected.split()[0].split('\n')[0].replace('"', '').replace("'", "")
+            return detected
+        except Exception:
+            return 'en'
     
     def get_language_name(self, lang_code: str) -> str:
         """

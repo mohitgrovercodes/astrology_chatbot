@@ -76,41 +76,34 @@ class LocalizationManager:
         """
         Return identity and guidelines for a specific persona and language.
         
-        All personas are pre-generated and loaded from disk.
-        Falls back to English if language not found.
-        
-        Args:
-            lang_code: Language code (e.g., 'es', 'fr')
-            persona_type: 'vedic' or 'western'
-            llm: Unused (kept for backward compatibility)
-            
-        Returns:
-            Persona dictionary with identity and guidelines
+        System attempts to load:
+        1. Exact match (e.g., 'hi-lat')
+        2. Base language match (e.g., 'hi')
+        3. Fallback to English ('en')
         """
-        # Check if language exists
+        # 1. Try exact match
         if lang_code in self.locales:
             persona = self.locales[lang_code].get('personas', {}).get(persona_type, {})
             if persona:
-                logger.debug(f"[LOCALIZATION] Using locale for {lang_code}/{persona_type}")
                 return persona
-        
-        # Fallback to English
-        logger.warning(f"[LOCALIZATION] Falling back to English for {lang_code}/{persona_type}")
+                
+        # 2. Try base language (handle -lat suffix)
+        if "-lat" in lang_code:
+            base_code = lang_code.split("-")[0]
+            if base_code in self.locales:
+                # Use base persona (content is in native script, but PromptBuilder dictates output script)
+                target_persona = self.locales[base_code].get('personas', {}).get(persona_type, {})
+                if target_persona:
+                    return target_persona
+
+        # 3. Fallback to English
         return self.locales.get('en', {}).get('personas', {}).get(persona_type, {})
 
     def get_language_map(self) -> Dict[str, str]:
         """Return a map of code to descriptive name for all locales."""
         result = {}
-        
-        # Manual locales
         for code, data in self.locales.items():
             result[code] = data.get('language_name', code)
-        
-        # Generated locales
-        for code, data in self._persona_cache.items():
-            if code not in result:
-                result[code] = data.get('language_name', code)
-        
         return result
 
 

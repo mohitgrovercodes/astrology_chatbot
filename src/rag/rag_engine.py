@@ -145,14 +145,19 @@ Always be respectful of the sacred nature of Vedic astrology."""
             db_path=db_path
         )
         
-        # Initialize LLM
-        print(f"[INFO] Initializing LLM: {llm_provider}/{llm_model or 'default'}")
         self.llm = create_llm(
             provider=llm_provider,
             model=llm_model,
             temperature=temperature,
             max_tokens=4096,
             use_rate_limiting=True,
+        )
+        
+        # Ensure retriever exists (Phase 6.2 fix)
+        self.retriever = retriever or AstrologyRetriever(
+            collection_name=collection_name,
+            db_path=db_path,
+            embedder=getattr(self, 'embedder', None)
         )
         
         # Initialize reranker if requested
@@ -180,6 +185,8 @@ Always be respectful of the sacred nature of Vedic astrology."""
             print(f"[OK] Persona loaded: {self.persona_config.name}")
         else:
             print(f"[WARN] Using legacy system prompt (prompts module unavailable)")
+            self.persona_config = None
+            self.persona_name = "legacy"
 
         # Initialize Long-Term Memory (Persistent ChromaDB)
         self.memory_retriever = MemoryRetriever(
@@ -187,8 +194,6 @@ Always be respectful of the sacred nature of Vedic astrology."""
             collection_name="conversation_memories"
         )
         print("[OK] Long-term memory retriever initialized (conversation_memories)")
-            self.persona_config = None
-            self.persona_name = "legacy"
         
         # Phase 4: Initialize conversation storage
         self.enable_storage = enable_storage and STORAGE_AVAILABLE
@@ -483,11 +488,11 @@ Always be respectful of the sacred nature of Vedic astrology."""
         all_chunks = []
         for q in query_variations:
             if final_hyde:
-                chunks = self.retriever.retrieve_with_advanced_hyde(q, top_k=top_k, filters=filters, llm=self.llm)
+                chunks = self.retriever.retrieve_with_advanced_hyde(q, top_k=top_k, filters=filters, llm=self.llm, language=language)
             elif final_hybrid:
-                chunks = self.retriever.retrieve_hybrid(q, top_k=top_k, filters=filters)
+                chunks = self.retriever.retrieve_hybrid(q, top_k=top_k, filters=filters, language=language)
             else:
-                chunks = self.retriever.retrieve(q, top_k=top_k, filters=filters)
+                chunks = self.retriever.retrieve(q, top_k=top_k, filters=filters, language=language)
             all_chunks.extend(chunks)
         
         # Deduplicate and sort by score
