@@ -33,7 +33,7 @@ from src.routing import SemanticRouter
 # PERSISTENCE & CACHING
 from src.engines.vedic.vedic_engine import VedicEngine, VedicChart
 import json
-
+from config.rag_config import RAGConfig
 
 class NakshatraState(TypedDict):
     """Enhanced state with calculation results."""
@@ -757,7 +757,7 @@ Provide a concise answer:"""
                 knowledge_chunks = self.hybrid_retriever.retrieve(
                     query=retrieval_query,
                     intent="RAG_WITH_CALCULATION",
-                    top_k=5,
+                    top_k=RAGConfig.get_top_k(content_type='interpretation'),  # Auto: 10 chunks
                     language=state.get('detected_language', 'en')
                 )
             elif not knowledge_chunks:
@@ -819,7 +819,7 @@ Provide a concise answer:"""
                 knowledge_chunks = self.hybrid_retriever.retrieve(
                     query=state['query'],
                     intent="RAG_ONLY",
-                    top_k=5,
+                    top_k=RAGConfig.get_top_k(content_type='general'),  # Auto: 8 chunks
                     language=state.get('detected_language', 'en')
                 )
             elif not knowledge_chunks:

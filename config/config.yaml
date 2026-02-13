@@ -36,7 +36,10 @@ embeddings:
 rag:
   chunk_size: 1000
   chunk_overlap: 200
-  top_k: 5
+  # top_k moved to config/rag_config.py for centralized control
+  # Default: 10 (was 5)
+  # Validation rules: 15, Interpretations: 10
+  use_python_config: true
   score_threshold: 0.7
   collection_name: astrology_knowledge
 

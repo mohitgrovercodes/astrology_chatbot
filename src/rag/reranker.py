@@ -17,7 +17,7 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.rag.retriever import RetrievedChunk
-
+from config.rag_config import RAGConfig
 
 class Reranker:
     """
@@ -60,6 +60,7 @@ class Reranker:
         query: str,
         chunks: List[RetrievedChunk],
         top_k: Optional[int] = None,
+        content_type: str = None,
     ) -> List[RetrievedChunk]:
         """
         Rerank retrieved chunks.
@@ -73,7 +74,11 @@ class Reranker:
             Reranked chunks
         """
         if not self.client or not chunks:
-            return chunks
+           return chunks
+    
+        # Get top_k from RAGConfig if not provided
+        if top_k is None:
+            top_k = RAGConfig.get_top_k(content_type=content_type)
         
         if self.method == "cross-encoder":
             return self._rerank_cross_encoder(query, chunks, top_k)

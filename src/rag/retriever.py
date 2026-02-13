@@ -258,12 +258,86 @@ class AstrologyRetriever:
     ) -> List[RetrievedChunk]:
         """
         Expand context by fetching adjacent chunks (previous/next).
-        Currently a placeholder that returns original chunks to prevent errors.
-        TODO: Implement true expansion using chunk_index/seq_id from metadata.
+        
+        Args:
+            chunks: Retrieved chunks to expand
+            max_related: Max adjacent chunks per direction (default: 2)
+            
+        Returns:
+            Original chunks + adjacent chunks (deduplicated)
         """
-        # For now, just return the chunks to fix the AttributeError
-        # In future: Query DB for chunk_index = current +/- 1 within same chapter
-        return chunks
+        if not self.collection or not chunks:
+            return chunks
+        
+        from config.rag_config import RAGConfig
+        
+        expanded = []
+        seen_ids = set()
+        
+        logger.info(f"[EXPAND] Expanding context for {len(chunks)} chunks...")
+        
+        for chunk in chunks:
+            # Add original chunk first
+            if chunk.chunk_id not in seen_ids:
+                expanded.append(chunk)
+                seen_ids.add(chunk.chunk_id)
+            
+            # Get metadata for expansion
+            metadata = chunk.metadata
+            source_book = metadata.get('source_book')
+            chapter = metadata.get('chapter')
+            chunk_index = metadata.get('chunk_index')
+            
+            # Can't expand without proper metadata
+            if not all([source_book, chapter is not None, chunk_index is not None]):
+                logger.debug(f"[EXPAND] Skipping chunk {chunk.chunk_id}: missing metadata")
+                continue
+            
+            # Fetch adjacent chunks
+            for offset in range(-max_related, max_related + 1):
+                if offset == 0:
+                    continue  # Skip current chunk
+                
+                adjacent_index = chunk_index + offset
+                
+                # Query for adjacent chunk
+                try:
+                    where_clause = {
+                        "$and": [
+                            {"source_book": {"$eq": source_book}},
+                            {"chapter": {"$eq": chapter}},
+                            {"chunk_index": {"$eq": adjacent_index}}
+                        ]
+                    }
+                    
+                    results = self.collection.get(
+                        where=where_clause,
+                        limit=1,
+                        include=["documents", "metadatas"]
+                    )
+                    
+                    if results and results['ids'] and len(results['ids']) > 0:
+                        adj_id = results['ids'][0]
+                        if adj_id not in seen_ids:
+                            adj_metadata = results['metadatas'][0]
+                            adj_chunk = RetrievedChunk(
+                                chunk_id=adj_id,
+                                text=results['documents'][0],
+                                display_text=adj_metadata.get('display_text', results['documents'][0]),
+                                verse_sanskrit=adj_metadata.get('verse_sanskrit'),
+                                score=chunk.score * RAGConfig.ADJACENT_CHUNK_SCORE_PENALTY,  # Lower score
+                                metadata=adj_metadata
+                            )
+                            expanded.append(adj_chunk)
+                            seen_ids.add(adj_id)
+                            logger.debug(f"[EXPAND] Added adjacent chunk: {adj_id} (offset: {offset})")
+                
+                except Exception as e:
+                    logger.debug(f"[EXPAND] Error fetching adjacent chunk at offset {offset}: {e}")
+                    continue
+        
+        logger.info(f"[EXPAND] Expanded {len(chunks)} → {len(expanded)} chunks")
+        return expanded
 
     def _parse_results(self, results) -> List[RetrievedChunk]:
         chunks = []

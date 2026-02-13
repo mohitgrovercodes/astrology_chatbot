@@ -29,6 +29,7 @@ sys.path.insert(0, str(project_root))
 from src.rag.retriever import AstrologyRetriever, RetrievedChunk
 from src.llm.factory import create_llm
 from src.rag.reranker import Reranker
+from config.rag_config import RAGConfig
 
 # Phase 4: Import personas and templates
 try:
@@ -118,11 +119,12 @@ Always be respectful of the sacred nature of Vedic astrology."""
         llm_model: Optional[str] = None,
         temperature: float = 0.3,
         retriever: Optional[AstrologyRetriever] = None,
-        use_reranker: bool = False,
+        use_reranker: bool = None,  # None = use RAGConfig default
         reranker_method: str = "cross-encoder",
         persona: str = "hybrid",  # Phase 4: Persona selection
         enable_storage: bool = True,  # Phase 4: Persistent storage
         session_id: Optional[str] = None,  # Phase 4: Session management
+        enable_context_expansion: bool = None,  # None = use RAGConfig default
     ):
         """
         Initialize RAG engine.
@@ -134,12 +136,18 @@ Always be respectful of the sacred nature of Vedic astrology."""
             llm_model: LLM model name (auto-selected if None)
             temperature: LLM temperature
             retriever: Optional pre-initialized retriever
-            use_reranker: Enable reranking for better precision
+            use_reranker: Enable reranking (None = use RAGConfig)
             reranker_method: 'cross-encoder'
             persona: Astrologer persona ('hybrid', 'traditional', 'educational', 'western')
             enable_storage: Enable conversation storage
             session_id: Existing session ID (creates new if None)
+            enable_context_expansion: Enable context expansion (None = use RAGConfig)
         """
+        # Get defaults from RAGConfig if not specified
+        if use_reranker is None:
+            use_reranker = RAGConfig.ENABLE_RERANKING
+        if enable_context_expansion is None:
+            enable_context_expansion = RAGConfig.ENABLE_CONTEXT_EXPANSION
         # Initialize retriever
         self.retriever = retriever or AstrologyRetriever(
             collection_name=collection_name,
@@ -162,13 +170,25 @@ Always be respectful of the sacred nature of Vedic astrology."""
         )
         
         # Initialize reranker if requested
+        self.enable_reranking = use_reranker
         self.reranker = None
         if use_reranker:
             try:
-                self.reranker = Reranker(method=reranker_method)
-                print(f"[OK] Reranker enabled: {reranker_method}")
+                self.reranker = Reranker(method=reranker_method, model=RAGConfig.RERANKER_MODEL)
+                print(f"[OK] ✅ Reranker enabled: {reranker_method} ({RAGConfig.RERANKER_MODEL})")
             except Exception as e:
-                print(f"[WARN] Reranker initialization failed: {e}")
+                print(f"[WARN] ⚠️ Reranker initialization failed: {e}")
+                print(f"[WARN] Install: pip install sentence-transformers")
+                self.enable_reranking = False
+        else:
+            print(f"[INFO] Reranker disabled")
+        
+        # Context expansion setting
+        self.enable_context_expansion = enable_context_expansion
+        if enable_context_expansion:
+            print(f"[OK] ✅ Context expansion enabled (±{RAGConfig.MAX_ADJACENT_CHUNKS} chunks)")
+        else:
+            print(f"[INFO] Context expansion disabled")
         
         # Phase 4: Initialize persona and templates
         if PROMPTS_AVAILABLE:
@@ -414,32 +434,65 @@ Always be respectful of the sacred nature of Vedic astrology."""
     def answer_question(
         self,
         query: str,
-        top_k: int = 5,
+        top_k: int = None,  # Now optional - auto-determined from RAGConfig
         filters: Optional[Dict[str, Any]] = None,
         use_hyde: Optional[bool] = None,   # Changed to Optional
-        use_hybrid: Optional[bool] = None, # Added Explicit Flag
-        expand_context: bool = True,
+        # use_hybrid: Optional[bool] = None, # Added Explicit Flag
+        # expand_context: bool = True,
+        
         conversation_history: Optional[List[Dict[str, str]]] = None,
         user_profile: Optional[Dict[str, Any]] = None, # Added Profile
         save_to_store: bool = True,  # Phase 4: Auto-save to storage
+        content_type: str = None,  # NEW: For smart top_k selection
+        intent: str = "DEFAULT",  # NEW: For context-aware retrieval
     ) -> RAGResponse:
         """
         Answer a question using RAG with automatic strategy routing.
         
         Args:
             query: User question
-            top_k: Number of chunks to retrieve
+            top_k: Number of chunks to retrieve (None = auto from RAGConfig)
             filters: Metadata filters
             use_hyde: Force HyDE (None = Auto)
             use_hybrid: Force Hybrid (None = Auto)
             expand_context: Expand with related chunks
             conversation_history: Previous conversation turns (if not using storage)
             save_to_store: Save turn to conversation store
+            content_type: 'validation_rule', 'interpretation', 'general', 'chitchat'
+            intent: Query intent for context-aware retrieval
             
         Returns:
             RAGResponse with answer and sources
         """
         print(f"\n[QUERY] {query}")
+        
+        # Auto-determine top_k from RAGConfig if not provided
+        if top_k is None:
+            # Smart content_type detection if not provided
+            if content_type is None:
+                query_lower = query.lower()
+                if 'validation' in query_lower or 'rule' in query_lower or 'check' in query_lower:
+                    content_type = 'validation_rule'
+                elif 'predict' in query_lower or intent == 'PREDICTION':
+                    content_type = 'interpretation'
+                elif 'hello' in query_lower or 'hi' in query_lower or intent == 'CHITCHAT':
+                    content_type = 'chitchat'
+                else:
+                    content_type = 'general'
+            
+            top_k = RAGConfig.get_top_k(content_type=content_type)
+            print(f"[RAG] Auto-selected top_k={top_k} for content_type='{content_type}'")
+        
+        # If reranking is enabled, retrieve more candidates
+        retrieval_k = top_k
+        if self.enable_reranking and self.reranker:
+            # Check if we should rerank (pre-check to optimize)
+            if RAGConfig.should_rerank(content_type=content_type, query=query):
+                retrieval_k = RAGConfig.get_top_k(
+                    content_type=content_type,
+                    for_reranking=True
+                )
+                print(f"[RAG] Retrieving {retrieval_k} candidates for reranking (will return top {top_k})")
         
         # Phase 4: Load history from storage if enabled
         if self.enable_storage and conversation_history is None:
@@ -489,11 +542,11 @@ Always be respectful of the sacred nature of Vedic astrology."""
         all_chunks = []
         for q in query_variations:
             if final_hyde:
-                chunks = self.retriever.retrieve_with_advanced_hyde(q, top_k=top_k, filters=filters, llm=self.llm, language=language)
+                chunks = self.retriever.retrieve_with_advanced_hyde(q, top_k=retrieval_k, filters=filters, llm=self.llm, language=language)
             elif final_hybrid:
-                chunks = self.retriever.retrieve_hybrid(q, top_k=top_k, filters=filters, language=language)
+                chunks = self.retriever.retrieve_hybrid(q, top_k=retrieval_k, filters=filters, language=language)
             else:
-                chunks = self.retriever.retrieve(q, top_k=top_k, filters=filters, language=language)
+                chunks = self.retriever.retrieve(q, top_k=retrieval_k, filters=filters, language=language)
             all_chunks.extend(chunks)
         
         # Deduplicate and sort by score
@@ -503,19 +556,53 @@ Always be respectful of the sacred nature of Vedic astrology."""
             if chunk.chunk_id not in seen_ids:
                 seen_ids.add(chunk.chunk_id)
                 unique_chunks.append(chunk)
-                if len(unique_chunks) >= top_k:
+                if len(unique_chunks) >= retrieval_k:  # Use retrieval_k here
                     break
         
         chunks = unique_chunks
         print(f"[RETRIEVAL] Found {len(chunks)} unique chunks")
         
-        # Rerank if enabled
-        if self.reranker and len(chunks) > 1:
-            chunks = self.reranker.rerank(query, chunks, top_k=top_k)
+        # Context expansion (smart decision based on RAGConfig)
+        if self.enable_context_expansion and chunks:
+            should_expand = RAGConfig.should_expand(
+                content_type=content_type,
+                chunks=chunks,
+                query=query
+            )
+            if should_expand:
+                print(f"[EXPANSION] Expanding context...")
+                chunks = self.retriever.expand_context(
+                    chunks,
+                    max_related=RAGConfig.MAX_ADJACENT_CHUNKS
+                )
+                
+                # Deduplicate after expansion
+                seen_ids_after = set()
+                expanded_unique = []
+                for chunk in chunks:
+                    if chunk.chunk_id not in seen_ids_after:
+                        expanded_unique.append(chunk)
+                        seen_ids_after.add(chunk.chunk_id)
+                chunks = expanded_unique
+                print(f"[EXPANSION] Now have {len(chunks)} chunks after expansion")
         
-        # Expand context
-        if expand_context and chunks:
-            chunks = self.retriever.expand_context(chunks, max_related=2)
+        # Reranking (smart decision based on RAGConfig)
+        if self.enable_reranking and self.reranker and len(chunks) > 1:
+            top_score = chunks[0].score if chunks else 0.0
+            should_rerank = RAGConfig.should_rerank(
+                content_type=content_type,
+                top_score=top_score,
+                query=query
+            )
+            if should_rerank:
+                print(f"[RERANK] Reranking {len(chunks)} chunks (top_score: {top_score:.3f})...")
+                chunks = self.reranker.rerank(
+                    query,
+                    chunks,
+                    top_k=top_k,
+                    content_type=content_type
+                )
+                print(f"[RERANK] Returned top {len(chunks)} reranked chunks")
             print(f"[CONTEXT] Expanded to {len(chunks)} chunks")
         
         # Build prompt (inject long-term memory here)

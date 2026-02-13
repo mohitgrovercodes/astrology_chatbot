@@ -7,7 +7,7 @@ Combines: Semantic (ChromaDB) + Keyword (BM25) + HyDE
 import numpy as np
 from typing import List, Dict, Optional
 from langchain_core.documents import Document
-
+from config.rag_config import RAGConfig
 
 class HybridRetriever:
     """Hybrid retriever with adaptive weighting."""
@@ -51,9 +51,13 @@ class HybridRetriever:
             print(f"[BM25] Error: {e}")
             self._bm25_built = True  # Don't try again
     
-    def retrieve(self, query: str, intent: str = "DEFAULT", top_k: int = 5, filters: Optional[Dict] = None, language: str = "en") -> List[Document]:
+    def retrieve(self, query: str, intent: str = "DEFAULT", top_k: int = None, filters: Optional[Dict] = None, language: str = "en", content_type: str = None,) -> List[Document]:
         """Main retrieval method with cross-lingual support."""
-        print(f"[HYBRID] Intent: {intent}, Language: {language}")
+        # Get top_k from RAGConfig if not provided
+        if top_k is None:
+            top_k = RAGConfig.get_top_k(content_type=content_type)
+    
+        print(f"[HYBRID] Intent: {intent}, Language: {language}, top_k: {top_k}")
         
         # Step 1: Query Translation (Cross-lingual RAG)
         # We find English text using an English version of the query

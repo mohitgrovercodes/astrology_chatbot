@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, Any
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import yaml
+from config.rag_config import RAGConfig
 
 
 # ============================================
@@ -61,9 +62,11 @@ class RAGConfig(BaseSettings):
     """RAG pipeline configuration from YAML."""
     chunk_size: int = 1000
     chunk_overlap: int = 200
-    top_k: int = 5
+    # REMOVED: top_k: int = 5  
+    # Now uses config/rag_config.py dynamically
     score_threshold: float = 0.7
     collection_name: str = "astrology_knowledge"
+    use_python_config: bool = True  # NEW
     
     model_config = SettingsConfigDict(extra='allow')
 
