@@ -1,3 +1,4 @@
+# src\ai\intent_classifier.py
 """
 LLM-Based Intent Classifier for NakshatraAI.
 
@@ -11,6 +12,7 @@ Uses Gemini/GPT to accurately classify user queries into four categories:
 from typing import Dict, List, Optional, Any
 import json
 import os
+import re
 
 
 class LLMIntentClassifier:
@@ -25,7 +27,8 @@ class LLMIntentClassifier:
         "CHITCHAT",
         "CALCULATION_ONLY", 
         "RAG_WITH_CALCULATION",
-        "RAG_ONLY"
+        "RAG_ONLY",
+        "AMBIGUOUS"  # NEW: Queries that need clarification
     ]
     
     # High-confidence pattern cache (exact matches only, 95%+ confidence)
@@ -138,6 +141,60 @@ Respond with ONLY a JSON object:
         self.llm = llm
         print("[INTENT] LLM connected to classifier")
     
+    def _is_ambiguous(self, query: str, user_profile: Optional[Dict] = None) -> bool:
+        """
+        Detect if a query is ambiguous (could be theory OR personalized).
+        
+        Triggers:
+        - Query mentions a planet/house WITHOUT context
+        - User has birth data (so personalization is possible)
+        - No explicit intent markers (e.g., "in general", "for me")
+        
+        Returns:
+            True if query is ambiguous and needs clarification
+        """
+        # Only ambiguous if user HAS birth data (personalization is possible)
+        if not user_profile or not user_profile.get('date_of_birth'):
+            return False
+        
+        query_lower = query.lower().strip()
+        
+        # Ambiguous patterns: Mentions planet/house without clear intent
+        ambiguous_patterns = [
+            r'\btell me about (jupiter|venus|mars|saturn|mercury|sun|moon|rahu|ketu)\b',
+            r'\bwhat (is|are) (the )?(1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|11th|12th) house\b',
+            r'\bexplain (jupiter|venus|mars|saturn|mercury|sun|moon|rahu|ketu)\b',
+            r'\b(jupiter|venus|mars|saturn|mercury|sun|moon|rahu|ketu) in astrology\b',
+            r'\btell me about (the )?(1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|11th|12th) house\b',
+        ]
+        
+        # Check if query matches ambiguous patterns
+        for pattern in ambiguous_patterns:
+            if re.search(pattern, query_lower):
+                # Check for explicit intent markers that REMOVE ambiguity
+                
+                # Theory markers (user wants general explanation)
+                theory_markers = [
+                    'in general', 'generally', 'what is', 'what are', 'define',
+                    'meaning of', 'significance of', 'in vedic astrology',
+                    'according to', 'classical', 'traditional'
+                ]
+                if any(marker in query_lower for marker in theory_markers):
+                    return False  # Not ambiguous, user wants theory
+                
+                # Personalization markers (user wants their chart)
+                personal_markers = [
+                    'for me', 'my', 'mine', 'in my chart', 'in my life',
+                    'will i', 'am i', 'do i', 'should i', 'when will i'
+                ]
+                if any(marker in query_lower for marker in personal_markers):
+                    return False  # Not ambiguous, user wants personalization
+                
+                # No clear markers → AMBIGUOUS!
+                return True
+        
+        return False
+    
     def _is_nonsensical(self, query: str) -> bool:
         """
         Check if query is nonsensical (random numbers, gibberish, etc.).
@@ -187,6 +244,17 @@ Respond with ONLY a JSON object:
                 'cached': False
             }
             print(f"[INTENT] [VALIDATION] -> CHITCHAT (nonsensical input)")
+            return result
+        
+        # NEW: Check for ambiguous queries BEFORE LLM classification
+        if self._is_ambiguous(query, user_profile):
+            result = {
+                'intent': 'AMBIGUOUS',
+                'confidence': 0.90,
+                'reasoning': 'Query could be theory or personalized, needs clarification',
+                'cached': False
+            }
+            print(f"[INTENT] [AMBIGUITY] -> AMBIGUOUS (needs clarification)")
             return result
         
         q = query.lower().strip()

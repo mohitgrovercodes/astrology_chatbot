@@ -1,3 +1,4 @@
+<!-- INTEGRATION_SUMMARY.md -->
 # ✅ Production Astrology API Integration - COMPLETE
 
 Complete integration layer for 3rd-party astrology APIs with Redis caching and RAG formatting.

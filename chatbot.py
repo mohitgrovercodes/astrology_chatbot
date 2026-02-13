@@ -1,3 +1,4 @@
+# chatbot.py
 """
 NakshatraAI Chatbot - V2 Architecture
 Uses LangGraph orchestrator with 3-category intent classification.

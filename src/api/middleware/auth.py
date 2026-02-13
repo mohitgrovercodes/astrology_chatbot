@@ -1,3 +1,4 @@
+# src\api\middleware\auth.py
 """
 API Key Authentication Middleware
 ===================================

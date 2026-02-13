@@ -1,3 +1,4 @@
+# src\locales\language_detector.py
 """
 Universal Language Detection Module
 
@@ -45,6 +46,12 @@ class LanguageDetector:
         'ok', 'okay', 'yes', 'no', 'thanks', 'thank you', 'hello', 'hi',
         'tell me', 'more', 'detail', 'explain', 'suggest', 'what', 'how',
         'where', 'when', 'who', 'why', 'please', 'help', 'ni hao', 'hola'
+    }
+
+    # Global Exclusion List: Words that should NEVER be counted as Indian markers
+    # even if they appear in the lists below.
+    GLOBAL_EXCLUSION = {
+        'to', 'is', 'me', 'do', 'we', 'us', 'an', 'at', 'by', 'he', 'so', 'it', 'or', 'as'
     }
     
     # Romanization markers for Indian languages
@@ -276,7 +283,7 @@ class LanguageDetector:
         match_counts: Dict[str, int] = {}
         for lang_code, markers in self.ROMANIZATION_MARKERS.items():
             count = sum(1 for marker in markers 
-                       if re.search(r'\b' + marker + r'\b', text_lower))
+                       if marker not in self.GLOBAL_EXCLUSION and re.search(r'\b' + marker + r'\b', text_lower))
             if count > 0:
                 match_counts[lang_code] = count
         

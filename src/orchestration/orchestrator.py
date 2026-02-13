@@ -1,3 +1,4 @@
+# src\orchestration\orchestrator.py
 """
 Enhanced LangGraph Orchestrator with REAL Calculation Integration.
 
@@ -159,6 +160,7 @@ class EnhancedLangGraphOrchestrator:
         workflow.add_node("detect_language", self._detect_language_node)
         workflow.add_node("classify_intent", self._classify_intent_node)
         workflow.add_node("handle_chitchat", self._handle_chitchat_node)
+        workflow.add_node("handle_clarification", self._handle_clarification_node)  # NEW: Clarification node
         workflow.add_node("handle_calculation_only", self._handle_calculation_only_node)
         workflow.add_node("handle_rag_with_calculation", self._handle_rag_with_calculation_node)
         workflow.add_node("handle_rag_only", self._handle_rag_only_node)
@@ -178,6 +180,7 @@ class EnhancedLangGraphOrchestrator:
             self._route_by_intent,
             {
                 "chitchat": "handle_chitchat",
+                "clarification": "handle_clarification",  # NEW: Route to clarification
                 "calculation_only": "handle_calculation_only",
                 "rag_with_calculation": "handle_rag_with_calculation",
                 "rag_only": "handle_rag_only",
@@ -195,6 +198,7 @@ class EnhancedLangGraphOrchestrator:
         
         # Direct paths (Skip validation for now)
         workflow.add_edge("handle_chitchat", "format_response")
+        workflow.add_edge("handle_clarification", "format_response")  # NEW: Clarification goes to format
         workflow.add_edge("handle_calculation_only", "format_response")
         
         # End
@@ -444,6 +448,72 @@ Response:"""
             print(f"[CHITCHAT] Error generating response: {e}")
             state['answer'] = f"Namaste, {user_name}! How can I help you with your astrology chart?"
             
+        return state
+    
+    def _extract_topic(self, query: str) -> str:
+        """Extract the main topic from an ambiguous query."""
+        import re
+        
+        # Planets
+        planets = ['jupiter', 'venus', 'mars', 'saturn', 'mercury', 'sun', 'moon', 'rahu', 'ketu']
+        # Houses
+        houses = ['1st house', '2nd house', '3rd house', '4th house', '5th house', 
+                  '6th house', '7th house', '8th house', '9th house', '10th house', 
+                  '11th house', '12th house']
+        
+        query_lower = query.lower()
+        
+        for planet in planets:
+            if planet in query_lower:
+                return planet.capitalize()
+        
+        for house in houses:
+            if house in query_lower:
+                return f"the {house}"
+        
+        return "this topic"
+    
+    def _handle_clarification_node(self, state: NakshatraState) -> NakshatraState:
+        """Node 3b: Handle ambiguous queries by asking for clarification."""
+        print(f"[CLARIFICATION] Asking user to specify intent")
+        
+        user_name = state['user_profile'].get('name', 'User')
+        query = state['query']
+        lang = state.get('detected_language', 'en')
+        
+        # Extract the topic (e.g., "Jupiter", "7th house")
+        topic = self._extract_topic(query)
+        
+        # Build clarification prompt (English for now, multilingual in Phase 3)
+        if lang == 'en':
+            state['answer'] = f"""Namaste, {user_name}! 🙏
+
+I can help you with **{topic}** in two ways:
+
+1️⃣ **General Explanation** (Theory)
+   → Learn about {topic} in Vedic astrology (classical principles)
+
+2️⃣ **Personalized Analysis** (Your Chart)
+   → Understand {topic} specifically in YOUR birth chart
+
+**Which would you prefer?**
+- Reply with "1" or "general" for theory
+- Reply with "2" or "personalized" for your chart analysis
+
+Or, you can rephrase your question to be more specific! 😊"""
+        else:
+            # Fallback to English for non-English languages (Phase 3 will add multilingual templates)
+            state['answer'] = f"""Namaste, {user_name}! 🙏
+
+I can help you with **{topic}** in two ways:
+
+1️⃣ **General Explanation** (Theory)
+2️⃣ **Personalized Analysis** (Your Chart)
+
+**Which would you prefer?**
+Reply with "1" for theory or "2" for personalized analysis."""
+        
+        print(f"[CLARIFICATION] Topic: {topic}, Language: {lang}")
         return state
     
     def _get_or_calculate_chart(self, user_id: str, user_profile: Dict, state: Optional[NakshatraState] = None) -> Tuple[Optional[Dict], Optional[VedicChart]]:
@@ -1297,6 +1367,8 @@ RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
         
         if intent == "CHITCHAT":
             return "chitchat"
+        elif intent == "AMBIGUOUS":  # NEW: Route ambiguous queries to clarification
+            return "clarification"
         elif intent == "CALCULATION_ONLY":
             return "calculation_only"
         elif intent == "RAG_ONLY":

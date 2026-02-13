@@ -1,3 +1,4 @@
+<!-- docs\DEVELOPER_GUIDE.md -->
 # 🛠️ Developer Guide
 
 **Welcome to the Astrology AI Checkbot Project!**
@@ -111,10 +112,156 @@ python src/tools/calculation_tools.py
 
 ---
 
-## 5. Troubleshooting
+## 5. Deployment
+
+### Docker Deployment (Recommended)
+
+**Quick Start:**
+```bash
+# 1. Build and start services
+docker-compose up -d
+
+# 2. Verify deployment
+docker-compose ps
+
+# 3. Check logs
+docker-compose logs -f api
+
+# 4. Test health endpoint
+curl http://localhost:8000/api/v1/health
+```
+
+**Service Architecture:**
+```yaml
+services:
+  api:          # FastAPI application (port 8000)
+  redis:        # Session storage (port 6379)
+```
+
+**Docker Commands:**
+```bash
+# Start services
+docker-compose up -d
+
+# Stop services
+docker-compose down
+
+# Restart specific service
+docker-compose restart api
+
+# View logs
+docker-compose logs -f api
+
+# Rebuild after code changes
+docker-compose build --no-cache
+docker-compose up -d
+```
+
+### Production Deployment
+
+**Pre-Deployment Checklist:**
+- [ ] Environment variables configured
+- [ ] Secrets generated and secured
+- [ ] Database connection tested
+- [ ] Redis connection tested
+- [ ] SSL certificates obtained (if applicable)
+- [ ] Firewall rules configured
+
+**Environment Variables (Production):**
+```env
+# API Configuration
+DEBUG=false
+HOST=0.0.0.0
+PORT=8000
+
+# Security
+INTERNAL_SERVICE_SECRET=<64-char-random-string>
+VALID_API_KEYS=<comma-separated-keys>
+
+# Redis
+REDIS_HOST=redis
+REDIS_PORT=6379
+REDIS_PASSWORD=<strong-password>
+
+# LLM
+OPENAI_API_KEY=sk-...
+LLM_PROVIDER=openai
+LLM_MODEL=gpt-4o-mini
+
+# CORS
+ALLOWED_ORIGINS=https://yourdomain.com
+
+# Rate Limiting
+RATE_LIMIT_PER_MINUTE=100
+```
+
+**Generate Secrets:**
+```bash
+# Generate strong secrets
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+---
+
+## 6. Localization & Language Support
+
+**Supported Languages (Fixed List):**
+- English (`en`), Hindi (`hi`), Marathi (`mr`), Punjabi (`pa`), Tamil (`ta`), Telugu (`te`), Malayalam (`ml`).
+
+**Adding/Editing Content:**
+- Edit the **Base JSON** only (e.g., `src/locales/mr.json`).
+- **DO NOT** create `mr-lat.json`. The system automatically reuses `mr.json` for Roman script inputs.
+
+---
+
+## 7. Troubleshooting
 
 **Issue**: `ImportError: cannot import name 'VedicEngine'`
 **Fix**: Ensure `PYTHONPATH` includes project root or run from root using `python -m src...`.
 
 **Issue**: `UnicodeEncodeError` on Windows Console
 **Fix**: `chcp 65001` to enable UTF-8 or use an IDE terminal like VS Code.
+
+**Issue**: Redis Connection Failed
+**Fix**:
+```bash
+# Check Redis status
+docker-compose ps redis
+
+# Test connection
+docker-compose exec redis redis-cli ping
+
+# Restart Redis
+docker-compose restart redis
+```
+
+**Issue**: Port Already in Use
+**Fix**:
+```bash
+# Find process using port 8000
+netstat -ano | findstr :8000  # Windows
+lsof -i :8000  # Linux/Mac
+
+# Kill process or change port in .env
+PORT=8001
+```
+
+---
+
+## 📚 Additional Resources
+
+**Documentation:**
+- [CURRENT_IMPLEMENTATION.md](CURRENT_IMPLEMENTATION.md) - Complete system state
+- [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) - Handoff guide for new developers
+- [API_REFERENCE.md](API_REFERENCE.md) - API documentation
+- [ARCHITECTURE.md](ARCHITECTURE.md) - System design
+
+**For Deployment:**
+- See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for detailed deployment instructions
+- Docker Compose configuration in `docker-compose.yml`
+- Environment template in `.env.example`
+
+---
+
+**Developer Guide Version:** 2.0  
+**Last Updated:** February 11, 2026

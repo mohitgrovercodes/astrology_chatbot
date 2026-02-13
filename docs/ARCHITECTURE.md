@@ -1,3 +1,4 @@
+<!-- docs\ARCHITECTURE.md -->
 # NakshatraAI Architecture V2 - Simplified + LangGraph
 
 **Date:** February 6, 2026
@@ -257,6 +258,35 @@ We replaced the brittle Regex/Keyword matching system with a **Semantic AI Route
 - **Threshold**: 0.75
 - **Categories**: DEATH_PREDICTION, MEDICAL, GAMBLING, HARMFUL, PRIVACY.
 - **Impact**: Robust detection of harmful intent without needing exhaustive keyword lists. (e.g., "end my life" is caught even without "suicide" keyword).
+
+---
+
+## 🌐 Multilingual Architecture (Phase 6.2)
+
+We enforce a **Strict 8-Language Lockdown** to prevent hallucinated languages and response drift.
+
+### 1. The 8 Supported Languages
+The system strictly parses inputs into one of these 8 codes. All else falls back to English.
+1. **English** (`en`)
+2. **Hindi** (`hi`) + **Hinglish** (`hi-lat`)
+3. **Marathi** (`mr`) + **Romanized** (`mr-lat`)
+4. **Punjabi** (`pa`) + **Romanized** (`pa-lat`)
+5. **Tamil** (`ta`) + **Romanized** (`ta-lat`)
+6. **Telugu** (`te`) + **Romanized** (`te-lat`)
+7. **Malayalam** (`ml`) + **Romanized** (`ml-lat`)
+
+### 2. Roman Script Handling (`-lat`)
+We use a **Single-Source-Locale** strategy:
+- **Detection**: `LanguageDetector` identifies Romanized text (e.g., "Kasa ahe?") -> Returns `mr-lat`.
+- **Loading**: `LocalizationManager` loads the **Base JSON** (`mr.json`).
+- **Instruction**: `PromptBuilder` injects: *"Respond in Marathi using Roman Script"*.
+- **Benefit**: No duplicate `*-lat.json` files required. 8 files cover 14 variants.
+
+### 3. Drift Prevention (RAG)
+To prevent Cross-Lingual Contamination (e.g., English query getting Marathi chunks):
+- **Filter**: `language IN [detected_code, 'en']`
+- **Logic**: English (`en`) is always retrieved as the "Universal Knowledge Hub".
+- **Result**: Users get answers in their requested language/script without random language switching.
 
 ---
 

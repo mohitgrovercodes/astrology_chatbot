@@ -1,3 +1,4 @@
+# src\rag\extraction\extraction_schemas.py
 """
 Pydantic schemas for structured extraction output.
 These schemas define the RAG-ready format for astrology texts.

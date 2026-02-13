@@ -1,3 +1,4 @@
+<!-- docs\COST_TRACKING.md -->
 # Cost Logger System - Usage Guide
 
 ## Overview

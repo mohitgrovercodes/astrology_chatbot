@@ -1,3 +1,4 @@
+# src\rag\preprocessing\book_profiler.py
 #!/usr/bin/env python3
 """
 Phase 3.5: Automated Book Profiling

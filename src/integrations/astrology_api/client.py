@@ -1,3 +1,4 @@
+# src\integrations\astrology_api\client.py
 """
 Astrology API Client Module
 

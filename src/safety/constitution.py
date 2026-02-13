@@ -1,3 +1,4 @@
+# src\safety\constitution.py
 """
 The Astrologer's Constitution
 =============================

@@ -1,3 +1,4 @@
+# src\rag\preprocessing\vector_db_builder.py
 #!/usr/bin/env python3
 """
 Phase 7: Vector Database Builder

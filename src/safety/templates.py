@@ -1,3 +1,4 @@
+# src\safety\templates.py
 """
 Response Templates for Safety Handling
 

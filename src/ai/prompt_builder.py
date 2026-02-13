@@ -1,3 +1,4 @@
+# src\ai\prompt_builder.py
 """
 Dynamic Prompt Builder for NakshatraAI.
 Builds context-aware prompts - NO rigid templates.

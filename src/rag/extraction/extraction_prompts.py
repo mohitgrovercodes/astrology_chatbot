@@ -1,3 +1,4 @@
+# src\rag\extraction\extraction_prompts.py
 """
 Specialized prompts for Vision LLM extraction of astrology texts.
 These prompts are designed to handle:

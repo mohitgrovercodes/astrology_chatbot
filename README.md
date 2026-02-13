@@ -1,3 +1,4 @@
+<!-- README.md -->
 # 🌟 Astrology AI Chatbot
 
 > **Production-grade AI conversational system for Vedic and Western Astrology**  

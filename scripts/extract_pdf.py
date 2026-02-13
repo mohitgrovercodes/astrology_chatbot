@@ -1,3 +1,4 @@
+# scripts\extract_pdf.py
 #!/usr/bin/env python3
 """
 Interactive PDF Extraction Tool

@@ -1,3 +1,4 @@
+<!-- src\safety\README.md -->
 # Astrology Chatbot Safety System
 
 A comprehensive, production-ready safety classification system for AI astrology chatbots.

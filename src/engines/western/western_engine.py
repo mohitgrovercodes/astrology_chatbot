@@ -1,3 +1,4 @@
+# src\engines\western\western_engine.py
 """
 Western Astrology Engine - Main Orchestrator
 ============================================

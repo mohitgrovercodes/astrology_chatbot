@@ -1,3 +1,4 @@
+<!-- FILE_STRUCTURE.md -->
 # File Structure Summary
 
 After consolidation, the integration now consists of **3 main files**:

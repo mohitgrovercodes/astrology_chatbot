@@ -1,3 +1,4 @@
+<!-- ARCHITECTURE_CLARIFICATION.md -->
 # Architecture Clarification: Backend Integration
 
 ## ✅ Corrected Architecture

@@ -1,3 +1,4 @@
+# src\engines\western\western_constants.py
 """
 Western Astrology Constants
 ===========================

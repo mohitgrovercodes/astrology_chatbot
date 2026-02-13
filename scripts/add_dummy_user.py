@@ -1,3 +1,4 @@
+# scripts\add_dummy_user.py
 #!/usr/bin/env python3
 """
 Add Dummy User Script

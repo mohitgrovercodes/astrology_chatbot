@@ -1,3 +1,4 @@
+<!-- DEPENDENCIES.md -->
 # Dependency Summary for Astrology API Integration
 
 ## New Dependencies Added

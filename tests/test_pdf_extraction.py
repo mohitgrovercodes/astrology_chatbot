@@ -1,3 +1,4 @@
+# tests\test_pdf_extraction.py
 #!/usr/bin/env python3
 """
 Test PDF Extraction with Vertex AI (with AI Studio fallback)

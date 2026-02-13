@@ -1,3 +1,4 @@
+# src\integrations\astrology_api\extended_client.py
 """
 Extended Astrology API Client
 

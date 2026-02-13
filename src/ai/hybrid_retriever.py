@@ -1,3 +1,4 @@
+# src\ai\hybrid_retriever.py
 """
 Advanced Hybrid Retriever for NakshatraAI.
 Combines: Semantic (ChromaDB) + Keyword (BM25) + HyDE

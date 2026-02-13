@@ -1,3 +1,4 @@
+<!-- docs\PDF_EXTRACTION_GUIDE.md -->
 # Vision Extraction System - Production Configuration
 
 **Last Updated:** 2026-01-27  

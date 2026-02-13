@@ -1,3 +1,4 @@
+<!-- src\rag\extraction\README.md -->
 # Vision LLM Extraction Pipeline for Astrology Texts
 
 A production-ready extraction system for scanned Vedic and Western astrology texts using Google Gemini 1.5 Pro Vision.

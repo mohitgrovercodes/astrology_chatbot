@@ -1,3 +1,4 @@
+<!-- src\integrations\astrology_api\README.md -->
 # Production Astrology API Integration
 
 Complete production-grade integration layer for 3rd-party astrology APIs with Redis caching and RAG context preparation.

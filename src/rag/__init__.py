@@ -1,1 +1,2 @@
+# src\rag\__init__.py
 """RAG module - Document ingestion and retrieval."""
