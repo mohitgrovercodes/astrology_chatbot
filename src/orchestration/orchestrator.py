@@ -35,6 +35,23 @@ from src.engines.vedic.vedic_engine import VedicEngine, VedicChart
 import json
 from config.rag_config import RAGConfig
 
+try:
+    from src.prediction.vedic_validation_engine_v2 import VedicValidationEngineV2
+    VALIDATION_AVAILABLE = True
+except ImportError:
+    print("[VALIDATION] vedic_validation_engine_v2 not found - validation disabled")
+    VALIDATION_AVAILABLE = False
+
+from src.orchestration.orchestrator_validation_helpers import (
+    detect_query_type,
+    determine_validation_tier,
+    prepare_chart_for_validation,
+    should_hard_halt,
+    build_halt_response,
+    build_validation_disclaimer,
+    format_validation_for_prompt
+)
+
 class NakshatraState(TypedDict):
     """Enhanced state with calculation results."""
     
@@ -82,6 +99,12 @@ class NakshatraState(TypedDict):
     
     # messages: Annotated[List, operator.add]
 
+# PHASE 12: Validation Results
+    validation_result: Optional[Dict]
+    validation_strength: Optional[float]
+    validation_can_proceed: bool
+    validation_query_type: Optional[str]
+    validation_disclaimer: Optional[str]
 
 class EnhancedLangGraphOrchestrator:
     """
@@ -144,6 +167,13 @@ class EnhancedLangGraphOrchestrator:
                 metadata={"type": "chitchat"}
             )
         
+        # PHASE 12: Initialize Validation Engine
+        self.validation_engine = None
+        self.validation_enabled = VALIDATION_AVAILABLE
+        
+        if self.validation_enabled:
+            print("[VALIDATION] Validation engine enabled ✅")
+
         self.graph = self._build_graph()
         
         print("[LANGGRAPH] [SUCCESS] Enhanced orchestrator initialized")
@@ -672,32 +702,34 @@ Provide a concise answer:"""
     
     def _handle_rag_with_calculation_node(self, state: NakshatraState) -> NakshatraState:
         """
-        Node 3c: RAG_WITH_CALCULATION - Personalized predictions.
-        Uses VedicEngine + RAG + LLM interpretation.
+        Node 3c: RAG_WITH_CALCULATION - Personalized predictions with validation.
+        
+        PHASE 12: Now includes classical validation engine integration
         
         Flow:
-        1. Analyze query for sensitive content (PHASE 6 safety)
-        2. Calculate birth chart, dashas, and transits
-        3. Retrieve relevant knowledge from vector DB
-        4. Synthesize personalized response with LLM
+        1. Calculate birth chart, dashas, and transits
+        1.5. VALIDATE chart against classical rules (NEW)
+        2. Retrieve relevant knowledge from vector DB
+        3. Build prompt with validation constraints
+        4. Generate LLM response
         """
-        print("[RAG_WITH_CALCULATION] Personalized prediction flow")
-        
-        # PHASE 10.5: Safety handled upstream in _classify_intent_node
-        # Legacy Phase 6 safety check removed.
-        
+        print("[RAG_WITH_CALCULATION] Personalized prediction flow with validation")
         
         user_profile = state['user_profile']
         
         try:
-            # Step 1: Calculate user's chart (always needed for personalized predictions)
+            # ================================================================
+            # STEP 1: Calculate user's chart
+            # ================================================================
             if user_profile.get('date_of_birth'):
                 print("[RAG_WITH_CALCULATION] Step 1: Calculating user's chart...")
                 
                 if not state.get('chart_data'):
                     try:
                         # Calculate or load from cache
-                        chart_data_from_helper, full_chart = self._get_or_calculate_chart(state['user_id'], user_profile, state)
+                        chart_data_from_helper, full_chart = self._get_or_calculate_chart(
+                            state['user_id'], user_profile, state
+                        )
                         
                         if isinstance(chart_data_from_helper, dict):
                             state['chart_data'] = chart_data_from_helper
@@ -705,11 +737,11 @@ Provide a concise answer:"""
                             state['chart_data'] = format_chart_for_llm(full_chart)
                             
                         if state.get('chart_data'):
-                            print(f"[RAG_WITH_CALCULATION] Chart ready: Lagna={state['chart_data']['lagna']}")
+                            print(f"[RAG_WITH_CALCULATION] Chart ready: Lagna={state['chart_data'].get('lagna') or state['chart_data'].get('ascendant', {}).get('rashi', 'Unknown')}")
                         
-                        # Calculate current dasha (Priority check)
+                        # Calculate current dasha
                         if not state.get('dasha_data'):
-                            print("[RAG_WITH_CALCULATION] [FALLBACK] Calculating dasha...")
+                            print("[RAG_WITH_CALCULATION] Calculating dasha...")
                             dasha_tool = self.calculation_tools['current_dasha']
                             dasha_data = dasha_tool.invoke({
                                 "date_of_birth": user_profile.get('date_of_birth'),
@@ -720,29 +752,136 @@ Provide a concise answer:"""
                             
                             if "error" not in dasha_data:
                                 state['dasha_data'] = dasha_data
-                                print(f"[RAG_WITH_CALCULATION] [FALLBACK] Dasha: {dasha_data['dasha_sequence']}")
-                        else:
-                            print("[RAG_WITH_CALCULATION] [PRIORITY] Using injected dasha data")
+                                print(f"[RAG_WITH_CALCULATION] Dasha: {dasha_data.get('dasha_sequence', 'Unknown')}")
                         
-                        # Calculate current transits (Priority check)
+                        # Calculate current transits
                         if not state.get('transit_data'):
-                            print("[RAG_WITH_CALCULATION] [FALLBACK] Calculating transits...")
+                            print("[RAG_WITH_CALCULATION] Calculating transits...")
                             transit_tool = self.calculation_tools['current_transits']
                             transit_data = transit_tool.invoke({})
                             
                             if "error" not in transit_data:
                                 state['transit_data'] = transit_data
-                                print(f"[RAG_WITH_CALCULATION] [FALLBACK] Transits for {transit_data['date']}")
-                        else:
-                            print("[RAG_WITH_CALCULATION] [PRIORITY] Using injected transit data")
+                                print(f"[RAG_WITH_CALCULATION] Transits for {transit_data.get('date', 'current')}")
                         
                     except Exception as e:
                         print(f"[RAG_WITH_CALCULATION] Calculation error: {e}")
-                        # Continue without chart data
             else:
                 print("[RAG_WITH_CALCULATION] No birth data - proceeding without chart")
 
-            # Step 2: Retrieve Relevant Knowledge (Bypass if retriever is missing)
+            # ================================================================
+            # STEP 1.5: VALIDATE CHART (PHASE 12 - NEW)
+            # ================================================================
+            if state.get('chart_data') and VALIDATION_AVAILABLE:
+                try:
+                    print("[VALIDATION] Running validation...")
+                    
+                    # Detect query type with LLM confirmation
+                    query_type = detect_query_type(
+                        state['query'], 
+                        llm=self.fast_llm if hasattr(self, 'fast_llm') else None,
+                        use_llm_confirmation=True
+                    )
+                    state['validation_query_type'] = query_type
+                    
+                    # Skip validation for general questions
+                    if query_type == 'general':
+                        print(f"[VALIDATION] Skipping validation for general question")
+                    else:
+                        # Determine tier (optimized for live chat)
+                        tier = determine_validation_tier(state['query'])
+                        print(f"[VALIDATION] Query: {query_type}, Tier: {tier}")
+                        
+                        # Get or create validation engine
+                        if not hasattr(self, 'validation_engine'):
+                            self.validation_engine = None
+                        
+                        if self.validation_engine is None:
+                            try:
+                                from pathlib import Path
+                                rules_path = Path("optimized/tiered_rules.json")
+                                
+                                if rules_path.exists():
+                                    print("[VALIDATION] Initializing engine...")
+                                    self.validation_engine = VedicValidationEngineV2(
+                                        tiered_rules_path=str(rules_path),
+                                        indexed_rules_path="optimized/indexed_rules.json"
+                                    )
+                                    print("[VALIDATION] ✅ Engine ready")
+                                else:
+                                    print("[VALIDATION] Rules file not found")
+                            except Exception as e:
+                                print(f"[VALIDATION] Init failed: {e}")
+                        
+                        if self.validation_engine:
+                            # Prepare chart for validation
+                            val_chart = prepare_chart_for_validation(
+                                chart_data=state['chart_data'],
+                                dasha_data=state.get('dasha_data', {}),
+                                transit_data=state.get('transit_data', {})
+                            )
+                            
+                            # Run validation with timeout for live chat
+                            val_result = self.validation_engine.validate(
+                                chart_data=val_chart,
+                                query_type=query_type,
+                                tier=tier,
+                                stage=None,
+                                live_chat=True,
+                                timeout_sec=10.0
+                            )
+                            
+                            # Store results
+                            state['validation_result'] = {
+                                'query_type': val_result.query_type,
+                                'overall_strength': val_result.overall_strength,
+                                'can_proceed': val_result.can_proceed,
+                                'critical_failures': [
+                                    {
+                                        'rule_id': f.rule_id,
+                                        'rule_name': f.rule_name,
+                                        'reason': f.reason,
+                                        'recommendation': f.recommendation,
+                                        'classical_ref': f.classical_ref
+                                    }
+                                    for f in val_result.critical_failures
+                                ]
+                            }
+                            
+                            state['validation_strength'] = val_result.overall_strength
+                            state['validation_can_proceed'] = val_result.can_proceed
+                            
+                            print(f"[VALIDATION] ✅ Strength: {val_result.overall_strength:.1f}/10")
+                            print(f"[VALIDATION] Critical failures: {len(val_result.critical_failures)}")
+                            
+                            # HARD HALT CHECK (only for extreme cases)
+                            if should_hard_halt(val_result.overall_strength, val_result.critical_failures):
+                                print(f"[VALIDATION] 🛑 HARD HALT - Refusing prediction")
+                                state['answer'] = build_halt_response(
+                                    state['validation_result'],
+                                    state['user_profile'],
+                                    state.get('detected_language', 'en')
+                                )
+                                return state  # Exit early without generating prediction
+                            
+                            # Build disclaimer for weak charts (soft warnings)
+                            if val_result.overall_strength < 6.0:
+                                state['validation_disclaimer'] = build_validation_disclaimer(
+                                    val_result.overall_strength,
+                                    query_type,
+                                    val_result.critical_failures
+                                )
+                                print(f"[VALIDATION] Added disclaimer for weak chart")
+                
+                except Exception as e:
+                    print(f"[VALIDATION] Error: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Don't block on validation errors - proceed without validation
+
+            # ================================================================
+            # STEP 2: Retrieve Relevant Knowledge
+            # ================================================================
             print("[RAG_WITH_CALCULATION] Step 2: Retrieving knowledge...")
             
             knowledge_chunks = state.get('knowledge_chunks') or []
@@ -752,21 +891,25 @@ Provide a concise answer:"""
                 retrieval_query = state['query']
                 if state.get('chart_data'):
                     c = state['chart_data']
-                    retrieval_query += f" (Lagna: {c.get('lagna')}, Rashi: {c.get('moon_sign')})"
+                    lagna = c.get('lagna') or c.get('ascendant', {}).get('rashi', 'Unknown')
+                    moon_sign = c.get('moon_sign') or c.get('planets', {}).get('Moon', {}).get('rashi', 'Unknown')
+                    retrieval_query += f" (Lagna: {lagna}, Rashi: {moon_sign})"
 
                 knowledge_chunks = self.hybrid_retriever.retrieve(
                     query=retrieval_query,
                     intent="RAG_WITH_CALCULATION",
-                    top_k=RAGConfig.get_top_k(content_type='interpretation'),  # Auto: 10 chunks
+                    top_k=RAGConfig.get_top_k(content_type='interpretation'),
                     language=state.get('detected_language', 'en')
                 )
             elif not knowledge_chunks:
-                print("[RAG_WITH_CALCULATION] [WARN] No retriever provided and no chunks injected. Proceeding with zero knowledge.")
+                print("[RAG_WITH_CALCULATION] No retriever - proceeding with zero knowledge")
             
             state['knowledge_chunks'] = knowledge_chunks
             print(f"[RAG_WITH_CALCULATION] Retrieved {len(knowledge_chunks)} chunks")
             
-            # Step 3: Build Prompt (always use prediction prompt with chart data)
+            # ================================================================
+            # STEP 3: Build Prompt (with validation constraints)
+            # ================================================================
             if state.get('chart_data'):
                 prompt = self._build_prediction_prompt(
                     query=state['query'],
@@ -775,6 +918,7 @@ Provide a concise answer:"""
                     transit_data=state.get('transit_data', {}),
                     knowledge_chunks=knowledge_chunks,
                     user_profile=user_profile,
+                    validation_result=state.get('validation_result'),  # NEW: Pass validation
                     conversation_history=state.get('conversation_history', []),
                     language=state.get('detected_language', 'en')
                 )
@@ -788,7 +932,9 @@ Provide a concise answer:"""
                     language=state.get('detected_language', 'en')
                 )
             
-            # Step 4: Generate
+            # ================================================================
+            # STEP 4: Generate LLM Response
+            # ================================================================
             response = self.llm.invoke(prompt)
             state['answer'] = response.content if hasattr(response, 'content') else str(response)
             
@@ -1095,7 +1241,13 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             if disclaimer_type:
                 disclaimer_text = get_disclaimer(disclaimer_type)
                 final_response = f"{final_response}\n\n{disclaimer_text}"
-                
+            
+            # PHASE 12: Validation Disclaimer Injection
+            validation_disclaimer = state.get('validation_disclaimer')
+            if validation_disclaimer:
+                final_response = f"{final_response}{validation_disclaimer}"
+                print("[FORMATTING] Added validation disclaimer")
+
             # PHASE 10.5: Reframe Intro Injection
             if state.get('is_reframed', False):
                 from src.safety.templates import format_reframe_response
@@ -1163,6 +1315,8 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         transit_data: Dict,
         knowledge_chunks: List,
         user_profile: Dict,
+        validation_result: Optional[Dict] = None,  # ADD THIS LINE
+        conversation_history: List = None,
         language: str = "hi-lat"
     ) -> str:
         """
@@ -1258,6 +1412,14 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         if conversation_history and len(conversation_history) > 0:
             system_prompt += "\n\nNOTE: This is an ongoing conversation. Do NOT start with greetings like 'Namaste', 'Hello', or 'Hari Om'. Get straight to the answer."
         
+        # PHASE 12: Inject Validation Context (NEW)
+        validation_context = ""
+        if validation_result and VALIDATION_AVAILABLE:
+            try:
+                validation_context = format_validation_for_prompt(validation_result)
+            except Exception as e:
+                print(f"[VALIDATION] Error formatting validation: {e}")
+
         # Map language code to descriptive name for LLM
         loc_manager = get_localization_manager()
         lang_name = loc_manager.get_language_name(language)
@@ -1306,6 +1468,8 @@ SOURCES: [Book Name] (Optional)
 Provide brief response:"""
 
         prompt = f"""{system_prompt}
+
+{validation_context}
 
 USER PROFILE:
 • Name: {user_profile.get('name', 'User')}
@@ -1429,7 +1593,14 @@ RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
             # PHASE 10.5: Advanced Safety
             "safety_result": None,
             "disclaimer_type": None,
-            "is_reframed": False
+            "is_reframed": False,
+
+            # PHASE 12: Validation initialization
+            "validation_result": None,
+            "validation_strength": None,
+            "validation_can_proceed": True,
+            "validation_query_type": None,
+            "validation_disclaimer": None
         }
 
         
