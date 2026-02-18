@@ -1,5 +1,4 @@
 # src/api/config.py
-# src\api\config.py
 """
 API Configuration
 ==================
@@ -7,7 +6,7 @@ API Configuration
 Centralized configuration for the FastAPI application.
 """
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from typing import List, Optional
 import os
@@ -50,7 +49,6 @@ class Settings(BaseSettings):
     USE_DUMMY_USER_DB: bool = True
     
     # LLM Configuration - Google Cloud (Vertex AI)
-    # Support both new and old field names for backward compatibility
     GOOGLE_CREDENTIALS_PATH: str = Field(
         default="",
         validation_alias="google_application_credentials"
@@ -77,7 +75,7 @@ class Settings(BaseSettings):
         validation_alias="default_llm_model"
     )
     
-    # Additional settings from your existing .env
+    # Embeddings
     OPENAI_EMBEDDING_MODEL: str = Field(
         default="text-embedding-3-large",
         validation_alias="openai_embedding_model"
@@ -86,10 +84,14 @@ class Settings(BaseSettings):
         default=3072,
         validation_alias="embedding_dimensions"
     )
+    
+    # ChromaDB
     CHROMA_PERSIST_DIR: str = Field(
         default="./data/vectordb",
         validation_alias="chroma_persist_dir"
     )
+    
+    # Logging
     LOG_LEVEL: str = Field(
         default="INFO",
         validation_alias="log_level"
@@ -99,19 +101,22 @@ class Settings(BaseSettings):
     ENABLE_CACHING: bool = True
     MAX_CONVERSATION_HISTORY: int = 10
     
-    # Additional LLM Settings (for backward compatibility)
+    # Additional LLM Settings
     OLLAMA_BASE_URL: str = Field(default="http://localhost:11434", validation_alias="ollama_base_url")
     FAST_LLM_PROVIDER: str = Field(default="openai", validation_alias="fast_llm_provider")
     FAST_LLM_MODEL: str = Field(default="gpt-4o-mini", validation_alias="fast_llm_model")
     
-    # Legacy Authentication (for backward compatibility)
+    # Legacy Authentication
     ASTRO_USERNAME: str = Field(default="", validation_alias="astro_username")
     ASTRO_PASSWORD: str = Field(default="", validation_alias="astro_password")
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
-        populate_by_name = True  # Allow using both field name and alias
+    # CRITICAL FIX: Use model_config instead of Config class
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        populate_by_name=True,
+        extra='ignore'  # CRITICAL: Ignore extra env vars instead of forbidding them
+    )
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

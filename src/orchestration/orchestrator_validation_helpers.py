@@ -210,9 +210,48 @@ def prepare_chart_for_validation(
     dasha_data: Dict,
     transit_data: Dict
 ) -> Dict:
-    """Convert orchestrator chart format to validation engine format."""
+
+     # ============= DEBUG LOGGING (ADD THIS) =============
+    print(f"\n[DEBUG] prepare_chart_for_validation CALLED")
+    print(f"[DEBUG] chart_data keys: {list(chart_data.keys())}")
+    print(f"[DEBUG] Has 'divisional_charts': {'divisional_charts' in chart_data}")
+    print(f"[DEBUG] Has 'vargas': {'vargas' in chart_data}")
+    print(f"[DEBUG] Has 'D9': {'D9' in chart_data}")
+    print(f"[DEBUG] Has 'navamsa': {'navamsa' in chart_data}")
     
-    # Extract planetary positions from chart_data
+    # Check what divisional_charts actually contains
+    div_charts = chart_data.get('divisional_charts') or chart_data.get('vargas')
+    if div_charts:
+        print(f"[DEBUG] divisional_charts type: {type(div_charts)}")
+        print(f"[DEBUG] divisional_charts keys: {list(div_charts.keys()) if isinstance(div_charts, dict) else 'not a dict'}")
+        if isinstance(div_charts, dict) and div_charts:
+            first_key = list(div_charts.keys())[0]
+            first_value = div_charts[first_key]
+            print(f"[DEBUG] First item type: {type(first_value)}")
+            print(f"[DEBUG] Has get_position: {hasattr(first_value, 'get_position')}")
+    else:
+        print(f"[DEBUG] divisional_charts is None or empty!")
+    print(f"[DEBUG] ============================================\n")
+    # ============= END DEBUG LOGGING =============
+
+    
+    """
+    Convert orchestrator chart format to validation engine format.
+    
+    COMPREHENSIVE VERSION - Includes ALL available calculations:
+    - D1 (Rasi) chart
+    - ALL divisional charts (D2-D60) if available
+    - Yogas (Raja Yoga, Dhana Yoga, etc.)
+    - Planetary strengths (Shadbala)
+    - Dasha periods with dates
+    - Current transits
+    - Aspects
+    - House lordships
+    """
+    
+    # =========================================================================
+    # 1. D1 CHART (Main Birth Chart)
+    # =========================================================================
     planets_d1 = {}
     for planet_name, planet_info in chart_data.get('planets', {}).items():
         if isinstance(planet_info, dict):
@@ -222,32 +261,185 @@ def prepare_chart_for_validation(
     
     validation_chart = {
         "D1": {
-            "lagna": chart_data.get('lagna', 'Unknown'),
+            "lagna": chart_data.get('lagna', chart_data.get('ascendant', {}).get('rashi', 'Unknown')),
             "planets": planets_d1
-        },
-        "D9": {
-            "lagna": "Unknown",
-            "planets": {}
-        },
-        "dasha": {
-            "mahadasha": {
-                "planet": dasha_data.get('mahadasha', {}).get('planet', 'Unknown'),
-                "end_date": dasha_data.get('mahadasha', {}).get('end_date', 'Unknown')
-            },
-            "antardasha": {
-                "planet": dasha_data.get('antardasha', {}).get('planet', 'Unknown'),
-                "end_date": dasha_data.get('antardasha', {}).get('end_date', 'Unknown')
-            },
-            "dasha_sequence": dasha_data.get('dasha_sequence', 'Unknown')
-        },
-        "transits": {}
+        }
     }
     
-    for planet_name, rashi_name in transit_data.get('transits', {}).items():
-        validation_chart["transits"][planet_name] = {
-            "rashi": rashi_name,
-            "house": None
+    # =========================================================================
+    # 2. DIVISIONAL CHARTS (D2-D60)
+    # =========================================================================
+    # Check multiple possible locations for divisional charts
+    divisional_charts = (
+        chart_data.get('divisional_charts') or 
+        chart_data.get('vargas') or 
+        chart_data.get('varga_charts') or
+        {}
+    )
+    
+    # If divisional charts are in AllVargaPositions format (from VedicEngine)
+    if divisional_charts and hasattr(list(divisional_charts.values())[0], 'get_position'):
+        # Convert from AllVargaPositions to simple dict
+        converted_charts = {}
+        
+        for chart_type in ['D2', 'D3', 'D4', 'D7', 'D9', 'D10', 'D12', 'D16', 'D20', 'D24', 'D27', 'D30', 'D40', 'D45', 'D60']:
+            chart_planets = {}
+            
+            for planet_name, varga_positions in divisional_charts.items():
+                try:
+                    from src.engines.vedic.vedic_constants import VargaChart
+                    varga_enum = getattr(VargaChart, chart_type, None)
+                    
+                    if varga_enum:
+                        position = varga_positions.get_position(varga_enum)
+                        if position:
+                            chart_planets[planet_name] = position.rashi.name
+                except:
+                    pass
+            
+            if chart_planets:
+                converted_charts[chart_type] = {
+                    "lagna": "Unknown",  # TODO: Calculate divisional lagna
+                    "planets": chart_planets
+                }
+        
+        # Add all converted charts
+        validation_chart.update(converted_charts)
+    
+    # If divisional charts are already in simple dict format
+    elif divisional_charts and isinstance(divisional_charts, dict):
+        for chart_name, chart_content in divisional_charts.items():
+            if isinstance(chart_content, dict) and 'planets' in chart_content:
+                validation_chart[chart_name] = chart_content
+            elif isinstance(chart_content, dict):
+                # Try to extract planets
+                validation_chart[chart_name] = {
+                    "lagna": chart_content.get('lagna', 'Unknown'),
+                    "planets": chart_content.get('planets', chart_content)
+                }
+    
+    # CRITICAL: Ensure D9 is present (most important for marriage)
+    if 'D9' not in validation_chart or not validation_chart['D9'].get('planets'):
+        # Try alternate locations
+        d9_data = (
+            chart_data.get('D9') or
+            chart_data.get('navamsa') or
+            chart_data.get('Navamsa')
+        )
+        
+        if d9_data:
+            validation_chart['D9'] = {
+                "lagna": d9_data.get('lagna', 'Unknown'),
+                "planets": d9_data.get('planets', {})
+            }
+        else:
+            # Still not found - mark as unavailable
+            validation_chart['D9'] = {
+                "lagna": "Unknown",
+                "planets": {}
+            }
+    
+    # =========================================================================
+    # 3. YOGAS (Auspicious/Inauspicious Combinations)
+    # =========================================================================
+    yogas = chart_data.get('yogas', chart_data.get('yoga_analysis', {}))
+    
+    if yogas:
+        validation_chart['yogas'] = yogas
+    else:
+        validation_chart['yogas'] = {
+            'raja_yogas': [],
+            'dhana_yogas': [],
+            'mahapurusha_yogas': [],
+            'other_yogas': []
         }
+    
+    # =========================================================================
+    # 4. PLANETARY STRENGTHS (Shadbala, Ashtakavarga, etc.)
+    # =========================================================================
+    strengths = (
+        chart_data.get('planetary_strengths') or
+        chart_data.get('shadbala') or
+        chart_data.get('strengths') or
+        {}
+    )
+    
+    if strengths:
+        validation_chart['planetary_strengths'] = strengths
+    
+    # =========================================================================
+    # 5. DASHA PERIODS (WITH DATES)
+    # =========================================================================
+    validation_chart['dasha'] = {
+        "mahadasha": {
+            "planet": dasha_data.get('mahadasha', {}).get('planet', 'Unknown'),
+            "start_date": dasha_data.get('mahadasha', {}).get('start_date', 'Unknown'),
+            "end_date": dasha_data.get('mahadasha', {}).get('end_date', 'Unknown'),
+            "balance_years": dasha_data.get('mahadasha', {}).get('balance_years', 'Unknown')
+        },
+        "antardasha": {
+            "planet": dasha_data.get('antardasha', {}).get('planet', 'Unknown'),
+            "start_date": dasha_data.get('antardasha', {}).get('start_date', 'Unknown'),
+            "end_date": dasha_data.get('antardasha', {}).get('end_date', 'Unknown')
+        },
+        "pratyantardasha": {
+            "planet": dasha_data.get('pratyantardasha', {}).get('planet', 'Unknown'),
+            "start_date": dasha_data.get('pratyantardasha', {}).get('start_date', 'Unknown'),
+            "end_date": dasha_data.get('pratyantardasha', {}).get('end_date', 'Unknown')
+        },
+        "dasha_sequence": dasha_data.get('dasha_sequence', 'Unknown'),
+        "calculation_details": dasha_data.get('calculation_details', {})
+    }
+    
+    # =========================================================================
+    # 6. CURRENT TRANSITS
+    # =========================================================================
+    validation_chart['transits'] = {}
+    
+    for planet_name, transit_info in transit_data.get('transits', {}).items():
+        if isinstance(transit_info, str):
+            # Simple rashi name
+            validation_chart['transits'][planet_name] = {
+                "rashi": transit_info,
+                "house": None,
+                "nakshatra": None
+            }
+        elif isinstance(transit_info, dict):
+            # Detailed transit info
+            validation_chart['transits'][planet_name] = {
+                "rashi": transit_info.get('rashi', 'Unknown'),
+                "house": transit_info.get('house'),
+                "nakshatra": transit_info.get('nakshatra'),
+                "degree": transit_info.get('degree')
+            }
+    
+    # Add transit date
+    validation_chart['transit_date'] = transit_data.get('date', transit_data.get('calculation_date'))
+    
+    # =========================================================================
+    # 7. ASPECTS (Vedic & Western)
+    # =========================================================================
+    aspects = chart_data.get('aspects', chart_data.get('planetary_aspects', {}))
+    if aspects:
+        validation_chart['aspects'] = aspects
+    
+    # =========================================================================
+    # 8. HOUSE LORDSHIPS
+    # =========================================================================
+    house_lords = chart_data.get('house_lords', chart_data.get('bhava_lords', {}))
+    if house_lords:
+        validation_chart['house_lords'] = house_lords
+    
+    # =========================================================================
+    # 9. ADDITIONAL METADATA
+    # =========================================================================
+    validation_chart['metadata'] = {
+        'ayanamsa': chart_data.get('ayanamsa', 'Lahiri'),
+        'calculation_date': chart_data.get('calculation_date'),
+        'timezone': chart_data.get('timezone'),
+        'latitude': chart_data.get('latitude'),
+        'longitude': chart_data.get('longitude')
+    }
     
     return validation_chart
 

@@ -139,7 +139,8 @@ def get_persona(system: str) -> AstrologerPersona:
 
 
 # Standard responses for common intents
-GREETING_RESPONSE = """Namaste! I'm NakshatraAI, your professional astrology consultant.
+GREETING_RESPONSES = {
+    'en': """Hello! I'm NakshatraAI, your professional astrology consultant.
 
 I'm here to help you understand your birth chart and navigate life's journey through astrological wisdom.
 
@@ -148,7 +149,57 @@ How may I assist you today? You can ask me about:
 • Timing for important life events
 • Current planetary transits and their effects
 • Understanding astrological concepts
+• Relationship compatibility""",
+    
+    'hi-lat': """Namaste! Main NakshatraAI hoon, aapka professional jyotish paramarshdata.
+
+Main aapki kundli ko samajhne aur jyotish gyan ke madhyam se jeevan yatra mein madad karne ke liye yahaan hoon.
+
+Aaj main aapki kaise madad kar sakta hoon? Aap mujhse pooch sakte hain:
+• Janam kundli ki vyakhya
+• Mahatvapurna jeevan ghatnaon ka samay
+• Vartaman graha gochar aur unka prabhav
+• Jyotish avdharanao ko samajhna
+• Rishton ki anukoolata""",
+    
+    'hi': """नमस्ते! मैं नक्षत्रएआई हूं, आपका व्यावसायिक ज्योतिष परामर्शदाता।
+
+मैं आपकी कुंडली को समझने और ज्योतिष ज्ञान के माध्यम से जीवन यात्रा में मदद करने के लिए यहां हूं।
+
+आज मैं आपकी कैसे मदद कर सकता हूं? आप मुझसे पूछ सकते हैं:
+• जन्म कुंडली की व्याख्या
+• महत्वपूर्ण जीवन घटनाओं का समय
+• वर्तमान ग्रह गोचर और उनका प्रभाव
+• ज्योतिष अवधारणाओं को समझना
+• रिश्तों की अनुकूलता""",
+    
+    'ta-lat': """Vanakkam! Naan NakshatraAI, ungal professional jyotish consultant.
+
+Naan ungal birth chart-ai purinjukkavum, jyotish gyanathoda life journey-la help pannanum.
+
+Innikki naan ungalukku eppadi help panlaam? Neenga kettukkalam:
+• Birth chart interpretations
+• Important life events timing
+• Current planetary transits effects
+• Astrology concepts understanding
 • Relationship compatibility"""
+}
+
+# Default greeting (English)
+GREETING_RESPONSE = GREETING_RESPONSES['en']
+
+
+def get_greeting(language: str = 'en') -> str:
+    """
+    Get greeting in specified language.
+    
+    Args:
+        language: Language code (e.g., 'en', 'hi-lat', 'hi')
+        
+    Returns:
+        Greeting message in appropriate language
+    """
+    return GREETING_RESPONSES.get(language, GREETING_RESPONSES['en'])
 
 
 OFF_TOPIC_RESPONSE = """I appreciate your question, but I'm NakshatraAI, specialized in Vedic and Western astrology.

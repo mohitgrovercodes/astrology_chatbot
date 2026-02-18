@@ -54,7 +54,7 @@ def ingest_local(
     client = chromadb.PersistentClient(path=db_path)
     
     if not collection_name:
-        collection_name = os.environ.get("COLLECTION_NAME", "astrology_default")
+        collection_name = os.environ.get("COLLECTION_NAME", "vedic_astrology_books_knowledge")
     
     if wipe:
         try:

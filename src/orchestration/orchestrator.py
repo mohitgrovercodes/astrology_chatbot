@@ -413,22 +413,40 @@ class EnhancedLangGraphOrchestrator:
         q = state['query'].lower().strip()
         lang = state.get('detected_language', 'en')
         
-        # Fast path for English common chitchat
-        if lang == 'en':
-            if any(word in q for word in ['hi', 'hello', 'hey', 'namaste']):
-                state['answer'] = f"Namaste, {user_name}! I'm NakshatraAI, your professional astrology consultant. How may I assist you today?"
-                return state
-            elif any(word in q for word in ['who are you', 'what are you']):
+        # Import greeting function
+        from src.ai.personas import get_greeting
+        
+        # Fast path for common chitchat with language-aware responses
+        if any(word in q for word in ['hi', 'hello', 'hey', 'namaste', 'vanakkam', 'namaskar']):
+            # Use language-specific greeting
+            greeting = get_greeting(lang)
+            state['answer'] = greeting.replace("How may I assist you today?", f"How may I assist you today, {user_name}?")
+            return state
+        
+        elif any(word in q for word in ['who are you', 'what are you', 'kaun', 'kya']):
+            if lang == 'en':
                 state['answer'] = f"I'm NakshatraAI, a professional Vedic astrology consultant. I can analyze your birth chart, predict timing for life events, and provide guidance based on classical astrological principles."
+            elif lang == 'hi-lat':
+                state['answer'] = f"Main NakshatraAI hoon, ek professional Vedic jyotish paramarshdata. Main aapki kundli ka vishleshan kar sakta hoon, jeevan ghatnaon ka samay bata sakta hoon, aur shastriya jyotish siddhanton par aadharit margdarshan de sakta hoon."
+            else:
+                # For other languages, use LLM
+                pass
+            
+            if state.get('answer'):
                 return state
-            elif any(word in q for word in ['thanks', 'thank you']):
+        
+        elif any(word in q for word in ['thanks', 'thank you', 'dhanyavad', 'shukriya']):
+            if lang == 'en':
                 state['answer'] = f"You're welcome, {user_name}! Feel free to ask anything about your chart or astrological concepts."
-                return state
+            elif lang == 'hi-lat':
+                state['answer'] = f"Aapka swagat hai, {user_name}! Apne chart ya jyotish avdharanao ke bare mein kuch bhi poochh sakte hain."
+            else:
+                state['answer'] = f"You're welcome, {user_name}!"
+            return state
 
         # Multilingual/Complex path: Use fast LLM with persona
         try:
             from src.ai.personas import get_persona
-            # Always default to 'vedic' for persona tone, or use user profile preference
             persona_type = state['user_profile'].get('preferred_system', 'vedic')
             persona = get_persona(persona_type)
             
@@ -443,7 +461,7 @@ class EnhancedLangGraphOrchestrator:
             lang_name = loc_manager.get_language_name(lang)
             
             if '-lat' in lang:
-                script_instruction = f"IMPORTANT: You must writing in {lang_name} using ROMAN ALPHABET (English Script). Do NOT use native script."
+                script_instruction = f"IMPORTANT: You must write in {lang_name} using ROMAN ALPHABET (English Script). Do NOT use native script."
             else:
                 script_instruction = f"Respond entirely in {lang_name} (Native Script)."
             
@@ -458,25 +476,26 @@ class EnhancedLangGraphOrchestrator:
 
             prompt = f"""{system_prompt}
             
-{history_context}
-User: "{state['query']}"
+    {history_context}
+    User: "{state['query']}"
 
-INSTRUCTIONS:
-1. Provide a warm, empathetic, professional response.
-2. If the user greets, greet back warmly.
-3. If the user asks about previous messages or personal context (like "Where am I going?"), ANSWER DIRECTLY based on CONVERSATION CONTEXT.
-4. If the question is entirely outside astrology and NOT in history, politely explain your scope.
-5. {script_instruction}
-6. Keep it brief (under 50 words).
+    INSTRUCTIONS:
+    1. Provide a warm, empathetic, professional response.
+    2. If the user greets, greet back warmly.
+    3. If the user asks about previous messages or personal context, ANSWER DIRECTLY based on CONVERSATION CONTEXT.
+    4. If the question is entirely outside astrology and NOT in history, politely explain your scope.
+    5. {script_instruction}
+    6. Keep it brief (under 50 words).
 
-Response:"""
+    Response:"""
             
             llm_response = self.fast_llm.invoke(prompt)
             state['answer'] = llm_response.content if hasattr(llm_response, 'content') else str(llm_response)
             
         except Exception as e:
             print(f"[CHITCHAT] Error generating response: {e}")
-            state['answer'] = f"Namaste, {user_name}! How can I help you with your astrology chart?"
+            # Fallback to language-specific greeting
+            state['answer'] = get_greeting(lang)
             
         return state
     
@@ -1347,8 +1366,10 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         knowledge_chunks: List,
         user_profile: Dict,
         conversation_history: List = None,  # Added argument
-        language: str = "hi-lat"
+        language: str = "hi-lat",
+        validation_result: Optional[Dict] = None  # ADD THIS LINE
     ) -> str:
+        
         context_parts = []
         for i, chunk in enumerate(knowledge_chunks[:3], 1):
             source = chunk.metadata.get('source_book', 'Unknown') if hasattr(chunk, 'metadata') else 'Unknown'

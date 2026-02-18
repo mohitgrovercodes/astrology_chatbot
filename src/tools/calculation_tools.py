@@ -147,10 +147,19 @@ def calculate_vedic_birth_chart(
         }
 
 def format_chart_for_llm(chart: VedicEngine) -> Dict[str, Any]:
-    """Helper to format a VedicChart object into the dictionary the LLM expects."""
+    """
+    Helper to format a VedicChart object into the dictionary the LLM expects.
+    
+    COMPREHENSIVE VERSION - Includes ALL available data:
+    - Main chart (D1)
+    - ALL divisional charts (D2-D60)
+    - Yogas
+    - Planetary strengths
+    - Everything VedicEngine calculates
+    """
     from src.engines.vedic.vedic_constants import RASHI_SANSKRIT_NAMES, NAKSHATRA_NAMES
     
-    return {
+    formatted = {
         "lagna": chart.lagna.rashi_name,
         "lagna_degree": f"{chart.lagna.rashi_name} {chart.lagna.degree}°{chart.lagna.minute}'",
         "moon_sign": chart.rashi_name,
@@ -209,6 +218,70 @@ def format_chart_for_llm(chart: VedicEngine) -> Dict[str, Any]:
             "ayanamsa": "Lahiri"
         }
     }
+    
+    # =========================================================================
+    # ADD DIVISIONAL CHARTS (D2-D60) - THE CRITICAL FIX!
+    # =========================================================================
+    # Check if chart has divisional charts (vargas attribute)
+    if hasattr(chart, 'vargas') and chart.vargas:
+        formatted['vargas'] = chart.vargas  # Keep the AllVargaPositions objects
+        formatted['divisional_charts'] = chart.vargas  # Also add as divisional_charts
+        
+        # Convert to simple dict format for easy access
+        divisional_simple = {}
+        for chart_type in ['D2', 'D3', 'D4', 'D7', 'D9', 'D10', 'D12', 'D16', 'D20', 'D24', 'D27', 'D30', 'D40', 'D45', 'D60']:
+            try:
+                from src.engines.vedic.vedic_constants import VargaChart
+                varga_enum = getattr(VargaChart, chart_type, None)
+                
+                if varga_enum:
+                    chart_planets = {}
+                    for planet_name in ['Sun', 'Moon', 'Mars', 'Mercury', 'Jupiter', 'Venus', 'Saturn', 'Rahu', 'Ketu']:
+                        planet_body = getattr(CelestialBody, planet_name.upper())
+                        if planet_body in chart.vargas:
+                            position = chart.vargas[planet_body].get_position(varga_enum)
+                            if position:
+                                chart_planets[planet_name] = position.rashi.name
+                    
+                    if chart_planets:
+                        divisional_simple[chart_type] = {
+                            "lagna": "Unknown",  # TODO: Calculate divisional lagna
+                            "planets": chart_planets
+                        }
+            except Exception as e:
+                # Silently skip if conversion fails
+                pass
+        
+        # Add both formats
+        formatted['divisional_charts_simple'] = divisional_simple
+    
+    # =========================================================================
+    # ADD YOGAS (if calculated)
+    # =========================================================================
+    if hasattr(chart, 'yogas') and chart.yogas:
+        formatted['yogas'] = chart.yogas
+    
+    # =========================================================================
+    # ADD PLANETARY STRENGTHS (if calculated)
+    # =========================================================================
+    if hasattr(chart, 'planetary_strengths') and chart.planetary_strengths:
+        formatted['planetary_strengths'] = chart.planetary_strengths
+    elif hasattr(chart, 'shadbala') and chart.shadbala:
+        formatted['planetary_strengths'] = chart.shadbala
+    
+    # =========================================================================
+    # ADD ASPECTS (if calculated)
+    # =========================================================================
+    if hasattr(chart, 'aspects') and chart.aspects:
+        formatted['aspects'] = chart.aspects
+    
+    # =========================================================================
+    # ADD HOUSE LORDS (if calculated)
+    # =========================================================================
+    if hasattr(chart, 'house_lords') and chart.house_lords:
+        formatted['house_lords'] = chart.house_lords
+    
+    return formatted
 
 
 # =============================================================================
