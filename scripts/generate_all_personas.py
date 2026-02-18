@@ -1,3 +1,4 @@
+# scripts/generate_all_personas.py
 # scripts\generate_all_personas.py
 """
 Batch generate personas for all target languages.

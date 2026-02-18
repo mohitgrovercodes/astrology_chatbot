@@ -1,3 +1,4 @@
+# config/config.py
 # config\config.py
 """
 Configuration loader for Astrology AI Chatbot.

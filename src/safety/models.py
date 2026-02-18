@@ -1,3 +1,4 @@
+# src/safety/models.py
 # src\safety\models.py
 """
 Safety Classification Models

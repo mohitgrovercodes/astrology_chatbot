@@ -1,3 +1,4 @@
+# src/rag/preprocessing/structural_cleaner.py
 # src\rag\preprocessing\structural_cleaner.py
 #!/usr/bin/env python3
 """

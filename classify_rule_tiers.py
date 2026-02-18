@@ -228,42 +228,50 @@ class TierClassifier:
         return tiers
     
     def _validate_tiers(self, tiered_rules: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict[str, Any]]]:
-        """Validate and adjust tier assignments"""
+        """Validate and adjust tier assignments.
         
-        # Ensure all critical+halt_on_failure rules are in Tier 1
-        tier2_to_promote = []
-        tier3_to_promote = []
-        tier4_to_promote = []
+        Only promotes rules that are BOTH critical severity AND halt_on_failure=True.
+        Caps promotion so Tier 1 never exceeds tier1_size * 1.5 (prevents bloat
+        when LLM over-marks rules as critical during extraction).
+        """
         
-        for rule in tiered_rules['tier2']:
-            if rule.get('severity') == 'critical' and rule.get('halt_on_failure'):
-                tier2_to_promote.append(rule)
+        # How many slots remain in Tier 1 before hitting the cap
+        max_tier1 = int(self.tier1_size * 1.5)
+        slots_available = max(0, max_tier1 - len(tiered_rules['tier1']))
         
-        for rule in tiered_rules['tier3']:
-            if rule.get('severity') == 'critical' and rule.get('halt_on_failure'):
-                tier3_to_promote.append(rule)
+        candidates = []
+        for source_tier in ('tier2', 'tier3', 'tier4'):
+            for rule in tiered_rules[source_tier]:
+                severity = rule.get('severity', '')
+                if isinstance(severity, list):
+                    severity = severity[0] if severity else ''
+                if isinstance(severity, dict):
+                    severity = severity.get('value', '')
+                halt = rule.get('halt_on_failure', False)
+                if str(severity).lower() == 'critical' and halt:
+                    candidates.append((source_tier, rule))
         
-        for rule in tiered_rules['tier4']:
-            if rule.get('severity') == 'critical' and rule.get('halt_on_failure'):
-                tier4_to_promote.append(rule)
+        # Only promote up to available slots
+        to_promote = candidates[:slots_available]
+        skipped   = len(candidates) - len(to_promote)
         
-        # Promote critical rules
-        if tier2_to_promote or tier3_to_promote or tier4_to_promote:
-            print(f"   ⬆️  Promoting {len(tier2_to_promote) + len(tier3_to_promote) + len(tier4_to_promote)} critical rules to Tier 1")
+        if to_promote:
+            print(f"   ⬆️  Promoting {len(to_promote)} critical+halt rules to Tier 1")
+            if skipped:
+                print(f"   ⏭️  Skipped {skipped} additional critical rules (Tier 1 cap {max_tier1} reached)")
             
-            # Remove from lower tiers
-            for rule in tier2_to_promote:
-                tiered_rules['tier2'].remove(rule)
-            for rule in tier3_to_promote:
-                tiered_rules['tier3'].remove(rule)
-            for rule in tier4_to_promote:
-                tiered_rules['tier4'].remove(rule)
-            
-            # Add to Tier 1
-            for rule in tier2_to_promote + tier3_to_promote + tier4_to_promote:
+            promoted_rules = {id(r) for _, r in to_promote}
+            for source_tier in ('tier2', 'tier3', 'tier4'):
+                tiered_rules[source_tier] = [
+                    r for r in tiered_rules[source_tier]
+                    if id(r) not in promoted_rules
+                ]
+            for _, rule in to_promote:
                 rule['tier'] = 1
                 rule['tier_name'] = 'Essential'
                 tiered_rules['tier1'].append(rule)
+        else:
+            print(f"   ✅ No critical+halt_on_failure rules need promotion")
         
         return tiered_rules
     

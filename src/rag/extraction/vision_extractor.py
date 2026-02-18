@@ -1,3 +1,4 @@
+# src/rag/extraction/vision_extractor.py
 # src\rag\extraction\vision_extractor.py
 """
 Vision LLM Extractor using Google Gemini 2.5 Flash/Lite/Pro

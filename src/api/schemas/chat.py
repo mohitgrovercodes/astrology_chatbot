@@ -1,3 +1,4 @@
+# src/api/schemas/chat.py
 # src\api\schemas\chat.py
 """
 Chat Schemas - Pydantic Models

@@ -1,3 +1,4 @@
+# tests/test_language_detection.py
 # tests\test_language_detection.py
 """
 Unit Tests for Universal Language Detector

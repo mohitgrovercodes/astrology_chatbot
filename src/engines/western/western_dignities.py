@@ -1,3 +1,4 @@
+# src/engines/western/western_dignities.py
 # src\engines\western\western_dignities.py
 """
 Essential Dignities for Western Astrology

@@ -1,3 +1,4 @@
+# src/tools/__init__.py
 # src\tools\__init__.py
 """
 LangChain Tool wrappers for calculation engines.

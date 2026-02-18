@@ -67,3 +67,7 @@ embeddings/
 extraction_output/
 preprocessing_output/
 *.zip
+
+
+.json
+*.json

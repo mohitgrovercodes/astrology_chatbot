@@ -1,3 +1,4 @@
+# config/rag_config.py
 """
 Centralized RAG Configuration
 Single source of truth for all RAG retrieval parameters

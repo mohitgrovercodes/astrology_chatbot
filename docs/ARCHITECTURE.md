@@ -1,355 +1,507 @@
-<!-- docs\ARCHITECTURE.md -->
-# NakshatraAI Architecture V2 - Simplified + LangGraph
+# NakshatraAI — System Architecture
 
-**Date:** February 6, 2026
-**Version:** 2.2 (Including Phase 11 Semantic Routing)
-**Status:** In Production / Scaling Phase
+> **Last Updated:** 2026-02-17  
+> **Version:** 2.0 (Post-MVP Architecture)
 
 ---
 
-## 🎯 Core Philosophy
+## 1. High-Level Architecture
 
-### The Problem with V1
+NakshatraAI follows a **layered architecture** with clear separation between deterministic computation, knowledge retrieval, LLM interpretation, and safety enforcement.
 
-**Too Many Intent Categories:**
-```
-V1: 7 categories
-├─ GREETING
-├─ OFF_TOPIC
-├─ UNCLEAR
-├─ CALCULATION
-├─ INTERPRETATION
-├─ PREDICTION
-└─ LEARNING
-```
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        CLI["CLI Chatbot<br/>(chatbot.py)"]
+        API["FastAPI REST API<br/>(src/api/)"]
+        MOBILE["Mobile App<br/>(External)"]
+    end
 
-**Issues:**
-- Unclear boundaries (PREDICTION vs INTERPRETATION?)
-- Complex routing logic
-- Harder to maintain
-- Doesn't map to system capabilities
+    subgraph "Orchestration Layer"
+        ORCH["LangGraph Orchestrator<br/>(orchestrator.py)"]
+        INTENT["Intent Classifier<br/>(intent_classifier.py)"]
+        LANG["Language Detector<br/>(language_detector.py)"]
+        SAFETY["Safety Classifier<br/>(classifier.py)"]
+    end
 
-### The Solution: V2
+    subgraph "Intelligence Layer"
+        LLM["LLM Factory<br/>(factory.py)"]
+        RAG["RAG Engine<br/>(rag_engine.py)"]
+        PERSONA["Persona System<br/>(personas.py)"]
+        PROMPT["Prompt Builder<br/>(prompt_builder.py)"]
+    end
 
-**3 Categories Matching System Capabilities:**
-```
-V2: 3 categories (capability-based)
-├─ CHITCHAT          → Conversational response
-├─ NEEDS_CALCULATION → Deterministic engine
-└─ NEEDS_RAG         → Knowledge + LLM
-```
+    subgraph "Retrieval Layer"
+        RET["Hybrid Retriever<br/>(retriever.py)"]
+        CHROMA["ChromaDB<br/>(Vector Store)"]
+        BM25["BM25 Index<br/>(Keyword Search)"]
+        RERANK["Reranker<br/>(reranker.py)"]
+        MEMORY["Memory Retriever<br/>(memory_retriever.py)"]
+    end
 
-**Benefits:**
-- Clear boundaries
-- Maps directly to what the system can do
-- Simpler routing
-- Easier to maintain
+    subgraph "Computation Layer"
+        VEDIC["Vedic Engine<br/>(vedic_engine.py)"]
+        WEST["Western Engine<br/>(western_engine.py)"]
+        CORE["Core Ephemeris<br/>(ephemeris.py)"]
+        TOOLS["Calculation Tools<br/>(calculation_tools.py)"]
+        VALID["Validation Engine<br/>(vedic_validation_engine_v2.py)"]
+    end
 
----
+    subgraph "Data Layer"
+        REDIS["Redis Cache"]
+        MONGO["MongoDB / SQLite"]
+        RULES["Rule JSON Files<br/>(~92 MB)"]
+    end
 
-## 🔄 Why LangGraph?
+    CLI --> ORCH
+    API --> ORCH
+    MOBILE --> API
 
-### V1 Mistake: Not Using LangGraph Properly
+    ORCH --> INTENT
+    ORCH --> LANG
+    ORCH --> SAFETY
+    ORCH --> LLM
+    ORCH --> RAG
+    ORCH --> TOOLS
 
-We had an `orchestrator.py` that was just a **Python class with methods**:
-```python
-class NakshatraAI:
-    def process_query(self):
-        intent = self.classify()
-        if intent == "GREETING":
-            return self.handle_greeting()
-        elif intent == "PREDICTION":
-            return self.handle_prediction()
-        # ... manual routing
-```
+    RAG --> RET
+    RAG --> PERSONA
+    RAG --> PROMPT
+    RAG --> MEMORY
 
-**Problems:**
-- Not leveraging LangGraph's state management
-- Manual routing logic
-- Hard to visualize flow
-- No built-in state tracking
+    RET --> CHROMA
+    RET --> BM25
+    RET --> RERANK
 
-### V2: Proper LangGraph StateGraph
+    TOOLS --> VEDIC
+    TOOLS --> WEST
+    VEDIC --> CORE
+    WEST --> CORE
+    ORCH --> VALID
+    VALID --> RULES
 
-Now we use LangGraph's **StateGraph** as designed:
-```python
-workflow = StateGraph(NakshatraState)
-
-# Add nodes
-workflow.add_node("authenticate", authenticate_fn)
-workflow.add_node("classify_intent", classify_fn)
-workflow.add_node("handle_chitchat", chitchat_fn)
-workflow.add_node("handle_calculation", calc_fn)
-workflow.add_node("handle_rag", rag_fn)
-
-# Conditional routing
-workflow.add_conditional_edges(
-    "classify_intent",
-    route_by_intent,
-    {
-        "chitchat": "handle_chitchat",
-        "calculation": "handle_calculation",
-        "rag": "handle_rag"
-    }
-)
-```
-
-**Benefits:**
-- Proper state management
-- Visual graph structure
-- Built-in state tracking
-- LangGraph handles execution
-- Easier to debug and extend
-
----
-
-## 🏗️ System Architecture
-
-### High-Level Flow
-
-```
-User Query
-    ↓
-[LangGraph StateGraph]
-    ↓
-┌─────────────────┐
-│ 1. Authenticate │ → Load user profile from MongoDB
-└────────┬────────┘
-         ↓
-┌─────────────────┐
-│ 2. Classify     │ → CHITCHAT | NEEDS_CALCULATION | NEEDS_RAG
-│    Intent       │    (Semantic Router + LLM Fallback)
-└────────┬────────┘
-         ↓
-    [Router]
-         ↓
-    ┌────┴────┐
-    ↓    ↓    ↓
-┌────────┐ ┌────────────┐ ┌─────────┐
-│Chitchat│ │Calculation │ │   RAG   │
-│Handler │ │Handler     │ │Handler  │
-│        │ │            │ │         │
-│Quick   │ │pyswisseph  │ │Retrieve │
-│Response│ │Engine      │ │+        │
-│        │ │            │ │Generate │
-└───┬────┘ └─────┬──────┘ └────┬────┘
-    └──────┴───────────────────┘
-                ↓
-    ┌───────────────────┐
-    │ 4. Format Response│
-    └──────────┬────────┘
-               ↓
-          Final Answer
-```
-
-### Detailed Component View
-
-```
-┌────────────────────────────────────────────────────────┐
-│           MOBILE APP (Your Existing App)               │
-└──────────────────────┬─────────────────────────────────┘
-                       │ REST API
-┌──────────────────────▼─────────────────────────────────┐
-│              FASTAPI LAYER (Phase 7)                   │
-│              POST /chat                                │
-└──────────────────────┬─────────────────────────────────┘
-                       │
-┌──────────────────────▼─────────────────────────────────┐
-│         LANGGRAPH ORCHESTRATOR (V2)                    │
-│                                                        │
-│  StateGraph with 6 nodes:                             │
-│  ┌──────────┐  ┌─────────────┐  ┌─────────────┐      │
-│  │Authenticate│→│Classify     │→│Route by     │      │
-│  │           │ │Intent       │ │Intent       │      │
-│  └──────────┘  └─────────────┘  └─────────────┘      │
-│                                        ↓              │
-│       ┌─────────────┬──────────────────┴─────────┐    │
-│       ↓             ↓                            ↓    │
-│  ┌────────┐   ┌─────────────┐   ┌──────────────┐    │
-│  │Chitchat│   │Calculation  │   │RAG           │    │
-│  └────────┘   └─────────────┘   └──────────────┘    │
-│       └─────────────┬──────────────────┬─────────┘    │
-│                     ↓                                 │
-│            ┌─────────────────┐                        │
-│            │Format Response  │                        │
-│            └─────────────────┘                        │
-└────────────────────────────────────────────────────────┘
-                       │
-        ┌──────────────┴────────────────┐
-        ↓                               ↓
-┌───────────────┐            ┌──────────────────────┐
-│CALCULATION    │            ┌──────────────────────┐
-│ENGINE         │            │RAG PIPELINE          │
-│               │            │                      │
-│• pyswisseph   │            │┌────────────────┐    │
-│• Birth Charts │            ││Hybrid Retrieval│    │
-│• Dashas       │            ││                │    │
-│• Transits     │            ││Semantic+BM25   │    │
-│               │            ││+HyDE           │    │
-│(Your existing │            │└────────────────┘    │
-│ engines)      │            │        ↓             │
-└───────────────┘            │┌────────────────┐    │
-                             ││ChromaDB        │    │
-                             │└────────────────┘    │
-                             └──────────────────────┘
-                                       │
-                            ┌──────────▼──────────┐
-                            │LLM GENERATION       │
-                            │                     │
-                            │Gemini 2.5 Flash     │
-                            │(Primary)            │
-                            └─────────────────────┘
+    ORCH --> REDIS
+    ORCH --> MONGO
 ```
 
 ---
 
-## 📚 RAG Preprocessing Pipeline (8-Phase Discovery)
+## 2. Request Processing Flow
 
-To achieve high-precision astrology retrieval, we implemented a sophisticated **Preprocessing Pipeline** that moves beyond fixed-length chunking.
+Every user query flows through a deterministic LangGraph state machine:
 
-### The 8-Phase Workflow
-
-| Phase | Name | Responsibility |
-| :--- | :--- | :--- |
-| **P1** | Extraction | Vision-LLM based PDF-to-Markdown extraction |
-| **P2** | Cleaning | Structural normalization and noise removal |
-| **P3** | Analysis | Cross-page continuity and chapter detection |
-| **P3.5**| **Profiling** | **Automated Structural Discovery (LLM)** |
-| **P4** | **Segmentation**| **Profile-Aware Semantic Chunking** |
-| **P5** | Enrichment | Summary, Entity Extraction (Planets/Houses) |
-| **P6** | Embedding | Multi-vector indexing (OpenAI Large) |
-| **P7** | Ingestion | Vector Database persistence (ChromaDB) |
-
-### Key Innovation: Structural Discovery (Phase 3.5)
-The system is **Book-Agnostic**. Before splitting a book, it uses an LLM to "read" representative samples and identify:
-- **Verse Patterns**: Regex for shloka markers (e.g. `॥ 42 ॥`).
-- **Semantic Markers**: Transition keywords (e.g. `"Sage Parasara said"`, `"Note:"`).
-- **Hierarchy**: Logical nesting of chapters, verses, and commentaries.
-
-### Semantic Segmentation (Phase 4)
-We use a **Hierarchical Splitter** instead of a token-limited one:
-1. **Hard Breaks**: Page/Chapter boundaries.
-2. **Context markers**: Discovered transition phrases.
-3. **Soft breaks**: Sentence boundaries (respecting Sanskrit punctuation).
-4. **Context Injection**: Each split chunk inherits a "Context Header" to prevent meaning fragmentation.
-
----
-
-## 🧠 Semantic Routing (Phase 11 Update)
-
-We replaced the brittle Regex/Keyword matching system with a **Semantic AI Router**.
-
-### Technical Architecture
-- **Engine**: `sentence-transformers/all-MiniLM-L6-v2`
-    - **Size**: ~80MB (Quantized)
-    - **Latency**: <50ms on CPU
-    - **Location**: Runs locally in `src/routing/` (No API calls required)
-- **Component**: `SemanticRouter` (Singleton pattern in `src/routing/semantic_router.py`)
-- **Mechanism**: Cosine Similarity between `Query Embedding` and `Route Canonical Embeddings`.
-
-### Configured Routes
-
-**1. Chitchat (`orchestrator.py`)**
-- **Threshold**: 0.70
-- **Examples**: "wassup", "sup", "namaste", "vanakkam".
-- **Impact**: Catches slang and variations that regex missed.
-
-**2. Safety (`classifier.py`)**
-- **Threshold**: 0.75
-- **Categories**: DEATH_PREDICTION, MEDICAL, GAMBLING, HARMFUL, PRIVACY.
-- **Impact**: Robust detection of harmful intent without needing exhaustive keyword lists. (e.g., "end my life" is caught even without "suicide" keyword).
-
----
-
-## 🌐 Multilingual Architecture (Phase 6.2)
-
-We enforce a **Strict 8-Language Lockdown** to prevent hallucinated languages and response drift.
-
-### 1. The 8 Supported Languages
-The system strictly parses inputs into one of these 8 codes. All else falls back to English.
-1. **English** (`en`)
-2. **Hindi** (`hi`) + **Hinglish** (`hi-lat`)
-3. **Marathi** (`mr`) + **Romanized** (`mr-lat`)
-4. **Punjabi** (`pa`) + **Romanized** (`pa-lat`)
-5. **Tamil** (`ta`) + **Romanized** (`ta-lat`)
-6. **Telugu** (`te`) + **Romanized** (`te-lat`)
-7. **Malayalam** (`ml`) + **Romanized** (`ml-lat`)
-
-### 2. Roman Script Handling (`-lat`)
-We use a **Single-Source-Locale** strategy:
-- **Detection**: `LanguageDetector` identifies Romanized text (e.g., "Kasa ahe?") -> Returns `mr-lat`.
-- **Loading**: `LocalizationManager` loads the **Base JSON** (`mr.json`).
-- **Instruction**: `PromptBuilder` injects: *"Respond in Marathi using Roman Script"*.
-- **Benefit**: No duplicate `*-lat.json` files required. 8 files cover 14 variants.
-
-### 3. Drift Prevention (RAG)
-To prevent Cross-Lingual Contamination (e.g., English query getting Marathi chunks):
-- **Filter**: `language IN [detected_code, 'en']`
-- **Logic**: English (`en`) is always retrieved as the "Universal Knowledge Hub".
-- **Result**: Users get answers in their requested language/script without random language switching.
-
----
-
-## 📊 Intent Classification Logic
-
-### The 3 Categories Explained
-
-#### 1. CHITCHAT
-**Definition:** General conversation that doesn't need astrology knowledge or calculations.
-**Processing:** < 100ms (Semantic Route or Fallback ID)
-
-#### 2. NEEDS_CALCULATION
-**Definition:** User wants to GENERATE or CALCULATE specific astrological data.
-**Examples:** "Calculate my birth chart", "Show my dasha"
-**Response:** Deterministic engine (pyswisseph)
-**Processing:** 500ms - 2s
-
-#### 3. NEEDS_RAG
-**Definition:** User wants astrological KNOWLEDGE, INTERPRETATION, or PREDICTION.
-**Examples:** "What does Jupiter mean?", "When will I get married?"
-**Response:** Hybrid retrieval + LLM
-**Processing:** 3-5s
-
----
-
-## 🎯 Routing Decision Tree
-
-```
-Query arrives
-    ↓
-[Semantic Router] Check Chitchat/Safety (Latency < 50ms)
-    ├─ Match? → Return Result Immediately
-    └─ No Match ↓
-[LLM Classification] Check Intent (Latency ~800ms)
-    ├─ Calculation? → NEEDS_CALCULATION
-    └─ Knowledge? → NEEDS_RAG
+```mermaid
+stateDiagram-v2
+    [*] --> Authenticate
+    Authenticate --> DetectLanguage
+    DetectLanguage --> ClassifyIntent
+    
+    ClassifyIntent --> Chitchat: CHITCHAT
+    ClassifyIntent --> Clarification: AMBIGUOUS
+    ClassifyIntent --> CalculationOnly: CALCULATION_ONLY
+    ClassifyIntent --> RAGWithCalc: RAG_WITH_CALCULATION
+    ClassifyIntent --> RAGOnly: RAG_ONLY
+    
+    Chitchat --> ValidateResponse
+    Clarification --> [*]: Return clarification question
+    
+    CalculationOnly --> ValidateResponse
+    
+    RAGWithCalc --> ValidateResponse
+    
+    RAGOnly --> ValidateResponse
+    
+    ValidateResponse --> FormatResponse: SAFE
+    ValidateResponse --> RAGWithCalc: UNSAFE (retry ≤ 2)
+    ValidateResponse --> FormatResponse: Max retries exceeded
+    
+    FormatResponse --> [*]
 ```
 
-**Rule:** Semantic Routing takes precedence for speed and safety. LLM Classification handles the nuance between Calculation and RAG.
+### Node Descriptions
+
+| Node | Responsibility | Key Logic |
+|---|---|---|
+| **Authenticate** | Load user profile + session data | MongoDB/dummy DB lookup, merge session |
+| **DetectLanguage** | Identify query language | Library-based → LLM fallback |
+| **ClassifyIntent** | Route query to correct handler | LLM classification → pattern fallback |
+| **Chitchat** | Quick conversational response | Persona-driven, no computation |
+| **Clarification** | Ask user to disambiguate | Detects "Mars in 7th" ambiguity |
+| **CalculationOnly** | Raw chart data (no interpretation) | VedicEngine direct output |
+| **RAGWithCalculation** | Personalized prediction | Chart + Dasha + Transit + RAG + LLM |
+| **RAGOnly** | General astrology theory | RAG retrieval + LLM synthesis |
+| **ValidateResponse** | Critic loop (safety check) | Constitution verification, max 2 retries |
+| **FormatResponse** | Add disclaimers, format output | Language-appropriate formatting |
 
 ---
 
-## 📈 Performance Characteristics
+## 3. Module Architecture
 
-| Path | Avg Time | Bottleneck |
-|------|----------|------------|
-| CHITCHAT (Semantic) | <50ms | None |
-| CHITCHAT (LLM) | ~800ms | LLM Latency |
-| NEEDS_CALCULATION | 1-2s | pyswisseph computation |
-| NEEDS_RAG | 3-5s | Retrieval + Generation |
+### 3.1 Computation Layer
 
-**Optimization Strategy:**
-- **Semantic First**: Offload 30-40% of queries (greetings, safety) to local embedding model.
-- **Caching**: Cache RAG intents and calculation results.
+The bottom-most layer. **Purely deterministic** — no LLM calls, no network dependencies.
+
+```
+src/engines/
+├── core/                          # Shared astronomical primitives
+│   ├── ephemeris.py               # Swiss Ephemeris wrapper (pyswisseph)
+│   ├── datetime_utils.py          # Julian Day ↔ datetime conversions
+│   ├── coordinates.py             # GeoPosition, lat/lon handling
+│   ├── celestial_bodies.py        # CelestialBody enum, planet data
+│   └── exceptions.py              # Custom exception hierarchy
+│
+├── vedic/                         # Vedic (Sidereal) astrology
+│   ├── vedic_engine.py            # Main engine: chart, lagna, positions
+│   ├── rashi_nakshatra.py         # Rashi + Nakshatra calculations
+│   ├── dasha_systems.py           # Vimshottari dasha periods
+│   ├── aspects_yogas.py           # Aspects + yoga detection
+│   ├── divisional_charts.py       # Navamsa, other D-charts
+│   ├── graha_stats.py             # Shadbala (planetary strength)
+│   └── vedic_constants.py         # Ayanamsa, zodiac, nakshatra data
+│
+└── western/                       # Western (Tropical) astrology
+    ├── western_engine.py          # Main engine: tropical chart
+    ├── western_aspects.py         # Aspect patterns
+    ├── western_dignities.py       # Essential/accidental dignities
+    ├── western_houses.py          # House systems
+    └── western_signs.py           # Sign characteristics
+```
+
+**Design Principle:** The `core/` module has ZERO dependencies on other project modules. Vedic and Western engines depend only on `core/`.
+
+### 3.2 RAG Pipeline
+
+```
+src/rag/
+├── rag_engine.py           # Main RAG orchestrator (876 lines)
+├── retriever.py            # Multi-strategy retriever (Semantic/BM25/Hybrid/HyDE)
+├── reranker.py             # Cross-encoder reranking
+├── memory_retriever.py     # Long-term conversation memory
+├── ingest_local.py         # Local file ingestion utility
+│
+├── extraction/             # PDF → structured text
+│   ├── vision_pipeline.py  # Vision LLM extraction pipeline
+│   ├── vision_extractor.py # Gemini Vision API integration
+│   ├── extraction_schemas.py # Extraction output schemas
+│   └── extraction_prompts.py # Extraction prompt templates
+│
+└── preprocessing/          # Text → embeddings (6-phase)
+    ├── pipeline.py         # Master preprocessing pipeline
+    ├── structural_cleaner.py  # Phase 1: Clean raw text
+    ├── page_analyzer.py       # Phase 2: Cross-page analysis
+    ├── semantic_segmenter.py  # Phase 3: Semantic chunking
+    ├── chunk_enricher.py      # Phase 4: LLM metadata enrichment
+    ├── subchunker.py          # Phase 5: Sub-chunk splitting
+    ├── embedder.py            # Phase 6: Embedding generation
+    ├── vector_db_builder.py   # ChromaDB ingestion
+    ├── schemas.py             # Pipeline data schemas
+    └── book_profiler.py       # Source-specific processing config
+```
+
+**Retrieval Strategy Routing:**
+
+```mermaid
+graph LR
+    Q["User Query"] --> RC["Classify Query Intent"]
+    RC -->|keyword| BM25["BM25 Search"]
+    RC -->|conceptual| HYDE["HyDE Search"]
+    RC -->|general| HYB["Hybrid Search<br/>(RRF Fusion)"]
+    BM25 --> RR["Reranker"]
+    HYDE --> RR
+    HYB --> RR
+    RR --> EXP["Context Expansion<br/>(Adjacent Chunks)"]
+    EXP --> OUT["Retrieved Chunks"]
+```
+
+### 3.3 AI / Intelligence Layer
+
+```
+src/ai/
+├── intent_classifier.py    # 4-category LLM classifier with fallback
+├── hybrid_retriever.py     # LangChain-compatible retriever wrapper
+├── prompt_builder.py       # Dynamic prompt construction
+├── persona_generator.py    # LLM-based persona generation
+├── personas.py             # Pre-defined astrologer personas
+└── user_manager.py         # User profile & birth data management
+```
+
+### 3.4 Safety Layer
+
+```
+src/safety/
+├── classifier.py           # Multi-gate LLM safety classifier
+├── input_validator.py      # Pattern-based pre-screening (Gate 1)
+├── constitution.py         # Astrologer behavioral rules
+├── disclaimers.py          # Domain-specific disclaimer templates
+├── models.py               # SafetyDecision, BlockReasons enums
+└── templates.py            # Safety prompt templates
+```
+
+**Safety Processing Pipeline:**
+
+```mermaid
+graph LR
+    Q["Query"] --> G1["Gate 1<br/>Semantic Routes<br/>(Pattern Match)"]
+    G1 -->|blocked| BLOCK["BLOCK<br/>(Return safe message)"]
+    G1 -->|pass| G2["Gate 2<br/>LLM Classifier<br/>(Few-shot)"]
+    G2 -->|SAFE| SAFE["Proceed"]
+    G2 -->|DISCLAIMER| DISC["Add Disclaimer<br/>+ Proceed"]
+    G2 -->|BLOCK| BLOCK
+    G2 -->|REFRAME| REF["Reframe Query<br/>+ Proceed"]
+```
+
+### 3.5 API Layer
+
+```
+src/api/
+├── main.py                 # FastAPI app setup, middleware, events
+├── config.py               # API-specific settings (Pydantic)
+├── dependencies.py         # Singleton DI (orchestrator, engines, etc.)
+│
+├── routes/
+│   ├── chat.py             # POST /api/v1/chat
+│   ├── user.py             # User management endpoints
+│   ├── calculation.py      # Direct calculation endpoints
+│   └── health.py           # Health check / readiness
+│
+├── middleware/
+│   └── (timing, CORS)
+│
+└── schemas/
+    └── user.py             # Request/response Pydantic models
+```
+
+### 3.6 Services Layer
+
+```
+src/services/
+├── astrology_service.py      # 3rd-party API orchestration + caching
+├── backend_data_adapter.py   # Mobile app ↔ NakshatraAI translation
+└── cache_manager.py          # Redis cache with TTL management
+```
 
 ---
 
-## 📋 Next Steps
+## 4. Data Flow: Personalized Prediction
 
-### Immediate (Phase 12)
-- [ ] Implement FastAPI layer (replace CLI)
-- [ ] Containerize with Docker (include sentence-transformers model)
+The most complex flow — `RAG_WITH_CALCULATION`:
 
-### Long-term
-- [ ] Add analytics nodes for router performance
-- [ ] Fine-tune RAG model on astrology texts
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant O as Orchestrator
+    participant IC as Intent Classifier
+    participant VE as Vedic Engine
+    participant R as Retriever
+    participant LLM as LLM
+    participant SC as Safety Classifier
+    
+    U->>O: "When will I get married?"
+    O->>O: Authenticate (load profile)
+    O->>O: Detect language
+    O->>IC: Classify intent
+    IC-->>O: RAG_WITH_CALCULATION
+    
+    O->>SC: Safety check (query)
+    SC-->>O: DISCLAIMER (relationship)
+    
+    O->>VE: Calculate birth chart
+    VE-->>O: Chart data (lagna, planets, houses)
+    O->>VE: Calculate dashas
+    VE-->>O: Current Mahadasha/Antardasha
+    O->>VE: Calculate transits
+    VE-->>O: Current planetary transits
+    
+    O->>R: Retrieve knowledge ("marriage timing vedic")
+    R-->>O: Relevant chunks (7th house, Venus, Dasha rules)
+    
+    O->>LLM: Build prediction prompt<br/>(chart + dasha + transit + chunks + persona)
+    LLM-->>O: Personalized interpretation
+    
+    O->>O: Validate response (critic loop)
+    O->>O: Add relationship disclaimer
+    O-->>U: Final response + disclaimer
+```
+
+---
+
+## 5. Configuration Architecture
+
+```mermaid
+graph TB
+    ENV[".env file<br/>(API keys, secrets)"] --> PYDANTIC["Pydantic Settings<br/>(EnvConfig)"]
+    YAML["config/config.yaml<br/>(structured config)"] --> APPCONFIG["AppConfig<br/>(config/config.py)"]
+    PYDANTIC --> APPCONFIG
+    RAG_PY["config/rag_config.py<br/>(dynamic RAG tuning)"] --> RAG_ENGINE
+    
+    APPCONFIG --> |singleton| FACTORY["LLM Factory"]
+    APPCONFIG --> |singleton| API["API Settings"]
+    APPCONFIG --> |singleton| SAFETY["Safety Config"]
+    APPCONFIG --> |singleton| RAG_ENGINE["RAG Engine"]
+```
+
+**Precedence:** `.env` overrides → `config.yaml` defaults → code defaults
+
+---
+
+## 6. LLM Provider Architecture
+
+```mermaid
+graph TB
+    subgraph "LLM Factory (src/llm/factory.py)"
+        FACTORY["LLMFactory.create()"]
+        RL["RateLimitedLLM<br/>(Wrapper)"]
+        PURPOSE["Purpose-Based<br/>Model Selection"]
+    end
+    
+    subgraph "Providers"
+        OAI["OpenAI<br/>(ChatOpenAI)"]
+        OLLAMA["Ollama<br/>(ChatOllama)"]
+    end
+    
+    subgraph "Purposes"
+        GEN["general<br/>(main responses)"]
+        CLASS["classification<br/>(intent, safety)"]
+        SAFE["safety<br/>(content filtering)"]
+    end
+    
+    FACTORY --> PURPOSE
+    PURPOSE --> GEN
+    PURPOSE --> CLASS
+    PURPOSE --> SAFE
+    FACTORY --> RL
+    RL --> OAI
+    RL --> OLLAMA
+```
+
+---
+
+## 7. Dependency Graph
+
+```
+Orchestrator
+├── IntentClassifier (src/ai/)
+├── UserManager (src/ai/)
+├── HybridRetriever (src/ai/)
+├── PromptBuilder (src/ai/)
+├── CalculationTools (src/tools/)
+│   └── VedicEngine (src/engines/vedic/)
+│       └── CoreEphemeris (src/engines/core/)
+├── SafetyClassifier (src/safety/)
+├── LLMFactory (src/llm/)
+├── RAGEngine (src/rag/)
+│   ├── AstrologyRetriever (src/rag/)
+│   │   └── ChromaDB + BM25
+│   ├── MemoryRetriever (src/rag/)
+│   └── Reranker (src/rag/)
+├── LanguageDetector (src/locales/)
+├── ValidationEngine (src/prediction/) [optional]
+└── ConversationStore (scripts/)
+```
+
+---
+
+## 8. Deployment Architecture
+
+```mermaid
+graph TB
+    subgraph "Docker Compose"
+        APP["NakshatraAI App<br/>(FastAPI + Uvicorn)"]
+        REDIS_D["Redis Container"]
+    end
+    
+    subgraph "External Services"
+        OPENAI_S["OpenAI API<br/>(LLM + Embeddings)"]
+        OLLAMA_S["Ollama Server<br/>(Local LLM)"]
+    end
+    
+    subgraph "Persistent Storage"
+        CHROMADB["ChromaDB<br/>(data/vectordb/)"]
+        SQLITE["SQLite<br/>(dev user DB)"]
+        LOGS["Log Files<br/>(logs/)"]
+    end
+    
+    APP --> REDIS_D
+    APP --> OPENAI_S
+    APP --> OLLAMA_S
+    APP --> CHROMADB
+    APP --> SQLITE
+    APP --> LOGS
+```
+
+---
+
+## 9. Key Design Decisions
+
+| Decision | Rationale |
+|---|---|
+| **Deterministic calculations over LLM** | Astronomical positions must be exact. LLMs hallucinate numbers. |
+| **RAG over fine-tuning for knowledge** | Classical texts need factual accuracy. RAG provides citations. |
+| **LangGraph over simple chains** | Complex 4-way routing with state needs graph-based orchestration. |
+| **Multi-gate safety** | Pattern matching (fast) + LLM classification (accurate) = robust. |
+| **Purpose-based LLM selection** | Classification needs speed; predictions need quality. |
+| **Stateless API mode** | Mobile app pre-computes charts; chatbot interprets. Scales better. |
+| **Hybrid retrieval (RRF)** | Combines semantic (meaning) + keyword (exact terms) strengths. |
+| **Constitution-based critic loop** | Post-generation verification catches hallucinations and unsafe content. |
+
+---
+
+## 10. File Map (Complete)
+
+```
+astro_chatbot/
+├── chatbot.py                      # CLI entry point
+├── config/
+│   ├── config.py                   # Main config loader (Pydantic + YAML)
+│   ├── config.yaml                 # Base configuration
+│   ├── rag_config.py               # Dynamic RAG settings
+│   └── logger.py                   # Logging configuration
+│
+├── src/
+│   ├── orchestration/
+│   │   └── orchestrator.py         # LangGraph orchestrator (1,693 lines)
+│   │
+│   ├── ai/
+│   │   ├── intent_classifier.py    # 4-category classifier
+│   │   ├── hybrid_retriever.py     # LangChain retriever wrapper
+│   │   ├── prompt_builder.py       # Prompt construction
+│   │   ├── persona_generator.py    # Dynamic persona creation
+│   │   ├── personas.py             # Pre-built personas
+│   │   └── user_manager.py         # User profile management
+│   │
+│   ├── engines/
+│   │   ├── core/                   # Swiss Ephemeris wrapper (5 files)
+│   │   ├── vedic/                  # Vedic astrology engine (8 files)
+│   │   └── western/                # Western astrology engine (7 files)
+│   │
+│   ├── rag/
+│   │   ├── rag_engine.py           # Main RAG orchestrator
+│   │   ├── retriever.py            # Multi-strategy retriever
+│   │   ├── reranker.py             # Cross-encoder reranking
+│   │   ├── memory_retriever.py     # Conversation memory
+│   │   ├── extraction/             # PDF extraction (6 files)
+│   │   └── preprocessing/          # Text preprocessing (11 files)
+│   │
+│   ├── llm/
+│   │   ├── factory.py              # LLM provider factory
+│   │   └── prompts/                # Prompt templates
+│   │
+│   ├── safety/                     # Safety & guardrails (7 files)
+│   ├── api/                        # FastAPI REST API (routes, schemas)
+│   ├── services/                   # Data services & caching
+│   ├── tools/                      # Calculation tool wrappers
+│   ├── routing/                    # Semantic router
+│   ├── locales/                    # i18n (6 languages)
+│   ├── prediction/                 # Validation engine
+│   ├── db/                         # Database clients
+│   ├── integrations/               # 3rd-party API clients
+│   └── utils/                      # Cost tracking, formatting, etc.
+│
+├── scripts/                        # Utility scripts (6 files)
+├── tests/                          # Test suite (20 files)
+├── data/                           # Data directory (vectordb, profiles)
+├── docs/                           # Documentation
+├── Dockerfile                      # Container definition
+├── docker-compose.yml              # Multi-container setup
+└── requirements.txt                # Python dependencies
+```

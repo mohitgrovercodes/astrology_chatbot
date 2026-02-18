@@ -1,3 +1,4 @@
+# src/locales/language_detector.py
 # src\locales\language_detector.py
 """
 Universal Language Detection Module

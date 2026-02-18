@@ -1,3 +1,4 @@
+# src/ai/user_manager.py
 # src\ai\user_manager.py
 """
 User Manager for NakshatraAI.

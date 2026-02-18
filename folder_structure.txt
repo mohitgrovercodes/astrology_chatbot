@@ -1,0 +1,488 @@
+Folder PATH listing
+Volume serial number is EC3C-D3A7
+D:.
+|   .env
+|   .gitignore
+|   ARCHITECTURE_CLARIFICATION.md
+|   Brihat_Parasara_Hora_Sastra_Vol1_by_Girish_Chand_Sharma_enriched_rules_partial.bak
+|   Brihat_Parasara_Hora_Sastra_Vol1_by_Girish_Chand_Sharma_enriched_rules_partial.json
+|   Brihat_Parasara_Hora_Sastra_Vol_2_by_Girish_Chand_Sharma_enriched_rules_partial.bak
+|   Brihat_Parasara_Hora_Sastra_Vol_2_by_Girish_Chand_Sharma_enriched_rules_partial.json
+|   build_rule_indices.py
+|   chatbot.py
+|   checkpoint_rules.json
+|   check_merged.py
+|   classify_rule_tiers.py
+|   COMPLETE_PACKAGE_SUMMARY.md
+|   consolidated_final.json
+|   consolidate_validation_rules.py
+|   DEPENDENCIES.md
+|   docker-compose.yml
+|   Dockerfile
+|   enrich_metadata_json_gemini.py
+|   extract_rules_json_gemini.py
+|   FILE_STRUCTURE.md
+|   final_vedic_astro_rules.json
+|   folder_structure.txt
+|   google_credentials.json
+|   inspect_rule_conditions.py
+|   inspect_rule_fields.py
+|   INTEGRATION_SUMMARY.md
+|   merge_validation_rules.py
+|   OPTIMIZATION_WORKFLOW_GUIDE.md
+|   optimize_rules.py
+|   Phaladeepika_rules.bak
+|   Phaladeepika_rules.json
+|   QUICKSTART.md
+|   QUICKSTART1.md
+|   QUICK_REFERENCE (1).md
+|   README.md
+|   reassign_rule_ids.py
+|   requirements.txt
+|   set_book_source.py
+|   test_validation_engine.py
+|   vedic_astro_validation_rules.json
+|   vedic_validation_engine.py
+|   vedic_validation_schema.py
+|   
++---.pytest_cache
+|   |   .gitignore
+|   |   CACHEDIR.TAG
+|   |   README.md
+|   |   
+|   \---v
+|       \---cache
+|               lastfailed
+|               nodeids
+|               stepwise
+|               
++---config
+|   |   config.py
+|   |   config.yaml
+|   |   logger.py
+|   |   rag_config.py
+|   |   
+|   \---__pycache__
+|           rag_config.cpython-311.pyc
+|           
++---data
+|   |   astro.db
+|   |   
+|   +---conversations
+|   |       session_0f84d41c-d3aa-4f83-96d0-0b99d86361c5.json
+|   |       session_1cde0542-4831-4b4f-a397-5574e591973d.json
+|   |       session_2cfcdaef-bd0b-4242-9685-50e0b87e7f27.json
+|   |       session_40d10589-2b97-4dbc-a769-124a3fba7ac7.json
+|   |       session_4ca10e1f-2c00-4770-93f4-198e8a65c993.json
+|   |       session_53516d2b-7e84-4dfa-9989-e3ee84a0bf21.json
+|   |       session_766d0dd6-99d3-4c9c-a621-7b4b7f77f2ec.json
+|   |       session_994ef875-307e-446c-b053-ab809995ab50.json
+|   |       session_c6139616-2dbf-470b-a743-46f902e9dc83.json
+|   |       session_d1eb6b16-06c8-427c-ab48-628175af31e7.json
+|   |       session_d856fef5-541b-4277-9d70-9c4af8810a10.json
+|   |       
+|   +---raw
+|   |       .gitkeep
+|   |       A_Manual_of_Hindu_Astrology_BVRaman.pdf
+|   |       Bhava_and_Graha_Balas_BVRaman.pdf
+|   |       BPHS_vlo2.pdf
+|   |       BPHS_vol1.pdf
+|   |       Combinations_BVRaman.pdf
+|   |       Hindu_Predictive_Astrology_BVRaman.pdf
+|   |       Jaimini_Sutras.pdf
+|   |       Jaimini_Sutras_SuryanarainRao.pdf
+|   |       JP_vol1.pdf
+|   |       JP_vol2.pdf
+|   |       JP_vol3.pdf
+|   |       Jyotish_Astrology_And_Timing_Of_Marriage_KNRao.pdf
+|   |       Phaladeepika.pdf
+|   |       Prasnatantra_BVRaman.pdf
+|   |       raman-how-to-judge-horoscope-1.pdf
+|   |       raman-how-to-judge-horoscope-2.pdf
+|   |       Saravali_vol1.pdf
+|   |       Saravali_vol2.pdf
+|   |       Uttarakalamritam.pdf
+|   |       VarahmihiraHorasastram.pdf
+|   |       
+|   \---vectordb
+|       |   chroma.sqlite3
+|       |   
+|       +---3d0bfed1-a747-47f5-8103-341ac9c1a85e
+|       |       data_level0.bin
+|       |       header.bin
+|       |       length.bin
+|       |       link_lists.bin
+|       |       
+|       \---484df2b0-c106-4315-8e20-41b0693e2273
+|               data_level0.bin
+|               header.bin
+|               index_metadata.pickle
+|               length.bin
+|               link_lists.bin
+|               
++---docs
+|       API_REFERENCE.md
+|       ARCHITECTURE.md
+|       CALCULATION_ENGINES.md
+|       COST_TRACKING.md
+|       CURRENT_IMPLEMENTATION.md
+|       DEVELOPER_GUIDE.md
+|       INTEGRATION_GUIDE.md
+|       PDF_EXTRACTION_GUIDE.md
+|       PROJECT_STATUS.md
+|       RAG_PIPELINE_DETAILED.md
+|       
++---examples
+|       chatbot_backend_integration.py
+|       production_integration_example.py
+|       use_external_api.py
+|       
++---folder
+|       Brihat_Parasara_Hora_Sastra_Vol_2_by_Girish_Chand_Sharma_enriched.json
+|       
++---logs
+|       cost_tracker.db
+|       
++---optimized
+|   |   consolidated_rules.json
+|   |   indexed_rules.json
+|   |   tiered_rules.json
+|   |   
+|   \---stats
+|           consolidation_stats.json
+|           indexing_stats.json
+|           tier_analysis.json
+|           
++---rules
+|       bphs_validation_rules.json
+|       jp23.json
+|       
++---scripts
+|       add_dummy_user.py
+|       batch_extract.py
+|       conversation_store.py
+|       extract_pdf.py
+|       generate_all_personas.py
+|       run_preprocessing_phases.py
+|       
++---src
+|   |   __init__.py
+|   |   
+|   +---ai
+|   |   |   hybrid_retriever.py
+|   |   |   intent_classifier.py
+|   |   |   personas.py
+|   |   |   persona_generator.py
+|   |   |   prompt_builder.py
+|   |   |   user_manager.py
+|   |   |   __init__.py
+|   |   |   
+|   |   \---__pycache__
+|   |           hybrid_retriever.cpython-311.pyc
+|   |           intent_classifier.cpython-311.pyc
+|   |           personas.cpython-311.pyc
+|   |           persona_generator.cpython-311.pyc
+|   |           prompt_builder.cpython-311.pyc
+|   |           user_manager.cpython-311.pyc
+|   |           __init__.cpython-311.pyc
+|   |           
+|   +---api
+|   |   |   astrology_api_client.py
+|   |   |   config.py
+|   |   |   dependencies.py
+|   |   |   main.py
+|   |   |   __init__.py
+|   |   |   
+|   |   +---middleware
+|   |   |       auth.py
+|   |   |       rate_limit.py
+|   |   |       __init__.py
+|   |   |       
+|   |   +---routes
+|   |   |       calculation.py
+|   |   |       chat.py
+|   |   |       health.py
+|   |   |       user.py
+|   |   |       __init__.py
+|   |   |       
+|   |   \---schemas
+|   |           calculation.py
+|   |           chat.py
+|   |           common.py
+|   |           user.py
+|   |           __init__.py
+|   |           
+|   +---db
+|   |   |   dummy_user_db.py
+|   |   |   redis_client.py
+|   |   |   __init__.py
+|   |   |   
+|   |   \---__pycache__
+|   |           dummy_user_db.cpython-311.pyc
+|   |           __init__.cpython-311.pyc
+|   |           
+|   +---engines
+|   |   |   __init__.py
+|   |   |   
+|   |   +---core
+|   |   |   |   celestial_bodies.py
+|   |   |   |   coordinates.py
+|   |   |   |   datetime_utils.py
+|   |   |   |   ephemeris.py
+|   |   |   |   exceptions.py
+|   |   |   |   __init__.py
+|   |   |   |   
+|   |   |   \---__pycache__
+|   |   |           celestial_bodies.cpython-311.pyc
+|   |   |           celestial_bodies.cpython-313.pyc
+|   |   |           coordinates.cpython-311.pyc
+|   |   |           coordinates.cpython-313.pyc
+|   |   |           datetime_utils.cpython-311.pyc
+|   |   |           datetime_utils.cpython-313.pyc
+|   |   |           ephemeris.cpython-311.pyc
+|   |   |           ephemeris.cpython-313.pyc
+|   |   |           exceptions.cpython-311.pyc
+|   |   |           exceptions.cpython-313.pyc
+|   |   |           __init__.cpython-311.pyc
+|   |   |           __init__.cpython-313.pyc
+|   |   |           
+|   |   +---vedic
+|   |   |   |   aspects_yogas.py
+|   |   |   |   dasha_systems.py
+|   |   |   |   divisional_charts.py
+|   |   |   |   graha_stats.py
+|   |   |   |   rashi_nakshatra.py
+|   |   |   |   vedic_constants.py
+|   |   |   |   vedic_engine.py
+|   |   |   |   __init__.py
+|   |   |   |   
+|   |   |   \---__pycache__
+|   |   |           aspects_yogas.cpython-311.pyc
+|   |   |           dasha_systems.cpython-311.pyc
+|   |   |           divisional_charts.cpython-311.pyc
+|   |   |           graha_stats.cpython-311.pyc
+|   |   |           rashi_nakshatra.cpython-311.pyc
+|   |   |           vedic_constants.cpython-311.pyc
+|   |   |           vedic_engine.cpython-311.pyc
+|   |   |           __init__.cpython-311.pyc
+|   |   |           __init__.cpython-313.pyc
+|   |   |           
+|   |   +---western
+|   |   |   |   western_aspects.py
+|   |   |   |   western_constants.py
+|   |   |   |   western_dignities.py
+|   |   |   |   western_engine.py
+|   |   |   |   western_houses.py
+|   |   |   |   western_signs.py
+|   |   |   |   __init__.py
+|   |   |   |   
+|   |   |   \---__pycache__
+|   |   |           western_aspects.cpython-311.pyc
+|   |   |           western_constants.cpython-311.pyc
+|   |   |           western_dignities.cpython-311.pyc
+|   |   |           western_engine.cpython-311.pyc
+|   |   |           western_houses.cpython-311.pyc
+|   |   |           western_signs.cpython-311.pyc
+|   |   |           __init__.cpython-311.pyc
+|   |   |           
+|   |   \---__pycache__
+|   |           __init__.cpython-311.pyc
+|   |           __init__.cpython-313.pyc
+|   |           
+|   +---integrations
+|   |   \---astrology_api
+|   |           client.py
+|   |           extended_client.py
+|   |           README.md
+|   |           __init__.py
+|   |           
+|   +---llm
+|   |   |   factory.py
+|   |   |   
+|   |   +---prompts
+|   |   |   |   personas.py
+|   |   |   |   templates.py
+|   |   |   |   __init__.py
+|   |   |   |   
+|   |   |   \---__pycache__
+|   |   |           personas.cpython-311.pyc
+|   |   |           templates.cpython-311.pyc
+|   |   |           __init__.cpython-311.pyc
+|   |   |           
+|   |   \---__pycache__
+|   |           factory.cpython-311.pyc
+|   |           
+|   +---locales
+|   |   |   en.json
+|   |   |   hi.json
+|   |   |   language_detector.py
+|   |   |   ml.json
+|   |   |   mr.json
+|   |   |   pa.json
+|   |   |   ta.json
+|   |   |   te.json
+|   |   |   
+|   |   \---__pycache__
+|   |           language_detector.cpython-311.pyc
+|   |           
+|   +---orchestration
+|   |   |   orchestrator.py
+|   |   |   __init__.py
+|   |   |   
+|   |   \---__pycache__
+|   |           orchestrator.cpython-311.pyc
+|   |           __init__.cpython-311.pyc
+|   |           
+|   +---prediction
+|   |   |   vedic_validation_engine_v2.py
+|   |   |   __init__.py
+|   |   |   
+|   |   \---__pycache__
+|   |           vedic_validation_engine_v2.cpython-311.pyc
+|   |           __init__.cpython-311.pyc
+|   |           
+|   +---rag
+|   |   |   ingest_local.py
+|   |   |   memory_retriever.py
+|   |   |   rag_engine.py
+|   |   |   reranker.py
+|   |   |   retriever.py
+|   |   |   __init__.py
+|   |   |   
+|   |   +---extraction
+|   |   |       extraction_prompts.py
+|   |   |       extraction_schemas.py
+|   |   |       README.md
+|   |   |       vision_extractor.py
+|   |   |       vision_pipeline.py
+|   |   |       __init__.py
+|   |   |       
+|   |   +---preprocessing
+|   |   |   |   book_profiler.py
+|   |   |   |   chunk_enricher.py
+|   |   |   |   embedder.py
+|   |   |   |   page_analyzer.py
+|   |   |   |   pipeline.py
+|   |   |   |   schemas.py
+|   |   |   |   semantic_segmenter.py
+|   |   |   |   structural_cleaner.py
+|   |   |   |   subchunker.py
+|   |   |   |   vector_db_builder.py
+|   |   |   |   __init__.py
+|   |   |   |   
+|   |   |   \---__pycache__
+|   |   |           embedder.cpython-311.pyc
+|   |   |           schemas.cpython-311.pyc
+|   |   |           __init__.cpython-311.pyc
+|   |   |           
+|   |   \---__pycache__
+|   |           memory_retriever.cpython-311.pyc
+|   |           reranker.cpython-311.pyc
+|   |           retriever.cpython-311.pyc
+|   |           __init__.cpython-311.pyc
+|   |           
+|   +---routing
+|   |   |   semantic_router.py
+|   |   |   __init__.py
+|   |   |   
+|   |   \---__pycache__
+|   |           semantic_router.cpython-311.pyc
+|   |           __init__.cpython-311.pyc
+|   |           
+|   +---safety
+|   |   |   classifier.py
+|   |   |   constitution.py
+|   |   |   disclaimers.py
+|   |   |   input_validator.py
+|   |   |   models.py
+|   |   |   README.md
+|   |   |   templates.py
+|   |   |   __init__.py
+|   |   |   
+|   |   \---__pycache__
+|   |           classifier.cpython-311.pyc
+|   |           constitution.cpython-311.pyc
+|   |           input_validator.cpython-311.pyc
+|   |           models.cpython-311.pyc
+|   |           templates.cpython-311.pyc
+|   |           __init__.cpython-311.pyc
+|   |           
+|   +---services
+|   |       astrology_service.py
+|   |       backend_data_adapter.py
+|   |       cache_manager.py
+|   |       __init__.py
+|   |       
+|   +---tools
+|   |   |   calculation_tools.py
+|   |   |   tools.py
+|   |   |   __init__.py
+|   |   |   
+|   |   \---__pycache__
+|   |           calculation_tools.cpython-311.pyc
+|   |           __init__.cpython-311.pyc
+|   |           
+|   +---utils
+|   |   |   config.py
+|   |   |   cost_logger.py
+|   |   |   cost_report.py
+|   |   |   cost_tracking.py
+|   |   |   formatters.py
+|   |   |   localization.py
+|   |   |   logger.py
+|   |   |   schemas.py
+|   |   |   serializers.py
+|   |   |   test.db
+|   |   |   validators.py
+|   |   |   __init__.py
+|   |   |   
+|   |   +---logs
+|   |   |       test_cost_tracker.db
+|   |   |       
+|   |   \---__pycache__
+|   |           config.cpython-311.pyc
+|   |           cost_logger.cpython-311.pyc
+|   |           cost_tracking.cpython-311.pyc
+|   |           formatters.cpython-311.pyc
+|   |           localization.cpython-311.pyc
+|   |           logger.cpython-311.pyc
+|   |           schemas.cpython-311.pyc
+|   |           serializers.cpython-311.pyc
+|   |           validators.cpython-311.pyc
+|   |           __init__.cpython-311.pyc
+|   |           
+|   \---__pycache__
+|           __init__.cpython-311.pyc
+|           __init__.cpython-313.pyc
+|           
++---tests
+|   |   .gitkeep
+|   |   README_MULTILINGUAL_TEST.md
+|   |   test_api.py
+|   |   test_backend_integration.py
+|   |   test_conversation_context.py
+|   |   test_cost_integration.py
+|   |   test_cost_logger.py
+|   |   test_dynamic_personas.py
+|   |   test_hybrid_priority.py
+|   |   test_indian_languages.py
+|   |   test_language_detection.py
+|   |   test_language_switching.py
+|   |   test_marriage_prediction_fix.py
+|   |   test_multilingual_rag.py
+|   |   test_pdf_extraction.py
+|   |   test_persistence_caching.py
+|   |   test_preprocessing.py
+|   |   test_safety.py
+|   |   test_session_context.py
+|   |   test_stateless_architecture.py
+|   |   
+|   \---__pycache__
+|           test_dynamic_personas.cpython-311-pytest-7.4.4.pyc
+|           test_indian_languages.cpython-311-pytest-7.4.4.pyc
+|           test_language_detection.cpython-311-pytest-7.4.4.pyc
+|           test_language_switching.cpython-311-pytest-7.4.4.pyc
+|           
+\---__pycache__
+        vedic_validation_schema.cpython-311.pyc
+        

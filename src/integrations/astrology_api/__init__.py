@@ -1,3 +1,4 @@
+# src/integrations/astrology_api/__init__.py
 # src\integrations\astrology_api\__init__.py
 """
 Astrology API Integration Module

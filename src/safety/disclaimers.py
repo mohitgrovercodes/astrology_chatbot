@@ -1,3 +1,4 @@
+# src/safety/disclaimers.py
 # src\safety\disclaimers.py
 """
 Disclaimers - Natural Astrologer-Style Disclaimers

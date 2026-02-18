@@ -1,3 +1,4 @@
+# src/ai/__init__.py
 # src\ai\__init__.py
 """
 AI components for NakshatraAI V2.
