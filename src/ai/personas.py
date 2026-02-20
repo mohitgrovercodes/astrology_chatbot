@@ -201,7 +201,69 @@ def get_greeting(language: str = 'en') -> str:
     """
     return GREETING_RESPONSES.get(language, GREETING_RESPONSES['en'])
 
+GREETING_BRIEF = {
+    'en': [
+        "Hello, {user_name}! How can I help you further?",
+        "Namaste, {user_name}. What else would you like to know?",
+        "Yes, {user_name}, I'm here. What's your question?",
+        "Hello! What can I clarify for you?",
+        "I'm listening, {user_name}. How may I assist you?",
+    ],
+    'hi-lat': [
+        "Namaste, {user_name}। Aur kya janna chahenge?",
+        "Haan, {user_name}?",
+        "Main yahaan hoon। Aapka sawal kya hai?",
+    ],
+    'hi': [
+        "नमस्ते, {user_name}। और क्या जानना चाहेंगे?",
+        "हां, {user_name}?",
+        "मैं यहां हूं। आपका सवाल क्या है?",
+    ]
+}
 
+
+def get_contextual_greeting(
+    user_name: str, 
+    conversation_length: int, 
+    language: str = 'en'
+) -> str:
+    """
+    Get appropriate greeting based on conversation context.
+    
+    Args:
+        user_name: User's name
+        conversation_length: Number of messages in history (including current)
+        language: Language code ('en', 'hi-lat', 'hi', etc.)
+    
+    Returns:
+        Context-appropriate greeting
+    """
+    import random
+    
+    # First interaction (0-2 messages) - full introduction
+    if conversation_length <= 2:
+        greeting = get_greeting(language)
+        # Personalize with user name
+        if "{user_name}" in greeting:
+            return greeting.format(user_name=user_name)
+        elif "How may I assist you today?" in greeting:
+            return greeting.replace(
+                "How may I assist you today?",
+                f"How may I assist you today, {user_name}?"
+            )
+        elif "Aaj main aapki kaise" in greeting:
+            return greeting.replace(
+                "Aaj main aapki kaise",
+                f"Aaj main {user_name} ki kaise"
+            )
+        return greeting
+    
+    # Returning user (3+ messages) - brief greeting
+    else:
+        brief_greetings = GREETING_BRIEF.get(language, GREETING_BRIEF['en'])
+        greeting = random.choice(brief_greetings)
+        return greeting.format(user_name=user_name)
+    
 OFF_TOPIC_RESPONSE = """I appreciate your question, but I'm NakshatraAI, specialized in Vedic and Western astrology.
 
 I can help you with:

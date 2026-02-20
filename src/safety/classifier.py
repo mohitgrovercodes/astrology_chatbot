@@ -48,6 +48,12 @@ SAFETY_ROUTES = {
         "is my boss cheating", "will my neighbor divorce", "is she sleeping with him",
         "secrets of my colleague", "what is he hiding"
     ],
+    "THIRD_PARTY_PREDICTION": [
+        "my friend when will she", "her marriage timing", "his career prospects",
+        "will my sister", "my brother's chart", "about my mother",
+        "my friend's horoscope", "when will he get married",
+        "her birth chart", "his future", "my spouse prediction"
+    ],
     BlockReasons.HEALTH_TENDENCY: [
         "general health outlook", "health issues in chart", "weak body parts",
         "periods of sickness", "vitality analysis"
@@ -332,6 +338,46 @@ class SafetyClassifier:
         """
         Classify query safety using multi-gate approach.
         """
+        # Gate -1: User's Own Data Queries (PRIORITY - check first!)
+        # These should NEVER be blocked - user asking about their own profile
+        query_lower = query.lower().strip()
+        
+        own_data_patterns = [
+            'my dob', 'my date of birth', 'my birth date', 'my birthday',
+            'my birth time', 'my time of birth', 'my birth place', 
+            'my place of birth', 'when was i born', 'where was i born',
+            'what time was i born', 'my chart', 'my kundli', 'my horoscope',
+            'show me my', 'tell me my', 'what is my'
+        ]
+        
+        if any(pattern in query_lower for pattern in own_data_patterns):
+            # User asking about their OWN data - mark as SAFE
+            decision = SafetyDecision(
+                category="SAFE",
+                reason="user_own_data_query",
+                should_answer=True,
+                disclaimer_type=None,
+                confidence=0.95,
+                explanation="User querying their own profile data"
+            )
+            return self._build_result(query, decision)
+        
+        # Gate 0: Third-Party Detection (pre-semantic routing)
+        third_party_check = self._detect_third_party(query)
+        if third_party_check:
+            is_third_party, person = third_party_check
+            decision = SafetyDecision(
+                category="SOFT_BLOCK",
+                reason="third_party_prediction",
+                should_answer=False,
+                disclaimer_type=None,
+                reframed_query=None,
+                confidence=0.95,
+                explanation=f"Query asks about {person}'s prediction",
+                keywords_matched=[person]
+            )
+            return self._build_result(query, decision)
+        
         # Gate 1: Fast Semantic Routing
         if self.use_pattern_matching and self.semantic_router.model:
             route_result = self.semantic_router.route(query, threshold=0.75) # Tuned threshold for safety
@@ -372,6 +418,46 @@ class SafetyClassifier:
         
         return self._build_result(query, decision)
     
+    def _detect_third_party(self, query: str) -> Optional[tuple[bool, str]]:
+        """
+        Detect if query is about someone else's prediction.
+        
+        Returns:
+            (is_third_party, person_name) or None
+        """
+        query_lower = query.lower()
+        
+        # Third-party indicators
+        patterns = [
+            'my friend', 'my sister', 'my brother', 'my mother', 'my father',
+            'my husband', 'my wife', 'my son', 'my daughter', 'my child',
+            'my boss', 'my colleague', 'my neighbor',
+            'her chart', 'his chart', 'their chart',
+            'her horoscope', 'his horoscope',
+            'when will he', 'when will she', 'when will they',
+            'will he', 'will she', 'will they',
+            'does he', 'does she', 'do they'
+        ]
+        
+        for pattern in patterns:
+            if pattern in query_lower:
+                # Try to extract person name
+                # Look for capitalized words after the pattern
+                words_after = query.split(pattern)[-1] if pattern in query.lower() else ""
+                names = re.findall(r'\b[A-Z][a-z]+\b', words_after[:50])
+                
+                person = names[0] if names else "someone else"
+                
+                # Check for "name is X" pattern
+                if 'name is' in query_lower:
+                    name_match = re.search(r'name is ([A-Z][a-z]+)', query, re.IGNORECASE)
+                    if name_match:
+                        person = name_match.group(1)
+                
+                return True, person
+        
+        return None
+    
     def _create_semantic_decision(
         self,
         query: str,
@@ -382,16 +468,28 @@ class SafetyClassifier:
         
         # Map reason to category
         category_map = {
+            # ACTUAL SAFETY BLOCKS
             BlockReasons.DEATH_PREDICTION: "HARD_BLOCK",
             BlockReasons.MEDICAL_DIAGNOSIS: "HARD_BLOCK",
             BlockReasons.GAMBLING_SPECIFIC: "HARD_BLOCK",
             BlockReasons.HARMFUL_INTENT: "HARD_BLOCK",
             BlockReasons.PRIVACY_VIOLATION: "SOFT_BLOCK",
+            "THIRD_PARTY_PREDICTION": "SOFT_BLOCK",
             BlockReasons.HEALTH_TENDENCY: "CONDITIONAL",
             BlockReasons.FINANCIAL_TREND: "CONDITIONAL",
+            
+            # CHITCHAT IS SAFE - Never block! (FIX)
+            "greeting": "SAFE",
+            "identity": "SAFE",
+            "gratitude": "SAFE",
+            "wellbeing": "SAFE",
+            "farewell": "SAFE",
+            "chitchat": "SAFE",
         }
         
-        category = category_map.get(reason, "HARD_BLOCK")
+        # FIX: Default to SAFE instead of HARD_BLOCK
+        # If we don't recognize the reason, assume it's safe rather than blocking
+        category = category_map.get(reason, "SAFE")
         should_answer = category not in ["HARD_BLOCK", "SOFT_BLOCK"]
         
         # Determine disclaimer type for conditional
@@ -401,12 +499,16 @@ class SafetyClassifier:
         }
         disclaimer_type = disclaimer_map.get(reason) if should_answer else None
         
+        # FIX: Clamp confidence to [0.0, 1.0] to avoid Pydantic validation errors
+        # Floating-point precision can cause values slightly > 1.0 (e.g., 1.000000238418579)
+        clamped_confidence = max(0.0, min(1.0, confidence))
+
         return SafetyDecision(
             category=category,
             reason=reason,
             should_answer=should_answer,
             disclaimer_type=disclaimer_type,
-            confidence=confidence,
+            confidence=clamped_confidence,  # Use clamped value
             explanation=f"Semantic match for {reason}"
         )
     

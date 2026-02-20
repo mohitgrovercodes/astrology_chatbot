@@ -12,13 +12,13 @@ UPDATED: Now uses actual VedicEngine calculations (no placeholders!)
 
 from datetime import datetime
 from src.utils.localization import get_localization_manager
-from src.safety.constitution import get_constitution_injection # PHASE 10
+from src.safety.constitution import get_constitution_injection
 from typing import Dict, List, Optional, Any, TypedDict, Annotated, Tuple
 
-# Types for state managementor
+# Types for state management
 import json
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph, END  # ← ADD CompiledStateGraph
 from langchain_core.messages import HumanMessage, AIMessage
 
 # NEW: Import calculation tools
@@ -27,16 +27,17 @@ from src.tools.calculation_tools import get_calculation_tools, format_chart_for_
 # PHASE 10.5: Import new safety framework
 from src.safety import create_safety_classifier, get_template, get_disclaimer
 from src.safety.input_validator import InputValidator
+
 # PHASE 11: Semantic Routing
 from src.routing import SemanticRouter
+from src.orchestration.divisional_chart_helper import get_divisional_chart_context
 
 # PERSISTENCE & CACHING
 from src.engines.vedic.vedic_engine import VedicEngine, VedicChart
-import json
 from config.rag_config import RAGConfig
 
 try:
-    from src.prediction.vedic_validation_engine_v2 import VedicValidationEngineV2
+    from src.validation.vedic_validation_engine_v2 import VedicValidationEngineV2
     VALIDATION_AVAILABLE = True
 except ImportError:
     print("[VALIDATION] vedic_validation_engine_v2 not found - validation disabled")
@@ -156,15 +157,56 @@ class EnhancedLangGraphOrchestrator:
         # PHASE 11: Initialize Semantic Router for Chitchat
         self.semantic_router = SemanticRouter()
         if self.semantic_router.model:
+            # Route 1: Greetings
             self.semantic_router.add_route(
-                name="chitchat",
+                name="greeting",
                 examples=[
                     "hi", "hello", "hey", "namaste", "namaskaram", "vanakkam", "hola",
-                    "good morning", "good evening", "good afternoon", "how are you",
-                    "who are you", "what are you", "thanks", "thank you", "bye", "goodbye",
-                    "wassup", "sup", "yo", "nice to meet you", "greetings"
+                    "good morning", "good evening", "good afternoon", "howdy",
+                    "wassup", "sup", "yo", "greetings", "salaam", "bonjour"
                 ],
-                metadata={"type": "chitchat"}
+                metadata={"type": "greeting", "subtype": "simple_greeting"}
+            )
+            
+            # Route 2: Identity questions
+            self.semantic_router.add_route(
+                name="identity",
+                examples=[
+                    "who are you", "what are you", "tell me about yourself",
+                    "what can you do", "introduce yourself", "what is your name",
+                    "kaun ho tum", "kya ho tum", "aap kaun hain"
+                ],
+                metadata={"type": "chitchat", "subtype": "identity"}
+            )
+            
+            # Route 3: Gratitude
+            self.semantic_router.add_route(
+                name="gratitude",
+                examples=[
+                    "thanks", "thank you", "appreciate it", "grateful", "thankyou",
+                    "dhanyavad", "shukriya", "धन्यवाद", "शुक्रिया"
+                ],
+                metadata={"type": "chitchat", "subtype": "gratitude"}
+            )
+            
+            # Route 4: How are you / Well-being checks
+            self.semantic_router.add_route(
+                name="wellbeing",
+                examples=[
+                    "how are you", "how's it going", "what's up", "how do you do",
+                    "kaise ho", "kya haal hai", "all good"
+                ],
+                metadata={"type": "chitchat", "subtype": "wellbeing"}
+            )
+            
+            # Route 5: Farewell
+            self.semantic_router.add_route(
+                name="farewell",
+                examples=[
+                    "bye", "goodbye", "see you", "talk later", "take care",
+                    "alvida", "khuda hafiz", "catch you later"
+                ],
+                metadata={"type": "chitchat", "subtype": "farewell"}
             )
         
         # PHASE 12: Initialize Validation Engine
@@ -180,62 +222,80 @@ class EnhancedLangGraphOrchestrator:
         print("[LANGGRAPH] Routes: CHITCHAT | CALCULATION_ONLY | RAG_WITH_CALCULATION | RAG_ONLY")
         print("[LANGGRAPH] Safety guardrails enabled (Phase 6)")
     
-    def _build_graph(self) -> StateGraph:
-        """Build enhanced graph with 4-way routing."""
+    def _build_graph(self):
+        """Build LangGraph workflow."""
+        print("[LANGGRAPH] Building enhanced workflow graph...")
         
         workflow = StateGraph(NakshatraState)
         
-        # Nodes
+        # Add nodes
         workflow.add_node("authenticate", self._authenticate_node)
         workflow.add_node("detect_language", self._detect_language_node)
-        workflow.add_node("classify_intent", self._classify_intent_node)
-        workflow.add_node("handle_chitchat", self._handle_chitchat_node)
-        workflow.add_node("handle_clarification", self._handle_clarification_node)  # NEW: Clarification node
-        workflow.add_node("handle_calculation_only", self._handle_calculation_only_node)
-        workflow.add_node("handle_rag_with_calculation", self._handle_rag_with_calculation_node)
-        workflow.add_node("handle_rag_only", self._handle_rag_only_node)
-        workflow.add_node("validate_response", self._validate_response_node)  # PHASE 10: Validation
+        workflow.add_node("safety_check", self._handle_safety_check_node)
+        workflow.add_node("intent_classification", self._classify_intent_node)
+        workflow.add_node("chitchat", self._handle_chitchat_node)
+        workflow.add_node("calculation_only", self._handle_calculation_only_node)
+        workflow.add_node("rag_with_calculation", self._handle_rag_with_calculation_node)
+        workflow.add_node("rag_only", self._handle_rag_only_node)
         workflow.add_node("format_response", self._format_response_node)
         
-        # Entry point
+        # Set entry point
         workflow.set_entry_point("authenticate")
         
-        # Edges
+        # Connect nodes
         workflow.add_edge("authenticate", "detect_language")
-        workflow.add_edge("detect_language", "classify_intent")
+        workflow.add_edge("detect_language", "safety_check")
         
-        # 4-way conditional routing
+        # Conditional edge from safety_check
         workflow.add_conditional_edges(
-            "classify_intent",
-            self._route_by_intent,
+            "safety_check",
+            lambda state: "blocked" if state.get('intent') == 'BLOCKED' else "safe",
             {
-                "chitchat": "handle_chitchat",
-                "clarification": "handle_clarification",  # NEW: Route to clarification
-                "calculation_only": "handle_calculation_only",
-                "rag_with_calculation": "handle_rag_with_calculation",
-                "rag_only": "handle_rag_only",
-                "safety_block": "format_response",  # PHASE 10: Blocked requests go to format
-                "error": END
+                "blocked": "format_response",
+                "safe": "intent_classification"
             }
         )
         
-        # RAG paths go to VALIDATION first
-        workflow.add_edge("handle_rag_with_calculation", "validate_response")
-        workflow.add_edge("handle_rag_only", "validate_response")
+        # Route from intent classification based on intent
+        def route_by_intent(state: NakshatraState) -> str:
+            """Route based on classified intent."""
+            intent = state.get('intent', 'CHITCHAT')
+            
+            if intent == 'CHITCHAT':
+                return "chitchat"
+            elif intent == 'CALCULATION_ONLY':
+                return "calculation_only"
+            elif intent == 'RAG_WITH_CALCULATION':
+                return "rag_with_calculation"
+            elif intent == 'RAG_ONLY':
+                return "rag_only"
+            else:
+                return "chitchat"  # Default fallback
         
-        # Validation goes to Format
-        workflow.add_edge("validate_response", "format_response")
+        workflow.add_conditional_edges(
+            "intent_classification",
+            route_by_intent,
+            {
+                "chitchat": "chitchat",
+                "calculation_only": "calculation_only",
+                "rag_with_calculation": "rag_with_calculation",
+                "rag_only": "rag_only"
+            }
+        )
         
-        # Direct paths (Skip validation for now)
-        workflow.add_edge("handle_chitchat", "format_response")
-        workflow.add_edge("handle_clarification", "format_response")  # NEW: Clarification goes to format
-        workflow.add_edge("handle_calculation_only", "format_response")
+        # All intent handlers go to format_response
+        workflow.add_edge("chitchat", "format_response")
+        workflow.add_edge("calculation_only", "format_response")
+        workflow.add_edge("rag_with_calculation", "format_response")
+        workflow.add_edge("rag_only", "format_response")
         
-        # End
+        # End node
         workflow.add_edge("format_response", END)
         
+        # Compile
+        print("[LANGGRAPH] Compiling workflow...")
         return workflow.compile()
-    
+        
     # ========================================================================
     # NODE IMPLEMENTATIONS
     # ========================================================================
@@ -330,6 +390,80 @@ class EnhancedLangGraphOrchestrator:
             
         return state
     
+    def _handle_safety_check_node(self, state: NakshatraState) -> NakshatraState:
+        """
+        Node 2.5: Safety check BEFORE intent classification.
+        Blocks harmful queries and third-party predictions.
+        """
+        query = state['query']
+        user_profile = state.get('user_profile', {})
+        conversation_history = state.get('conversation_history', [])
+        
+        print(f"[SAFETY] Checking query safety...")
+        
+        # Import safety classifier
+        from src.safety import create_safety_classifier
+        
+        try:
+            # Initialize safety classifier if not already done
+            if not hasattr(self, 'safety_classifier'):
+                self.safety_classifier = create_safety_classifier()
+            
+            # Run safety check
+            safety_result = self.safety_classifier.classify(
+                query=query,
+                conversation_history=conversation_history
+            )
+            
+            
+            # If blocked, return template response immediately
+            if safety_result.is_blocked:
+                print(f"[SAFETY] 🚫 BLOCKED: {safety_result.decision.reason}")
+                
+                # WORKAROUND: Don't block chitchat queries
+                CHITCHAT_REASONS = ['greeting', 'identity', 'gratitude', 'wellbeing', 'farewell']
+                if safety_result.decision.reason in CHITCHAT_REASONS:
+                    print(f"[SAFETY] ✅ Chitchat query - allowing through")
+                    state['is_safe'] = True
+                    return state
+                
+                # Continue with real blocking...
+                from src.safety.templates import get_template, build_third_party_refusal
+                
+                # Special handling for third-party predictions
+                if safety_result.decision.reason == "third_party_prediction":
+                    person = safety_result.decision.keywords_matched[0] if safety_result.decision.keywords_matched else "someone else"
+                    response = build_third_party_refusal(
+                        person=person,
+                        user_name=user_profile.get('name', 'friend')
+                    )
+                else:
+                    # Use standard template
+                    template_key = safety_result.get_template_key()
+                    response = get_template(template_key) if template_key else "I cannot provide guidance on this query due to safety concerns."
+                
+                state['answer'] = response
+                state['intent'] = 'BLOCKED'
+                state['is_safe'] = False
+                return state
+            
+            # If conditional, flag for disclaimer
+            if safety_result.needs_disclaimer:
+                state['needs_disclaimer'] = safety_result.decision.disclaimer_type
+            
+            # Safe to proceed
+            state['is_safe'] = True
+            print(f"[SAFETY] ✅ Safe to proceed")
+            
+        except Exception as e:
+            print(f"[SAFETY] ⚠️ Error in safety check: {e}")
+            import traceback
+            traceback.print_exc()
+            # On error, allow to proceed (fail open for availability)
+            state['is_safe'] = True
+        
+        return state
+
     def _classify_intent_node(self, state: NakshatraState) -> NakshatraState:
         """Node 2: Classify intent."""
         print(f"[INTENT] Classifying query: '{state['query'][:50]}...'")
@@ -406,99 +540,142 @@ class EnhancedLangGraphOrchestrator:
         return state
     
     def _handle_chitchat_node(self, state: NakshatraState) -> NakshatraState:
-        """Node 3a: Handle conversational queries with multilingual support."""
+        """Node 3a: Handle conversational queries with semantic understanding."""
         print(f"[CHITCHAT] Response for language: {state.get('detected_language', 'en')}")
         
         user_name = state['user_profile'].get('name', 'User')
-        q = state['query'].lower().strip()
+        query = state['query']
         lang = state.get('detected_language', 'en')
+        conversation_history = state.get('conversation_history', [])
         
-        # Import greeting function
-        from src.ai.personas import get_greeting
+        # Import greeting functions
+        from src.ai.personas import get_contextual_greeting, get_greeting
         
-        # Fast path for common chitchat with language-aware responses
-        if any(word in q for word in ['hi', 'hello', 'hey', 'namaste', 'vanakkam', 'namaskar']):
-            # Use language-specific greeting
-            greeting = get_greeting(lang)
-            state['answer'] = greeting.replace("How may I assist you today?", f"How may I assist you today, {user_name}?")
-            return state
+        # SEMANTIC ROUTING: Detect chitchat type using semantic similarity
+        chitchat_match = None
+        if self.semantic_router.model:
+            chitchat_match = self.semantic_router.route(query, threshold=0.70)
         
-        elif any(word in q for word in ['who are you', 'what are you', 'kaun', 'kya']):
-            if lang == 'en':
-                state['answer'] = f"I'm NakshatraAI, a professional Vedic astrology consultant. I can analyze your birth chart, predict timing for life events, and provide guidance based on classical astrological principles."
-            elif lang == 'hi-lat':
-                state['answer'] = f"Main NakshatraAI hoon, ek professional Vedic jyotish paramarshdata. Main aapki kundli ka vishleshan kar sakta hoon, jeevan ghatnaon ka samay bata sakta hoon, aur shastriya jyotish siddhanton par aadharit margdarshan de sakta hoon."
-            else:
-                # For other languages, use LLM
-                pass
+        # Handle based on semantic match
+        if chitchat_match:
+            match_type = chitchat_match.name
+            confidence = chitchat_match.confidence
+            print(f"[CHITCHAT] Semantic match: {match_type} (confidence: {confidence:.2f})")
             
-            if state.get('answer'):
+            # 1. GREETING
+            if match_type == "greeting":
+                greeting = get_contextual_greeting(
+                    user_name=user_name,
+                    conversation_length=len(conversation_history),
+                    language=lang
+                )
+                state['answer'] = greeting
                 return state
-        
-        elif any(word in q for word in ['thanks', 'thank you', 'dhanyavad', 'shukriya']):
-            if lang == 'en':
-                state['answer'] = f"You're welcome, {user_name}! Feel free to ask anything about your chart or astrological concepts."
-            elif lang == 'hi-lat':
-                state['answer'] = f"Aapka swagat hai, {user_name}! Apne chart ya jyotish avdharanao ke bare mein kuch bhi poochh sakte hain."
-            else:
-                state['answer'] = f"You're welcome, {user_name}!"
+            
+            # 2. IDENTITY QUESTIONS
+            elif match_type == "identity":
+                if lang == 'en':
+                    state['answer'] = f"I'm NakshatraAI, a professional Vedic astrology consultant. I can analyze your birth chart, predict timing for life events, and provide guidance based on classical astrological principles."
+                elif lang == 'hi-lat':
+                    state['answer'] = f"Main NakshatraAI hoon, ek professional Vedic jyotish paramarshdata. Main aapki kundli ka vishleshan kar sakta hoon, jeevan ghatnaon ka samay bata sakta hoon, aur shastriya jyotish siddhanton par aadharit margdarshan de sakta hoon."
+                elif lang == 'hi':
+                    state['answer'] = f"मैं नक्षत्रएआई हूं, एक व्यावसायिक वैदिक ज्योतिष परामर्शदाता। मैं आपकी कुंडली का विश्लेषण कर सकता हूं और जीवन की घटनाओं का समय बता सकता हूं।"
+                else:
+                    # Fallback to English
+                    state['answer'] = f"I'm NakshatraAI, a professional Vedic astrology consultant."
+                return state
+            
+            # 3. GRATITUDE
+            elif match_type == "gratitude":
+                if lang == 'en':
+                    state['answer'] = f"You're welcome, {user_name}! Feel free to ask anything about your chart or astrological concepts."
+                elif lang == 'hi-lat':
+                    state['answer'] = f"Aapka swagat hai, {user_name}! Apne chart ya jyotish avdharanao ke bare mein kuch bhi poochh sakte hain."
+                elif lang == 'hi':
+                    state['answer'] = f"आपका स्वागत है, {user_name}! अपने चार्ट या ज्योतिष अवधारणाओं के बारे में कुछ भी पूछ सकते हैं।"
+                else:
+                    state['answer'] = f"You're welcome, {user_name}!"
+                return state
+            
+            # 4. WELLBEING CHECK
+            elif match_type == "wellbeing":
+                if lang == 'en':
+                    state['answer'] = f"I'm doing well, thank you for asking, {user_name}! As an AI, I'm always ready to help you explore your birth chart and astrological insights. How can I assist you today?"
+                elif lang == 'hi-lat':
+                    state['answer'] = f"Main theek hoon, poochne ke liye dhanyavad, {user_name}! Aaj main aapki kaise madad kar sakta hoon?"
+                else:
+                    state['answer'] = f"I'm doing well, {user_name}! How can I help you today?"
+                return state
+            
+            # 5. FAREWELL
+            elif match_type == "farewell":
+                if lang == 'en':
+                    state['answer'] = f"Goodbye, {user_name}! Feel free to return anytime you have questions about your chart or astrology. May the stars guide you well!"
+                elif lang == 'hi-lat':
+                    state['answer'] = f"Alvida, {user_name}! Jab bhi aapke chart ya jyotish ke baare mein sawal ho, wapas aa sakte hain. Tare aapka margdarshan karen!"
+                else:
+                    state['answer'] = f"Goodbye, {user_name}! Take care!"
+                return state
+
+            # Multilingual/Complex path: Use fast LLM with persona
+            try:
+                from src.ai.personas import get_persona
+                persona_type = state['user_profile'].get('preferred_system', 'vedic')
+                persona = get_persona(persona_type)
+                
+                system_prompt = persona.get_system_prompt(
+                    user_name=user_name,
+                    language=lang,
+                    llm=self.fast_llm
+                )
+
+                # Add conversational tone guidelines
+                from src.safety.templates import CONVERSATIONAL_TONE_SYSTEM_PROMPT
+                system_prompt += f"\n\n{CONVERSATIONAL_TONE_SYSTEM_PROMPT}"
+                
+                # Map language code to descriptive name
+                loc_manager = get_localization_manager()
+                lang_name = loc_manager.get_language_name(lang)
+                
+                if '-lat' in lang:
+                    script_instruction = f"IMPORTANT: You must write in {lang_name} using ROMAN ALPHABET (English Script). Do NOT use native script."
+                else:
+                    script_instruction = f"Respond entirely in {lang_name} (Native Script)."
+                
+                # PHASE 6: Tiered History Support
+                history_context = ""
+                if state.get('conversation_history'):
+                    history_turns = state['conversation_history'][-3:]
+                    from src.ai.prompt_builder import PromptBuilder
+                    builder = PromptBuilder()
+                    formatted_history = builder._format_conversation(history_turns)
+                    history_context = f"\nCONVERSATION CONTEXT:\n{formatted_history}\n"
+
+                prompt = f"""{system_prompt}
+                
+        {history_context}
+        User: "{state['query']}"
+
+        INSTRUCTIONS:
+        1. Provide a warm, empathetic, professional response.
+        2. If the user greets, greet back warmly.
+        3. If the user asks about previous messages or personal context, ANSWER DIRECTLY based on CONVERSATION CONTEXT.
+        4. If the question is entirely outside astrology and NOT in history, politely explain your scope.
+        5. {script_instruction}
+        6. Keep it brief (under 50 words).
+
+        Response:"""
+                
+                llm_response = self.fast_llm.invoke(prompt)
+                state['answer'] = llm_response.content if hasattr(llm_response, 'content') else str(llm_response)
+                
+            except Exception as e:
+                print(f"[CHITCHAT] Error generating response: {e}")
+                # Fallback to language-specific greeting
+                state['answer'] = get_greeting(lang)
+                
             return state
-
-        # Multilingual/Complex path: Use fast LLM with persona
-        try:
-            from src.ai.personas import get_persona
-            persona_type = state['user_profile'].get('preferred_system', 'vedic')
-            persona = get_persona(persona_type)
-            
-            system_prompt = persona.get_system_prompt(
-                user_name=user_name,
-                language=lang,
-                llm=self.fast_llm
-            )
-            
-            # Map language code to descriptive name
-            loc_manager = get_localization_manager()
-            lang_name = loc_manager.get_language_name(lang)
-            
-            if '-lat' in lang:
-                script_instruction = f"IMPORTANT: You must write in {lang_name} using ROMAN ALPHABET (English Script). Do NOT use native script."
-            else:
-                script_instruction = f"Respond entirely in {lang_name} (Native Script)."
-            
-            # PHASE 6: Tiered History Support
-            history_context = ""
-            if state.get('conversation_history'):
-                history_turns = state['conversation_history'][-3:]
-                from src.ai.prompt_builder import PromptBuilder
-                builder = PromptBuilder()
-                formatted_history = builder._format_conversation(history_turns)
-                history_context = f"\nCONVERSATION CONTEXT:\n{formatted_history}\n"
-
-            prompt = f"""{system_prompt}
-            
-    {history_context}
-    User: "{state['query']}"
-
-    INSTRUCTIONS:
-    1. Provide a warm, empathetic, professional response.
-    2. If the user greets, greet back warmly.
-    3. If the user asks about previous messages or personal context, ANSWER DIRECTLY based on CONVERSATION CONTEXT.
-    4. If the question is entirely outside astrology and NOT in history, politely explain your scope.
-    5. {script_instruction}
-    6. Keep it brief (under 50 words).
-
-    Response:"""
-            
-            llm_response = self.fast_llm.invoke(prompt)
-            state['answer'] = llm_response.content if hasattr(llm_response, 'content') else str(llm_response)
-            
-        except Exception as e:
-            print(f"[CHITCHAT] Error generating response: {e}")
-            # Fallback to language-specific greeting
-            state['answer'] = get_greeting(lang)
-            
-        return state
-    
+        
     def _extract_topic(self, query: str) -> str:
         """Extract the main topic from an ambiguous query."""
         import re
@@ -646,10 +823,38 @@ Reply with "1" for theory or "2" for personalized analysis."""
         print("[CALCULATION_ONLY] Generating raw chart data")
         
         user_profile = state['user_profile']
+        query = state['query'].lower()
         
         # Check if user has birth data
         if not user_profile.get('date_of_birth'):
             state['answer'] = "I don't have your birth details. Please update your profile with date, time, and place of birth."
+            return state
+        
+        # FIX #4: Check if user is asking about their profile/birth data
+        profile_keywords = ['dob', 'date of birth', 'birth date', 'birthday', 
+                           'birth time', 'time of birth', 'birth place', 
+                           'place of birth', 'born', 'when was i born', 
+                           'where was i born', 'what time was i born']
+        
+        if any(keyword in query for keyword in profile_keywords):
+            # User asking about their own birth details - provide direct answer
+            print("[CALCULATION_ONLY] User asking about profile data")
+            
+            response = f"""**Your Birth Details:**
+
+📅 **Date of Birth:** {user_profile.get('date_of_birth', 'Not available')}
+⏰ **Time of Birth:** {user_profile.get('time_of_birth', 'Not available')}
+📍 **Place of Birth:** {user_profile.get('place_of_birth', 'Not available')}
+
+These details are used to calculate your Vedic birth chart with precise planetary positions.
+
+**What would you like to explore?**
+• View your complete birth chart
+• Understand your planetary placements
+• Check current dashas (planetary periods)
+• See upcoming transits"""
+            
+            state['answer'] = response
             return state
         
         try:
@@ -847,7 +1052,7 @@ Provide a concise answer:"""
                                 tier=tier,
                                 stage=None,
                                 live_chat=True,
-                                timeout_sec=10.0
+                                timeout_sec=None
                             )
                             
                             # Store results
@@ -1441,6 +1646,19 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             except Exception as e:
                 print(f"[VALIDATION] Error formatting validation: {e}")
 
+        divisional_context = ""
+        if validation_result:
+            query_type = validation_result.get('query_type', 'general')
+            try:
+                divisional_context = get_divisional_chart_context(
+                    query_type=query_type,
+                    chart_data=chart_data,
+                    include_secondary=True,
+                    verbose=True
+                )
+            except Exception as e:
+                print(f"[DIVISIONAL] Error adding divisional chart context: {e}")
+
         # Map language code to descriptive name for LLM
         loc_manager = get_localization_manager()
         lang_name = loc_manager.get_language_name(language)
@@ -1512,6 +1730,7 @@ BIRTH CHART DATA (Sidereal/Lahiri):
 • Rahu: {chart_data.get('planets', {}).get('Rahu', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Rahu', {}).get('house', '?')}
 • Ketu: {chart_data.get('planets', {}).get('Ketu', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Ketu', {}).get('house', '?')}
 
+{divisional_context}
 
 VIMSHOTTARI DASHA CALCULATION (Transparent & Auditable):
 

@@ -31,26 +31,99 @@ class HybridRetriever:
     
     
     def _ensure_bm25_built(self):
-        """Lazy build BM25 index on first use."""
+        """Lazy build BM25 index with pagination and multiple strategies."""
         if self._bm25_built:
             return
         
         try:
             from rank_bm25 import BM25Okapi
+            from langchain.schema import Document
             print("[BM25] Building index (first time)...")
-            docs = self.vector_store.similarity_search("", k=10000)
-            if docs:
-                tokenized = [doc.page_content.lower().split() for doc in docs]
+            
+            all_docs = []
+            
+            # Strategy 1: Direct collection access with pagination (most reliable)
+            try:
+                print("[BM25] Strategy 1: Direct collection access with pagination...")
+                collection = self.vector_store._collection
+                total_count = collection.count()
+                print(f"[BM25] Total documents in collection: {total_count}")
+                
+                batch_size = 1000
+                offset = 0
+                
+                while offset < min(total_count, 10000):  # Limit to 10k docs
+                    try:
+                        batch = collection.get(limit=batch_size, offset=offset)
+                        if batch and batch.get('documents'):
+                            batch_docs = [
+                                Document(page_content=text, metadata=meta or {})
+                                for text, meta in zip(batch['documents'], batch.get('metadatas', [{}] * len(batch['documents'])))
+                            ]
+                            all_docs.extend(batch_docs)
+                            offset += batch_size
+                            if offset % 5000 == 0:
+                                print(f"[BM25] Loaded {len(all_docs)} docs so far...")
+                        else:
+                            break
+                    except Exception as e:
+                        print(f"[BM25] Batch at offset {offset} failed: {e}")
+                        break
+                
+                if all_docs:
+                    print(f"[BM25] Strategy 1 succeeded: {len(all_docs)} docs")
+            except Exception as e:
+                print(f"[BM25] Strategy 1 failed: {e}")
+            
+            # Strategy 2: Generic query (fallback)
+            if not all_docs:
+                try:
+                    print("[BM25] Strategy 2: Generic query...")
+                    all_docs = self.vector_store.similarity_search("astrology", k=10000)
+                    if all_docs:
+                        print(f"[BM25] Strategy 2 succeeded: {len(all_docs)} docs")
+                except Exception as e:
+                    print(f"[BM25] Strategy 2 failed: {e}")
+            
+            # Strategy 3: Small query and expand (last resort)
+            if not all_docs:
+                try:
+                    print("[BM25] Strategy 3: Small query expansion...")
+                    queries = ["marriage", "career", "health", "astrology", "birth chart"]
+                    seen_ids = set()
+                    
+                    for query in queries:
+                        results = self.vector_store.similarity_search(query, k=2000)
+                        for doc in results:
+                            doc_id = hash(doc.page_content)
+                            if doc_id not in seen_ids:
+                                all_docs.append(doc)
+                                seen_ids.add(doc_id)
+                    
+                    if all_docs:
+                        print(f"[BM25] Strategy 3 succeeded: {len(all_docs)} unique docs")
+                except Exception as e:
+                    print(f"[BM25] Strategy 3 failed: {e}")
+            
+            # Build index if we got documents
+            if all_docs:
+                tokenized = [doc.page_content.lower().split() for doc in all_docs]
                 self.bm25_index = BM25Okapi(tokenized)
-                self.bm25_documents = docs
-                print(f"[BM25] Built with {len(docs)} docs")
+                self.bm25_documents = all_docs
+                print(f"[BM25] ✅ Successfully built index with {len(all_docs)} documents")
+            else:
+                print("[BM25] ❌ All strategies failed - proceeding with vector search only")
+            
             self._bm25_built = True
+            
         except ImportError:
             print("[BM25] rank-bm25 not installed, skipping")
-            self._bm25_built = True  # Don't try again
+            self._bm25_built = True
         except Exception as e:
-            print(f"[BM25] Error: {e}")
-            self._bm25_built = True  # Don't try again
+            print(f"[BM25] Unexpected error: {e}")
+            import traceback
+            traceback.print_exc()
+            self._bm25_built = True
     
     def retrieve(self, query: str, intent: str = "DEFAULT", top_k: int = None, filters: Optional[Dict] = None, language: str = "en", content_type: str = None,) -> List[Document]:
         """Main retrieval method with cross-lingual support."""

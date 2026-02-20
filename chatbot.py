@@ -43,8 +43,7 @@ def main():
     print("Initializing NakshatraAI V2...")
     
     # 1. User Manager
-    mongodb_uri = os.getenv('MONGODB_URI')
-    user_manager = get_user_manager(mongodb_uri)
+    user_manager = get_user_manager("data/astro.db")
     
     # 2. LLM Setup - Centralized Factory
     # Supports switching via CLI args or LLM_PROVIDER env var
@@ -82,11 +81,11 @@ def main():
     
     # 4. Vector Store
     vector_store = Chroma(
-        collection_name="astrology_default",
+        collection_name="vedic_astrology_books_knowledge",
         embedding_function=embeddings,
         persist_directory="./data/vectordb"
     )
-    print("[OK] Vector Store: ChromaDB (astrology_default)")
+    print("[OK] Vector Store: ChromaDB (vedic_astrology_books_knowledge)")
     
     # 5. Intent Classifier (4 categories)
     intent_classifier = EnhancedIntentClassifier(
@@ -166,6 +165,41 @@ def main():
     print("=" * 60)
     print()
     
+    # =========================================================================
+    # STATIC WELCOME MESSAGE (No LLM processing needed!)
+    # =========================================================================
+    
+    # Simulate session data with full enrichment for all users
+    session_data = {
+        "name": profile.name,
+        "custom_note": "Premium Session",
+        "chart_data": None,   # Will be computed live by orchestrator
+        "dasha_data": None,
+        "transit_data": None,
+    }
+    
+    # Simple static greeting (no API calls, instant)
+    print(f"✨ Namaste, {session_data.get('name', 'Friend')}!")
+    print()
+    print("I'm NakshatraAI, your professional Vedic astrology consultant.")
+    print("I'm here to help you understand your birth chart and navigate")
+    print("life's journey through astrological wisdom.")
+    print()
+    print("How may I assist you today? You can ask me about:")
+    print("  • Birth chart interpretations")
+    print("  • Timing for important life events")
+    print("  • Current planetary transits")
+    print("  • Astrological concepts")
+    print("  • Relationship compatibility")
+    print()
+    
+    # =========================================================================
+    # MAIN CHAT LOOP
+    # =========================================================================
+    
+    # Initialize empty conversation history
+    conversation_history = []
+    
     # Main loop
     while True:
         # Get query
@@ -204,13 +238,15 @@ def main():
                 "transit_data": {"date": "2024-02-10", "transits": {"Jupiter": "Aries"}}
             }
         else:
-            # Simulating session data (e.g., from Redis/Backend)
-            # In a real app, the backend would provide this 
-            # Session data OVERWRITES the DB name for personalization
+            # Full session enrichment for all authenticated users
+            # In a real app, the backend would provide pre-computed chart/dasha/transit data
             session_data = {
-                "name": f"Expert User {user_id}",
-                "custom_note": "Premium Session"
-            } if user_id == "user011" else {}
+                "name": profile.name,
+                "custom_note": "Premium Session",
+                "chart_data": None,   # Will be computed live by orchestrator
+                "dasha_data": None,
+                "transit_data": None,
+            }
 
         # Process query with streaming
         print("🤔 Thinking...")

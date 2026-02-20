@@ -196,11 +196,23 @@ class LLMFactory:
             temperature = 0.3 if purpose == "classification" else 0.5
         
         if max_tokens is None:
-            max_tokens = 1024 if purpose == "classification" else 2048
+            # Enhanced purpose-based token allocation
+            # Fixes Issue #4: Response truncation by allocating appropriate tokens per use case
+            purpose_token_map = {
+                "classification": 1024,   # Fast classification (intent, safety)
+                "chitchat": 1024,           # Brief conversational responses
+                "general": 4096,           # Standard responses
+                "prediction": 4096,        # Detailed predictions with timing
+                "rag": 4096,               # Knowledge-heavy RAG responses
+                "validation": 4096,        # Validation engine batch processing
+            }
+            max_tokens = purpose_token_map.get(purpose, 2048)  # Default: 2048
+            
+            logger.debug(f"Token allocation for purpose '{purpose}': {max_tokens}")
         
         logger.info(
             f"Creating LLM: provider={provider}, model={model}, "
-            f"purpose={purpose}, temp={temperature}"
+            f"purpose={purpose}, temp={temperature}, max_tokens={max_tokens}"
         )
         
         # Step 4: Create Provider-Specific LLM

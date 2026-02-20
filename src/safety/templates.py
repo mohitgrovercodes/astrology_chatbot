@@ -113,6 +113,23 @@ Astrology is best used for:
 
 If you're experiencing difficulties in a relationship, I can help you understand your own chart's patterns and what you might work on personally. Would that be helpful?"""
 
+SOFT_BLOCK_THIRD_PARTY_PREDICTION = """I appreciate your interest, but I can only provide astrological readings for you, based on your authenticated birth chart.
+
+**Why I cannot read for others:**
+- Astrological predictions require accurate birth details (date, time, place)
+- I'm configured to work only with verified user profiles for accuracy and privacy
+- Reading someone else's chart without their consent raises ethical concerns
+
+**What I can do instead:**
+- Analyze YOUR relationship prospects and timing
+- Discuss YOUR chart's indicators for family dynamics
+- Explain general astrological concepts related to your question
+- Suggest how they can get their own reading (if interested)
+
+If they want a reading, they can create their own profile and consult me directly!
+
+Is there something about YOUR chart I can help you with instead?"""
+
 
 # ============================================================================
 # CONDITIONAL DISCLAIMERS (Answer with Warning)
@@ -214,6 +231,95 @@ Would you like to explore any of these? And consider reaching out to a relations
 
 
 # ============================================================================
+# GREETING TEMPLATES (Context-Aware)
+# ============================================================================
+
+GREETING_FIRST_TIME = """Hello! I'm NakshatraAI, your professional astrology consultant.
+
+I'm here to help you understand your birth chart and navigate life's journey through astrological wisdom.
+
+How may I assist you today, {user_name}? You can ask me about:
+• Birth chart interpretations
+• Timing for important life events
+• Current planetary transits and their effects
+• Understanding astrological concepts
+• Relationship compatibility"""
+
+GREETING_RETURNING = [
+    "Hello, {user_name}! How can I help you further?",
+    "Namaste, {user_name}. What else would you like to know?",
+    "Yes, {user_name}, I'm here. What's your question?",
+    "Hello! What can I clarify for you?",
+    "I'm listening, {user_name}. How may I assist you?",
+]
+
+GREETING_HINDI_FIRST = """नमस्ते! मैं NakshatraAI हूं, आपका व्यावसायिक ज्योतिष सलाहकार।
+
+मैं यहां आपकी जन्मकुंडली को समझने और ज्योतिषीय ज्ञान के माध्यम से जीवन यात्रा में मार्गदर्शन करने के लिए हूं।
+
+आज मैं {user_name} की कैसे सहायता कर सकता हूं?"""
+
+GREETING_HINDI_RETURNING = [
+    "नमस्ते, {user_name}। और क्या जानना चाहेंगे?",
+    "हां, {user_name}?",
+    "मैं यहां हूं। आपका प्रश्न क्या है?",
+]
+
+
+# ============================================================================
+# CONVERSATIONAL TONE GUIDELINES (For System Prompts)
+# ============================================================================
+
+CONVERSATIONAL_TONE_SYSTEM_PROMPT = """
+TONE & LANGUAGE GUIDELINES:
+
+1. **Use Natural Language:**
+   - Write like you're having a friendly conversation
+   - Use "you", "your", active voice
+   - Avoid overly formal or academic language
+
+2. **Balance Sanskrit Terms:**
+   - Use English names FIRST: "Mars (Mangal)" not "Mangal (Mars)"
+   - Only use Sanskrit when it adds clarity or tradition
+   - Maximum 2-3 Sanskrit terms per paragraph
+
+3. **Simplify Technical Concepts:**
+   ❌ "The 10th Bhava lord positioned in the 4th Bhava"
+   ✅ "Your career planet is in your home sector"
+   
+   ❌ "Shani in Kumbha in the 6th Bhava"
+   ✅ "Saturn in Aquarius in your 6th house (daily work)"
+   
+   ❌ "Chandra in Mithuna indicates"
+   ✅ "Your Moon in Gemini shows"
+
+4. **Explain, Don't Just State:**
+   ❌ "Jupiter aspects your 7th house"
+   ✅ "Jupiter sends its beneficial energy to your relationship sector, supporting harmonious partnerships"
+
+5. **Use Parentheticals for Sanskrit:**
+   ✅ "Your Moon (Chandra) in Gemini..."
+   ✅ "The 7th house (marriage sector)..."
+   ✅ "During Saturn's period (Shani dasha)..."
+
+6. **Conversational Connectors:**
+   Use: "This means...", "In other words...", "Think of it like...", "Here's what this means for you..."
+   Avoid: "Thus", "Therefore", "Hence", "Thereby"
+
+7. **For Timing Questions:**
+   ALWAYS provide specific months/timeframes:
+   ✅ "March-April 2026 when Jupiter transits..."
+   ❌ "During your Saturn Mahadasha" (too vague)
+
+EXAMPLE TRANSFORMATION:
+
+❌ BAD: "Your Chandra positioned in Mithuna Rashi in the 10th Bhava indicates communicative faculties in professional endeavors."
+
+✅ GOOD: "Your Moon in Gemini (your career house) shows you're naturally great at communication and adapting to change at work. This placement often means you thrive in dynamic environments where you can use your quick thinking."
+"""
+
+
+# ============================================================================
 # ALTERNATIVE SUGGESTIONS (When Declining)
 # ============================================================================
 
@@ -257,6 +363,15 @@ RESPONSE_TEMPLATES: Dict[str, str] = {
     "SOFT_BLOCK_CONSPIRACY": SOFT_BLOCK_CONSPIRACY,
     "SOFT_BLOCK_CONSPIRACY_THEORY": SOFT_BLOCK_CONSPIRACY,
     "SOFT_BLOCK_THIRD_PARTY_HARM": SOFT_BLOCK_THIRD_PARTY_HARM,
+    "SOFT_BLOCK_THIRD_PARTY_PREDICTION": SOFT_BLOCK_THIRD_PARTY_PREDICTION,
+    "SOFT_BLOCK_THIRD_PARTY": SOFT_BLOCK_THIRD_PARTY_PREDICTION,
+    
+    # Greetings
+    "GREETING_FIRST_TIME": GREETING_FIRST_TIME,
+    "GREETING_HINDI_FIRST": GREETING_HINDI_FIRST,
+    
+    # System Prompts
+    "CONVERSATIONAL_TONE_SYSTEM_PROMPT": CONVERSATIONAL_TONE_SYSTEM_PROMPT,
     
     # Disclaimers
     "DISCLAIMER_HEALTH": DISCLAIMER_HEALTH,
@@ -372,3 +487,112 @@ Please try:
 - Focusing on your own chart rather than predicting specific outcomes
 
 I'm here to help with astrological guidance and chart interpretation. What would you like to know?"""
+
+
+# ============================================================================
+# Helper Functions for Context-Aware Responses
+# ============================================================================
+
+def get_contextual_greeting(user_name: str, conversation_length: int, language: str = 'en') -> str:
+    """
+    Get greeting based on conversation context.
+    
+    Args:
+        user_name: User's name
+        conversation_length: Number of messages in history (including current)
+        language: User's language preference ('en' or 'hi')
+    
+    Returns:
+        Appropriate greeting message
+    """
+    import random
+    
+    # First interaction (0-2 messages)
+    if conversation_length <= 2:
+        if language == 'hi':
+            return GREETING_HINDI_FIRST.format(user_name=user_name)
+        else:
+            return GREETING_FIRST_TIME.format(user_name=user_name)
+    
+    # Returning user (3+ messages) - use brief greeting
+    else:
+        if language == 'hi':
+            greetings = GREETING_HINDI_RETURNING
+        else:
+            greetings = GREETING_RETURNING
+        
+        return random.choice(greetings).format(user_name=user_name)
+
+
+def detect_third_party_query(query: str) -> tuple[bool, str]:
+    """
+    Detect if user is asking about someone else's chart/prediction.
+    
+    Args:
+        query: User's query text
+    
+    Returns:
+        (is_third_party, person_mentioned)
+    """
+    query_lower = query.lower()
+    
+    # Third-party indicators
+    third_party_patterns = [
+        # Direct mentions
+        'my friend', 'my sister', 'my brother', 'my mother', 'my father',
+        'my husband', 'my wife', 'my boyfriend', 'my girlfriend',
+        'my son', 'my daughter', 'my child', 'my children',
+        'my boss', 'my colleague', 'my partner',
+        
+        # Possessive pronouns
+        'her chart', 'his chart', 'their chart',
+        'her horoscope', 'his horoscope',
+        'her birth', 'his birth',
+        
+        # Question patterns about others
+        'when will he', 'when will she', 'when will they',
+        'will he', 'will she', 'will they',
+        'does he', 'does she', 'do they',
+    ]
+    
+    # Check for patterns
+    person_mentioned = "someone else"
+    for pattern in third_party_patterns:
+        if pattern in query_lower:
+            # Try to extract name if present
+            import re
+            # Look for capitalized words that might be names
+            words_after = query.split(pattern)[-1] if pattern in query.lower() else ""
+            names = re.findall(r'\b[A-Z][a-z]+\b', words_after[:50])
+            if names:
+                person_mentioned = names[0]
+            
+            # Check for "name is X" pattern
+            if 'name is' in query_lower or 'named' in query_lower:
+                name_match = re.search(r'name is ([A-Z][a-z]+)', query, re.IGNORECASE)
+                if name_match:
+                    person_mentioned = name_match.group(1)
+            
+            return True, person_mentioned
+    
+    return False, None
+
+
+def build_third_party_refusal(person: str, user_name: str) -> str:
+    """
+    Build polite refusal for third-party predictions.
+    
+    Args:
+        person: Name/description of the third party
+        user_name: Authenticated user's name
+    
+    Returns:
+        Formatted refusal message
+    """
+    return SOFT_BLOCK_THIRD_PARTY_PREDICTION.replace(
+        "for others:", 
+        f"for {person}:"
+    ).replace(
+        "Is there something about YOUR chart",
+        f"Is there something about YOUR chart, {user_name},"
+    )

@@ -7,7 +7,7 @@ Pydantic models for safety decision-making in the astrology chatbot.
 """
 
 from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class SafetyDecision(BaseModel):
@@ -62,11 +62,14 @@ class SafetyDecision(BaseModel):
     confidence: float = Field(
         ge=0.0,
         le=1.0,
-        description=(
-            "Confidence score for this classification (0.0 to 1.0). "
-            "Queries with confidence < 0.7 should be flagged for human review."
-        )
+        description="Confidence score"
     )
+    
+    @field_validator('confidence')
+    @classmethod
+    def clamp_confidence(cls, v: float) -> float:
+        """Clamp confidence to [0.0, 1.0] range to handle floating-point precision."""
+        return max(0.0, min(1.0, v))
     
     explanation: Optional[str] = Field(
         default=None,
@@ -194,6 +197,7 @@ class BlockReasons:
     PRIVACY_VIOLATION = "privacy_violation"
     OUT_OF_SCOPE = "out_of_scope"
     CONSPIRACY_THEORY = "conspiracy_theory"
+    THIRD_PARTY_PREDICTION = "third_party_prediction"
     
     # Conditional Reasons
     HEALTH_TENDENCY = "health_tendency"

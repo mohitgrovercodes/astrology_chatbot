@@ -2,6 +2,8 @@
 """
 Validation Engine Integration Helpers for NakshatraAI Orchestrator
 Complete implementation with LLM-based query type confirmation and soft halt handling.
+
+FIXED VERSION - All dasha_data and transit_data null access issues resolved
 """
 
 from typing import Dict, Optional, List, Any
@@ -210,31 +212,6 @@ def prepare_chart_for_validation(
     dasha_data: Dict,
     transit_data: Dict
 ) -> Dict:
-
-     # ============= DEBUG LOGGING (ADD THIS) =============
-    print(f"\n[DEBUG] prepare_chart_for_validation CALLED")
-    print(f"[DEBUG] chart_data keys: {list(chart_data.keys())}")
-    print(f"[DEBUG] Has 'divisional_charts': {'divisional_charts' in chart_data}")
-    print(f"[DEBUG] Has 'vargas': {'vargas' in chart_data}")
-    print(f"[DEBUG] Has 'D9': {'D9' in chart_data}")
-    print(f"[DEBUG] Has 'navamsa': {'navamsa' in chart_data}")
-    
-    # Check what divisional_charts actually contains
-    div_charts = chart_data.get('divisional_charts') or chart_data.get('vargas')
-    if div_charts:
-        print(f"[DEBUG] divisional_charts type: {type(div_charts)}")
-        print(f"[DEBUG] divisional_charts keys: {list(div_charts.keys()) if isinstance(div_charts, dict) else 'not a dict'}")
-        if isinstance(div_charts, dict) and div_charts:
-            first_key = list(div_charts.keys())[0]
-            first_value = div_charts[first_key]
-            print(f"[DEBUG] First item type: {type(first_value)}")
-            print(f"[DEBUG] Has get_position: {hasattr(first_value, 'get_position')}")
-    else:
-        print(f"[DEBUG] divisional_charts is None or empty!")
-    print(f"[DEBUG] ============================================\n")
-    # ============= END DEBUG LOGGING =============
-
-    
     """
     Convert orchestrator chart format to validation engine format.
     
@@ -247,6 +224,8 @@ def prepare_chart_for_validation(
     - Current transits
     - Aspects
     - House lordships
+    
+    FIXED: All null pointer issues for dasha_data and transit_data
     """
     
     # =========================================================================
@@ -368,35 +347,40 @@ def prepare_chart_for_validation(
         validation_chart['planetary_strengths'] = strengths
     
     # =========================================================================
-    # 5. DASHA PERIODS (WITH DATES)
+    # 5. DASHA PERIODS (WITH DATES) - FIXED FOR NULL SAFETY
     # =========================================================================
+    # CRITICAL FIX: Safe null handling - dasha_data can be None if calculation fails
+    safe_dasha = dasha_data or {}
+    
     validation_chart['dasha'] = {
         "mahadasha": {
-            "planet": dasha_data.get('mahadasha', {}).get('planet', 'Unknown'),
-            "start_date": dasha_data.get('mahadasha', {}).get('start_date', 'Unknown'),
-            "end_date": dasha_data.get('mahadasha', {}).get('end_date', 'Unknown'),
-            "balance_years": dasha_data.get('mahadasha', {}).get('balance_years', 'Unknown')
+            "planet": safe_dasha.get('mahadasha', {}).get('planet', 'Unknown'),
+            "start_date": safe_dasha.get('mahadasha', {}).get('start_date', 'Unknown'),
+            "end_date": safe_dasha.get('mahadasha', {}).get('end_date', 'Unknown'),
+            "balance_years": safe_dasha.get('mahadasha', {}).get('balance_years', 'Unknown')
         },
         "antardasha": {
-            "planet": dasha_data.get('antardasha', {}).get('planet', 'Unknown'),
-            "start_date": dasha_data.get('antardasha', {}).get('start_date', 'Unknown'),
-            "end_date": dasha_data.get('antardasha', {}).get('end_date', 'Unknown')
+            "planet": safe_dasha.get('antardasha', {}).get('planet', 'Unknown'),
+            "start_date": safe_dasha.get('antardasha', {}).get('start_date', 'Unknown'),
+            "end_date": safe_dasha.get('antardasha', {}).get('end_date', 'Unknown')
         },
         "pratyantardasha": {
-            "planet": dasha_data.get('pratyantardasha', {}).get('planet', 'Unknown'),
-            "start_date": dasha_data.get('pratyantardasha', {}).get('start_date', 'Unknown'),
-            "end_date": dasha_data.get('pratyantardasha', {}).get('end_date', 'Unknown')
+            "planet": safe_dasha.get('pratyantardasha', {}).get('planet', 'Unknown'),
+            "start_date": safe_dasha.get('pratyantardasha', {}).get('start_date', 'Unknown'),
+            "end_date": safe_dasha.get('pratyantardasha', {}).get('end_date', 'Unknown')
         },
-        "dasha_sequence": dasha_data.get('dasha_sequence', 'Unknown'),
-        "calculation_details": dasha_data.get('calculation_details', {})
+        "dasha_sequence": safe_dasha.get('dasha_sequence', 'Unknown'),
+        "calculation_details": safe_dasha.get('calculation_details', {})
     }
     
     # =========================================================================
-    # 6. CURRENT TRANSITS
+    # 6. CURRENT TRANSITS - FIXED FOR NULL SAFETY
     # =========================================================================
+    # CRITICAL FIX: Safe null handling - transit_data can be None
+    safe_transit = transit_data or {}
     validation_chart['transits'] = {}
     
-    for planet_name, transit_info in transit_data.get('transits', {}).items():
+    for planet_name, transit_info in safe_transit.get('transits', {}).items():
         if isinstance(transit_info, str):
             # Simple rashi name
             validation_chart['transits'][planet_name] = {
@@ -414,7 +398,7 @@ def prepare_chart_for_validation(
             }
     
     # Add transit date
-    validation_chart['transit_date'] = transit_data.get('date', transit_data.get('calculation_date'))
+    validation_chart['transit_date'] = safe_transit.get('date', safe_transit.get('calculation_date'))
     
     # =========================================================================
     # 7. ASPECTS (Vedic & Western)
@@ -516,8 +500,15 @@ def build_halt_response(validation_result: Dict, user_profile: Dict, language: s
     
     explanation_parts = []
     for failure in critical_failures[:2]:
-        classical_ref = failure.get('classical_ref', '')
-        reason = failure.get('reason', '')
+        # Handle both dict and RuleResult object
+        if isinstance(failure, dict):
+            classical_ref = failure.get('classical_ref', '')
+            reason = failure.get('reason', '')
+        else:
+            # RuleResult dataclass - use attributes
+            classical_ref = getattr(failure, 'classical_ref', '')
+            reason = getattr(failure, 'reason', '')
+        
         if classical_ref:
             explanation_parts.append(f"According to {classical_ref}, {reason.lower()}")
         else:
@@ -574,7 +565,15 @@ def build_validation_disclaimer(validation_strength: float, query_type: str, cri
     if critical_failures:
         disclaimer += "Classical rules indicate:\n"
         for f in critical_failures[:2]:
-            disclaimer += f"- {f.get('rule_name', 'Unknown rule')}: {f.get('reason', '')}\n"
+            # Handle both dict and RuleResult object
+            if isinstance(f, dict):
+                rule_name = f.get('rule_name', 'Unknown rule')
+                reason = f.get('reason', '')
+            else:
+                # RuleResult dataclass - use attributes
+                rule_name = getattr(f, 'rule_name', 'Unknown rule')
+                reason = getattr(f, 'reason', '')
+            disclaimer += f"- {rule_name}: {reason}\n"
     
     disclaimer += "\nThis prediction is exploratory. Consider focusing on areas where your chart shows stronger potential."
     return disclaimer
@@ -602,10 +601,18 @@ def format_validation_for_prompt(validation_result: Dict) -> str:
     if critical_failures:
         failures_lines = []
         for f in critical_failures[:3]:
-            rule_id = f.get('rule_id', 'Unknown')
-            rule_name = f.get('rule_name', 'Unknown')
-            reason = f.get('reason', '')
-            classical_ref = f.get('classical_ref', '')
+            # Handle both dict and RuleResult object
+            if isinstance(f, dict):
+                rule_id = f.get('rule_id', 'Unknown')
+                rule_name = f.get('rule_name', 'Unknown')
+                reason = f.get('reason', '')
+                classical_ref = f.get('classical_ref', '')
+            else:
+                # RuleResult dataclass - use attributes
+                rule_id = getattr(f, 'rule_id', 'Unknown')
+                rule_name = getattr(f, 'rule_name', 'Unknown')
+                reason = getattr(f, 'reason', '')
+                classical_ref = getattr(f, 'classical_ref', '')
             
             ref_text = f" ({classical_ref})" if classical_ref else ""
             failures_lines.append(f"[{rule_id}] {rule_name}{ref_text}\n       → {reason}")

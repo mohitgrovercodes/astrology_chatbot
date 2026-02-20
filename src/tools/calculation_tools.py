@@ -259,7 +259,33 @@ def format_chart_for_llm(chart: VedicEngine) -> Dict[str, Any]:
     # ADD YOGAS (if calculated)
     # =========================================================================
     if hasattr(chart, 'yogas') and chart.yogas:
-        formatted['yogas'] = chart.yogas
+        # Convert yogas to JSON-serializable format with deep serialization
+        def serialize_yoga_object(obj):
+            """Recursively serialize yoga objects."""
+            if obj is None:
+                return None
+            elif isinstance(obj, (str, int, float, bool)):
+                return obj
+            elif isinstance(obj, (list, tuple)):
+                return [serialize_yoga_object(item) for item in obj]
+            elif isinstance(obj, dict):
+                return {k: serialize_yoga_object(v) for k, v in obj.items()}
+            elif hasattr(obj, 'to_dict'):
+                return obj.to_dict()
+            elif hasattr(obj, '__dict__'):
+                return {
+                    k: serialize_yoga_object(v) 
+                    for k, v in obj.__dict__.items() 
+                    if not k.startswith('_')
+                }
+            else:
+                return str(obj)
+        
+        try:
+            formatted['yogas'] = serialize_yoga_object(chart.yogas)
+        except Exception as e:
+            # Ultimate fallback
+            formatted['yogas'] = str(chart.yogas) 
     
     # =========================================================================
     # ADD PLANETARY STRENGTHS (if calculated)
@@ -273,7 +299,32 @@ def format_chart_for_llm(chart: VedicEngine) -> Dict[str, Any]:
     # ADD ASPECTS (if calculated)
     # =========================================================================
     if hasattr(chart, 'aspects') and chart.aspects:
-        formatted['aspects'] = chart.aspects
+        # Serialize aspects (might be AspectGrid object)
+        def serialize_aspects(obj):
+            """Serialize aspect objects."""
+            if obj is None:
+                return None
+            elif isinstance(obj, (str, int, float, bool)):
+                return obj
+            elif isinstance(obj, (list, tuple)):
+                return [serialize_aspects(item) for item in obj]
+            elif isinstance(obj, dict):
+                return {k: serialize_aspects(v) for k, v in obj.items()}
+            elif hasattr(obj, 'to_dict'):
+                return obj.to_dict()
+            elif hasattr(obj, '__dict__'):
+                return {
+                    k: serialize_aspects(v) 
+                    for k, v in obj.__dict__.items() 
+                    if not k.startswith('_')
+                }
+            else:
+                return str(obj)
+        
+        try:
+            formatted['aspects'] = serialize_aspects(chart.aspects)
+        except Exception as e:
+            formatted['aspects'] = str(chart.aspects)
     
     # =========================================================================
     # ADD HOUSE LORDS (if calculated)

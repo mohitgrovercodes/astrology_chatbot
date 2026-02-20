@@ -116,15 +116,43 @@ class PromptBuilder:
     
     def _get_guidance(self, intent: str, query: str) -> Optional[str]:
         if intent == "PREDICTION":
-            return "Analyze chart + transits. Be optimistic but realistic. Never guarantee."
+            timing_guidance = ""
+            # Check if user is asking about timing/when
+            if any(word in query.lower() for word in ['when', 'timing', 'what time', 'which period', 'which year']):
+                timing_guidance = """
+
+    CRITICAL FOR TIMING QUESTIONS:
+    You MUST provide SPECIFIC timeframes:
+    - Immediate (next 1-3 months): "February-March 2026"
+    - Near-term (3-6 months): "April-June 2026"  
+    - Medium-term (6-12 months): "August-September 2026"
+    - Long-term (1-3 years): "2027-2028"
+
+    NEVER say just "during Saturn Mahadasha" - always give actual months/seasons!
+    Example: "March-April 2026 when Jupiter transits your 7th house" ✅
+    Not: "During your Saturn period" ❌"""
+            
+            return f"""Analyze chart + transits. Be optimistic but realistic. Never guarantee.{timing_guidance}
+
+    CONVERSATIONAL TONE:
+    - Use English names FIRST: "Mars (Mangal)" not "Mangal (Mars)"
+    - Maximum 2-3 Sanskrit terms per paragraph
+    - Explain what things MEAN, don't just state positions
+    - Example: "Your Moon in Gemini shows..." not "Chandra in Mithuna indicates..."
+    """
         elif intent == "INTERPRETATION":
-            return "Explain meaning. Cite texts when relevant."
+            return """Explain meaning. Cite texts when relevant.
+
+    CONVERSATIONAL TONE:
+    - Use English names FIRST, Sanskrit in parentheses
+    - Simplify: "your career house" not "the 10th Bhava"
+    - Explain what it means for THEM personally"""
         elif intent == "LEARNING":
-            return "Teach concept clearly."
+            return "Teach concept clearly with examples."
         return None
     
     def _get_instructions(self, intent: str, language: str = "en") -> str:
-        base = "Be professional, warm, clear. Cite sources."
+        base = "Be professional, warm, conversational. Explain clearly."
         
         # Determine language name and script instruction
         from .language_detector import get_language_detector
@@ -138,11 +166,13 @@ class PromptBuilder:
             lang_instruction = f" Respond entirely in {lang_name} (Native Script)."
         
         if intent == "PREDICTION":
-            pred = " Focus on timing. Emphasize free will."
+            pred = " Focus on timing with SPECIFIC months/dates. Emphasize free will. Be conversational (English names first, Sanskrit in parentheses)."
             return base + pred + lang_instruction
+        elif intent == "INTERPRETATION":
+            interpret = " Be conversational. Use English names first, Sanskrit in parentheses."
+            return base + interpret + lang_instruction
             
         return base + lang_instruction
-
 
 if __name__ == "__main__":
     print("PromptBuilder class loaded successfully")
