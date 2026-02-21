@@ -48,30 +48,16 @@ class Settings(BaseSettings):
     MONGODB_URI: str = ""
     USE_DUMMY_USER_DB: bool = True
     
-    # LLM Configuration - Google Cloud (Vertex AI)
-    GOOGLE_CREDENTIALS_PATH: str = Field(
-        default="",
-        validation_alias="google_application_credentials"
-    )
-    GOOGLE_PROJECT_ID: str = Field(
-        default="",
-        validation_alias="google_cloud_project"
-    )
-    GOOGLE_LOCATION: str = Field(
-        default="us-central1",
-        validation_alias="vertex_ai_location"
-    )
-    
     # LLM Configuration - OpenAI
     OPENAI_API_KEY: str = ""
     
     # LLM Provider and Model
     LLM_PROVIDER: str = Field(
-        default="google",
+        default="openai",
         validation_alias="default_llm_provider"
     )
     LLM_MODEL: str = Field(
-        default="gemini-2.0-flash-exp",
+        default="gpt-4o-mini",
         validation_alias="default_llm_model"
     )
     

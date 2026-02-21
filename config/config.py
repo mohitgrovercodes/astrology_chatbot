@@ -1,5 +1,4 @@
 # config/config.py
-# config\config.py
 """
 Configuration loader for Astrology AI Chatbot.
 
@@ -43,7 +42,7 @@ class LLMConfig(BaseSettings):
     @classmethod
     def validate_provider(cls, v: str) -> str:
         """Validate provider is one of the supported ones."""
-        valid_providers = ['openai', 'google']
+        valid_providers = ['openai', 'free']
         if v not in valid_providers:
             raise ValueError(f"Provider must be one of {valid_providers}, got: {v}")
         return v
@@ -128,7 +127,6 @@ class EnvConfig(BaseSettings):
     
     # LLM Provider API Keys
     openai_api_key: Optional[str] = None
-    google_api_key: Optional[str] = None
     
     # Default LLM Configuration (can override YAML)
     default_llm_provider: Optional[str] = None
@@ -274,7 +272,7 @@ class AppConfig:
         
         key_map = {
             'openai': self.env.openai_api_key,
-            'google': self.env.google_api_key,
+            'free': None,  # Ollama — no API key needed
         }
         
         if provider not in key_map:
@@ -306,9 +304,11 @@ class AppConfig:
             List of provider names with valid API keys
         """
         available = []
-        for provider in ['openai', 'google', 'ollama']:
+        for provider in ['openai']:
             if self.validate_provider_setup(provider):
                 available.append(provider)
+        # 'free' (Ollama) is always listed — no API key required
+        available.append('free')
         return available
     
     def to_dict(self) -> Dict[str, Any]:
@@ -347,7 +347,6 @@ class AppConfig:
             },
             "api_keys": {
                 "openai": mask_api_key(self.env.openai_api_key),
-                "google": mask_api_key(self.env.google_api_key),
             },
             "chroma_persist_dir": self.env.chroma_persist_dir,
             "log_level": self.logging.level,

@@ -3,7 +3,7 @@
 """
 LLM-Based Intent Classifier for NakshatraAI.
 
-Uses Gemini/GPT to accurately classify user queries into four categories:
+Uses an LLM (via LLMFactory) to accurately classify user queries into four categories:
 - CHITCHAT: Greetings and conversational queries
 - CALCULATION_ONLY: Raw chart data requests (no interpretation)
 - RAG_WITH_CALCULATION: Personal predictions (chart + knowledge + interpretation)

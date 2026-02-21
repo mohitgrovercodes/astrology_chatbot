@@ -43,7 +43,7 @@ class LLMConfig(BaseSettings):
     @classmethod
     def validate_provider(cls, v: str) -> str:
         """Validate provider is one of the supported ones."""
-        valid_providers = ['openai', 'google', 'ollama']
+        valid_providers = ['openai', 'free']
         if v not in valid_providers:
             raise ValueError(f"Provider must be one of {valid_providers}, got: {v}")
         return v
@@ -126,7 +126,6 @@ class EnvConfig(BaseSettings):
     
     # LLM Provider API Keys
     openai_api_key: Optional[str] = None
-    google_api_key: Optional[str] = None
     
     # Default LLM Configuration (can override YAML)
     # Support both LLM_PROVIDER (standard) and DEFAULT_LLM_PROVIDER (legacy)
@@ -274,7 +273,7 @@ class AppConfig:
         Get API key for a specific provider.
         
         Args:
-            provider: Provider name (openai, google, ollama)
+            provider: Provider name (openai, free)
             
         Returns:
             API key string or None if not set
@@ -286,8 +285,7 @@ class AppConfig:
         
         key_map = {
             'openai': self.env.openai_api_key,
-            'google': self.env.google_api_key,
-            'ollama': 'no-key-required'
+            'free': None,  # Ollama — no API key required
         }
         
         if provider not in key_map:
@@ -319,11 +317,11 @@ class AppConfig:
             List of provider names with valid API keys
         """
         available = []
-        for provider in ['openai', 'google', 'ollama']:
-            if provider == 'ollama':
+        for provider in ['openai']:
+            if self.validate_provider_setup(provider):
                 available.append(provider)
-            elif self.validate_provider_setup(provider):
-                available.append(provider)
+        # 'free' (Ollama) is always available — no API key required
+        available.append('free')
         return available
     
     def to_dict(self) -> Dict[str, Any]:
@@ -362,7 +360,6 @@ class AppConfig:
             },
             "api_keys": {
                 "openai": mask_api_key(self.env.openai_api_key),
-                "google": mask_api_key(self.env.google_api_key),
             },
             "chroma_persist_dir": self.env.chroma_persist_dir,
             "log_level": self.logging.level,
@@ -424,13 +421,13 @@ def validate_config() -> None:
             "Please set it in your .env file."
         )
     
-    # Check that default provider has API key (Ollama is local/keyless)
+    # Check that default provider has API key ('free'/Ollama is local/keyless)
     default_provider = config.llm.default_provider
-    if default_provider != 'ollama' and not config.validate_provider_setup(default_provider):
+    if default_provider != 'free' and not config.validate_provider_setup(default_provider):
         raise ValueError(
             f"Default LLM provider '{default_provider}' is not configured. "
             f"Please set {default_provider.upper()}_API_KEY in your .env file, "
-            f"or switch to 'ollama' by setting LLM_PROVIDER=ollama."
+            f"or switch to 'free' (Ollama) by setting LLM_PROVIDER=free."
         )
     
     # Check that ChromaDB directory exists or can be created

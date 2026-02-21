@@ -1,6 +1,6 @@
 # src/rag/rag_engine.py
 # src\rag\rag_engine.py
-#!/usr/bin/env python3
+
 """
 RAG Engine for Astrology Chatbot - Phase 4 Enhanced
 
@@ -116,7 +116,7 @@ Always be respectful of the sacred nature of Vedic astrology."""
         self,
         collection_name: str = "saravali_vol1",
         db_path: str = "data/vectordb",
-        llm_provider: str = "google",
+        llm_provider: str = "openai",
         llm_model: Optional[str] = None,
         temperature: float = 0.3,
         retriever: Optional[AstrologyRetriever] = None,
@@ -133,7 +133,7 @@ Always be respectful of the sacred nature of Vedic astrology."""
         Args:
             collection_name: ChromaDB collection name
             db_path: Path to vector database
-            llm_provider: 'google' or 'openai'
+            llm_provider: 'openai' or 'free' (Ollama)
             llm_model: LLM model name (auto-selected if None)
             temperature: LLM temperature
             retriever: Optional pre-initialized retriever
@@ -820,7 +820,7 @@ def main():
     parser.add_argument("query", nargs="?", help="Question to ask")
     parser.add_argument("--collection", default="brihat_parasara_hora_sastra", help="Collection name")
     parser.add_argument("--top-k", type=int, default=5, help="Number of chunks to retrieve")
-    parser.add_argument("--model", default="gemini-2.5-flash", help="LLM model")
+    parser.add_argument("--model", default="gpt-4o-mini", help="LLM model")
     parser.add_argument("--persona", default="hybrid", help="Astrologer persona")
     parser.add_argument("--hyde", action="store_true", help="Use HyDE retrieval")
     parser.add_argument("--no-expand", action="store_true", help="Don't expand context")

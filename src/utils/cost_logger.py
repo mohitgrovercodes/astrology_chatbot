@@ -51,49 +51,16 @@ class ModelPricing:
     notes: str = ""
 
 
-# Pricing as of January 2026
+# Pricing as of February 2026
 PRICING_TABLE = {
-    # Gemini 2.5 Models (Pricing as of Jan 2026)
-    "gemini-2.5-pro": ModelPricing(
-        model_name="gemini-2.5-pro",
-        model_type=ModelType.LLM,
-        input_price_per_1k=0.00125,    
-        output_price_per_1k=0.01000,   
-        context_window=2_000_000,
-        notes="Standard tier pricing"
-    ),
-    "gemini-2.5-flash": ModelPricing(
-        model_name="gemini-2.5-flash",
-        model_type=ModelType.LLM,
-        input_price_per_1k=0.00030,   
-        output_price_per_1k=0.00250,   
-        context_window=1_000_000,
-    ),
-    "gemini-2.5-flash-lite": ModelPricing(
-        model_name="gemini-2.5-flash-lite",
-        model_type=ModelType.LLM,
-        input_price_per_1k=0.00010, 
-        output_price_per_1k=0.00040,
-        context_window=1_000_000,
-        notes="Flash-Lite Preview pricing"
-    ),
-    
-    
     # OpenAI Models
     "gpt-4o-mini": ModelPricing(
         model_name="gpt-4o-mini",
         model_type=ModelType.LLM,
-        input_price_per_1k=0.00015,
-        output_price_per_1k=0.00060,
+        input_price_per_1k=0.00015,  # $0.15 per 1M tokens = $0.00015 per 1K
+        output_price_per_1k=0.00060,  # $0.60 per 1M tokens = $0.00060 per 1K
         context_window=128_000,
-        notes="Standard pricing"
-    ),
-    "gpt-4o": ModelPricing(
-        model_name="gpt-4o",
-        model_type=ModelType.LLM,
-        input_price_per_1k=0.00250,
-        output_price_per_1k=0.01000,
-        context_window=128_000,
+        notes="Cost-efficient model - $0.15/1M input, $0.60/1M output"
     ),
     
     # OpenAI Embedding Models
@@ -101,13 +68,6 @@ PRICING_TABLE = {
         model_name="text-embedding-3-large",
         model_type=ModelType.EMBEDDING,
         input_price_per_1k=0.00013,
-        output_price_per_1k=0.0,
-        context_window=8191,
-    ),
-    "text-embedding-3-small": ModelPricing(
-        model_name="text-embedding-3-small",
-        model_type=ModelType.EMBEDDING,
-        input_price_per_1k=0.00002,
         output_price_per_1k=0.0,
         context_window=8191,
     ),
@@ -703,7 +663,7 @@ def get_cost_logger(
     Example:
         >>> from src.utils.cost_logger import get_cost_logger
         >>> logger = get_cost_logger()
-        >>> logger.log_llm_call("gemini-2.5-flash", 1000, 500)
+        >>> logger.log_llm_call("gpt-4o-mini", 1000, 500)
     """
     global _cost_logger_instance
     
@@ -738,7 +698,7 @@ if __name__ == "__main__":
     # Test LLM call logging
     print("Testing LLM call logging...")
     cost_logger.log_llm_call(
-        model_name="gemini-2.5-flash",
+        model_name="gpt-4o-mini",
         input_tokens=1500,
         output_tokens=800,
         metadata={"test": "llm_call"}
@@ -757,7 +717,7 @@ if __name__ == "__main__":
     # Test vision call logging
     print("\nTesting vision call logging...")
     cost_logger.log_vision_call(
-        model_name="gemini-2.5-flash",
+        model_name="gpt-4o-mini",
         input_tokens=2000,
         output_tokens=1000,
         metadata={"page": 5, "file": "test.pdf"}

@@ -2,7 +2,7 @@
 # ============================================================================
 # ASTROLOGY AI CHATBOT - COMPLETE RAG SYSTEM (JAN 2026)
 # Python: 3.10–3.11
-# Model: gemini-2.5-flash (Vertex AI) + OpenAI (embeddings)
+# Model: gpt-4o-mini (OpenAI) + Ollama (local) + OpenAI (embeddings)
 # ============================================================================
 
 # ----------------------------------------------------------------------------
@@ -75,14 +75,8 @@ sentence-transformers>=2.2.0  # For local cross-encoder
 # ----------------------------------------------------------------------------
 # DATABASE (MongoDB for User Management)
 # ----------------------------------------------------------------------------
-pymongo>=4.6.0,<5.0.0  # MongoDB driver for user authentication
 redis>=5.0.0,<6.0.0     # Redis client for session management & API caching
 hiredis>=2.2.0,<3.0.0   # Optional: Faster Redis protocol parser (C extension)
-
-# ----------------------------------------------------------------------------
-# MULTI-LLM SUPPORT (Optional Alternative Providers)
-# ----------------------------------------------------------------------------
-# langchain-anthropic>=0.3.0,<0.4.0  # Claude Sonnet support (optional)
 
 # ----------------------------------------------------------------------------
 # API FRAMEWORK

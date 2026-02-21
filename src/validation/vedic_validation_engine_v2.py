@@ -1,22 +1,20 @@
-# src/prediction/vedic_validation_engine_v2.py
+# src/validation/vedic_validation_engine_v2.py
 """
 vedic_validation_engine_v2.py
 ------------------------------
-LLM-guided validation engine using Gemini (Google Cloud Vertex AI).
+LLM-guided validation engine using OpenAI (via LLMFactory).
 Reads check_logic from tiered_rules.json and evaluates each rule
 against chart data using the LLM.
 
-Matches your existing project config (.env):
-    DEFAULT_LLM_MODEL=gemini-2.5-flash
-    GOOGLE_APPLICATION_CREDENTIALS=credentials/video-translate-key.json
-    GOOGLE_CLOUD_PROJECT=nakshatraai-447814
-    GOOGLE_LOCATION=us-central1
+Provider is configured via LLM_PROVIDER env var (default: openai).
+    LLM_PROVIDER=openai  → uses gpt-4o-mini
+    LLM_PROVIDER=free    → uses Ollama llama3.2:3b
 
 Usage:
-    python vedic_validation_engine_v2.py --tier 1 --query marriage
+    python -m src.validation.vedic_validation_engine_v2 --tier 1 --query marriage
 
     # Or import:
-    from vedic_validation_engine_v2 import VedicValidationEngineV2
+    from src.validation.vedic_validation_engine_v2 import VedicValidationEngineV2
     engine = VedicValidationEngineV2()
     result = engine.validate(chart_data, query_type="marriage", tier=1)
 """
@@ -34,15 +32,18 @@ from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 load_dotenv()
 
-# ── LLM: Gemini via Vertex AI ─────────────────────────────────────────────────
+# ── LLM: via LLMFactory (OpenAI or Ollama) ──────────────────────────────────
+from langchain_core.prompts import ChatPromptTemplate
 try:
-    from langchain_google_vertexai import ChatVertexAI
-    from langchain_core.prompts import ChatPromptTemplate
-    LANGCHAIN_AVAILABLE = True
+    from src.llm.factory import LLMFactory
+    LLMFACTORY_AVAILABLE = True
 except ImportError:
-    LANGCHAIN_AVAILABLE = False
-    print("⚠️  langchain_google_vertexai not found.")
-    print("   Install: pip install langchain-google-vertexai")
+    try:
+        from llm.factory import LLMFactory
+        LLMFACTORY_AVAILABLE = True
+    except ImportError:
+        LLMFACTORY_AVAILABLE = False
+        print("⚠️  LLMFactory not found. Ensure src/llm/factory.py exists.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -120,7 +121,7 @@ Return JSON array only.""")
 
 class VedicValidationEngineV2:
     """
-    LLM-guided validation engine using Gemini via Vertex AI.
+    LLM-guided validation engine using OpenAI (or Ollama) via LLMFactory.
     Evaluates check_logic rules from tiered_rules.json against chart data.
     """
 
@@ -128,16 +129,13 @@ class VedicValidationEngineV2:
         self,
         tiered_rules_path:  str = "optimized/tiered_rules.json",
         indexed_rules_path: str = "optimized/indexed_rules.json",
-        model:       str = None,  # defaults to LLM_MODEL in .env
-        project:     str = None,  # defaults to GOOGLE_CLOUD_PROJECT in .env
-        location:    str = None,  # defaults to GOOGLE_LOCATION in .env
+        model:       str = None,  # overrides LLMFactory model selection
         batch_size:  int = 10,    # rules per LLM call
-        max_workers: int = 3,     # parallel LLM calls (keep low for quota)
-        rpm_limit:   int = 30,    # max requests per minute to Vertex AI
+        max_workers: int = 3,     # parallel LLM calls
     ):
-        if not LANGCHAIN_AVAILABLE:
+        if not LLMFACTORY_AVAILABLE:
             raise ImportError(
-                "Install: pip install langchain-google-vertexai"
+                "LLMFactory not found. Ensure src/llm/factory.py exists."
             )
 
         self.tiered_path   = Path(tiered_rules_path)
@@ -146,35 +144,21 @@ class VedicValidationEngineV2:
         self.max_workers   = max_workers
         self._tiered_data  = None
         self._indexed_data = None   # loaded on first use
-        # Semaphore: min gap between API calls = 60/rpm_limit seconds
-        self._rpm_delay    = 60.0 / max(rpm_limit, 1)
         self._api_lock     = threading.Semaphore(max_workers)
 
-        # Resolve config: arg > .env > default
-        _model    = model    or os.getenv("LLM_MODEL", "gemini-2.5-flash")
-        _project  = project  or os.getenv("GOOGLE_CLOUD_PROJECT", "")
-        _location = location or os.getenv("GOOGLE_CLOUD_REGION", os.getenv("GOOGLE_LOCATION", "us-central1"))
-        _creds    = os.getenv("GOOGLE_APPLICATION_CREDENTIALS",   "")
-
-        if _creds:
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = _creds
-
-        # Guard: warn if a non-Gemini model name slipped in via env var
-        if not _model.startswith("gemini"):
-            print(f"⚠️  WARNING: model '{_model}' from env var is not a Gemini model.")
-            print(f"   Overriding with gemini-2.5-flash. Set GEMINI_MODEL in .env to change.")
-            _model = "gemini-2.5-flash"
-        print(f"🤖 Model:    {_model}")
-        print(f"📦 Project:  {_project}")
-        print(f"📍 Location: {_location}")
-
-        self.llm = ChatVertexAI(
-            model_name=_model,
-            project=_project,
-            location=_location,
+        # Create LLM via factory (respects LLM_PROVIDER env var)
+        _llm = LLMFactory.create(
+            purpose="validation",
+            model=model,           # None → factory picks default
             temperature=0,
-            max_output_tokens=8192,
+            max_tokens=8192,
+            use_rate_limiting=True,
+            rate_limit_delay=2.0,
         )
+        print(f"🤖 LLM Provider: {LLMFactory._determine_provider()}")
+        print(f"🤖 Model:        {model or LLMFactory._select_model_for_provider(LLMFactory._determine_provider(), 'validation')}")
+
+        self.llm   = _llm
         self.chain = EVAL_PROMPT | self.llm
 
     # ── Loaders ───────────────────────────────────────────────────────────────
@@ -364,10 +348,9 @@ class VedicValidationEngineV2:
         return objects
 
     def _evaluate_batch(self, rules: List[Dict], chart: Dict) -> List[Dict]:
-        """Send one batch to Gemini and parse verdicts (rate-limited)."""
+        """Send one batch to the LLM and parse verdicts (rate-limited)."""
         rules_for_llm = [self._format_rule_for_llm(r) for r in rules]
-        # Small jitter so parallel workers don't all fire at exactly the same ms
-        time.sleep(random.uniform(0, self._rpm_delay * 0.5))
+        # Rate limiting is handled by RateLimitedLLM wrapper in LLMFactory
 
         try:
             response = self.chain.invoke({
@@ -379,7 +362,7 @@ class VedicValidationEngineV2:
             parsed  = self._extract_json(content)
 
             if not parsed:
-                raise ValueError("Empty or unparseable response from Gemini")
+                raise ValueError("Empty or unparseable response from LLM")
 
             return parsed
 
@@ -682,7 +665,7 @@ class VedicValidationEngineV2:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Vedic Validation Engine (Gemini)")
+    parser = argparse.ArgumentParser(description="Vedic Validation Engine")
     parser.add_argument("--tiered-rules", default="optimized/tiered_rules.json")
     parser.add_argument("--tier",  type=int, default=1, choices=[1, 2, 3])
     parser.add_argument("--query", default="marriage",
@@ -697,10 +680,8 @@ if __name__ == "__main__":
                         help="Timeout seconds for live mode (default: 25)")
     parser.add_argument("--workers", type=int, default=3,
                         help="Parallel LLM calls (default: 3)")
-    parser.add_argument("--rpm", type=int, default=30,
-                        help="Max requests per minute to Vertex AI (default: 30)")
     parser.add_argument("--model", default=None,
-                        help="Override Gemini model name")
+                        help="Override LLM model name (e.g. gpt-4o, llama3.2:3b)")
     args = parser.parse_args()
 
     # ── Sample chart (replace with real VedicEngine output) ──────────────────
@@ -760,7 +741,6 @@ if __name__ == "__main__":
         model=args.model,
         batch_size=args.batch,
         max_workers=args.workers,
-        rpm_limit=args.rpm,
     )
 
     result = engine.validate(

@@ -29,8 +29,8 @@ class CostTrackerCallback(BaseCallbackHandler):
     Usage:
         from src.utils.cost_tracking import CostTrackerCallback
         
-        callback = CostTrackerCallback(provider="google", model="gemini-2.5-flash")
-        llm = ChatGoogleGenerativeAI(callbacks=[callback], ...)
+        callback = CostTrackerCallback(provider="openai", model="gpt-4o-mini")
+        llm = ChatOpenAI(callbacks=[callback], ...)
     """
     
     def __init__(
@@ -44,7 +44,7 @@ class CostTrackerCallback(BaseCallbackHandler):
         Initialize cost tracking callback.
         
         Args:
-            provider: LLM provider name (google, openai, etc.)
+            provider: LLM provider name (openai, free, etc.)
             model: Model name
             operation: Operation type for logging
             metadata: Additional metadata to include in logs
@@ -69,7 +69,7 @@ class CostTrackerCallback(BaseCallbackHandler):
             **kwargs: Additional arguments
         """
         try:
-            # SKIP: Flash models (usage not tracked/shared)
+            # Skip: Flash models — note: keep this guard for Ollama model naming too
             if "flash" in self.model.lower():
                 return
 
@@ -82,7 +82,7 @@ class CostTrackerCallback(BaseCallbackHandler):
                 input_tokens = usage.get("prompt_tokens", 0)
                 output_tokens = usage.get("completion_tokens", 0)
             elif hasattr(response, "usage_metadata") and response.usage_metadata:
-                # Vertex AI / Google GenAI / Newer LangChain format
+                # Newer LangChain usage_metadata format
                 usage_meta = response.usage_metadata
                 
                 if hasattr(usage_meta, "prompt_token_count"):
@@ -150,7 +150,7 @@ def track_llm_cost(
                        Should return (input_tokens, output_tokens)
     
     Usage:
-        @track_llm_cost(model_name="gemini-2.5-flash", operation="vision_extraction")
+        @track_llm_cost(model_name="gpt-4o-mini", operation="vision_extraction")
         def extract_page(self, image):
             response = self.model.generate_content([prompt, image])
             return response
@@ -162,7 +162,7 @@ def track_llm_cost(
             result = func(*args, **kwargs)
             
             try:
-                # SKIP: Flash models
+                # Skip: flash models
                 if "flash" in model_name.lower():
                     return result
 
@@ -170,7 +170,7 @@ def track_llm_cost(
                 if extract_tokens:
                     input_tokens, output_tokens = extract_tokens(result)
                 elif hasattr(result, "usage_metadata"):
-                    # Gemini API response format
+                    # usage_metadata format (various providers)
                     input_tokens = result.usage_metadata.prompt_token_count
                     output_tokens = result.usage_metadata.candidates_token_count
                 else:
@@ -259,7 +259,7 @@ class CostTrackingWrapper:
     Useful when decorators can't be used or for more complex scenarios.
     
     Usage:
-        tracker = CostTrackingWrapper(model_name="gemini-2.5-flash")
+        tracker = CostTrackingWrapper(model_name="gpt-4o-mini")
         
         # Make API call
         response = model.generate_content(prompt)
@@ -300,7 +300,7 @@ class CostTrackingWrapper:
         try:
             # Extract tokens based on response type
             if hasattr(response, "usage_metadata"):
-                # Gemini API format
+                # usage_metadata format (various providers)
                 input_tokens = response.usage_metadata.prompt_token_count
                 output_tokens = response.usage_metadata.candidates_token_count
             elif hasattr(response, "usage"):
@@ -380,7 +380,7 @@ class BatchCostTracker:
     Context manager for tracking costs of batch operations.
     
     Usage:
-        with BatchCostTracker("gemini-2.5-flash", "batch_enrichment") as tracker:
+        with BatchCostTracker("gpt-4o-mini", "batch_enrichment") as tracker:
             for item in items:
                 response = process_item(item)
                 tracker.add_from_response(response)
@@ -496,7 +496,7 @@ if __name__ == "__main__":
     
     # Test manual wrapper
     print("Testing CostTrackingWrapper...")
-    wrapper = CostTrackingWrapper("gemini-2.5-flash", "llm")
+    wrapper = CostTrackingWrapper("gpt-4o-mini", "llm")
     wrapper.log_manual(
         input_tokens=1000,
         output_tokens=500,
@@ -507,7 +507,7 @@ if __name__ == "__main__":
     
     # Test batch tracker
     print("\nTesting BatchCostTracker...")
-    with BatchCostTracker("gemini-2.5-flash", "test_batch") as tracker:
+    with BatchCostTracker("gpt-4o-mini", "test_batch") as tracker:
         for i in range(3):
             tracker.add_manual(input_tokens=500, output_tokens=250)
     print("[DONE] Batch tracking works")

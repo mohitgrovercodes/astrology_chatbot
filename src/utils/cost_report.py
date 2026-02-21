@@ -7,7 +7,7 @@ Generate cost reports and query cost data from the command line.
 
 Usage:
     python -m src.utils.cost_report --today
-    python -m src.utils.cost_report --model gemini-2.5-flash
+    python -m src.utils.cost_report --model gpt-4o-mini
     python -m src.utils.cost_report --date-range 2026-01-20 2026-01-24
     python -m src.utils.cost_report --export costs.csv
 """
