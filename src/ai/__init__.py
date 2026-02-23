@@ -18,16 +18,8 @@ try:
 except ImportError:
     PromptBuilder = None
 
-try:
-    from .user_manager import get_user_manager, UserManager
-except ImportError:
-    get_user_manager = None
-    UserManager = None
-
 __all__ = [
     'SimplifiedIntentClassifier',
     'HybridRetriever',
     'PromptBuilder',
-    'get_user_manager',
-    'UserManager'
 ]

@@ -13,7 +13,6 @@ import os
 
 from src.orchestration.orchestrator import create_enhanced_orchestrator
 from src.ai.intent_classifier import IntentClassifier
-from src.ai.user_manager import UserManager  # CORRECT: UserManager is in src.ai
 from src.ai.hybrid_retriever import HybridRetriever
 from src.ai.prompt_builder import PromptBuilder
 from src.engines.vedic.vedic_engine import VedicEngine
@@ -23,7 +22,6 @@ from src.api.config import settings
 
 # Singleton instances
 _orchestrator_instance: Optional[object] = None
-_user_manager_instance: Optional[UserManager] = None
 _vedic_engine_instance: Optional[VedicEngine] = None
 _western_engine_instance: Optional[WesternAstroEngine] = None
 _redis_client_instance: Optional[object] = None
@@ -110,23 +108,20 @@ def get_orchestrator():
             
             # Initialize intent classifier with fast LLM
             intent_classifier = IntentClassifier(llm=fast_llm)
-            
-            user_manager = get_user_manager()
-            
+
             hybrid_retriever = HybridRetriever(
-                vector_store=vector_store, 
+                vector_store=vector_store,
                 llm=llm
             )
-            
+
             prompt_builder = PromptBuilder()
-            
+
             # Get calculation tools
             from src.tools.calculation_tools import get_calculation_tools
             calculation_tools = get_calculation_tools()
-            
+
             _orchestrator_instance = create_enhanced_orchestrator(
                 intent_classifier=intent_classifier,
-                user_manager=user_manager,
                 hybrid_retriever=hybrid_retriever,
                 prompt_builder=prompt_builder,
                 calculation_tools=calculation_tools,
@@ -144,24 +139,6 @@ def get_orchestrator():
     
     return _orchestrator_instance
 
-
-def get_user_manager() -> UserManager:
-    """
-    Get singleton user manager instance.
-    
-    FIXED: Uses use_sqlite instead of mongodb_uri
-    """
-    global _user_manager_instance
-    
-    if _user_manager_instance is None:
-        print("[API] Initializing user manager...")
-        
-        # FIXED: UserManager expects use_sqlite=True, not mongodb_uri
-        _user_manager_instance = UserManager(use_sqlite=True)
-        
-        print("[API] ✅ User manager initialized")
-    
-    return _user_manager_instance
 
 
 def get_vedic_engine() -> VedicEngine:
@@ -195,9 +172,8 @@ def get_western_engine() -> WesternAstroEngine:
 # Reset function for testing
 def reset_dependencies():
     """Reset all singleton instances (for testing)."""
-    global _orchestrator_instance, _user_manager_instance, _vedic_engine_instance, _western_engine_instance, _redis_client_instance
+    global _orchestrator_instance, _vedic_engine_instance, _western_engine_instance, _redis_client_instance
     _orchestrator_instance = None
-    _user_manager_instance = None
     _vedic_engine_instance = None
     _western_engine_instance = None
     _redis_client_instance = None

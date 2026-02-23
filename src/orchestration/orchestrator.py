@@ -115,7 +115,6 @@ class EnhancedLangGraphOrchestrator:
     def __init__(
         self,
         intent_classifier,
-        user_manager,
         hybrid_retriever,
         prompt_builder,
         calculation_tools: Optional[Dict] = None,  # [DONE] CHANGED: Now optional
@@ -124,7 +123,7 @@ class EnhancedLangGraphOrchestrator:
     ):
         """Initialize enhanced orchestrator with dual LLM support."""
         self.intent_classifier = intent_classifier
-        self.user_manager = user_manager
+        self.user_manager = None  # Removed: system is fully stateless via Redis
         self.hybrid_retriever = hybrid_retriever
         self.prompt_builder = prompt_builder
         
@@ -804,11 +803,8 @@ Reply with "1" for theory or "2" for personalized analysis."""
                 timezone_str=tz
             )
             
-            # Save to cache if db is available
-            if self.user_manager.db:
-                chart_json = json.dumps(full_chart.to_dict())
-                self.user_manager.db.update_user_chart(user_id, chart_json)
-                print(f"[CACHE] Chart saved to database for {user_id}")
+            # Chart caching in DB removed (stateless Redis architecture)
+            # Chart data is available in Redis session for the duration of the session
             
             return None, full_chart
         except Exception as e:
@@ -1937,13 +1933,12 @@ if __name__ == "__main__":
 # ========================================================================
 
 def create_enhanced_orchestrator(
-    intent_classifier,
-    user_manager,
-    hybrid_retriever,
-    prompt_builder,
+    intent_classifier=None,
+    hybrid_retriever=None,
+    prompt_builder=None,
     calculation_tools=None,
     llm=None,
-    fast_llm=None  # NEW
+    fast_llm=None
 ):
     """
     Factory function to create an EnhancedLangGraphOrchestrator.
@@ -1952,10 +1947,9 @@ def create_enhanced_orchestrator(
     """
     return EnhancedLangGraphOrchestrator(
         intent_classifier=intent_classifier,
-        user_manager=user_manager,
         hybrid_retriever=hybrid_retriever,
         prompt_builder=prompt_builder,
         calculation_tools=calculation_tools,
         llm=llm,
-        fast_llm=fast_llm  # NEW
+        fast_llm=fast_llm
     )

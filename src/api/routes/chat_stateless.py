@@ -7,16 +7,245 @@ Two-endpoint architecture:
 2. /message - Send message (session-based)
 """
 
+import os
+CONTEXT_WINDOW = int(os.getenv('CONVERSATION_CONTEXT_WINDOW', '5'))
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 import time
+import redis
+import json
+from datetime import datetime
 
-from src.session.redis_session_manager import get_session_manager
-from src.orchestration.orchestrator import create_enhanced_orchestrator
+from src.api.orchestrator_helper import get_orchestrator
 
 
 router = APIRouter()
+
+
+# ============================================================================
+# INLINE SESSION MANAGER (no external dependency)
+# ============================================================================
+
+class SimpleSessionManager:
+    """Simple session manager for Redis."""
+    
+    def __init__(self):
+        try:
+            self.redis = redis.Redis(
+                host='localhost',
+                port=6379,
+                db=0,
+                decode_responses=True
+            )
+            self.redis.ping()
+            print("[SESSION] Redis connection established")
+        except:
+            self.redis = None
+            print("[SESSION] Redis not available")
+    
+    def get_user_profile(self, user_id: str):
+        if not self.redis:
+            return None
+        try:
+            data = self.redis.get(f"session:{user_id}:user_profile")
+            return json.loads(data) if data else None
+        except:
+            return None
+    
+    def get_conversation_history(self, user_id: str):
+        if not self.redis:
+            return []
+        try:
+            data = self.redis.get(f"session:{user_id}:conversation")
+            return json.loads(data) if data else []
+        except:
+            return []
+    
+    def get_chart_data(self, user_id: str):
+        if not self.redis:
+            return None
+        try:
+            data = self.redis.get(f"session:{user_id}:chart_data")
+            return json.loads(data) if data else None
+        except:
+            return None
+    
+    def get_dasha_data(self, user_id: str):
+        if not self.redis:
+            return None
+        try:
+            data = self.redis.get(f"session:{user_id}:dasha_data")
+            return json.loads(data) if data else None
+        except:
+            return None
+    
+    def get_transit_data(self, user_id: str):
+        if not self.redis:
+            return None
+        try:
+            data = self.redis.get(f"session:{user_id}:transit_data")
+            return json.loads(data) if data else None
+        except:
+            return None
+    
+    def session_exists(self, user_id: str):
+        if not self.redis:
+            return False
+        return self.redis.exists(f"session:{user_id}:metadata") > 0
+    
+    def initialize_session(self, user_id: str, user_profile: dict, conversation_history: list = None):
+        if not self.redis:
+            return {"status": "error", "message": "Redis not available"}
+        
+        try:
+            # Store user profile (24h)
+            self.redis.setex(f"session:{user_id}:user_profile", 86400, json.dumps(user_profile))
+            
+            # Convert conversation history from external format to internal format
+            internal_conversation = []
+            if conversation_history:
+                for msg in conversation_history:
+                    # Add question (user message)
+                    if msg.get('question'):
+                        internal_conversation.append({
+                            "role": "user",
+                            "content": msg['question'],
+                            "timestamp": msg.get('timestamp', {}).get('$date') if isinstance(msg.get('timestamp'), dict) else msg.get('timestamp')
+                        })
+                    
+                    # Add answer (assistant message)
+                    if msg.get('answer'):
+                        internal_conversation.append({
+                            "role": "assistant",
+                            "content": msg['answer'],
+                            "timestamp": msg.get('timestamp', {}).get('$date') if isinstance(msg.get('timestamp'), dict) else msg.get('timestamp'),
+                            "metadata": {
+                                "source": msg.get('source', 'external')
+                            }
+                        })
+            
+            # Store conversation (24h)
+            self.redis.setex(f"session:{user_id}:conversation", 86400, json.dumps(internal_conversation))
+            
+            # Store metadata
+            metadata = {
+                "user_id": user_id,
+                "created_at": datetime.utcnow().isoformat(),
+                "messages_imported": len(internal_conversation)
+            }
+            self.redis.setex(f"session:{user_id}:metadata", 86400, json.dumps(metadata))
+            
+            return {
+                "status": "success",
+                "user_id": user_id
+            }
+        except Exception as e:
+            print(f"[SESSION] Error initializing: {e}")
+            return {
+                "status": "error",
+                "user_id": user_id,
+                "message": str(e)
+            }
+    
+    def add_message(self, session_id: str, role: str, content: str, metadata: dict = None):
+        if not self.redis:
+            return False
+        
+        try:
+            conversation = self.get_conversation_history(session_id)
+            message = {
+                "role": role,
+                "content": content,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            if metadata:
+                message["metadata"] = metadata
+            
+            conversation.append(message)
+            
+            # Keep last 20 messages
+            if len(conversation) > 20:
+                conversation = conversation[-20:]
+            
+            self.redis.setex(f"session:{session_id}:conversation", 86400, json.dumps(conversation))
+            return True
+        except:
+            return False
+    
+    def store_chart_data(self, user_id: str, chart_data: dict):
+        if not self.redis:
+            return
+        try:
+            self.redis.setex(f"session:{user_id}:chart_data", 604800, json.dumps(chart_data))
+            print(f"[CACHE] 💾 Stored chart data for {user_id} (TTL: 7d)")
+        except:
+            pass
+    
+    def store_dasha_data(self, user_id: str, dasha_data: dict):
+        if not self.redis:
+            return
+        try:
+            self.redis.setex(f"session:{user_id}:dasha_data", 604800, json.dumps(dasha_data))
+            print(f"[CACHE] 💾 Stored dasha data for {user_id} (TTL: 7d)")
+        except:
+            pass
+    
+    def store_transit_data(self, user_id: str, transit_data: dict):
+        if not self.redis:
+            return
+        try:
+            self.redis.setex(f"session:{user_id}:transit_data", 7200, json.dumps(transit_data))
+            print(f"[CACHE] 💾 Stored transit data for {user_id} (TTL: 2h)")
+        except:
+            pass
+    
+    def extend_session(self, user_id: str):
+        if not self.redis:
+            return
+        try:
+            for key in [f"session:{user_id}:user_profile", f"session:{user_id}:conversation", f"session:{user_id}:metadata"]:
+                if self.redis.exists(key):
+                    self.redis.expire(key, 86400)
+        except:
+            pass
+    
+    def clear_session(self, session_id: str):
+        if not self.redis:
+            return False
+        try:
+            keys = [
+                f"session:{session_id}:user_profile",
+                f"session:{session_id}:conversation",
+                f"session:{session_id}:metadata",
+                f"session:{session_id}:chart_data",
+                f"session:{session_id}:dasha_data",
+                f"session:{session_id}:transit_data"
+            ]
+            self.redis.delete(*keys)
+            return True
+        except:
+            return False
+    
+    def get_active_sessions_count(self):
+        if not self.redis:
+            return 0
+        try:
+            keys = self.redis.keys("session:*:metadata")
+            return len(keys)
+        except:
+            return 0
+
+
+# Global session manager
+_session_manager = None
+
+def get_session_manager():
+    global _session_manager
+    if _session_manager is None:
+        _session_manager = SimpleSessionManager()
+    return _session_manager
 
 
 # ============================================================================
@@ -36,50 +265,39 @@ class UserProfile(BaseModel):
     preferred_system: str = "vedic"
 
 
-class PreCalculatedData(BaseModel):
-    """Optional pre-calculated astrological data."""
-    birth_chart: Optional[Dict[str, Any]] = None
-    dasha_data: Optional[Dict[str, Any]] = None
-    transits: Optional[Dict[str, Any]] = None
-
-
-class ConversationMessage(BaseModel):
-    """Single conversation message."""
-    role: str = Field(..., description="'user' or 'assistant'")
-    content: str
-    timestamp: Optional[str] = None
+class ConversationHistoryItem(BaseModel):
+    """Single conversation item from external system."""
+    question: str
+    answer: str
+    source: str = "external"
+    timestamp: Any  # Can be string or dict with $date
 
 
 class InitializeSessionRequest(BaseModel):
     """Request to initialize a new session."""
-    session_id: str = Field(..., description="Unique session identifier")
+    user_id: str = Field(..., description="User identifier (also used as session_id)")
     user_profile: UserProfile
-    pre_calculated_data: Optional[PreCalculatedData] = None
-    conversation_history: Optional[List[ConversationMessage]] = []
+    conversation_history: Optional[List[ConversationHistoryItem]] = []
 
 
 class InitializeSessionResponse(BaseModel):
     """Response from session initialization."""
-    status: str
-    session_id: str
-    message: str = "Session initialized successfully"
-    cached_data: Dict[str, Any]
-    ttl: Dict[str, int]
+    user_id: str
+    status: str  # "success" or "error"
 
 
 class SendMessageRequest(BaseModel):
     """Request to send a message."""
-    session_id: str
-    message: str
+    user_id: str = Field(..., description="User identifier (same as session_id)")
+    question: str = Field(..., description="User's question")
 
 
 class SendMessageResponse(BaseModel):
     """Response from message."""
+    user_id: str
+    question: str
     answer: str
-    intent: str
-    confidence: float
-    processing_time: float
-    metadata: Dict[str, Any]
+    source: str = "openai"  # "openai" or "external"
 
 
 # ============================================================================
@@ -91,7 +309,9 @@ async def initialize_session(request: InitializeSessionRequest):
     """
     Initialize a new chatbot session.
     
-    Called when user opens the chatbot. Stores all user data in Redis.
+    Called when user opens the chatbot. Stores user data and conversation history in Redis.
+    
+    NOTE: user_id IS the session_id (they are the same).
     
     Args:
         request: Session initialization data
@@ -103,7 +323,7 @@ async def initialize_session(request: InitializeSessionRequest):
         ```
         POST /api/v1/chat/initialize
         {
-          "session_id": "sess_20260220_abc123",
+          "user_id": "user_12345",
           "user_profile": {
             "user_id": "user_12345",
             "name": "Priya Sharma",
@@ -115,69 +335,58 @@ async def initialize_session(request: InitializeSessionRequest):
             "timezone": "Asia/Kolkata",
             "preferred_system": "vedic"
           },
-          "pre_calculated_data": {
-            "birth_chart": {...},  // Optional
-            "dasha_data": {...},   // Optional
-            "transits": {...}      // Optional
-          },
-          "conversation_history": []  // Optional
+          "conversation_history": [
+            {
+              "question": "When will I get married?",
+              "answer": "Based on your chart...",
+              "source": "external",
+              "timestamp": {"$date": "2026-02-20T11:25:57.567Z"}
+            }
+          ]
         }
         ```
     """
     try:
-        # Get session manager
         session_manager = get_session_manager()
+        user_id = request.user_id
         
         # Check if session already exists
-        if session_manager.session_exists(request.session_id):
+        if session_manager.session_exists(user_id):
             # Extend existing session
-            session_manager.extend_session(request.session_id)
+            session_manager.extend_session(user_id)
+            print(f"[SESSION] Extended existing session for {user_id}")
             return InitializeSessionResponse(
-                status="extended",
-                session_id=request.session_id,
-                message="Existing session extended",
-                cached_data={"existing": True},
-                ttl={"session": 86400, "chart_cache": 604800}
+                user_id=user_id,
+                status="success"
             )
         
-        # Convert conversation history
+        # Convert conversation history from Pydantic models to dicts
         conversation = []
         if request.conversation_history:
-            conversation = [
-                {
-                    "role": msg.role,
-                    "content": msg.content,
-                    "timestamp": msg.timestamp
-                }
-                for msg in request.conversation_history
-            ]
-        
-        # Convert pre-calculated data
-        pre_calc = None
-        if request.pre_calculated_data:
-            pre_calc = request.pre_calculated_data.dict(exclude_none=True)
+            conversation = [item.dict() for item in request.conversation_history]
         
         # Initialize session
         result = session_manager.initialize_session(
-            session_id=request.session_id,
-            user_id=request.user_profile.user_id,
+            user_id=user_id,
             user_profile=request.user_profile.dict(),
-            pre_calculated_data=pre_calc,
             conversation_history=conversation
         )
         
-        if result['status'] == 'success':
-            return InitializeSessionResponse(
-                status="success",
-                session_id=request.session_id,
-                cached_data=result['cached_data'],
-                ttl=result['ttl']
-            )
-        else:
-            raise HTTPException(status_code=500, detail=result.get('message', 'Failed to initialize session'))
+        print(f"[SESSION] Initialized session for {user_id} - Status: {result['status']}")
+        
+        return InitializeSessionResponse(
+            user_id=result['user_id'],
+            status=result['status']
+        )
     
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Session initialization error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        print(f"[SESSION] Error initializing session: {e}")
+        return InitializeSessionResponse(
+            user_id=request.user_id,
+            status="error"
+        )
 
 
 # ============================================================================
@@ -189,8 +398,13 @@ async def send_message(request: SendMessageRequest):
     """
     Send a message in an existing session.
     
+    Context Management:
+    - Retrieves full conversation history from Redis
+    - Sends only last N messages to orchestrator (default: 5)
+    - Stores all messages in Redis for future reference
+    
     Args:
-        request: Message request with session_id and message
+        request: Message request with user_id and question
         
     Returns:
         AI response
@@ -199,96 +413,116 @@ async def send_message(request: SendMessageRequest):
         ```
         POST /api/v1/chat/message
         {
-          "session_id": "sess_20260220_abc123",
-          "message": "When will I get married?"
+          "user_id": "user_12345",
+          "question": "When will I get married?"
         }
         ```
     """
     start_time = time.time()
     
     try:
-        # Get session manager
         session_manager = get_session_manager()
+        user_id = request.user_id
+        question = request.question
         
-        # Get session data
-        session_data = session_manager.get_session_data(request.session_id)
-        
-        if not session_data:
+        # Get user profile
+        user_profile = session_manager.get_user_profile(user_id)
+        if not user_profile:
             raise HTTPException(
                 status_code=404,
-                detail=f"Session not found: {request.session_id}. Please call /initialize first."
+                detail=f"Session not found for user: {user_id}. Please call /initialize first."
             )
         
-        # Get orchestrator
-        orchestrator = create_enhanced_orchestrator()
+        # ====================================================================
+        # CONTEXT WINDOW: Get last N messages for orchestrator
+        # ====================================================================
+        full_history = session_manager.get_conversation_history(user_id) or []
         
-        # Prepare session data for orchestrator
+        if len(full_history) > CONTEXT_WINDOW:
+            recent_history = full_history[-CONTEXT_WINDOW:]
+            print(f"[CONTEXT] Sending last {CONTEXT_WINDOW} of {len(full_history)} messages")
+        else:
+            recent_history = full_history
+            print(f"[CONTEXT] Sending all {len(full_history)} messages")
+        
+        # Get orchestrator
+        orchestrator = get_orchestrator()
+        
+        # ====================================================================
+        # SMART CACHING: Get cached calculations if available
+        # ====================================================================
+        cached_chart = session_manager.get_chart_data(user_id)
+        cached_dasha = session_manager.get_dasha_data(user_id)
+        cached_transit = session_manager.get_transit_data(user_id)
+        
+        # Log cache status
+        print(f"[CACHE] Chart: {'✅ Cached' if cached_chart else '❌ Not cached'}")
+        print(f"[CACHE] Dasha: {'✅ Cached' if cached_dasha else '❌ Not cached'}")
+        print(f"[CACHE] Transit: {'✅ Cached' if cached_transit else '❌ Not cached'}")
+        
+        # Prepare session data with cached calculations
         orchestrator_session_data = {
-            "chart_data": session_data.chart_data,
-            "dasha_data": session_data.dasha_data,
-            "transit_data": session_data.transit_data
+            "chart_data": cached_chart,
+            "dasha_data": cached_dasha,
+            "transit_data": cached_transit
         }
         
-        # Process query
+        # ====================================================================
+        # PROCESS QUERY
+        # ====================================================================
         result = orchestrator.process_query(
-            query=request.message,
-            user_id=session_data.user_id,
-            conversation_history=session_data.conversation_history,
-            user_profile_override=session_data.user_profile,
+            query=question,
+            user_id=user_id,
+            conversation_history=recent_history,
+            user_profile_override=user_profile,
             session_data=orchestrator_session_data
         )
         
-        # Extract answer and metadata
         answer = result.get('answer', '')
         intent = result.get('intent', 'UNKNOWN')
         confidence = result.get('confidence', 0.0)
         
-        # Update conversation history in Redis
+        # ====================================================================
+        # STORE NEW CALCULATIONS IN CACHE
+        # ====================================================================
+        if result.get('chart_data') and not cached_chart:
+            session_manager.store_chart_data(user_id, result['chart_data'])
+        
+        if result.get('dasha_data') and not cached_dasha:
+            session_manager.store_dasha_data(user_id, result['dasha_data'])
+        
+        if result.get('transit_data') and not cached_transit:
+            session_manager.store_transit_data(user_id, result['transit_data'])
+        
+        # ====================================================================
+        # UPDATE CONVERSATION HISTORY
+        # ====================================================================
+        session_manager.add_message(user_id, "user", question)
         session_manager.add_message(
-            session_id=request.session_id,
-            role="user",
-            content=request.message
+            user_id,
+            "assistant",
+            answer,
+            metadata={
+                "intent": intent,
+                "confidence": confidence,
+                "source": "openai"
+            }
         )
         
-        session_manager.add_message(
-            session_id=request.session_id,
-            role="assistant",
-            content=answer,
-            metadata={"intent": intent, "confidence": confidence}
-        )
-        
-        # Store calculated data if generated
-        if 'chart_data' in result and result['chart_data']:
-            session_manager.store_chart_data(request.session_id, result['chart_data'])
-        
-        if 'dasha_data' in result and result['dasha_data']:
-            session_manager.store_dasha_data(request.session_id, result['dasha_data'])
-        
-        if 'transit_data' in result and result['transit_data']:
-            session_manager.store_transit_data(request.session_id, result['transit_data'])
-        
-        # Extend session (user is active)
-        session_manager.extend_session(request.session_id)
-        
-        # Build metadata
-        metadata = {
-            "session_id": request.session_id,
-            "user_id": session_data.user_id,
-            "cached_chart": session_data.chart_data is not None,
-            "cached_dasha": session_data.dasha_data is not None,
-            "validation_passed": result.get('validation_result', {}).get('passed', None),
-            "validation_strength": result.get('validation_result', {}).get('overall_strength', None),
-            "sources_count": len(result.get('knowledge_chunks', []))
-        }
+        # Extend session
+        session_manager.extend_session(user_id)
         
         processing_time = time.time() - start_time
         
+        # Log processing info (for debugging)
+        print(f"[RESPONSE] User: {user_id}, Intent: {intent}, Confidence: {confidence:.2f}, Time: {processing_time:.2f}s")
+        
+        # Return simplified response
         return SendMessageResponse(
+            user_id=user_id,
+            question=question,
             answer=answer,
-            intent=intent,
-            confidence=confidence,
-            processing_time=processing_time,
-            metadata=metadata
+            source="openai"
         )
     
     except HTTPException:
@@ -300,36 +534,34 @@ async def send_message(request: SendMessageRequest):
 
 
 # ============================================================================
-# OPTIONAL: SESSION MANAGEMENT ENDPOINTS
+# OPTIONAL ENDPOINTS
 # ============================================================================
 
 @router.get("/session/{session_id}/status")
 async def get_session_status(session_id: str):
-    """
-    Get session status.
-    
-    Returns information about what data is cached for a session.
-    """
+    """Get session status."""
     try:
         session_manager = get_session_manager()
         
         if not session_manager.session_exists(session_id):
             raise HTTPException(status_code=404, detail="Session not found")
         
-        session_data = session_manager.get_session_data(session_id)
+        user_profile = session_manager.get_user_profile(session_id)
+        conversation = session_manager.get_conversation_history(session_id)
         
         return {
             "session_id": session_id,
             "exists": True,
-            "user_id": session_data.user_id,
+            "user_id": user_profile.get('user_id') if user_profile else None,
             "cached_data": {
-                "user_profile": session_data.user_profile is not None,
-                "chart_data": session_data.chart_data is not None,
-                "dasha_data": session_data.dasha_data is not None,
-                "transit_data": session_data.transit_data is not None,
-                "conversation_messages": len(session_data.conversation_history)
+                "user_profile": user_profile is not None,
+                "chart_data": session_manager.get_chart_data(session_id) is not None,
+                "dasha_data": session_manager.get_dasha_data(session_id) is not None,
+                "transit_data": session_manager.get_transit_data(session_id) is not None,
+                "conversation_messages": len(conversation)
             },
-            "created_at": session_data.created_at
+            "context_window_size": CONTEXT_WINDOW,
+            "messages_sent_to_llm": min(len(conversation), CONTEXT_WINDOW)
         }
     
     except HTTPException:
@@ -340,14 +572,9 @@ async def get_session_status(session_id: str):
 
 @router.delete("/session/{session_id}")
 async def clear_session(session_id: str):
-    """
-    Clear a session (logout/cleanup).
-    
-    Removes all cached data for a session.
-    """
+    """Clear a session."""
     try:
         session_manager = get_session_manager()
-        
         success = session_manager.clear_session(session_id)
         
         if success:
@@ -367,7 +594,9 @@ async def get_stats():
         
         return {
             "active_sessions": session_manager.get_active_sessions_count(),
-            "redis_connected": session_manager.redis is not None
+            "redis_connected": session_manager.redis is not None,
+            "context_window_size": CONTEXT_WINDOW,
+            "context_window_env_var": "CONVERSATION_CONTEXT_WINDOW"
         }
     
     except Exception as e:

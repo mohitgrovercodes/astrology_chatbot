@@ -44,10 +44,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = 10
     RATE_LIMIT_PER_HOUR: int = 100
     
-    # Database
-    MONGODB_URI: str = ""
-    USE_DUMMY_USER_DB: bool = True
-    
+
     # LLM Configuration - OpenAI
     OPENAI_API_KEY: str = ""
     
