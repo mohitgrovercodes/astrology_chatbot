@@ -278,7 +278,7 @@ class VectorDBBuilder:
                 # Sanitize collection name (ChromaDB requirements)
                 collection_name = source_book.lower().replace(" ", "_").replace("-", "_")
             else:
-                collection_name = "astrology_default"
+                collection_name = "vedic_astrology_books_knowledge"
         
         # Create collection
         self.create_collection(collection_name, reset=reset)

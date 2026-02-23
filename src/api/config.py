@@ -84,6 +84,18 @@ class Settings(BaseSettings):
     ENABLE_CACHING: bool = True
     MAX_CONVERSATION_HISTORY: int = 10
     
+    # Conversation Context Management
+    CONVERSATION_CONTEXT_WINDOW: int = Field(
+        default=10,
+        validation_alias="conversation_context_window",
+        description="Number of recent messages to include in conversation history"
+    )
+    CONVERSATION_SUMMARY_THRESHOLD: int = Field(
+        default=6,
+        validation_alias="conversation_summary_threshold",
+        description="Update conversation summary after this many messages"
+    )
+    
     # Additional LLM Settings
     OLLAMA_BASE_URL: str = Field(default="http://localhost:11434", validation_alias="ollama_base_url")
     FAST_LLM_PROVIDER: str = Field(default="openai", validation_alias="fast_llm_provider")

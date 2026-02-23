@@ -111,7 +111,7 @@ TEST_QUERIES = [
 class RAGTester:
     """Test RAG retrieval quality across languages."""
     
-    def __init__(self, collection_name='astrology_default'):
+    def __init__(self, collection_name='vedic_astrology_books_knowledge'):
         """Initialize with current retriever."""
         try:
             self.retriever = AstrologyRetriever(collection_name=collection_name)

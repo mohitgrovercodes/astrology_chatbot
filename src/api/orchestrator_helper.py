@@ -7,6 +7,13 @@ Passes None for components that will auto-initialize or are optional.
 """
 
 from src.orchestration.orchestrator import EnhancedLangGraphOrchestrator
+from src.rag.retriever import AstrologyRetriever
+
+# In get_orchestrator():
+retriever = AstrologyRetriever(
+    collection_name="vedic_astrology_books_knowledge",
+    db_path="data/vectordb"
+)
 
 # Global orchestrator instance (singleton per worker)
 _orchestrator_instance = None
@@ -116,7 +123,7 @@ def get_orchestrator():
         # hybrid_retriever, prompt_builder, calculation_tools, llm all auto-load if None
         _orchestrator_instance = EnhancedLangGraphOrchestrator(
             intent_classifier=intent_classifier,
-            hybrid_retriever=None,  # Auto-loads from RAGConfig
+            hybrid_retriever=retriever,
             prompt_builder=None,     # Auto-loads
             calculation_tools=None,  # Auto-loads
             llm=None,                # Auto-loads

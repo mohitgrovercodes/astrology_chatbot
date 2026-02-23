@@ -78,7 +78,7 @@ class AstrologyRetriever:
             self.collection_name = collection_name or config.rag.collection_name
             self.db_path = Path(db_path or config.env.chroma_persist_dir)
         else:
-            self.collection_name = collection_name or "astro_collection1"
+            self.collection_name = collection_name or "vedic_astrology_books_knowledge"
             self.db_path = Path(db_path or "data/vectordb")
         
         # Initialize ChromaDB
@@ -127,8 +127,22 @@ class AstrologyRetriever:
         top_k: int = 5,
         filters: Optional[Dict[str, Any]] = None,
         language: Optional[str] = None,
+        intent: Optional[str] = None,  # Add intent parameter
     ) -> List[RetrievedChunk]:
-        """Core semantic retrieval with language filtering."""
+        """
+        Core semantic retrieval with language filtering.
+        
+        Args:
+            query: Search query
+            top_k: Number of results to return
+            filters: Optional metadata filters
+            language: Language code for filtering ('en', 'hi', etc.)
+            intent: Query intent type ('RAG_ONLY', 'RAG_WITH_CALCULATION', 'PREDICTION', etc.)
+                   Used to adjust retrieval strategy and top_k
+        
+        Returns:
+            List of retrieved chunks with scores
+        """
         if not self.collection:
             logger.error(f"Retrieval unavailable: Collection '{self.collection_name}' not loaded.")
             return []
@@ -136,8 +150,42 @@ class AstrologyRetriever:
         if not self.embedder.client:
             logger.error("Retrieval unavailable: Embedder client not initialized (Check OPENAI_API_KEY).")
             return []
+        
+        # Adjust top_k based on intent if provided
+        if intent:
+            intent_top_k_map = {
+                'PREDICTION': 15,           # More context for predictions
+                'INTERPRETATION': 12,       # Good context for interpretations
+                'RAG_WITH_CALCULATION': 10, # Balanced for hybrid queries
+                'RAG_ONLY': 8,             # Focused knowledge retrieval
+                'LEARNING': 10,            # Educational queries
+                'CHITCHAT': 3,             # Minimal for casual chat
+            }
+            top_k = intent_top_k_map.get(intent, top_k)
+            logger.info(f"Adjusted top_k to {top_k} based on intent: {intent}")
             
         where_clause = self._build_where_clause(filters) if filters else {}
+        
+        # APPLY INTENT-BASED CONTENT TYPE FILTERING
+        # Different intents benefit from different content types
+        if intent and not filters:  # Only if user didn't provide custom filters
+            intent_content_preferences = {
+                'PREDICTION': ['interpretation', 'prediction'],
+                'INTERPRETATION': ['interpretation', 'general'],
+                'RAG_ONLY': ['general', 'interpretation'],
+                'LEARNING': ['general', 'educational'],
+            }
+            
+            if intent in intent_content_preferences:
+                preferred_types = intent_content_preferences[intent]
+                content_filter = {"content_type": {"$in": preferred_types}}
+                
+                if where_clause:
+                    where_clause = {"$and": [where_clause, content_filter]}
+                else:
+                    where_clause = content_filter
+                    
+                logger.info(f"Applied content type filter for intent {intent}: {preferred_types}")
         
         # APPLY LANGUAGE FILTERING
         # If language is provided, filter by that language. 
@@ -171,9 +219,24 @@ class AstrologyRetriever:
         filters: Optional[Dict[str, Any]] = None,
         language: Optional[str] = None,
         semantic_weight: float = 0.7,
+        intent: Optional[str] = None,  # Add intent parameter
     ) -> List[RetrievedChunk]:
-        """Reciprocal Rank Fusion (RRF) Hybrid Search with language filtering."""
-        semantic_results = self.retrieve(query, top_k=top_k * 2, filters=filters, language=language)
+        """
+        Reciprocal Rank Fusion (RRF) Hybrid Search with language filtering.
+        
+        Args:
+            query: Search query
+            top_k: Number of results to return
+            filters: Optional metadata filters
+            language: Language code for filtering
+            semantic_weight: Weight for semantic vs keyword (0-1)
+            intent: Query intent type for adaptive retrieval
+        
+        Returns:
+            List of retrieved chunks ranked by RRF
+        """
+        # Pass intent to semantic retrieval
+        semantic_results = self.retrieve(query, top_k=top_k * 2, filters=filters, language=language, intent=intent)
         
         bm25_results = []
         if self.bm25_index:

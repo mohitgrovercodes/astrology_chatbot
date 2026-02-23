@@ -65,7 +65,7 @@ class RAGConfig(BaseSettings):
     # REMOVED: top_k: int = 5  
     # Now uses config/rag_config.py dynamically
     score_threshold: float = 0.7
-    collection_name: str = "astrology_knowledge"
+    collection_name: str = "vedic_astrology_books_knowledge"
     use_python_config: bool = True  # NEW
     
     model_config = SettingsConfigDict(extra='allow')

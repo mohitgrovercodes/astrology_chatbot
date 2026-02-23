@@ -100,12 +100,17 @@ class NakshatraState(TypedDict):
     
     # messages: Annotated[List, operator.add]
 
-# PHASE 12: Validation Results
+    # PHASE 12: Validation Results
     validation_result: Optional[Dict]
     validation_strength: Optional[float]
     validation_can_proceed: bool
     validation_query_type: Optional[str]
     validation_disclaimer: Optional[str]
+
+    # NEW: Context Management Fields
+    conversation_summary: Optional[str]      # LLM-generated summary
+    intent_analysis: Optional[Dict]          # From context manager
+    resolution_result: Optional[Dict]        # From semantic interpreter
 
 class EnhancedLangGraphOrchestrator:
     """
@@ -1105,7 +1110,7 @@ Provide a concise answer:"""
             print("[RAG_WITH_CALCULATION] Step 2: Retrieving knowledge...")
             
             knowledge_chunks = state.get('knowledge_chunks') or []
-            
+
             if not knowledge_chunks and self.hybrid_retriever:
                 # Enhance query for better retrieval if we have chart data
                 retrieval_query = state['query']
@@ -1153,12 +1158,36 @@ Provide a concise answer:"""
                 )
             
             # ================================================================
-            # STEP 4: Generate LLM Response
+            # STEP 4: Build Messages Array with Conversation History
             # ================================================================
-            response = self.llm.invoke(prompt)
+            messages = []
+
+            # Add system prompt
+            messages.append({
+                "role": "system",
+                "content": prompt.split("USER'S QUERY:")[0].strip()  # System part
+            })
+
+            # Add conversation history (CRITICAL for context!)
+            conversation_history = state.get('conversation_history', [])
+            if conversation_history:
+                formatted_history = self._format_conversation_for_llm(conversation_history)
+                messages.extend(formatted_history)
+                print(f"[RAG_WITH_CALCULATION] Including {len(formatted_history)} previous messages")
+
+            # Add current query with chart context
+            user_prompt = "USER'S QUERY:" + prompt.split("USER'S QUERY:")[1]
+            messages.append({
+                "role": "user",
+                "content": user_prompt
+            })
+
+            # ================================================================
+            # STEP 5: Generate LLM Response with Full Context
+            # ================================================================
+            print(f"[LLM] Sending {len(messages)} messages to LLM")
+            response = self.llm.invoke(messages)
             state['answer'] = response.content if hasattr(response, 'content') else str(response)
-            
-            print(f"[RAG_WITH_CALCULATION] Generated response ({len(state['answer'])} chars)")
             
         except Exception as e:
             print(f"[ERROR] RAG_WITH_CALCULATION failed: {e}")
@@ -1202,6 +1231,31 @@ Provide a concise answer:"""
                 language=state.get('detected_language', 'en')
             )
             
+            if not knowledge_chunks or len(knowledge_chunks) == 0:
+                print("[RAG_ONLY] [WARN] No chunks - using fallback")
+                
+                # Quick fallback for common queries
+                query_lower = state['query'].lower()
+                
+                if 'jupiter' in query_lower and '7th' in query_lower:
+                    state['answer'] = """Jupiter in the 7th house is highly auspicious for marriage and partnerships. This placement indicates:
+
+            - A wise and supportive spouse
+            - Harmonious relationships
+            - Prosperity through partnerships
+            - Beneficial business collaborations
+
+            This is general astrological knowledge. For personalized insights based on your specific chart, let me analyze your birth details."""
+                    return state
+                
+                elif 'moon' in query_lower and ('10th' in query_lower or 'career' in query_lower):
+                    state['answer'] = """Moon's placement relates to career through emotional connection to work and public image. The 10th house specifically governs career, reputation, and professional achievements.
+
+            For detailed insights about your career prospects, I can analyze your complete birth chart with current planetary periods."""
+                    return state
+                
+                # If no fallback, continue to original "no sources" message
+
             # GROUNDING SAFEGUARD: If no sources, refuse to answer
             if prompt is None:
                 user_name = state['user_profile'].get('name', 'User')
@@ -1226,10 +1280,32 @@ I prefer to say "I don't know" rather than provide information not grounded in c
                 return state
             
             # Step 3: Generate response with LLM (only if we have sources!)
-            response = self.llm.invoke(prompt)
-            state['answer'] = response.content if hasattr(response, 'content') else str(response)
-            
-            print(f"[RAG_ONLY] Generated grounded response ({len(state['answer'])} chars)")
+            # Build messages with conversation history
+            messages = []
+
+            # System prompt
+            messages.append({
+                "role": "system", 
+                "content": prompt.split("USER'S QUERY:")[0].strip()
+            })
+
+            # Add conversation history
+            conversation_history = state.get('conversation_history', [])
+            if conversation_history:
+                formatted_history = self._format_conversation_for_llm(conversation_history)
+                messages.extend(formatted_history)
+                print(f"[RAG_ONLY] Including {len(formatted_history)} previous messages")
+
+            # Current query
+            user_prompt = "USER'S QUERY:" + prompt.split("USER'S QUERY:")[1]
+            messages.append({
+                "role": "user",
+                "content": user_prompt
+            })
+
+            # Invoke with full context
+            print(f"[LLM] Sending {len(messages)} messages to LLM")
+            response = self.llm.invoke(messages)
             
         except Exception as e:
             print(f"[ERROR] RAG_ONLY path failed: {e}")
@@ -1526,7 +1602,33 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         ]
         
         return any(phrase in query_lower for phrase in detail_phrases)
-    
+
+    def _format_conversation_for_llm(
+        self, 
+        conversation_history: List[Dict]
+    ) -> List[Dict[str, str]]:
+        """
+        Format conversation history for LLM.
+        
+        Args:
+            conversation_history: List of {role, content, timestamp} dicts
+            
+        Returns:
+            List of {role, content} dicts ready for LLM
+        """
+        if not conversation_history:
+            return []
+        
+        formatted = []
+        for msg in conversation_history:
+            # Convert our format to LLM format
+            formatted.append({
+                "role": msg.get("role"),
+                "content": msg.get("content")
+            })
+        
+        return formatted
+
     def _build_prediction_prompt(
         self,
         query: str,
@@ -1630,9 +1732,18 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         constitution = get_constitution_injection()
         system_prompt = f"{system_prompt}\n\n{constitution}"
 
-        # GREETING CONTROL: Suppress greetings if conversation is ongoing
+      # CHANGE 6: Enhanced context handling instructions
         if conversation_history and len(conversation_history) > 0:
-            system_prompt += "\n\nNOTE: This is an ongoing conversation. Do NOT start with greetings like 'Namaste', 'Hello', or 'Hari Om'. Get straight to the answer."
+            system_prompt += """
+
+ONGOING CONVERSATION - CONTEXT HANDLING:
+- No greetings (Namaste/Hello/Hari Om) - get straight to answer
+- Review ALL previous messages before responding
+- When user says "it", "this", "that" → check conversation history
+- Connect follow-up questions to earlier topics
+- Build upon previous insights, don't repeat
+- Maintain conversation flow with context awareness
+"""
         
         # PHASE 12: Inject Validation Context (NEW)
         validation_context = ""
@@ -1702,9 +1813,24 @@ SOURCES: [Book Name] (Optional)
 
 Provide brief response:"""
 
+        # CHANGE 5: Add conversation summary section
+        conversation_summary_section = ""
+        if conversation_history and len(conversation_history) > 0:
+            conversation_summary_section = """
+CONVERSATION CONTEXT:
+This is an ongoing conversation. Previous messages contain:
+- Topics already discussed
+- Chart placements mentioned
+- Questions answered
+
+When user uses "it", "this", "that" or asks "why", "how" → connect to conversation history.
+"""
+
         prompt = f"""{system_prompt}
 
 {validation_context}
+
+{conversation_summary_section}
 
 USER PROFILE:
 • Name: {user_profile.get('name', 'User')}

@@ -398,7 +398,7 @@ class PreprocessingPipeline:
             source_book = embedded_doc.chunks[0].metadata.source_book
             collection_name = source_book.lower().replace(" ", "_").replace("-", "_")
         elif not collection_name:
-            collection_name = "astrology_default"
+            collection_name = "vedic_astrology_books_knowledge"
         
         # Create collection
         self.vector_db_builder.create_collection(collection_name, reset=reset_collection)

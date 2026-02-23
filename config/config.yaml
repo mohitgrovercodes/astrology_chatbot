@@ -41,7 +41,7 @@ rag:
   # Validation rules: 15, Interpretations: 10
   use_python_config: true
   score_threshold: 0.7
-  collection_name: astrology_knowledge
+  collection_name: vedic_astrology_books_knowledge
 
 # ============================================
 # Safety Configuration

@@ -114,7 +114,7 @@ Always be respectful of the sacred nature of Vedic astrology."""
 
     def __init__(
         self,
-        collection_name: str = "saravali_vol1",
+        collection_name: str = "vedic_astrology_books_knowledge",
         db_path: str = "data/vectordb",
         llm_provider: str = "openai",
         llm_model: Optional[str] = None,
