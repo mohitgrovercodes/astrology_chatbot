@@ -31,14 +31,14 @@ def main():
 
     input_path = Path(args.input)
     if not input_path.exists():
-        print(f"❌ File not found: {args.input}")
+        print(f"[FAIL] File not found: {args.input}")
         return
 
     # ── Backup
     if not args.no_backup:
         backup_path = input_path.with_suffix(".bak")
         shutil.copy2(input_path, backup_path)
-        print(f"💾 Backup saved: {backup_path}")
+        print(f"[SAVE] Backup saved: {backup_path}")
 
     # ── Load
     data = json.load(open(input_path, "r", encoding="utf-8"))
@@ -58,7 +58,7 @@ def main():
                 updated += 1
                 break  # only update the first matching field
 
-    print(f"✅ Set source to '{args.book}' for {updated} rules")
+    print(f"[OK] Set source to '{args.book}' for {updated} rules")
 
     # ── Save
     if isinstance(data, dict):
@@ -68,7 +68,7 @@ def main():
         output_data = rules
 
     json.dump(output_data, open(input_path, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
-    print(f"💾 Saved: {input_path}")
+    print(f"[SAVE] Saved: {input_path}")
 
     # ── Quick verify
     sample_sources = set()
@@ -77,7 +77,7 @@ def main():
             if field in r:
                 sample_sources.add(r[field])
                 break
-    print(f"🔍 Sample check (first 20 rules): {sample_sources}")
+    print(f"[SEARCH] Sample check (first 20 rules): {sample_sources}")
 
 
 if __name__ == "__main__":

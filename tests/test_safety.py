@@ -60,7 +60,7 @@ def test_query_analysis():
                 f"Expected sensitivity >= {min_sens}, got {analysis.sensitivity_level}"
     
     print("\n" + "=" * 70)
-    print("✅ All query analysis tests passed!")
+    print("[OK] All query analysis tests passed!")
 
 
 def test_response_enhancement():
@@ -123,16 +123,16 @@ def test_response_enhancement():
     assert len(enhanced) == len(raw_response), "General queries should not be enhanced"
     
     print("\n" + "=" * 70)
-    print("✅ All response enhancement tests passed!")
+    print("[OK] All response enhancement tests passed!")
 
 
 def test_clarification_flow():
-    """Test the C → B → A flow for highly sensitive queries."""
+    """Test the C -> B -> A flow for highly sensitive queries."""
     analyzer = QueryAnalyzer()
     enhancer = ResponseEnhancer()
     
     print("\n" + "=" * 70)
-    print("C → B → A FLOW TESTS")
+    print("C -> B -> A FLOW TESTS")
     print("=" * 70)
     
     # Highly sensitive query should trigger clarification (C)
@@ -147,7 +147,7 @@ def test_clarification_flow():
         print(f"   Clarifying Question:")
         print(f"   {clarifying_q}")
     
-    # Medium sensitivity should get redirect + empathy (B → A)
+    # Medium sensitivity should get redirect + empathy (B -> A)
     query = "Will I get divorced?"
     analysis = analyzer.analyze(query)
     should_clarify, _ = enhancer.should_ask_clarification(analysis)
@@ -161,11 +161,11 @@ def test_clarification_flow():
         print(f"   {analysis.positive_redirect[:100]}...")
     
     print("\n" + "=" * 70)
-    print("✅ C → B → A flow tests passed!")
+    print("[OK] C -> B -> A flow tests passed!")
 
 
 def test_full_integration():
-    """Test complete query → analysis → enhancement pipeline."""
+    """Test complete query -> analysis -> enhancement pipeline."""
     from src.safety.guardrails import analyze_query, enhance_response
     
     print("\n" + "=" * 70)
@@ -205,7 +205,7 @@ def test_full_integration():
         "Enhanced response should maintain astrological context"
     
     print("\n" + "=" * 70)
-    print("✅ Full integration test passed!")
+    print("[OK] Full integration test passed!")
 
 
 if __name__ == "__main__":
@@ -221,8 +221,8 @@ if __name__ == "__main__":
         print("\nSafety module is ready for integration with orchestrator.")
         
     except AssertionError as e:
-        print(f"\n❌ Test failed: {e}")
+        print(f"\n[FAIL] Test failed: {e}")
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[FAIL] Error: {e}")
         import traceback
         traceback.print_exc()

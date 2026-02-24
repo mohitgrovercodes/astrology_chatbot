@@ -84,39 +84,39 @@ class RuleConsolidator:
         print("=" * 60)
         
         self.stats['original_count'] = len(rules)
-        print(f"📊 Input: {len(rules)} rules")
+        print(f"[STATS] Input: {len(rules)} rules")
         
         # Step 1: Quality filtering
-        print("\n🔍 Step 1: Quality Filtering...")
+        print("\n[SEARCH] Step 1: Quality Filtering...")
         rules = self._filter_by_quality(rules)
         self.stats['after_quality_filter'] = len(rules)
-        print(f"   ✅ Kept {len(rules)} high-quality rules")
+        print(f"   [OK] Kept {len(rules)} high-quality rules")
         
         # Step 2: Exact deduplication
-        print("\n🔍 Step 2: Exact Deduplication...")
+        print("\n[SEARCH] Step 2: Exact Deduplication...")
         rules = self._deduplicate_exact(rules)
         self.stats['after_dedup'] = len(rules)
-        print(f"   ✅ Removed duplicates, {len(rules)} unique rules")
+        print(f"   [OK] Removed duplicates, {len(rules)} unique rules")
         
         # Step 3: Pattern detection
-        print("\n🔍 Step 3: Pattern Detection...")
+        print("\n[SEARCH] Step 3: Pattern Detection...")
         pattern_groups = self._detect_patterns(rules)
-        print(f"   ✅ Found {len(pattern_groups)} consolidation groups")
+        print(f"   [OK] Found {len(pattern_groups)} consolidation groups")
         
         # Step 4: Consolidate patterns
-        print("\n🔍 Step 4: Consolidating Patterns...")
+        print("\n[SEARCH] Step 4: Consolidating Patterns...")
         consolidated = self._consolidate_patterns(pattern_groups)
         
         # Step 5: Add remaining non-pattern rules
-        print("\n🔍 Step 5: Adding Non-Pattern Rules...")
+        print("\n[SEARCH] Step 5: Adding Non-Pattern Rules...")
         final_rules = self._merge_with_remaining(consolidated, rules, pattern_groups)
         
         self.stats['after_consolidation'] = len(final_rules)
         self.stats['consolidation_groups'] = len(pattern_groups)
         
         print("\n" + "=" * 60)
-        print("✅ CONSOLIDATION COMPLETE")
-        print(f"📊 Final count: {len(final_rules)} rules")
+        print("[OK] CONSOLIDATION COMPLETE")
+        print(f"[STATS] Final count: {len(final_rules)} rules")
         print(f"📉 Reduction: {self.stats['original_count'] - len(final_rules)} rules ({(1 - len(final_rules)/self.stats['original_count'])*100:.1f}%)")
         print("=" * 60)
         
@@ -498,7 +498,7 @@ class RuleConsolidator:
             if r.get('rule_id') not in consolidated_rule_ids
         ]
         
-        print(f"   ✅ Added {len(remaining)} non-pattern rules")
+        print(f"   [OK] Added {len(remaining)} non-pattern rules")
         
         return consolidated + remaining
     
@@ -545,7 +545,7 @@ def main():
     
     rules = data.get('rules', data if isinstance(data, list) else [])
     
-    print(f"   ✅ Loaded {len(rules)} rules")
+    print(f"   [OK] Loaded {len(rules)} rules")
     
     # Consolidate
     consolidator = RuleConsolidator(min_confidence=args.min_confidence)
@@ -564,23 +564,23 @@ def main():
     }
     
     # Save consolidated rules
-    print(f"\n💾 Saving consolidated rules to {args.output}...")
+    print(f"\n[SAVE] Saving consolidated rules to {args.output}...")
     
     with open(args.output, 'w', encoding='utf-8') as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
     
-    print(f"   ✅ Saved {len(consolidated_rules)} rules")
+    print(f"   [OK] Saved {len(consolidated_rules)} rules")
     
     # Save statistics if requested
     if args.stats_file:
         stats = consolidator.get_statistics()
         with open(args.stats_file, 'w', encoding='utf-8') as f:
             json.dump(stats, f, indent=2)
-        print(f"   ✅ Statistics saved to {args.stats_file}")
+        print(f"   [OK] Statistics saved to {args.stats_file}")
     
     # Print summary
     print("\n" + "=" * 60)
-    print("📊 CONSOLIDATION SUMMARY")
+    print("[STATS] CONSOLIDATION SUMMARY")
     print("=" * 60)
     print(f"Original rules:        {consolidator.stats['original_count']:,}")
     print(f"After quality filter:  {consolidator.stats['after_quality_filter']:,}")

@@ -163,7 +163,7 @@ def detect_query_type(query: str, llm=None, use_llm_confirmation: bool = True) -
         confirmed_type = confirm_query_type_with_llm(query, pattern_type, llm)
         
         if confirmed_type != pattern_type:
-            print(f"[QUERY_TYPE] LLM correction: {pattern_type} → {confirmed_type}")
+            print(f"[QUERY_TYPE] LLM correction: {pattern_type} -> {confirmed_type}")
             return confirmed_type
         else:
             print(f"[QUERY_TYPE] LLM confirmed: {confirmed_type}")
@@ -615,7 +615,7 @@ def format_validation_for_prompt(validation_result: Dict) -> str:
                 classical_ref = getattr(f, 'classical_ref', '')
             
             ref_text = f" ({classical_ref})" if classical_ref else ""
-            failures_lines.append(f"[{rule_id}] {rule_name}{ref_text}\n       → {reason}")
+            failures_lines.append(f"[{rule_id}] {rule_name}{ref_text}\n       -> {reason}")
         
         failures_text = "\n   ".join(failures_lines)
     
@@ -624,7 +624,7 @@ def format_validation_for_prompt(validation_result: Dict) -> str:
 
 **Query Type:** {query_type.title()}
 **Chart Strength:** {strength:.1f}/10
-**Validation Verdict:** {"✅ SUPPORTED" if strength >= 6.0 else "⚠️ WEAK SUPPORT" if strength >= 4.0 else "❌ VERY WEAK"}
+**Validation Verdict:** {"[OK] SUPPORTED" if strength >= 6.0 else "[WARN] WEAK SUPPORT" if strength >= 4.0 else "[FAIL] VERY WEAK"}
 
 **Critical Rule Violations:**
    {failures_text}

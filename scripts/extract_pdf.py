@@ -24,7 +24,7 @@ try:
     from src.rag.extraction.vision_extractor import VisionExtractor, ExtractionConfig
     from src.rag.extraction.pdf_processor import PDFProcessor
 except ImportError:
-    print("❌ Error: Could not import production modules.")
+    print("[FAIL] Error: Could not import production modules.")
     print("Make sure you are running from the project root.")
     sys.exit(1)
 
@@ -51,7 +51,7 @@ def main():
     pdf_path = pdf_input or default_pdf
     
     if not os.path.exists(pdf_path):
-        print(f"\n❌ File not found: {pdf_path}")
+        print(f"\n[FAIL] File not found: {pdf_path}")
         return
     
     print(f"✓ PDF found: {pdf_path}\n")
@@ -70,7 +70,7 @@ def main():
         extractor = VisionExtractor(config)
         print("✓ Engines ready\n")
     except Exception as e:
-        print(f"❌ Initialization failed: {e}")
+        print(f"[FAIL] Initialization failed: {e}")
         return
 
     while True:
@@ -96,7 +96,7 @@ def main():
                 # 1. Convert to image
                 images = pdf_processor.convert_to_images(page_num, page_num)
                 if not images:
-                    print("❌ Failed to convert PDF page")
+                    print("[FAIL] Failed to convert PDF page")
                     continue
                 image = images[0]
                 
@@ -130,14 +130,14 @@ def main():
                 print(f"Saved artifacts to: {extractor.output_dir}")
                 
             except ValueError:
-                print("❌ Invalid number")
+                print("[FAIL] Invalid number")
             except Exception as e:
-                print(f"❌ Error: {e}")
+                print(f"[FAIL] Error: {e}")
                 import traceback
                 traceback.print_exc()
 
         elif choice == '2':
-            print("\n⚠️  For robust batch processing, use 'batch_extract.py' instead.")
+            print("\n[WARN]  For robust batch processing, use 'batch_extract.py' instead.")
             print("   This tool is optimized for single-page debugging.")
             continue
 

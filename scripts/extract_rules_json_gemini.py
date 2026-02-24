@@ -60,7 +60,7 @@ Focus on rules about:
 1. **Planetary States**: Combustion, retrogression, planetary war, dignity
 2. **Divisional Confirmation**: When D9/D10/other divisionals must be checked
 3. **Lagna-Specific**: Functional benefics/malefics by ascendant
-4. **Hierarchical Logic**: Promise→Timing→Trigger workflow
+4. **Hierarchical Logic**: Promise->Timing->Trigger workflow
 5. **Lunar Considerations**: Moon's paksha, state, strength
 6. **Karmic Axis**: Rahu/Ketu effects
 7. **Strength Assessment**: Shadbala requirements, minimum thresholds
@@ -163,7 +163,7 @@ def setup_gemini(
     
     # Check if credentials are available
     if "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
-        print("⚠️  Warning: GOOGLE_APPLICATION_CREDENTIALS not set")
+        print("[WARN]  Warning: GOOGLE_APPLICATION_CREDENTIALS not set")
         print("   Set in .env file or via: export GOOGLE_APPLICATION_CREDENTIALS=path/to/key.json")
     
     # Initialize Gemini (NO deprecated parameter)
@@ -173,14 +173,14 @@ def setup_gemini(
             temperature=temperature
         )
         
-        print(f"✅ Initialized Gemini: {model}")
+        print(f"[OK] Initialized Gemini: {model}")
         print(f"   Temperature: {temperature}")
         if project_id:
             print(f"   Project: {project_id}")
         return llm
         
     except Exception as e:
-        print(f"❌ Error initializing Gemini: {e}")
+        print(f"[FAIL] Error initializing Gemini: {e}")
         print("\nTroubleshooting:")
         print("1. Check .env file has GOOGLE_APPLICATION_CREDENTIALS set")
         print("2. Verify service account has Vertex AI API access")
@@ -244,11 +244,11 @@ def load_json_chunk_file(file_path: Path) -> Dict[str, Any]:
                     "chunks": [data]
                 }
         else:
-            print(f"⚠️  Unexpected structure in {file_path.name}")
+            print(f"[WARN]  Unexpected structure in {file_path.name}")
             return {"source": file_path.stem, "chunks": []}
             
     except Exception as e:
-        print(f"❌ Error loading {file_path.name}: {e}")
+        print(f"[FAIL] Error loading {file_path.name}: {e}")
         return {"source": file_path.stem, "chunks": []}
 
 
@@ -459,7 +459,7 @@ def extract_rules_from_chunks_parallel(
     # Print error summary
     total_errors = sum(error_count.values())
     if total_errors > 0:
-        print(f"  ⚠️  Errors encountered: {total_errors} chunks")
+        print(f"  [WARN]  Errors encountered: {total_errors} chunks")
         if error_count["json_errors"] > 0:
             print(f"     - JSON parsing errors: {error_count['json_errors']} (LLM returned invalid JSON)")
         if error_count["empty_responses"] > 0:
@@ -577,10 +577,10 @@ def process_json_file(
     output_partial = file_path.parent / f"{file_path.stem}_rules_partial.json"
     
     # === PARALLEL EXTRACTION ===
-    print(f"  🚀 Extracting rules in parallel...")
+    print(f"  [LAUNCH] Extracting rules in parallel...")
     raw_rules_all = extract_rules_from_chunks_parallel(chunks, source_name, llm, max_workers)
     
-    print(f"  ✅ Extraction complete: Found {len(raw_rules_all)} raw rules")
+    print(f"  [OK] Extraction complete: Found {len(raw_rules_all)} raw rules")
     
     # === SEQUENTIAL CONVERSION (must be sequential for rule_counter) ===
     print(f"  🔄 Converting to schema...")
@@ -608,11 +608,11 @@ def process_json_file(
                     "conversion_stats": conversion_stats,
                     "rules": [r.model_dump() if hasattr(r, 'model_dump') else (r.dict() if hasattr(r, 'dict') else r) for r in all_rules]
                 }, f, indent=2, ensure_ascii=False)
-            print(f"  💾 Saved: {len(all_rules)} rules → {output_partial.name}")
+            print(f"  [SAVE] Saved: {len(all_rules)} rules -> {output_partial.name}")
         except Exception as e:
-            print(f"  ⚠️  Could not save: {e}")
+            print(f"  [WARN]  Could not save: {e}")
     
-    print(f"  ✅ Extracted {len(all_rules)} rules from {file_path.name}")
+    print(f"  [OK] Extracted {len(all_rules)} rules from {file_path.name}")
     print(f"     (Attempted: {conversion_stats['attempted']}, Successful: {conversion_stats['successful']}, Failed: {conversion_stats['failed']})")
     
     return all_rules
@@ -835,7 +835,7 @@ def convert_to_rule_schema(raw_rule: Dict[str, Any], rule_id: str) -> Optional[V
         rule_name = raw_rule.get('rule_name', 'Unknown')
         
         # Print detailed error message
-        print(f"  ⚠️  Error converting rule '{rule_name}': {error_details}")
+        print(f"  [WARN]  Error converting rule '{rule_name}': {error_details}")
         
         # Debug output for common issues
         if "NoneType" in error_details:
@@ -861,7 +861,7 @@ def deduplicate_rules(rules: List[VedicValidationRule]) -> List[VedicValidationR
             seen.add(sig)
             unique_rules.append(rule)
     
-    print(f"\n🔍 Deduplication: {len(rules)} → {len(unique_rules)} rules")
+    print(f"\n[SEARCH] Deduplication: {len(rules)} -> {len(unique_rules)} rules")
     return unique_rules
 
 
@@ -904,19 +904,19 @@ def load_checkpoint_if_exists(checkpoint_file: Path) -> List[Dict]:
             rules = data.get("rules", [])
             files_done = data.get("files_processed", 0)
             
-            print(f"✅ Checkpoint contains:")
+            print(f"[OK] Checkpoint contains:")
             print(f"   - {len(rules)} rules")
             print(f"   - {files_done} files processed")
             
             response = input("\n❓ Load checkpoint? (y/n): ").strip().lower()
             if response == 'y':
-                print("✅ Loading checkpoint data...")
+                print("[OK] Loading checkpoint data...")
                 return rules, files_done
             else:
                 print("⏭️  Skipping checkpoint, starting fresh...")
                 return [], 0
         except Exception as e:
-            print(f"⚠️  Could not load checkpoint: {e}")
+            print(f"[WARN]  Could not load checkpoint: {e}")
             return [], 0
     return [], 0
 
@@ -937,12 +937,12 @@ def main():
     # Setup
     input_dir = Path(args.input_dir)
     if not input_dir.exists():
-        print(f"❌ Input directory not found: {input_dir}")
+        print(f"[FAIL] Input directory not found: {input_dir}")
         return
     
-    print("🚀 Vedic Validation Rule Extraction (JSON + Gemini) - PARALLEL MODE")
+    print("[LAUNCH] Vedic Validation Rule Extraction (JSON + Gemini) - PARALLEL MODE")
     print(f"📁 Input: {input_dir}")
-    print(f"💾 Output: {args.output}")
+    print(f"[SAVE] Output: {args.output}")
     print(f"⚡ Workers: {args.max_workers} concurrent")
     print("=" * 60)
     
@@ -986,7 +986,7 @@ def main():
             
             # CHECKPOINT: Save after EVERY file (not every 5!)
             if len(all_rules) > 0:
-                print(f"💾 Checkpoint: Saving {len(all_rules)} rules...")
+                print(f"[SAVE] Checkpoint: Saving {len(all_rules)} rules...")
                 try:
                     with open(checkpoint_file, "w", encoding='utf-8') as f:
                         json.dump({
@@ -996,13 +996,13 @@ def main():
                             "rules_count": len(all_rules),
                             "rules": [r if isinstance(r, dict) else (r.model_dump() if hasattr(r, 'model_dump') else r.dict()) for r in all_rules]
                         }, f, indent=2, ensure_ascii=False)
-                    print(f"✅ Checkpoint saved: {idx}/{len(json_files)} files, {len(all_rules)} rules")
+                    print(f"[OK] Checkpoint saved: {idx}/{len(json_files)} files, {len(all_rules)} rules")
                 except Exception as e:
-                    print(f"⚠️  Checkpoint failed: {e}")
+                    print(f"[WARN]  Checkpoint failed: {e}")
         
         except KeyboardInterrupt:
-            print(f"\n\n⚠️  Interrupted by user at file {idx}/{len(json_files)}")
-            print(f"💾 Saving emergency checkpoint with {len(all_rules)} rules...")
+            print(f"\n\n[WARN]  Interrupted by user at file {idx}/{len(json_files)}")
+            print(f"[SAVE] Saving emergency checkpoint with {len(all_rules)} rules...")
             try:
                 with open(checkpoint_file, "w", encoding='utf-8') as f:
                     json.dump({
@@ -1012,21 +1012,21 @@ def main():
                         "rules_count": len(all_rules),
                         "rules": [r if isinstance(r, dict) else (r.model_dump() if hasattr(r, 'model_dump') else r.dict()) for r in all_rules]
                     }, f, indent=2, ensure_ascii=False)
-                print(f"✅ Emergency checkpoint saved to: {checkpoint_file}")
+                print(f"[OK] Emergency checkpoint saved to: {checkpoint_file}")
                 print(f"   Files processed: {idx}/{len(json_files)}")
                 print(f"   Rules extracted: {len(all_rules)}")
-                print(f"\n💡 To continue later, load this file and process remaining files.")
+                print(f"\n[IDEA] To continue later, load this file and process remaining files.")
             except Exception as e:
-                print(f"❌ Could not save emergency checkpoint: {e}")
+                print(f"[FAIL] Could not save emergency checkpoint: {e}")
             return
         
         except Exception as e:
-            print(f"❌ Error processing {file_path.name}: {e}")
+            print(f"[FAIL] Error processing {file_path.name}: {e}")
             print("   Continuing with next file...")
             continue
     
     # Final checkpoint after all files
-    print(f"\n💾 Final checkpoint: Saving {len(all_rules)} rules...")
+    print(f"\n[SAVE] Final checkpoint: Saving {len(all_rules)} rules...")
     try:
         with open(checkpoint_file, "w", encoding='utf-8') as f:
             json.dump({
@@ -1035,12 +1035,12 @@ def main():
                 "rules_count": len(all_rules),
                 "rules": [r if isinstance(r, dict) else (r.model_dump() if hasattr(r, 'model_dump') else r.dict()) for r in all_rules]
             }, f, indent=2, ensure_ascii=False)
-        print(f"✅ All rules checkpointed")
+        print(f"[OK] All rules checkpointed")
     except Exception as e:
-        print(f"⚠️  Final checkpoint failed: {e}")
+        print(f"[WARN]  Final checkpoint failed: {e}")
     
     # Deduplicate
-    print(f"\n🔍 Deduplication: {len(all_rules)} → ", end="")
+    print(f"\n[SEARCH] Deduplication: {len(all_rules)} -> ", end="")
     unique_rules = deduplicate_rules(all_rules)
     print(f"{len(unique_rules)} rules")
     
@@ -1061,17 +1061,17 @@ def main():
     }
     
     # SAVE IMMEDIATELY
-    print(f"\n💾 Saving {len(unique_rules)} rules...")
+    print(f"\n[SAVE] Saving {len(unique_rules)} rules...")
     try:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(ruleset_dict, f, indent=2, ensure_ascii=False)
-        print(f"✅ Rules saved to: {output_path}")
+        print(f"[OK] Rules saved to: {output_path}")
     except Exception as e:
-        print(f"❌ Error saving rules: {e}")
+        print(f"[FAIL] Error saving rules: {e}")
         return
     
     # NOW try to generate statistics (optional, won't lose data if it fails)
-    print("\n📊 Generating statistics...")
+    print("\n[STATS] Generating statistics...")
     try:
         stats = generate_statistics(unique_rules)
         
@@ -1086,8 +1086,8 @@ def main():
         
         # Print summary
         print("\n" + "=" * 60)
-        print("✅ EXTRACTION COMPLETE")
-        print(f"📊 Total Rules Extracted: {len(unique_rules)}")
+        print("[OK] EXTRACTION COMPLETE")
+        print(f"[STATS] Total Rules Extracted: {len(unique_rules)}")
         print(f"\n📈 Statistics:")
         print(f"  By Category:")
         for cat, count in sorted(stats["by_category"].items()):
@@ -1098,19 +1098,19 @@ def main():
         print(f"  By Stage:")
         for stage, count in sorted(stats["by_stage"].items()):
             print(f"    - {stage}: {count}")
-        print(f"\n💾 Saved to: {output_path}")
+        print(f"\n[SAVE] Saved to: {output_path}")
         print(f"🗑️  Clean up checkpoints:")
         print(f"    rm checkpoint_rules.json")
         print(f"    rm *_rules_partial.json  # Per-file checkpoints")
         print("=" * 60)
         
     except Exception as e:
-        print(f"\n⚠️  Warning: Statistics generation failed: {e}")
+        print(f"\n[WARN]  Warning: Statistics generation failed: {e}")
         print("   But all rules are saved successfully!")
         print("\n" + "=" * 60)
-        print("✅ EXTRACTION COMPLETE")
-        print(f"📊 Total Rules Extracted: {len(unique_rules)}")
-        print(f"💾 Saved to: {output_path}")
+        print("[OK] EXTRACTION COMPLETE")
+        print(f"[STATS] Total Rules Extracted: {len(unique_rules)}")
+        print(f"[SAVE] Saved to: {output_path}")
         print(f"🗑️  Clean up checkpoint: rm checkpoint_rules.json")
         print("=" * 60)
 

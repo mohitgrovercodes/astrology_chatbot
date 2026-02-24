@@ -182,6 +182,17 @@ def calculate_current_dasha(
         
         periods = chart.get_current_dasha(calc_dt)
         
+        # Get upcoming antardashas for timeline context
+        all_ads = chart.dasha.get_antardashas(periods["mahadasha"])
+        upcoming_ads = []
+        for ad in all_ads:
+            if ad.end_date > calc_dt:
+                upcoming_ads.append({
+                    "planet": ad.lord.name,
+                    "start": ad.start_date.strftime("%Y-%m-%d"),
+                    "end": ad.end_date.strftime("%Y-%m-%d")
+                })
+        
         # Format for LLM consumption
         result = {
             "mahadasha": {
@@ -199,7 +210,14 @@ def calculate_current_dasha(
                 "start": periods["pratyantardasha"].start_date.strftime("%Y-%m-%d"),
                 "end": periods["pratyantardasha"].end_date.strftime("%Y-%m-%d")
             },
-            "sequence": f"{periods['mahadasha'].lord.name}/{periods['antardasha'].lord.name}/{periods['pratyantardasha'].lord.name}"
+            "upcoming_antardashas": upcoming_ads,
+            "dasha_sequence": f"{periods['mahadasha'].lord.name}/{periods['antardasha'].lord.name}/{periods['pratyantardasha'].lord.name}",
+            "calculation_details": {
+                "moon_longitude": round(chart.dasha.moon_longitude, 2),
+                "moon_nakshatra": chart.dasha.moon_nakshatra.name,
+                "first_dasha_lord": chart.dasha.dasha_balance.first_lord.name,
+                "balance_at_birth_years": round(chart.dasha.dasha_balance.remaining_years, 2)
+            }
         }
         return result
     except Exception as e:

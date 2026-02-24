@@ -97,9 +97,9 @@ class PromptBuilder:
     
     def _format_chart(self, chart: Dict, system: str) -> str:
         if system.lower() == "vedic":
-            return f"Lagna: {chart.get('lagna', '?')}, Rashi: {chart.get('rashi', '?')}, Sun: {chart.get('sun_sign', '?')}"
+            return f"Lagna: {chart.get('lagna', {}).get('sign', '?')}, Rashi: {chart.get('planets', {}).get('MOON', {}).get('sign', '?')}, Sun: {chart.get('planets', {}).get('SUN', {}).get('sign', '?')}"
         else:
-            return f"Sun: {chart.get('sun_sign', '?')}, Moon: {chart.get('moon_sign', '?')}, Asc: {chart.get('ascendant', '?')}"
+            return f"Sun: {chart.get('planets', {}).get('SUN', {}).get('sign', '?')}, Moon: {chart.get('planets', {}).get('MOON', {}).get('sign', '?')}, Asc: {chart.get('ascendant', {}).get('sign', '?')}"
     
     def _format_conditions(self, transits: Optional[Dict], dasha: Optional[Dict]) -> str:
         parts = [f"Date: {datetime.now().strftime('%B %d, %Y')}"]
@@ -165,7 +165,7 @@ VOICE — English names first, Sanskrit in parentheses. Example: "Mars (Mangal)"
     
     def _get_instructions(self, intent: str, language: str = "en") -> str:
         """Generate response instructions dynamically based on intent AND language."""
-        from .language_detector import get_language_detector
+        from src.locales.language_detector import get_language_detector
         detector = get_language_detector()
         lang_name = detector.get_language_name(language)
 

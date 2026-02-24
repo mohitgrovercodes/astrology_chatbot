@@ -353,7 +353,7 @@ if __name__ == "__main__":
     print()
     
     print("=" * 70)
-    print("✅ All tests passed!")
+    print("[OK] All tests passed!")
     print("=" * 70)
     print()
     print("Storage location: data/conversations/")

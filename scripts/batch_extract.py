@@ -105,7 +105,7 @@ def main():
             elif os.path.exists(default_dir / val):
                  args.pdf_path = str(default_dir / val)
             else:
-                print(f"❌ File not found: {val}")
+                print(f"[FAIL] File not found: {val}")
     
     # 2. Start Page
     if args.start is None:
@@ -116,7 +116,7 @@ def main():
                 if args.start < 1: raise ValueError
                 break
             except ValueError:
-                print("❌ Invalid input. Please enter a positive integer.")
+                print("[FAIL] Invalid input. Please enter a positive integer.")
                 
     # 3. End Page
     if args.end is None:
@@ -124,15 +124,15 @@ def main():
             try:
                 val = input("\n[3/4] Enter End Page (e.g., 50): ").strip()
                 if not val:
-                    print("❌ End page is required for batch processing.")
+                    print("[FAIL] End page is required for batch processing.")
                     continue
                 args.end = int(val)
                 if args.end < args.start:
-                    print(f"❌ End page must be at least {args.start}.")
+                    print(f"[FAIL] End page must be at least {args.start}.")
                     continue
                 break
             except ValueError:
-                print("❌ Invalid input. Please enter a positive integer.")
+                print("[FAIL] Invalid input. Please enter a positive integer.")
 
     # 4. Workers
     if args.workers is None:
@@ -153,7 +153,7 @@ def main():
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(default_creds)
             print(f"🔑 Using Credentials: {default_creds}")
         else:
-            print("❌ Error: GOOGLE_APPLICATION_CREDENTIALS not set and not found in root.")
+            print("[FAIL] Error: GOOGLE_APPLICATION_CREDENTIALS not set and not found in root.")
             return
 
     print("[VERTEX AI] Configuring for Google Cloud Vertex AI...")
@@ -164,12 +164,12 @@ def main():
         primary_model="gemini-2.5-flash-lite",  # Fast for text-heavy pages
         hybrid_table_model="gemini-2.5-flash",  # Better for table-heavy pages
         upgrade_model="gemini-2.5-pro",         # Fallback for low confidence
-        enable_hybrid_strategy=True,            # ✅ Use Flash for tables, Lite for text
+        enable_hybrid_strategy=True,            # [OK] Use Flash for tables, Lite for text
         
         # Quality Settings
         confidence_threshold=0.9,               # Strict 90% threshold for Pro fallback
         enable_auto_upgrade=True,
-        enable_content_validation=True,         # ✅ Validate and adjust confidence
+        enable_content_validation=True,         # [OK] Validate and adjust confidence
         
         # Performance
         enable_parallel=True,

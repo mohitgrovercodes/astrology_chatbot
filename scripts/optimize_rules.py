@@ -3,7 +3,7 @@
 Master Rule Optimization Script
 
 Runs all three optimization steps in sequence:
-1. Consolidation (10K → 3K rules)
+1. Consolidation (10K -> 3K rules)
 2. Indexing (fast lookup tables)
 3. Tier Classification (progressive validation)
 
@@ -36,7 +36,7 @@ def run_step(step_name: str, command: list) -> bool:
     """Run a single optimization step"""
     
     print("\n" + "=" * 70)
-    print(f"🚀 STEP: {step_name}")
+    print(f"[LAUNCH] STEP: {step_name}")
     print("=" * 70)
     print(f"Command: {' '.join(command)}\n")
     
@@ -48,15 +48,15 @@ def run_step(step_name: str, command: list) -> bool:
             text=True
         )
         
-        print(f"\n✅ {step_name} completed successfully!")
+        print(f"\n[OK] {step_name} completed successfully!")
         return True
         
     except subprocess.CalledProcessError as e:
-        print(f"\n❌ {step_name} failed!")
+        print(f"\n[FAIL] {step_name} failed!")
         print(f"Error: {e}")
         return False
     except FileNotFoundError:
-        print(f"\n❌ Script not found!")
+        print(f"\n[FAIL] Script not found!")
         print(f"Make sure all scripts are in the same directory.")
         return False
 
@@ -152,7 +152,7 @@ def main():
     print("=" * 70)
     print(f"📥 Input:           {args.input}")
     print(f"📤 Output dir:      {output_dir}")
-    print(f"📊 Min confidence:  {args.min_confidence}")
+    print(f"[STATS] Min confidence:  {args.min_confidence}")
     print(f"🎯 Tier 1 target:   {args.tier1_size} rules (default: 300 for 15+ books)")
     print(f"🎯 Tier 2 target:   {args.tier2_size} rules (default: 800 for 15+ books)")
     print(f"🎯 Tier 3 target:   {args.tier3_size} rules (default: 3000 for 15+ books)")
@@ -176,7 +176,7 @@ def main():
         results['consolidation'] = run_step("CONSOLIDATION", step1_cmd)
         
         if not results['consolidation']:
-            print("\n❌ Pipeline failed at consolidation step!")
+            print("\n[FAIL] Pipeline failed at consolidation step!")
             sys.exit(1)
     else:
         print("\n⏭️  Skipping consolidation (using existing file)")
@@ -196,7 +196,7 @@ def main():
         results['indexing'] = run_step("INDEXING", step2_cmd)
         
         if not results['indexing']:
-            print("\n❌ Pipeline failed at indexing step!")
+            print("\n[FAIL] Pipeline failed at indexing step!")
             sys.exit(1)
     else:
         print("\n⏭️  Skipping indexing")
@@ -218,7 +218,7 @@ def main():
         results['tiering'] = run_step("TIER CLASSIFICATION", step3_cmd)
         
         if not results['tiering']:
-            print("\n❌ Pipeline failed at tier classification step!")
+            print("\n[FAIL] Pipeline failed at tier classification step!")
             sys.exit(1)
     else:
         print("\n⏭️  Skipping tier classification")
@@ -230,14 +230,14 @@ def main():
     
     # Print final summary
     print("\n" + "=" * 70)
-    print("✅ OPTIMIZATION PIPELINE COMPLETE!")
+    print("[OK] OPTIMIZATION PIPELINE COMPLETE!")
     print("=" * 70)
     print(f"⏱️  Total time: {duration}")
     print(f"\n📁 Output files:")
     print(f"   • {consolidated_file}")
     print(f"   • {indexed_file}")
     print(f"   • {tiered_file}")
-    print(f"\n📊 Statistics:")
+    print(f"\n[STATS] Statistics:")
     print(f"   • {consolidation_stats}")
     print(f"   • {indexing_stats}")
     print(f"   • {tier_analysis}")
@@ -268,7 +268,7 @@ def main():
         print(f"   Tier 3 (Detailed):      {tier_sizes.get('tier3_actual', 0)} rules")
         print(f"   Tier 4 (Comprehensive): {tier_sizes.get('tier4_actual', 0)} rules")
     
-    print("\n💡 Next steps:")
+    print("\n[IDEA] Next steps:")
     print("   1. Review statistics in stats/ directory")
     print("   2. Test performance with sample chart")
     print("   3. Integrate indexed_rules.json into your validation engine")

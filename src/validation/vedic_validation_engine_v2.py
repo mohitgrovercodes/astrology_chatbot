@@ -7,8 +7,8 @@ Reads check_logic from tiered_rules.json and evaluates each rule
 against chart data using the LLM.
 
 Provider is configured via LLM_PROVIDER env var (default: openai).
-    LLM_PROVIDER=openai  → uses gpt-4o-mini
-    LLM_PROVIDER=free    → uses Ollama llama3.2:3b
+    LLM_PROVIDER=openai  -> uses gpt-4o-mini
+    LLM_PROVIDER=free    -> uses Ollama llama3.2:3b
 
 Usage:
     python -m src.validation.vedic_validation_engine_v2 --tier 1 --query marriage
@@ -43,7 +43,7 @@ except ImportError:
         LLMFACTORY_AVAILABLE = True
     except ImportError:
         LLMFACTORY_AVAILABLE = False
-        print("⚠️  LLMFactory not found. Ensure src/llm/factory.py exists.")
+        print("[WARN] LLMFactory not found. Ensure src/llm/factory.py exists.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -149,14 +149,14 @@ class VedicValidationEngineV2:
         # Create LLM via factory (respects LLM_PROVIDER env var)
         _llm = LLMFactory.create(
             purpose="validation",
-            model=model,           # None → factory picks default
+            model=model,           # None -> factory picks default
             temperature=0,
             max_tokens=8192,
             use_rate_limiting=True,
             rate_limit_delay=2.0,
         )
-        print(f"🤖 LLM Provider: {LLMFactory._determine_provider()}")
-        print(f"🤖 Model:        {model or LLMFactory._select_model_for_provider(LLMFactory._determine_provider(), 'validation')}")
+        print(f"[LLM] LLM Provider: {LLMFactory._determine_provider()}")
+        print(f"[LLM] Model:        {model or LLMFactory._select_model_for_provider(LLMFactory._determine_provider(), 'validation')}")
 
         self.llm   = _llm
         self.chain = EVAL_PROMPT | self.llm
@@ -367,7 +367,7 @@ class VedicValidationEngineV2:
             return parsed
 
         except Exception as e:
-            print(f"\n   ⚠️  LLM error ({type(e).__name__}): {e}")
+            print(f"\n   [ERROR] LLM error ({type(e).__name__}): {e}")
             return [
                 {
                     "rule_id":        r["rule_id"],
@@ -414,7 +414,7 @@ class VedicValidationEngineV2:
             applicable = indexed_rules
             all_rules  = self._get_rules_for_tier(tier)
             print(f"  Total in Tier 1-{tier}:         {len(all_rules)}")
-            print(f"  Index hit ✅                 {len(applicable)} rules "
+            print(f"  Index hit [OK]               {len(applicable)} rules "
                   f"(vs {len(all_rules)} linear scan)")
             if stage:
                 print(f"  Stage filter:               '{stage}'")
@@ -425,13 +425,13 @@ class VedicValidationEngineV2:
             if stage:
                 applicable = self._filter_by_stage(applicable, stage)
             print(f"  Total in Tier 1-{tier}:         {len(all_rules)}")
-            print(f"  Linear scan ⚠️               {len(applicable)} applicable "
+            print(f"  Linear scan [WARN]           {len(applicable)} applicable "
                   f"(index not found)")
             if stage:
                 print(f"  Filtered to '{stage}' stage: {len(applicable)}")
 
         if not applicable:
-            print("  ⚠️  No applicable rules found.")
+            print("  [WARN] No applicable rules found.")
             print("  Common query types: marriage, career, finance, health, children")
             return ValidationResult(
                 query_type=query_type, tier_used=tier,
@@ -459,14 +459,14 @@ class VedicValidationEngineV2:
             # Also cap at first 80 rules ordered by check_order
             applicable.sort(key=lambda r: r.get("check_order", 999))
             applicable = applicable[:80]
-            print(f"  Live chat filter:           {before} → {len(applicable)} rules "
+            print(f"  Live chat filter:           {before} -> {len(applicable)} rules "
                   f"(critical+high, non-yoga, capped at 80)")
 
         # Effective batch size: larger batches = fewer API calls
         eff_batch = 15 if live_chat else self.batch_size
 
         total_batches = (len(applicable) + eff_batch - 1) // eff_batch
-        print(f"  Batches:                    {total_batches} × {eff_batch} rules")
+        print(f"  Batches:                    {total_batches} x {eff_batch} rules")
         print(f"  Workers:                    {self.max_workers} parallel")
         print(f"\n  Evaluating...\n")
 
@@ -501,7 +501,7 @@ class VedicValidationEngineV2:
                           flush=True)
                 except FutureTimeout:
                     timed_out = True
-                    print(f"\n  ⏱️  Timeout — stopping early")
+                    print(f"\n  [TIMEOUT] Timeout - stopping early")
                     break
 
         # ── Process results in original order ─────────────────────────────
@@ -538,7 +538,7 @@ class VedicValidationEngineV2:
                     or "combination" in category
                     or any(kw in rule_name_lower for kw in YOGA_KEYWORDS)
                 )
-                # Downgrade yoga-absence failures: critical → high
+                # Downgrade yoga-absence failures: critical -> high
                 if not passed and is_yoga_rule and severity == "critical":
                     severity = "high"
 
@@ -572,11 +572,11 @@ class VedicValidationEngineV2:
                         halt_triggered = True
                         halt_rule_name = rule.get("rule_name", rid)
 
-            status = "🛑 HALT" if halt_triggered else f"{batch_failed} failed"
+            status = "[HALT]" if halt_triggered else f"{batch_failed} failed"
             print(f"  Batch {batch_idx+1}: {status}")
 
             if halt_triggered:
-                print(f"\n  🛑 Halt triggered by: {halt_rule_name}")
+                print(f"\n  [HALT] Halt triggered by: {halt_rule_name}")
                 break
 
         # Aggregate
@@ -635,13 +635,13 @@ class VedicValidationEngineV2:
         print(f"  Critical failures:  {len(r.critical_failures)}")
         print(f"  High failures:      {len(r.high_failures)}")
         print(f"  Strength:           {r.overall_strength:.1f} / 10")
-        print(f"  Halt triggered:     {'YES ⛔' if r.halt_triggered else 'No ✅'}")
+        print(f"  Halt triggered:     {'YES [HALT]' if r.halt_triggered else 'No [OK]'}")
         print(f"  Time:               {r.elapsed_seconds:.1f}s")
-        print(f"  Can proceed:        {'YES ✅' if r.can_proceed else 'NO ❌'}")
+        print(f"  Can proceed:        {'YES [OK]' if r.can_proceed else 'NO [ERROR]'}")
         print(f"\n  {r.reasoning_summary}")
 
         if r.critical_failures:
-            print(f"\n  🚨 CRITICAL FAILURES:")
+            print(f"\n  [CRITICAL FAILURES]:")
             for f in r.critical_failures[:5]:
                 print(f"     [{f.rule_id}] {f.rule_name}")
                 print(f"              Reason: {f.reason}")
@@ -650,7 +650,7 @@ class VedicValidationEngineV2:
                     print(f"              Note:   {f.recommendation}")
 
         if r.high_failures:
-            print(f"\n  ⚠️  HIGH FAILURES (first 3):")
+            print(f"\n  [HIGH FAILURES] (first 3):")
             for f in r.high_failures[:3]:
                 print(f"     [{f.rule_id}] {f.rule_name}")
                 print(f"              {f.reason}")
@@ -686,7 +686,7 @@ if __name__ == "__main__":
 
     # ── Sample chart (replace with real VedicEngine output) ──────────────────
     # Astronomically valid: Venus in Aries (28° from Sun in Taurus), Mercury conjunct Sun
-    # Mars lagna (Aries) → Mars is lagna lord, also first dasa lord by BPHS method
+    # Mars lagna (Aries) -> Mars is lagna lord, also first dasa lord by BPHS method
     sample_chart = {
         "lagna": "Aries", "lagna_degrees": 15.23,
         "moon_sign": "Cancer", "sun_sign": "Taurus",

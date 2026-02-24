@@ -216,38 +216,38 @@ Analyze the user's query to determine:
 1. How clear and resolvable is it? (1.0 = perfectly clear with context, 0.0 = completely vague/ambiguous)
 2. Can we confidently resolve references without changing meaning?
 
-⚠️ CRITICAL: Be LIBERAL with confidence scores! Most follow-up questions have clear context.
+[WARN] CRITICAL: Be LIBERAL with confidence scores! Most follow-up questions have clear context.
 
-📊 SCORING GUIDELINES (determines bot behavior):
-• Score > 0.6 → AUTO-EXPAND (bot immediately expands references and answers)
-• Score 0.3-0.6 → ADD HINT (bot adds minimal context hint)
-• Score < 0.3 → ASK CLARIFICATION (bot asks user what they mean)
+[STATS] SCORING GUIDELINES (determines bot behavior):
+• Score > 0.6 -> AUTO-EXPAND (bot immediately expands references and answers)
+• Score 0.3-0.6 -> ADD HINT (bot adds minimal context hint)
+• Score < 0.3 -> ASK CLARIFICATION (bot asks user what they mean)
 
-✅ EXAMPLES - SCORE HIGH (0.7-1.0) - AUTO-EXPAND:
+[OK] EXAMPLES - SCORE HIGH (0.7-1.0) - AUTO-EXPAND:
 
 Query: "Tell me more about it"
 Context: "Your moon sign is Gemini"
-→ Score: 0.9
-→ Reasoning: "it" clearly = Gemini moon (single recent topic)
+-> Score: 0.9
+-> Reasoning: "it" clearly = Gemini moon (single recent topic)
 
 Query: "Why that time?"
 Context: "You will get married in March 2026"
-→ Score: 0.95
-→ Reasoning: "that time" clearly = March 2026
+-> Score: 0.95
+-> Reasoning: "that time" clearly = March 2026
 
-⚠️ EXAMPLES - SCORE MEDIUM (0.3-0.6) - ADD HINT:
+[WARN] EXAMPLES - SCORE MEDIUM (0.3-0.6) - ADD HINT:
 
 Query: "What else should I know?"
 Context: "Moon in Gemini. Career prospects are good."
-→ Score: 0.5
-→ Reasoning: Two topics (moon, career), unclear which one
+-> Score: 0.5
+-> Reasoning: Two topics (moon, career), unclear which one
 
-❌ EXAMPLES - SCORE LOW (0.0-0.3) - ASK CLARIFICATION:
+[FAIL] EXAMPLES - SCORE LOW (0.0-0.3) - ASK CLARIFICATION:
 
 Query: "Is this good?"
 Context: [4+ topics: moon sign, career, marriage, health]
-→ Score: 0.2
-→ Reasoning: Multiple topics, "this" is too vague
+-> Score: 0.2
+-> Reasoning: Multiple topics, "this" is too vague
 
 PREVIOUS CONVERSATION:
 {conv_text}
@@ -322,7 +322,7 @@ Remember: Higher score = More confident = Bot answers immediately!
         # STEP 2: Apply strategy based on score
         # HIGH CONFIDENCE (> 0.6): Auto-expand
         if ambiguity_score > 0.6 and can_resolve:
-            print(f"  → Strategy: AUTO-EXPAND")
+            print(f"  -> Strategy: AUTO-EXPAND")
             
             expansion_prompt = f"""Expand vague references in: "{current_query}"
 
@@ -352,7 +352,7 @@ Respond with ONLY the expanded query.
         
         # MEDIUM CONFIDENCE (0.3-0.6): Add hint
         elif 0.3 <= ambiguity_score <= 0.6:
-            print(f"  → Strategy: HINT")
+            print(f"  -> Strategy: HINT")
             hinted = f"Regarding {referenced_topic}: {current_query}"
             
             return {
@@ -365,7 +365,7 @@ Respond with ONLY the expanded query.
         
         # LOW CONFIDENCE (< 0.3): Ask for clarification
         else:
-            print(f"  → Strategy: ASK_CLARIFICATION")
+            print(f"  -> Strategy: ASK_CLARIFICATION")
             clarification_q = f"Could you clarify what you're referring to regarding {referenced_topic}?"
             
             return {
@@ -472,12 +472,12 @@ class EnhancedSessionManager:
                 client = redis.Redis(host=host, port=6379, db=0, decode_responses=True, socket_connect_timeout=2)
                 client.ping()
                 self.redis = client
-                print(f"[SESSION] ✅ Redis connected on {host}:6379")
+                print(f"[SESSION] [OK] Redis connected on {host}:6379")
                 break
             except Exception as e:
                 print(f"[SESSION] Redis {host}:6379 failed: {e}")
         if not self.redis:
-            print("[SESSION] ❌ Redis not available on any host — sessions will not persist")
+            print("[SESSION] [FAIL] Redis not available on any host — sessions will not persist")
     
     def get_user_profile(self, user_id: str):
         if not self.redis:
@@ -529,7 +529,7 @@ class EnhancedSessionManager:
                 86400,
                 json.dumps(summary_data)
             )
-            print(f"[SUMMARY] 💾 Stored conversation summary at key: {key}")
+            print(f"[SUMMARY] Stored conversation summary at key: {key}")
         except Exception as e:
             print(f"[SUMMARY] Error storing summary: {e}")
     
@@ -541,10 +541,10 @@ class EnhancedSessionManager:
             print(f"[REDIS] GET key={key}")
             data = self.redis.get(key)
             if data:
-                print(f"[REDIS] ✅ Found chart in Redis")
+                print(f"[REDIS] Found chart in Redis")
                 return json.loads(data)
             else:
-                print(f"[REDIS] ❌ No chart found at key: {key}")
+                print(f"[REDIS] No chart found at key: {key}")
                 return None
         except Exception as e:
             print(f"[SESSION] ERROR: Failed to get chart data for {user_id}: {e}")
@@ -558,10 +558,10 @@ class EnhancedSessionManager:
             print(f"[REDIS] GET key={key}")
             data = self.redis.get(key)
             if data:
-                print(f"[REDIS] ✅ Found dasha in Redis")
+                print(f"[REDIS] Found dasha in Redis")
                 return json.loads(data)
             else:
-                print(f"[REDIS] ❌ No dasha found at key: {key}")
+                print(f"[REDIS] No dasha found at key: {key}")
                 return None
         except Exception as e:
             print(f"[SESSION] ERROR: Failed to get dasha data for {user_id}: {e}")
@@ -575,10 +575,10 @@ class EnhancedSessionManager:
             print(f"[REDIS] GET key={key}")
             data = self.redis.get(key)
             if data:
-                print(f"[REDIS] ✅ Found transit in Redis")
+                print(f"[REDIS] Found transit in Redis")
                 return json.loads(data)
             else:
-                print(f"[REDIS] ❌ No transit found at key: {key}")
+                print(f"[REDIS] No transit found at key: {key}")
                 return None
         except Exception as e:
             print(f"[SESSION] ERROR: Failed to get transit data for {user_id}: {e}")
@@ -699,7 +699,7 @@ class EnhancedSessionManager:
             key = f"session:{user_id}:chart"
             print(f"[REDIS] STORE key={key}")
             self.redis.setex(key, 604800, json.dumps(chart_data))
-            print(f"[CACHE] ✅ Chart stored (TTL: 7d)")
+            print(f"[CACHE] [OK] Chart stored (TTL: 7d)")
         except Exception as e:
             print(f"[CACHE] Error storing chart: {e}")
             pass
@@ -711,7 +711,7 @@ class EnhancedSessionManager:
             key = f"session:{user_id}:dasha"
             print(f"[REDIS] STORE key={key}")
             self.redis.setex(key, 604800, json.dumps(dasha_data))
-            print(f"[CACHE] ✅ Dasha stored (TTL: 7d)")
+            print(f"[CACHE] [OK] Dasha stored (TTL: 7d)")
         except Exception as e:
             print(f"[CACHE] Error storing dasha: {e}")
             pass
@@ -723,7 +723,7 @@ class EnhancedSessionManager:
             key = f"session:{user_id}:transit"
             print(f"[REDIS] STORE key={key}")
             self.redis.setex(key, 7200, json.dumps(transit_data))
-            print(f"[CACHE] ✅ Transit stored (TTL: 2h)")
+            print(f"[CACHE] [OK] Transit stored (TTL: 2h)")
         except Exception as e:
             print(f"[CACHE] Error storing transit: {e}")
             pass

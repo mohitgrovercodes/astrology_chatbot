@@ -127,9 +127,9 @@ class HybridRetriever:
                 tokenized = [doc.page_content.lower().split() for doc in all_docs]
                 self.bm25_index = BM25Okapi(tokenized)
                 self.bm25_documents = all_docs
-                print(f"[BM25] ✅ Successfully built index with {len(all_docs)} documents")
+                print(f"[BM25] [OK] Successfully built index with {len(all_docs)} documents")
             else:
-                print("[BM25] ❌ All strategies failed - proceeding with vector search only")
+                print("[BM25] [FAIL] All strategies failed - proceeding with vector search only")
             
             self._bm25_built = True
             

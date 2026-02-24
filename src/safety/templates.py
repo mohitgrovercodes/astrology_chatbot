@@ -137,27 +137,27 @@ Is there something about YOUR chart I can help you with instead?"""
 
 DISCLAIMER_HEALTH = """
 
-⚕️ **Important Disclaimer**: The astrological insights I provide are for educational and self-reflection purposes only. Astrology indicates *tendencies* and *areas of focus*, not medical diagnoses. Always consult qualified healthcare providers for health concerns, diagnoses, or treatment decisions."""
+[HEALTH] **Important Disclaimer**: The astrological insights I provide are for educational and self-reflection purposes only. Astrology indicates *tendencies* and *areas of focus*, not medical diagnoses. Always consult qualified healthcare providers for health concerns, diagnoses, or treatment decisions."""
 
 DISCLAIMER_FINANCIAL = """
 
-💼 **Important Disclaimer**: Astrological insights about finances and career are for guidance and timing awareness only. They should not be your sole basis for major financial decisions. Always consult financial advisors and make practical assessments before significant investments or career changes."""
+[FINANCIAL] **Important Disclaimer**: Astrological insights about finances and career are for guidance and timing awareness only. They should not be your sole basis for major financial decisions. Always consult financial advisors and make practical assessments before significant investments or career changes."""
 
 DISCLAIMER_RELATIONSHIP = """
 
-💕 **Important Reminder**: Astrological compatibility is one factor among many in relationships. Real-world communication, shared values, mutual respect, and effort are far more important than chart compatibility. Use these insights as a tool for understanding, not as a relationship verdict."""
+[RELATIONSHIP] **Important Reminder**: Astrological compatibility is one factor among many in relationships. Real-world communication, shared values, mutual respect, and effort are far more important than chart compatibility. Use these insights as a tool for understanding, not as a relationship verdict."""
 
 DISCLAIMER_CHILDREN = """
 
-👶 **Important Note**: Questions about children and fertility are deeply personal. While astrology can indicate favorable periods, it cannot predict specific outcomes. Medical consultation is essential for fertility and family planning decisions. These astrological insights are for timing awareness only."""
+[CHILDREN] **Important Note**: Questions about children and fertility are deeply personal. While astrology can indicate favorable periods, it cannot predict specific outcomes. Medical consultation is essential for fertility and family planning decisions. These astrological insights are for timing awareness only."""
 
 DISCLAIMER_CAREER = """
 
-💼 **Important Reminder**: Career decisions should be based on practical factors—skills, market conditions, financial stability, and personal circumstances. Astrological timing is one input among many. Use this guidance to inform your decision-making, not replace it."""
+[CAREER] **Important Reminder**: Career decisions should be based on practical factors—skills, market conditions, financial stability, and personal circumstances. Astrological timing is one input among many. Use this guidance to inform your decision-making, not replace it."""
 
 DISCLAIMER_GENERAL = """
 
-🔮 **Important Reminder**: Astrological insights are for self-reflection and timing awareness. They show tendencies and potentials, not fixed destinies. Your free will, choices, and circumstances all play crucial roles in shaping outcomes."""
+[ASTROLOGY] **Important Reminder**: Astrological insights are for self-reflection and timing awareness. They show tendencies and potentials, not fixed destinies. Your free will, choices, and circumstances all play crucial roles in shaping outcomes."""
 
 
 # ============================================================================
@@ -322,14 +322,14 @@ GREETING_RETURNING = [
     "Hi again! What would you like to explore today?",
 ]
 
-# Hindi (Native Script) — natural, conversational
+# Hindi (Native Script) - natural, conversational
 GREETING_HINDI_RETURNING = [
-    "नमस्ते, {user_name}! बताइए, क्या जानना चाहेंगे?",
-    "हां {user_name}, मैं यहां हूं। क्या पूछना है?",
-    "जी {user_name}, बोलिए!",
-    "क्या जानना चाहते हैं आप?",
-    "बताइए — मैं सुन रहा हूं।",
-    "आपके लिए क्या देख सकता हूं?",
+    "Namaste, {user_name}! Bataiye, kya jaanna chahenge?",
+    "Han {user_name}, main yahan hoon. Kya poochhna hai?",
+    "Ji {user_name}, boliye!",
+    "Kya jaanna chahte hain aap?",
+    "Bataiye - main sun raha hoon.",
+    "Aapke liye kya dekh sakta hoon?",
 ]
 
 # Hinglish (Romanized Hindi) — for hi-lat language code
@@ -368,23 +368,23 @@ TONE & LANGUAGE GUIDELINES:
    - Maximum 2-3 Sanskrit terms per paragraph
 
 3. **Simplify Technical Concepts:**
-   ❌ "The 10th Bhava lord positioned in the 4th Bhava"
-   ✅ "Your career planet is in your home sector"
+   [FAIL] "The 10th Bhava lord positioned in the 4th Bhava"
+   [OK] "Your career planet is in your home sector"
    
-   ❌ "Shani in Kumbha in the 6th Bhava"
-   ✅ "Saturn in Aquarius in your 6th house (daily work)"
+   [FAIL] "Shani in Kumbha in the 6th Bhava"
+   [OK] "Saturn in Aquarius in your 6th house (daily work)"
    
-   ❌ "Chandra in Mithuna indicates"
-   ✅ "Your Moon in Gemini shows"
+   [FAIL] "Chandra in Mithuna indicates"
+   [OK] "Your Moon in Gemini shows"
 
 4. **Explain, Don't Just State:**
-   ❌ "Jupiter aspects your 7th house"
-   ✅ "Jupiter sends its beneficial energy to your relationship sector, supporting harmonious partnerships"
+   [FAIL] "Jupiter aspects your 7th house"
+   [OK] "Jupiter sends its beneficial energy to your relationship sector, supporting harmonious partnerships"
 
 5. **Use Parentheticals for Sanskrit:**
-   ✅ "Your Moon (Chandra) in Gemini..."
-   ✅ "The 7th house (marriage sector)..."
-   ✅ "During Saturn's period (Shani dasha)..."
+   [OK] "Your Moon (Chandra) in Gemini..."
+   [OK] "The 7th house (marriage sector)..."
+   [OK] "During Saturn's period (Shani dasha)..."
 
 6. **Conversational Connectors:**
    Use: "This means...", "In other words...", "Think of it like...", "Here's what this means for you..."
@@ -392,14 +392,14 @@ TONE & LANGUAGE GUIDELINES:
 
 7. **For Timing Questions:**
    ALWAYS provide specific months/timeframes:
-   ✅ "March-April 2026 when Jupiter transits..."
-   ❌ "During your Saturn Mahadasha" (too vague)
+   [OK] "March-April 2026 when Jupiter transits..."
+   [FAIL] "During your Saturn Mahadasha" (too vague)
 
 EXAMPLE TRANSFORMATION:
 
-❌ BAD: "Your Chandra positioned in Mithuna Rashi in the 10th Bhava indicates communicative faculties in professional endeavors."
+[FAIL] BAD: "Your Chandra positioned in Mithuna Rashi in the 10th Bhava indicates communicative faculties in professional endeavors."
 
-✅ GOOD: "Your Moon in Gemini (your career house) shows you're naturally great at communication and adapting to change at work. This placement often means you thrive in dynamic environments where you can use your quick thinking."
+[OK] GOOD: "Your Moon in Gemini (your career house) shows you're naturally great at communication and adapting to change at work. This placement often means you thrive in dynamic environments where you can use your quick thinking."
 """
 
 

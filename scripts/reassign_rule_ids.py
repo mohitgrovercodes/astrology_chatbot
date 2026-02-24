@@ -28,14 +28,14 @@ def main():
     print(f"\n📖 Loading rules from {args.input}...")
     data = json.load(open(args.input, "r", encoding="utf-8"))
     rules = data.get("rules", data) if isinstance(data, dict) else data
-    print(f"   ✅ Loaded {len(rules)} rules")
+    print(f"   [OK] Loaded {len(rules)} rules")
 
     # ── Check for duplicates before fixing
     existing_ids = [r.get("rule_id", "") for r in rules]
     id_counts = Counter(existing_ids)
     duplicates = {k: v for k, v in id_counts.items() if v > 1}
-    print(f"   ⚠️  Duplicate IDs found: {len(duplicates)} IDs repeated")
-    print(f"   📊 Total unique IDs before fix: {len(set(existing_ids))}")
+    print(f"   [WARN]  Duplicate IDs found: {len(duplicates)} IDs repeated")
+    print(f"   [STATS] Total unique IDs before fix: {len(set(existing_ids))}")
 
     # ── Reassign sequentially
     print(f"\n🔄 Reassigning IDs with prefix '{args.prefix}'...")
@@ -51,9 +51,9 @@ def main():
 
     # ── Verify no duplicates remain
     new_ids = [r["rule_id"] for r in rules]
-    assert len(new_ids) == len(set(new_ids)), "❌ Still have duplicates — bug!"
-    print(f"   ✅ All {len(rules)} rules now have unique IDs")
-    print(f"   📊 Range: {new_ids[0]} → {new_ids[-1]}")
+    assert len(new_ids) == len(set(new_ids)), "[FAIL] Still have duplicates — bug!"
+    print(f"   [OK] All {len(rules)} rules now have unique IDs")
+    print(f"   [STATS] Range: {new_ids[0]} -> {new_ids[-1]}")
 
     # ── Save
     if isinstance(data, dict):
@@ -64,7 +64,7 @@ def main():
 
     json.dump(output_data, open(args.output, "w", encoding="utf-8"),
               indent=2, ensure_ascii=False)
-    print(f"\n✅ Saved to {args.output}")
+    print(f"\n[OK] Saved to {args.output}")
 
 
 if __name__ == "__main__":

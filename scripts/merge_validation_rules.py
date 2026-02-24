@@ -52,7 +52,7 @@ def deduplicate_rules(rules: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     Handles list/dict fields by converting to hashable types
     """
     
-    print(f"\n🔍 Deduplicating {len(rules)} rules...")
+    print(f"\n[SEARCH] Deduplicating {len(rules)} rules...")
     
     # Track unique rules by (rule_name, category)
     unique_map = {}
@@ -81,8 +81,8 @@ def deduplicate_rules(rules: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     unique_rules = list(unique_map.values())
     duplicates_removed = len(rules) - len(unique_rules)
     
-    print(f"  ✅ Removed {duplicates_removed} duplicates")
-    print(f"  ✅ Unique rules: {len(unique_rules)}")
+    print(f"  [OK] Removed {duplicates_removed} duplicates")
+    print(f"  [OK] Unique rules: {len(unique_rules)}")
     
     return unique_rules
 
@@ -105,7 +105,7 @@ def load_rules(filepath: Path) -> List[Dict[str, Any]]:
     else:
         raise ValueError(f"Invalid format in {filepath}. Expected list or dict with 'rules' key.")
     
-    print(f"  ✅ Loaded {len(rules)} rules")
+    print(f"  [OK] Loaded {len(rules)} rules")
     return rules
 
 
@@ -118,7 +118,7 @@ def save_rules(rules: List[Dict[str, Any]], output_path: Path, metadata: Dict[st
         output_path: Output file path
         metadata: Optional metadata dict
     """
-    print(f"\n💾 Saving to: {output_path}")
+    print(f"\n[SAVE] Saving to: {output_path}")
     
     # Default metadata
     if metadata is None:
@@ -143,13 +143,13 @@ def save_rules(rules: List[Dict[str, Any]], output_path: Path, metadata: Dict[st
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
     
-    print(f"  ✅ Saved {len(rules)} rules")
-    print(f"  📊 File size: {output_path.stat().st_size / 1024:.2f} KB")
+    print(f"  [OK] Saved {len(rules)} rules")
+    print(f"  [STATS] File size: {output_path.stat().st_size / 1024:.2f} KB")
 
 
 def analyze_rules(rules: List[Dict[str, Any]]):
     """Print analysis of rule set"""
-    print(f"\n📊 Analysis:")
+    print(f"\n[STATS] Analysis:")
     print(f"  Total rules: {len(rules)}")
     
     # Count by category
@@ -202,7 +202,7 @@ def merge_files(
     for f in input_files:
         print(f"  - {f}")
     print(f"📁 Output: {output_file}")
-    print(f"🔍 Deduplicate: {deduplicate}")
+    print(f"[SEARCH] Deduplicate: {deduplicate}")
     
     # Load all rules
     all_rules = []
@@ -210,7 +210,7 @@ def merge_files(
         rules = load_rules(filepath)
         all_rules.extend(rules)
     
-    print(f"\n📊 Combined: {len(all_rules)} rules")
+    print(f"\n[STATS] Combined: {len(all_rules)} rules")
     
     # Deduplicate if requested
     if deduplicate:
@@ -230,7 +230,7 @@ def merge_files(
     save_rules(all_rules, output_file, metadata)
     
     print("\n" + "=" * 60)
-    print("✅ MERGE COMPLETE")
+    print("[OK] MERGE COMPLETE")
     print("=" * 60)
 
 
@@ -253,7 +253,7 @@ def append_to_existing(
     
     print(f"📁 New file: {new_file}")
     print(f"📁 Existing file: {existing_file}")
-    print(f"🔍 Deduplicate: {deduplicate}")
+    print(f"[SEARCH] Deduplicate: {deduplicate}")
     
     # Load existing rules
     print(f"\n📖 Loading existing rules from {existing_file}...")
@@ -288,7 +288,7 @@ def append_to_existing(
     save_rules(all_rules, existing_file, metadata)
     
     print("\n" + "=" * 60)
-    print("✅ APPEND COMPLETE")
+    print("[OK] APPEND COMPLETE")
     print("=" * 60)
 
 
@@ -345,7 +345,7 @@ def main():
             merge_files(args.input_files, args.output, deduplicate)
     
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[FAIL] Error: {e}")
         raise
 
 

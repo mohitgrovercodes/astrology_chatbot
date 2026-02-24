@@ -203,7 +203,7 @@ def _evaluate_condition(factor: str, operator: str, value: Any, chart: Dict) -> 
                     }
                     orb = combust_orbs.get(planet, 10)
                     if diff < orb:
-                        return False   # is combust → fail
+                        return False   # is combust -> fail
         return True
 
     # ── House occupancy checks ────────────────────────────────────────────
@@ -229,9 +229,9 @@ def _evaluate_condition(factor: str, operator: str, value: Any, chart: Dict) -> 
                 return len(occupants) == 0
         except StopIteration:
             pass
-        return True  # can't evaluate → pass
+        return True  # can't evaluate -> pass
 
-    # Default: condition not evaluable with simple checker → pass
+    # Default: condition not evaluable with simple checker -> pass
     return True
 
 
@@ -250,19 +250,19 @@ def run_test(tiered_path: str, query_type: str, max_tier: int):
     print(f"\n📖 Loading rules from {tiered_path}...")
     t0 = time.time()
     all_rules = load_rules_for_tier(tiered_path, max_tier)
-    print(f"   ✅ Loaded {len(all_rules)} rules (Tier 1-{max_tier})")
+    print(f"   [OK] Loaded {len(all_rules)} rules (Tier 1-{max_tier})")
 
     # ── Filter by query type ─────────────────────────────────────────────
     applicable = filter_by_query(all_rules, query_type)
-    print(f"   ✅ {len(applicable)} rules apply to '{query_type}'")
+    print(f"   [OK] {len(applicable)} rules apply to '{query_type}'")
 
     if not applicable:
-        print("\n⚠️  No applicable rules found. Check query_type spelling.")
+        print("\n[WARN]  No applicable rules found. Check query_type spelling.")
         print("   Common values: marriage, career, finance, health, children")
         return
 
     # ── Run checks ───────────────────────────────────────────────────────
-    print(f"\n🔍 Running {len(applicable)} rule checks...\n")
+    print(f"\n[SEARCH] Running {len(applicable)} rule checks...\n")
 
     passed_count  = 0
     failed_count  = 0
@@ -300,7 +300,7 @@ def run_test(tiered_path: str, query_type: str, max_tier: int):
 
             if halt:
                 halt_triggered = True
-                print(f"   🛑 HALT triggered by: {rule.get('rule_name')}")
+                print(f"   [STOP] HALT triggered by: {rule.get('rule_name')}")
                 break
 
     elapsed = time.time() - t0
@@ -318,19 +318,19 @@ def run_test(tiered_path: str, query_type: str, max_tier: int):
     print(f"  Critical failures:   {len(critical_failures)}")
     print(f"  High failures:       {len(high_failures)}")
     print(f"  Overall strength:    {strength:.1f} / 10")
-    print(f"  Halt triggered:      {'YES ⛔' if halt_triggered else 'No ✅'}")
+    print(f"  Halt triggered:      {'YES ⛔' if halt_triggered else 'No [OK]'}")
     print(f"  Time elapsed:        {elapsed:.2f}s")
-    print(f"  Can proceed:         {'NO' if critical_failures or halt_triggered else 'YES ✅'}")
+    print(f"  Can proceed:         {'NO' if critical_failures or halt_triggered else 'YES [OK]'}")
 
     if critical_failures:
-        print(f"\n🚨 CRITICAL FAILURES ({len(critical_failures)}):")
+        print(f"\n[ALERT] CRITICAL FAILURES ({len(critical_failures)}):")
         for f in critical_failures[:5]:
             print(f"   [{f['rule_id']}] {f['rule_name']}")
             print(f"        Source: {f['source']}")
             print(f"        Reason: {f['reason']}")
 
     if high_failures:
-        print(f"\n⚠️  HIGH SEVERITY FAILURES ({len(high_failures)}) — first 5:")
+        print(f"\n[WARN]  HIGH SEVERITY FAILURES ({len(high_failures)}) — first 5:")
         for f in high_failures[:5]:
             print(f"   [{f['rule_id']}] {f['rule_name']}")
 
@@ -375,7 +375,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if not Path(args.tiered_rules).exists():
-        print(f"❌ File not found: {args.tiered_rules}")
+        print(f"[FAIL] File not found: {args.tiered_rules}")
         print("   Run optimize_rules.py first to generate tiered_rules.json")
     else:
         run_test(args.tiered_rules, args.query, args.tier)

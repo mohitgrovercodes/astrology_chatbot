@@ -5,7 +5,7 @@ Verification test for Hybrid Data Priority.
 
 Verifies:
 1. [PRIORITY] Injected data is used (Bypassing calculations)
-2. [HYBRID]   Partial injection (Name via API, Chart missing → fallback to engine)
+2. [HYBRID]   Partial injection (Name via API, Chart missing -> fallback to engine)
 3. [HISTORY]  Injected conversation history takes priority over empty state
 """
 

@@ -180,14 +180,17 @@ class AstrologyRetriever:
             if intent in intent_content_preferences:
                 preferred_types = intent_content_preferences[intent]
                 
-                # ✅ FIX: Check if content_type metadata exists before filtering
+                # [OK] FIX: Check if content_type metadata exists before filtering
                 try:
-                    test_result = self.collection.get(limit=1, include=["metadatas"])
+                    test_result = self.collection.get(
+                        limit=1, 
+                        where={"content_type": {"$in": preferred_types}},
+                        include=["metadatas"]
+                    )
                     has_content_type = (
                         test_result and 
                         test_result.get('metadatas') and 
-                        len(test_result['metadatas']) > 0 and
-                        'content_type' in test_result['metadatas'][0]
+                        len(test_result['metadatas']) > 0
                     )
                     
                     if has_content_type:
@@ -207,17 +210,20 @@ class AstrologyRetriever:
         # APPLY LANGUAGE FILTERING (Optional - only if metadata exists)
         if language:
             try:
-                # Check if language metadata exists
-                test_result = self.collection.get(limit=1, include=["metadatas"])
+                # Check if language metadata exists by querying for it
+                target_lang = language.split('-')[0]
+                test_result = self.collection.get(
+                    limit=1, 
+                    where={"language": {"$in": [target_lang, "en"]}},
+                    include=["metadatas"]
+                )
                 has_language = (
                     test_result and 
                     test_result.get('metadatas') and 
-                    len(test_result['metadatas']) > 0 and
-                    'language' in test_result['metadatas'][0]
+                    len(test_result['metadatas']) > 0
                 )
                 
                 if has_language:
-                    target_lang = language.split('-')[0]
                     lang_filter = {"language": {"$in": [target_lang, "en"]}}
                     
                     if where_clause:
@@ -429,7 +435,7 @@ class AstrologyRetriever:
                     logger.debug(f"[EXPAND] Error fetching adjacent chunk at offset {offset}: {e}")
                     continue
         
-        logger.info(f"[EXPAND] Expanded {len(chunks)} → {len(expanded)} chunks")
+        logger.info(f"[EXPAND] Expanded {len(chunks)} -> {len(expanded)} chunks")
         return expanded
 
     def _parse_results(self, results) -> List[RetrievedChunk]:

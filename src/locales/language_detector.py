@@ -33,11 +33,11 @@ def _count_in_range(text: str, lo: int, hi: int) -> int:
 # Unicode block ranges for Indian scripts
 _UNICODE_BLOCKS: List[Tuple[str, int, int]] = [
     # (base_language_code, lo, hi)
-    ("hi",  0x0900, 0x097F),   # Devanagari  → Hindi / Marathi
+    ("hi",  0x0900, 0x097F),   # Devanagari  -> Hindi / Marathi
     ("ta",  0x0B80, 0x0BFF),   # Tamil
     ("te",  0x0C00, 0x0C7F),   # Telugu
     ("ml",  0x0D00, 0x0D7F),   # Malayalam
-    ("pa",  0x0A00, 0x0A7F),   # Gurmukhi   → Punjabi
+    ("pa",  0x0A00, 0x0A7F),   # Gurmukhi   -> Punjabi
     ("mr",  0x0900, 0x097F),   # Marathi shares Devanagari — disambiguated below
 ]
 
@@ -200,7 +200,7 @@ class LanguageDetector:
     def __init__(self, llm=None, default_language: str = "en"):
         self.llm = llm
         self.default_language = default_language
-        print(f"[LANG] Detector ready — default: {self.LANGUAGE_NAMES.get(default_language, default_language)}")
+        print(f"[LANG] Detector ready - default: {self.LANGUAGE_NAMES.get(default_language, default_language)}")
 
     # ==================================================================
     # PUBLIC API
@@ -337,7 +337,7 @@ class LanguageDetector:
 
         if best_score >= 3:
             lat_code = f"{best_lang}-lat"
-            # Normalise confidence: score 3→0.75, score 6→0.9, score 10→0.95
+            # Normalise confidence: score 3->0.75, score 6->0.9, score 10->0.95
             confidence = min(0.97, 0.70 + best_score * 0.025)
             return (lat_code, confidence)
 
@@ -346,7 +346,7 @@ class LanguageDetector:
     def _check_english(self, text: str) -> Optional[Tuple[str, float]]:
         """
         Check for English AFTER Indian romanized detection to prevent:
-        'mera career kaisa hai' → en  (should be hi-lat)
+        'mera career kaisa hai' -> en  (should be hi-lat)
         """
         text_lower = text.lower().strip()
         words = set(re.findall(r"\b[a-z]+\b", text_lower))

@@ -68,11 +68,11 @@ class RuleIndexBuilder:
         print("=" * 60)
         
         self.stats['total_rules'] = len(rules)
-        print(f"📊 Indexing {len(rules)} rules")
+        print(f"[STATS] Indexing {len(rules)} rules")
         print(f"📐 Dimensions: {', '.join(dimensions)}")
         
         # Build single-dimension indices
-        print("\n🔍 Building single-dimension indices...")
+        print("\n[SEARCH] Building single-dimension indices...")
         if 'query_type' in dimensions:
             self._build_query_type_index(rules)
         if 'stage' in dimensions:
@@ -83,19 +83,19 @@ class RuleIndexBuilder:
             self._build_severity_index(rules)
         
         # Build parameter type index
-        print("\n🔍 Building parameter type index...")
+        print("\n[SEARCH] Building parameter type index...")
         self._build_parameter_type_index(rules)
         
         # Build composite indices
-        print("\n🔍 Building composite indices...")
+        print("\n[SEARCH] Building composite indices...")
         self._build_composite_indices(rules, dimensions)
         
         # Calculate statistics
         self._calculate_stats()
         
         print("\n" + "=" * 60)
-        print("✅ INDEX BUILDING COMPLETE")
-        print(f"📊 Total indices created: {sum(len(idx) for idx in self.indices.values())}")
+        print("[OK] INDEX BUILDING COMPLETE")
+        print(f"[STATS] Total indices created: {sum(len(idx) for idx in self.indices.values())}")
         print("=" * 60)
         
         return self.indices
@@ -359,7 +359,7 @@ def main():
     rules = data.get('rules', data if isinstance(data, list) else [])
     metadata = data.get('metadata', {})
     
-    print(f"   ✅ Loaded {len(rules)} rules")
+    print(f"   [OK] Loaded {len(rules)} rules")
     
     # Create lookup map (rule_id -> full rule)
     rule_map = {rule['rule_id']: rule for rule in rules}
@@ -390,22 +390,22 @@ def main():
     }
     
     # Save indexed rules
-    print(f"\n💾 Saving indexed rules to {args.output}...")
+    print(f"\n[SAVE] Saving indexed rules to {args.output}...")
     
     with open(args.output, 'w', encoding='utf-8') as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
     
-    print(f"   ✅ Saved indexed structure")
+    print(f"   [OK] Saved indexed structure")
     
     # Save statistics if requested
     if args.stats_file:
         with open(args.stats_file, 'w', encoding='utf-8') as f:
             json.dump(builder.get_statistics(), f, indent=2)
-        print(f"   ✅ Statistics saved to {args.stats_file}")
+        print(f"   [OK] Statistics saved to {args.stats_file}")
     
     # Print summary
     print("\n" + "=" * 60)
-    print("📊 INDEX SUMMARY")
+    print("[STATS] INDEX SUMMARY")
     print("=" * 60)
     print(f"Total rules:           {len(rules):,}")
     print(f"Index dimensions:      {len(dimensions)}")
@@ -418,7 +418,7 @@ def main():
     print("=" * 60)
     
     # Print usage examples
-    print("\n💡 USAGE EXAMPLES:")
+    print("\n[IDEA] USAGE EXAMPLES:")
     print("-" * 60)
     for example_name, example_data in lookup_guide['usage_examples'].items():
         print(f"\n{example_name}:")

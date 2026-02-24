@@ -22,7 +22,7 @@ def example_birth_chart():
     client = get_astrology_api_client()
     
     if not client:
-        print("❌ API not configured. Set ASTRO_API_BASE_URL in .env")
+        print("[FAIL] API not configured. Set ASTRO_API_BASE_URL in .env")
         return
     
     try:
@@ -46,11 +46,11 @@ def example_birth_chart():
         print("\n🔄 Fetching birth chart from API...")
         chart = client.get_birth_chart(**birth_data)
         
-        print("\n✅ Birth Chart Received:")
+        print("\n[OK] Birth Chart Received:")
         print(json.dumps(chart, indent=2))
         
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[FAIL] Error: {e}")
     finally:
         client.close()
 
@@ -64,7 +64,7 @@ def example_planetary_positions():
     client = get_astrology_api_client()
     
     if not client:
-        print("❌ API not configured")
+        print("[FAIL] API not configured")
         return
     
     try:
@@ -72,7 +72,7 @@ def example_planetary_positions():
         
         now = datetime.now()
         
-        print(f"\n🌍 Location: New Delhi, India")
+        print(f"\n[EARTH] Location: New Delhi, India")
         print(f"📅 Date: {now.strftime('%Y-%m-%d %H:%M:%S')}")
         
         # Get planetary positions
@@ -85,11 +85,11 @@ def example_planetary_positions():
             timezone="Asia/Kolkata"
         )
         
-        print("\n✅ Planetary Positions:")
+        print("\n[OK] Planetary Positions:")
         print(json.dumps(positions, indent=2))
         
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[FAIL] Error: {e}")
     finally:
         client.close()
 
@@ -103,7 +103,7 @@ def example_vimshottari_dasha():
     client = get_astrology_api_client()
     
     if not client:
-        print("❌ API not configured")
+        print("[FAIL] API not configured")
         return
     
     try:
@@ -120,11 +120,11 @@ def example_vimshottari_dasha():
             timezone="Asia/Kolkata"
         )
         
-        print("\n✅ Current Dasha:")
+        print("\n[OK] Current Dasha:")
         print(json.dumps(dasha, indent=2))
         
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[FAIL] Error: {e}")
     finally:
         client.close()
 
@@ -138,14 +138,14 @@ def example_transits():
     client = get_astrology_api_client()
     
     if not client:
-        print("❌ API not configured")
+        print("[FAIL] API not configured")
         return
     
     try:
         from datetime import datetime
         
         print(f"\n📅 Date: {datetime.now().strftime('%Y-%m-%d')}")
-        print("🌍 Location: New Delhi, India")
+        print("[EARTH] Location: New Delhi, India")
         
         # Get transits
         print("\n🔄 Fetching current transits...")
@@ -154,11 +154,11 @@ def example_transits():
             longitude=77.2090
         )
         
-        print("\n✅ Current Transits:")
+        print("\n[OK] Current Transits:")
         print(json.dumps(transits, indent=2))
         
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[FAIL] Error: {e}")
     finally:
         client.close()
 
@@ -172,7 +172,7 @@ def example_compatibility():
     client = get_astrology_api_client()
     
     if not client:
-        print("❌ API not configured")
+        print("[FAIL] API not configured")
         return
     
     try:
@@ -205,11 +205,11 @@ def example_compatibility():
             system="vedic"
         )
         
-        print("\n✅ Compatibility Analysis:")
+        print("\n[OK] Compatibility Analysis:")
         print(json.dumps(compatibility, indent=2))
         
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[FAIL] Error: {e}")
     finally:
         client.close()
 
@@ -223,7 +223,7 @@ def example_with_caching():
     client = get_astrology_api_client()
     
     if not client:
-        print("❌ API not configured")
+        print("[FAIL] API not configured")
         return
     
     try:
@@ -251,14 +251,14 @@ def example_with_caching():
         time2 = time.time() - start
         print(f"⏱️  Time: {time2:.3f}s")
         
-        print(f"\n📊 Speed improvement: {time1/time2:.1f}x faster")
+        print(f"\n[STATS] Speed improvement: {time1/time2:.1f}x faster")
         
         # Clear cache
         print("\n🗑️  Clearing cache...")
         client.clear_cache()
         
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[FAIL] Error: {e}")
     finally:
         client.close()
 
@@ -282,7 +282,7 @@ def main():
     example_with_caching()
     
     print("\n" + "="*60)
-    print("✅ Examples completed!")
+    print("[OK] Examples completed!")
     print("="*60 + "\n")
 
 

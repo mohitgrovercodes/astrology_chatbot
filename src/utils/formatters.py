@@ -54,7 +54,7 @@ def _format_vedic_for_llm(chart_data: Dict[str, Any], query: str) -> str:
     # Lagna
     sections.append(f"## Ascendant (Lagna)")
     sections.append(f"- Sign: {lagna.get('sign')} ({lagna.get('sign_sanskrit')})")
-    sections.append(f"- Degree: {lagna.get('degree')}°{lagna.get('minute')}'")
+    sections.append(f"- Degree: {lagna.get('degree')} deg {lagna.get('minute')}'")
     sections.append(f"- Nakshatra: {lagna.get('nakshatra')} "
                    f"(Pada {lagna.get('nakshatra_pada')})\n")
     
@@ -66,7 +66,7 @@ def _format_vedic_for_llm(chart_data: Dict[str, Any], query: str) -> str:
         
         sections.append(
             f"**{planet_name}**: {planet_data.get('sign')} "
-            f"{planet_data.get('degree')}°{planet_data.get('minute')}', "
+            f"{planet_data.get('degree')} deg {planet_data.get('minute')}', "
             f"House {planet_data.get('house')}, "
             f"{planet_data.get('nakshatra')} Pada {planet_data.get('nakshatra_pada')}"
             f"{retro_str}{combust_str}"
@@ -133,9 +133,9 @@ def _format_western_for_llm(chart_data: Dict[str, Any], query: str) -> str:
     sections.append(f"**Sun Sign**: {key_points.get('sun_sign')}")
     sections.append(f"**Moon Sign**: {key_points.get('moon_sign')}")
     asc = key_points.get('ascendant', {})
-    sections.append(f"**Ascendant**: {asc.get('sign')} {asc.get('degree')}°")
+    sections.append(f"**Ascendant**: {asc.get('sign')} {asc.get('degree')} deg")
     mc = key_points.get('midheaven', {})
-    sections.append(f"**Midheaven**: {mc.get('sign')} {mc.get('degree')}°\n")
+    sections.append(f"**Midheaven**: {mc.get('sign')} {mc.get('degree')} deg\n")
     
     # Planets
     sections.append("## Planetary Positions\n")
@@ -143,7 +143,7 @@ def _format_western_for_llm(chart_data: Dict[str, Any], query: str) -> str:
         retro = " (R)" if planet_data.get("retrograde") else ""
         sections.append(
             f"**{planet_name}**: {planet_data.get('sign')} "
-            f"{planet_data.get('degree_in_sign')}°, "
+            f"{planet_data.get('degree_in_sign')} deg, "
             f"House {planet_data.get('house')}{retro}"
         )
     
@@ -155,7 +155,7 @@ def _format_western_for_llm(chart_data: Dict[str, Any], query: str) -> str:
         for aspect in aspects[:15]:  # Top 15
             sections.append(
                 f"{aspect.get('planet1')} {aspect.get('aspect_type')} "
-                f"{aspect.get('planet2')} (orb: {aspect.get('orb')}°)"
+                f"{aspect.get('planet2')} (orb: {aspect.get('orb')} deg)"
             )
     
     if query:

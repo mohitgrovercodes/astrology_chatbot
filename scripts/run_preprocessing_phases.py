@@ -74,12 +74,12 @@ def main():
                    input_json = str(batches[-1])
                    break
                else:
-                   print("❌ Input required (or no auto-detectable files found).")
+                   print("[FAIL] Input required (or no auto-detectable files found).")
             elif Path(val).exists():
                 input_json = val
                 break
             else:
-                print(f"❌ File not found: {val}")
+                print(f"[FAIL] File not found: {val}")
 
     # 2. Source Book
     source_book = "Jataka Parijata Vol 1" # Default fallback

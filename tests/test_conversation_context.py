@@ -51,9 +51,9 @@ def test_conversation_context():
     
     # Expected: Should NOT be CHITCHAT, should be RAG_WITH_CALCULATION
     if result['intent'] == 'CHITCHAT':
-        print("❌ FAIL: Classified as CHITCHAT (lost context!)")
+        print("[FAIL] FAIL: Classified as CHITCHAT (lost context!)")
     else:
-        print(f"✅ PASS: Correctly classified as {result['intent']}")
+        print(f"[OK] PASS: Correctly classified as {result['intent']}")
     
     print()
     print("="*70)
@@ -81,9 +81,9 @@ def test_conversation_context():
     print()
     
     if result2['intent'] == 'CHITCHAT':
-        print("❌ FAIL: Classified as CHITCHAT (lost context!)")
+        print("[FAIL] FAIL: Classified as CHITCHAT (lost context!)")
     else:
-        print(f"✅ PASS: Correctly classified as {result2['intent']}")
+        print(f"[OK] PASS: Correctly classified as {result2['intent']}")
     
     print()
     print("="*70)
@@ -106,9 +106,9 @@ def test_conversation_context():
     print()
     
     if result3['intent'] == 'CHITCHAT':
-        print("✅ PASS: Correctly classified as CHITCHAT (no context)")
+        print("[OK] PASS: Correctly classified as CHITCHAT (no context)")
     else:
-        print(f"⚠️ UNEXPECTED: Classified as {result3['intent']} (expected CHITCHAT)")
+        print(f"[WARN] UNEXPECTED: Classified as {result3['intent']} (expected CHITCHAT)")
     
     print()
     print("="*70)

@@ -46,7 +46,7 @@ Core signal: Answer would be the same for any person, no personalization needed.
 Only choose this if the query is clearly educational with no personal framing.
 
 Think: What does the user want — data, a personal answer, education, or just conversation?
-If personal even slightly → RAG_WITH_CALCULATION.
+If personal even slightly -> RAG_WITH_CALCULATION.
 
 Respond ONLY with valid JSON:
 {{"intent": "CATEGORY_NAME", "confidence": 0.95, "reasoning": "One sentence."}}"""
@@ -78,7 +78,7 @@ Respond ONLY with valid JSON:
             w in q for w in ['predict', 'when will', 'will i', 'should i', 'career', 'marriage']):
             return {'intent': 'CALCULATION_ONLY', 'confidence': 0.88, 'reasoning': 'Raw data display request', 'cached': False}
 
-        # Default: any ambiguous personal query → safest route
+        # Default: any ambiguous personal query -> safest route
         return {'intent': 'RAG_WITH_CALCULATION', 'confidence': 0.80, 'reasoning': 'Default: personal or prediction query', 'cached': False}
 
     def classify(self, query: str, user_profile: dict = None, conversation_history: list = None):
@@ -135,6 +135,6 @@ def get_orchestrator():
             fast_llm=None            # Auto-loads
         )
         
-        print("[ORCHESTRATOR] ✅ Initialized successfully")
+        print("[ORCHESTRATOR] Initialized successfully")
     
     return _orchestrator_instance

@@ -115,9 +115,10 @@ def get_orchestrator():
             llm = get_llm()
             fast_llm = get_fast_llm()
             vector_store = get_vector_store()
+            embeddings = get_embeddings()
             
-            # Initialize intent classifier with fast LLM
-            intent_classifier = IntentClassifier(llm=fast_llm)
+            # Initialize intent classifier with fast LLM and embeddings
+            intent_classifier = IntentClassifier(llm=fast_llm, embeddings=embeddings)
 
             hybrid_retriever = HybridRetriever(
                 vector_store=vector_store,
@@ -139,10 +140,10 @@ def get_orchestrator():
                 fast_llm=fast_llm
             )
             
-            print("[API] ✅ Orchestrator initialized successfully")
+            print("[API] Orchestrator initialized successfully")
             
         except Exception as e:
-            print(f"[API] ❌ Orchestrator initialization failed: {e}")
+            print(f"[API] Orchestrator initialization failed: {e}")
             import traceback
             traceback.print_exc()
             raise
@@ -160,7 +161,7 @@ def get_vedic_engine() -> VedicEngine:
     if _vedic_engine_instance is None:
         print("[API] Initializing Vedic engine...")
         _vedic_engine_instance = VedicEngine()
-        print("[API] ✅ Vedic engine initialized")
+        print("[API] Vedic engine initialized")
     
     return _vedic_engine_instance
 
@@ -174,7 +175,7 @@ def get_western_engine() -> WesternAstroEngine:
     if _western_engine_instance is None:
         print("[API] Initializing Western engine...")
         _western_engine_instance = WesternAstroEngine()
-        print("[API] ✅ Western engine initialized")
+        print("[API] Western engine initialized")
     
     return _western_engine_instance
 

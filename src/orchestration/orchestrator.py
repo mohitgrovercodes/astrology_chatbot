@@ -8,6 +8,7 @@ UPDATED: Now uses actual VedicEngine calculations (no placeholders!)
 1. CHITCHAT -> Quick response
 2. NEEDS_CALCULATION -> Real birth chart calculation
 3. NEEDS_RAG -> Knowledge + Real chart data + Interpretation/Prediction
+4. RAG_ONLY -> Knowledge only
 """
 
 from datetime import datetime
@@ -239,7 +240,7 @@ class EnhancedLangGraphOrchestrator:
                 name="gratitude",
                 examples=[
                     "thanks", "thank you", "appreciate it", "grateful", "thankyou",
-                    "dhanyavad", "shukriya", "धन्यवाद", "शुक्रिया"
+                    "dhanyavad", "shukriya", "dhanyawad", "shukriya-ji"
                 ],
                 metadata={"type": "chitchat", "subtype": "gratitude"}
             )
@@ -269,7 +270,7 @@ class EnhancedLangGraphOrchestrator:
         self.validation_enabled = VALIDATION_AVAILABLE
         
         if self.validation_enabled:
-            print("[VALIDATION] Validation engine enabled ✅")
+            print("[VALIDATION] Validation engine enabled")
 
         self.graph = self._build_graph()
         
@@ -478,12 +479,12 @@ class EnhancedLangGraphOrchestrator:
             
             # If blocked, return template response immediately
             if safety_result.is_blocked:
-                print(f"[SAFETY] 🚫 BLOCKED: {safety_result.decision.reason}")
+                print(f"[SAFETY] BLOCKED: {safety_result.decision.reason}")
                 
                 # WORKAROUND: Don't block chitchat queries
                 CHITCHAT_REASONS = ['greeting', 'identity', 'gratitude', 'wellbeing', 'farewell']
                 if safety_result.decision.reason in CHITCHAT_REASONS:
-                    print(f"[SAFETY] ✅ Chitchat query - allowing through")
+                    print(f"[SAFETY] Chitchat query - allowing through")
                     state['is_safe'] = True
                     return state
                 
@@ -513,10 +514,10 @@ class EnhancedLangGraphOrchestrator:
             
             # Safe to proceed
             state['is_safe'] = True
-            print(f"[SAFETY] ✅ Safe to proceed")
+            print(f"[SAFETY] [OK] Safe to proceed")
             
         except Exception as e:
-            print(f"[SAFETY] ⚠️ Error in safety check: {e}")
+            print(f"[SAFETY] [ERROR] Error in safety check: {e}")
             import traceback
             traceback.print_exc()
             # On error, allow to proceed (fail open for availability)
@@ -528,7 +529,7 @@ class EnhancedLangGraphOrchestrator:
         """Node 2: Classify intent."""
         print(f"[INTENT] Classifying query: '{state['query'][:50]}...'")
 
-        # ── CONTINUATION GUARD ────────────────────────────────────────────────
+        # == CONTINUATION GUARD ================================================
         # Bare follow-up phrases must reach the RAG node — not CHITCHAT/BLOCKED.
         # "Tell me more", "Why that time?", "What else?" are valid astrological
         # queries when conversation history exists.  Without this guard they
@@ -949,10 +950,10 @@ class EnhancedLangGraphOrchestrator:
 I can help you with **{topic}** in two ways:
 
 1️⃣ **General Explanation** (Theory)
-   → Learn about {topic} in Vedic astrology (classical principles)
+   -> Learn about {topic} in Vedic astrology (classical principles)
 
 2️⃣ **Personalized Analysis** (Your Chart)
-   → Understand {topic} specifically in YOUR birth chart
+   -> Understand {topic} specifically in YOUR birth chart
 
 **Which would you prefer?**
 - Reply with "1" or "general" for theory
@@ -1100,7 +1101,7 @@ These details are used to calculate your Vedic birth chart with precise planetar
                 state['answer'] = "Could not generate or load your birth chart. Please check your birth details."
                 return state
             
-            print(f"[CALCULATION_ONLY] Chart: Lagna={chart_data['lagna']}, Rashi={chart_data['moon_sign']}")
+            print(f"[CALCULATION_ONLY] Chart: Lagna={chart_data.get('lagna', {}).get('sign', 'Unknown')}, Rashi={chart_data.get('planets', {}).get('MOON', {}).get('sign', 'Unknown')}")
             
             # Use LLM to extract only what was asked for
             extraction_prompt = f"""You are a data extraction assistant. The user asked: "{state['query']}"
@@ -1111,21 +1112,21 @@ USER'S BIRTH DETAILS:
 • Place of Birth: {user_profile.get('place_of_birth')}
  
 COMPLETE BIRTH CHART DATA:
-• Lagna (Ascendant): {chart_data.get('lagna', 'Unknown')}
-• Moon Sign (Rashi): {chart_data.get('moon_sign', 'Unknown')}
-• Sun Sign: {chart_data.get('sun_sign', 'Unknown')}
-• Moon Nakshatra: {chart_data.get('moon_nakshatra', 'Unknown')}
+• Lagna (Ascendant): {chart_data.get('lagna', {}).get('sign', 'Unknown')}
+• Moon Sign (Rashi): {chart_data.get('planets', {}).get('MOON', {}).get('sign', 'Unknown')}
+• Sun Sign: {chart_data.get('planets', {}).get('SUN', {}).get('sign', 'Unknown')}
+• Moon Nakshatra: {chart_data.get('planets', {}).get('MOON', {}).get('nakshatra', 'Unknown')}
  
 Planetary Positions:
-• Sun: {chart_data.get('planets', {}).get('Sun', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Sun', {}).get('house', '?')})
-• Moon: {chart_data.get('planets', {}).get('Moon', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Moon', {}).get('house', '?')})
-• Mars: {chart_data.get('planets', {}).get('Mars', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Mars', {}).get('house', '?')})
-• Mercury: {chart_data.get('planets', {}).get('Mercury', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Mercury', {}).get('house', '?')})
-• Jupiter: {chart_data.get('planets', {}).get('Jupiter', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Jupiter', {}).get('house', '?')})
-• Venus: {chart_data.get('planets', {}).get('Venus', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Venus', {}).get('house', '?')})
-• Saturn: {chart_data.get('planets', {}).get('Saturn', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Saturn', {}).get('house', '?')})
-• Rahu: {chart_data.get('planets', {}).get('Rahu', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Rahu', {}).get('house', '?')})
-• Ketu: {chart_data.get('planets', {}).get('Ketu', {}).get('rashi', 'Unknown')} (House {chart_data.get('planets', {}).get('Ketu', {}).get('house', '?')})
+• Sun: {chart_data.get('planets', {}).get('SUN', {}).get('sign', 'Unknown')} (House {chart_data.get('planets', {}).get('SUN', {}).get('house', '?')})
+• Moon: {chart_data.get('planets', {}).get('MOON', {}).get('sign', 'Unknown')} (House {chart_data.get('planets', {}).get('MOON', {}).get('house', '?')})
+• Mars: {chart_data.get('planets', {}).get('MARS', {}).get('sign', 'Unknown')} (House {chart_data.get('planets', {}).get('MARS', {}).get('house', '?')})
+• Mercury: {chart_data.get('planets', {}).get('MERCURY', {}).get('sign', 'Unknown')} (House {chart_data.get('planets', {}).get('MERCURY', {}).get('house', '?')})
+• Jupiter: {chart_data.get('planets', {}).get('JUPITER', {}).get('sign', 'Unknown')} (House {chart_data.get('planets', {}).get('JUPITER', {}).get('house', '?')})
+• Venus: {chart_data.get('planets', {}).get('VENUS', {}).get('sign', 'Unknown')} (House {chart_data.get('planets', {}).get('VENUS', {}).get('house', '?')})
+• Saturn: {chart_data.get('planets', {}).get('SATURN', {}).get('sign', 'Unknown')} (House {chart_data.get('planets', {}).get('SATURN', {}).get('house', '?')})
+• Rahu: {chart_data.get('planets', {}).get('RAHU', {}).get('sign', 'Unknown')} (House {chart_data.get('planets', {}).get('RAHU', {}).get('house', '?')})
+• Ketu: {chart_data.get('planets', {}).get('KETU', {}).get('sign', 'Unknown')} (House {chart_data.get('planets', {}).get('KETU', {}).get('house', '?')})
  
 INSTRUCTIONS:
 1. Extract ONLY the specific information the user asked for
@@ -1295,7 +1296,7 @@ Provide a concise answer:"""
                                         tiered_rules_path=str(rules_path),
                                         indexed_rules_path="optimized/indexed_rules.json"
                                     )
-                                    print("[VALIDATION] ✅ Engine ready")
+                                    print("[VALIDATION] [OK] Engine ready")
                                 else:
                                     print("[VALIDATION] Rules file not found")
                             except Exception as e:
@@ -1379,8 +1380,8 @@ Provide a concise answer:"""
                 retrieval_query = state['query']
                 if state.get('chart_data'):
                     c = state['chart_data']
-                    lagna = c.get('lagna') or c.get('ascendant', {}).get('rashi', 'Unknown')
-                    moon_sign = c.get('moon_sign') or c.get('planets', {}).get('Moon', {}).get('rashi', 'Unknown')
+                    lagna = c.get('lagna', {}).get('sign') or c.get('ascendant', {}).get('sign', 'Unknown')
+                    moon_sign = c.get('moon_sign') or c.get('planets', {}).get('MOON', {}).get('sign', 'Unknown')
                     retrieval_query += f" (Lagna: {lagna}, Rashi: {moon_sign})"
 
                 knowledge_chunks = self.hybrid_retriever.retrieve(
@@ -1655,8 +1656,8 @@ USER PROFILE:
 • Date of Birth: {_p.get('date_of_birth', 'Unknown')}
 • Time of Birth: {_p.get('time_of_birth', 'Unknown')}
 • Place of Birth: {_p.get('place_of_birth', 'Unknown')}
-• Moon Sign: {(_p.get('chart_data') or {}).get('moon_sign', _p.get('moon_sign', 'Unknown'))}
-• Lagna (Ascendant): {(_p.get('chart_data') or {}).get('lagna', _p.get('lagna', 'Unknown'))}
+• Moon Sign: {((_p.get('chart_data') or {}).get('planets', {})).get('MOON', {}).get('sign', _p.get('moon_sign', 'Unknown'))}
+• Lagna (Ascendant): {((_p.get('chart_data') or {}).get('lagna', {})).get('sign', _p.get('lagna', 'Unknown'))}
 
 ====USER_QUERY_MARKER====
 "{query}"
@@ -1742,7 +1743,7 @@ Return "UNSAFE: <reason>" if violations found.
         state['validation_attempts'] += 1
         
         if not is_safe:
-            print(f"[CRITIC] ❌ Unsafe response detected: {feedback}")
+            print(f"[CRITIC] [FAIL] Unsafe response detected: {feedback}")
             state['validation_feedback'] = feedback
             
             # Simple Self-Correction (Rewrite)
@@ -1765,7 +1766,7 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                 try:
                     state['answer'] = self._call_llm(state, rewrite_prompt)
                     state['is_safe'] = True # Assume fixed (single loop for now)
-                    print("[CRITIC] ✅ Response rewritten.")
+                    print("[CRITIC] [OK] Response rewritten.")
                 except Exception as e:
                     state['error'] = f"Rewriting failed: {e}"
                     state['answer'] = "I cannot answer this query due to safety guidelines."
@@ -1773,7 +1774,7 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                 # If we failed twice, block it.
                 state['answer'] = "I must decline to answer this request as it violates my safety constitution regarding harmful or fatalistic predictions."
         else:
-            print("[CRITIC] ✅ Response is SAFE.")
+            print("[CRITIC] [OK] Response is SAFE.")
             
         return state
 
@@ -2001,11 +2002,18 @@ Provide a concise answer:"""
         
         # DEBUG: Print dasha data to verify it has dates
         print(f"[DEBUG] Dasha data in prompt:")
-        print(f"  Mahadasha: {maha_planet} ({dasha_data.get('mahadasha', {}).get('start_date', 'NO DATE')} to {dasha_data.get('mahadasha', {}).get('end_date', 'NO DATE')})")
-        print(f"  Antardasha: {antar_planet} ({dasha_data.get('antardasha', {}).get('start_date', 'NO DATE')} to {dasha_data.get('antardasha', {}).get('end_date', 'NO DATE')})")
+        print(f"  Mahadasha: {maha_planet} ({dasha_data.get('mahadasha', {}).get('start', 'NO DATE')} to {dasha_data.get('mahadasha', {}).get('end', 'NO DATE')})")
+        print(f"  Antardasha: {antar_planet} ({dasha_data.get('antardasha', {}).get('start', 'NO DATE')} to {dasha_data.get('antardasha', {}).get('end', 'NO DATE')})")
         calc_details = dasha_data.get('calculation_details', {})
         print(f"  Calculation details: Moon={calc_details.get('moon_longitude', 'MISSING')}, Nakshatra={calc_details.get('moon_nakshatra', 'MISSING')}")
         
+        # Build upcoming antardashas timeline
+        upcoming_ads = dasha_data.get('upcoming_antardashas', [])
+        upcoming_ads_str = ""
+        if upcoming_ads:
+            upcoming_ads_str = "\nStep 3 - Upcoming Antardashas (for future timing):\n"
+            for ad in upcoming_ads:
+                upcoming_ads_str += f"• {ad.get('planet', 'Unknown')} ({ad.get('start', 'Unknown')} to {ad.get('end', 'Unknown')})\n"
         
         # Extract transit info safely
         jupiter_transit = transit_data.get('transits', {}).get('Jupiter', 'Unknown')
@@ -2036,7 +2044,7 @@ Provide a concise answer:"""
 ONGOING CONVERSATION - CONTEXT HANDLING:
 - No greetings (Namaste/Hello/Hari Om) - get straight to answer
 - Review ALL previous messages before responding
-- When user says "it", "this", "that" → check conversation history
+- When user says "it", "this", "that" -> check conversation history
 - Connect follow-up questions to earlier topics
 - Build upon previous insights, don't repeat
 - Maintain conversation flow with context awareness
@@ -2093,7 +2101,7 @@ This is an ongoing conversation. Previous messages contain:
 - Chart placements mentioned
 - Questions answered
 
-When user uses "it", "this", "that" or asks "why", "how" → connect to conversation history.
+When user uses "it", "this", "that" or asks "why", "how" -> connect to conversation history.
 """
 
         prompt = f"""{system_prompt}
@@ -2112,16 +2120,16 @@ USER PROFILE:
 "{query}"
 
 BIRTH CHART DATA (Sidereal/Lahiri):
-• Ascendant (Lagna): {chart_data.get('ascendant', {}).get('rashi', 'Not available')} ({chart_data.get('ascendant', {}).get('degrees', 0.0):.2f}°)
-• Sun: {chart_data.get('planets', {}).get('Sun', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Sun', {}).get('house', '?')} ({chart_data.get('planets', {}).get('Sun', {}).get('nakshatra', 'Not available')})
-• Moon: {chart_data.get('planets', {}).get('Moon', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Moon', {}).get('house', '?')} ({chart_data.get('planets', {}).get('Moon', {}).get('nakshatra', 'Not available')})
-• Mars: {chart_data.get('planets', {}).get('Mars', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Mars', {}).get('house', '?')}
-• Mercury: {chart_data.get('planets', {}).get('Mercury', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Mercury', {}).get('house', '?')}
-• Jupiter: {chart_data.get('planets', {}).get('Jupiter', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Jupiter', {}).get('house', '?')}
-• Venus: {chart_data.get('planets', {}).get('Venus', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Venus', {}).get('house', '?')}
-• Saturn: {chart_data.get('planets', {}).get('Saturn', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Saturn', {}).get('house', '?')}
-• Rahu: {chart_data.get('planets', {}).get('Rahu', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Rahu', {}).get('house', '?')}
-• Ketu: {chart_data.get('planets', {}).get('Ketu', {}).get('rashi', 'Not available')} in House {chart_data.get('planets', {}).get('Ketu', {}).get('house', '?')}
+• Ascendant (Lagna): {chart_data.get('lagna', {}).get('sign', 'Not available')} ({chart_data.get('lagna', {}).get('degree', 0.0):.2f}°)
+• Sun: {chart_data.get('planets', {}).get('SUN', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('SUN', {}).get('house', '?')} ({chart_data.get('planets', {}).get('SUN', {}).get('nakshatra', 'Not available')})
+• Moon: {chart_data.get('planets', {}).get('MOON', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('MOON', {}).get('house', '?')} ({chart_data.get('planets', {}).get('MOON', {}).get('nakshatra', 'Not available')})
+• Mars: {chart_data.get('planets', {}).get('MARS', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('MARS', {}).get('house', '?')}
+• Mercury: {chart_data.get('planets', {}).get('MERCURY', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('MERCURY', {}).get('house', '?')}
+• Jupiter: {chart_data.get('planets', {}).get('JUPITER', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('JUPITER', {}).get('house', '?')}
+• Venus: {chart_data.get('planets', {}).get('VENUS', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('VENUS', {}).get('house', '?')}
+• Saturn: {chart_data.get('planets', {}).get('SATURN', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('SATURN', {}).get('house', '?')}
+• Rahu: {chart_data.get('planets', {}).get('RAHU', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('RAHU', {}).get('house', '?')}
+• Ketu: {chart_data.get('planets', {}).get('KETU', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('KETU', {}).get('house', '?')}
 
 {divisional_context}
 
@@ -2134,12 +2142,12 @@ Step 1 - Moon's Position at Birth:
 • Balance of First Dasha at Birth: {dasha_data.get('calculation_details', {}).get('balance_at_birth_years', 'Not available')} years
 
 Step 2 - Current Dasha Periods (Calculated from Moon Nakshatra):
-• Mahadasha: {maha_planet} ({dasha_data.get('mahadasha', {}).get('start_date', 'Unknown')} to {dasha_data.get('mahadasha', {}).get('end_date', 'Unknown')})
-• Antardasha: {antar_planet} ({dasha_data.get('antardasha', {}).get('start_date', 'Unknown')} to {dasha_data.get('antardasha', {}).get('end_date', 'Unknown')})
-• Pratyantardasha: {dasha_data.get('pratyantardasha', {}).get('planet', 'Unknown')} ({dasha_data.get('pratyantardasha', {}).get('start_date', 'Unknown')} to {dasha_data.get('pratyantardasha', {}).get('end_date', 'Unknown')})
+• Mahadasha: {maha_planet} ({dasha_data.get('mahadasha', {}).get('start', 'Unknown')} to {dasha_data.get('mahadasha', {}).get('end', 'Unknown')})
+• Antardasha: {antar_planet} ({dasha_data.get('antardasha', {}).get('start', 'Unknown')} to {dasha_data.get('antardasha', {}).get('end', 'Unknown')})
+• Pratyantardasha: {dasha_data.get('pratyantardasha', {}).get('planet', 'Unknown')} ({dasha_data.get('pratyantardasha', {}).get('start', 'Unknown')} to {dasha_data.get('pratyantardasha', {}).get('end', 'Unknown')})
 • Dasha Sequence: {dasha_sequence}
-
-CRITICAL: These dates are CALCULATED using Swiss Ephemeris, not estimated. The calculation follows classical Vimshottari Dasha rules: Moon's Nakshatra → Nakshatra Lord → Dasha sequence. Use ONLY these exact dates for timing predictions.
+{upcoming_ads_str}
+CRITICAL: These dates are CALCULATED using Swiss Ephemeris, not estimated. The calculation follows classical Vimshottari Dasha rules: Moon's Nakshatra -> Nakshatra Lord -> Dasha sequence. Use ONLY these exact dates for timing predictions.
 
 
 CURRENT TRANSITS (as of {transit_date}):

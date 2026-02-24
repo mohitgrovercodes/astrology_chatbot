@@ -49,12 +49,12 @@ def print_header(text: str):
 
 def print_success(text: str):
     """Print success message."""
-    print(f"{Colors.GREEN}✅ {text}{Colors.ENDC}")
+    print(f"{Colors.GREEN}[OK] {text}{Colors.ENDC}")
 
 
 def print_error(text: str):
     """Print error message."""
-    print(f"{Colors.RED}❌ {text}{Colors.ENDC}")
+    print(f"{Colors.RED}[FAIL] {text}{Colors.ENDC}")
 
 
 def print_info(text: str):
@@ -64,7 +64,7 @@ def print_info(text: str):
 
 def print_warning(text: str):
     """Print warning message."""
-    print(f"{Colors.YELLOW}⚠️  {text}{Colors.ENDC}")
+    print(f"{Colors.YELLOW}[WARN]  {text}{Colors.ENDC}")
 
 
 def print_json(title: str, data: Any):
@@ -198,7 +198,7 @@ def test_initialize_session(user_id: str, r: redis.Redis):
             assert conversation[1]["role"] == "assistant"
             assert conversation[1]["metadata"]["source"] == "external"
             print_success("Conversation format converted correctly")
-            print_success(f"External format (2 Q&A pairs) → Internal format (4 messages)")
+            print_success(f"External format (2 Q&A pairs) -> Internal format (4 messages)")
         
         # Verify metadata
         print_info("\n--- METADATA ---")

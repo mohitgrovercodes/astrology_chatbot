@@ -256,8 +256,8 @@ Your classification must be based on the user's UNDERLYING INTENT and potential 
 - `career_change`: Career timing, job decisions. Add CAREER disclaimer.
 
 **REFRAME** — The question is answerable but framed as hard fortune-telling. Reframe it to empower the user with probabilistic guidance:
-- `poorly_framed`: "Will I get rich?" → "What periods support wealth accumulation for me?"
-- `misunderstood`: "Why is God punishing me?" → "What challenging planetary periods am I in, and how do I grow through them?"
+- `poorly_framed`: "Will I get rich?" -> "What periods support wealth accumulation for me?"
+- `misunderstood`: "Why is God punishing me?" -> "What challenging planetary periods am I in, and how do I grow through them?"
 
 **SAFE** — Legitimate astrological question with no special risk:
 - `educational`: Learning about concepts, planets, houses, yogas, dashas.
@@ -390,7 +390,7 @@ class SafetyClassifier:
             decision = SafetyDecision(**decision_dict)
             
         except Exception as e:
-            # Fallback: Be permissive on технический errors but log the failure
+            # Fallback: Be permissive on technical errors but log the failure
             # If the query is obviously safe (e.g. "hi", "what is my rashi"), don't block
             print(f"[INTENT] [WARN] Safety classifier technical error: {e}")
             
@@ -418,10 +418,10 @@ class SafetyClassifier:
         """
         query_lower = query.lower()
         
-        # Third-party indicators
+        # High-risk Third-party indicators (asking for someone else's reading)
         patterns = [
             'my friend', 'my sister', 'my brother', 'my mother', 'my father',
-            'my husband', 'my wife', 'my son', 'my daughter', 'my child',
+            'my husband', 'my wife', 'my son', 'my daughter',
             'my boss', 'my colleague', 'my neighbor',
             'her chart', 'his chart', 'their chart',
             'her horoscope', 'his horoscope',
@@ -429,6 +429,24 @@ class SafetyClassifier:
             'will he', 'will she', 'will they',
             'does he', 'does she', 'do they'
         ]
+        
+        # Exclusions: Valid questions about the user's *own* life events involving others
+        # Example: "when will my child be born" is a valid 5th house question for the user
+        exclusions = [
+            'my child be born',
+            'have a child',
+            'get a job', # just in case
+        ]
+        
+        for exc in exclusions:
+            if exc in query_lower:
+                return None
+                
+        # Also, check "my child" separately to allow general children questions for the user's chart
+        if 'my child' in query_lower and not any(exc in query_lower for exc in exclusions):
+             # Only block if it looks like they want a reading *for* the child (e.g. "my child's chart")
+             if "chart" in query_lower or "horoscope" in query_lower or "kundli" in query_lower:
+                 return True, "your child"
         
         for pattern in patterns:
             if pattern in query_lower:

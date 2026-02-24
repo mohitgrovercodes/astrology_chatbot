@@ -462,5 +462,5 @@ if __name__ == "__main__":
         print("\n[DONE] Configuration is valid!")
         
     except Exception as e:
-        print(f"\n❌ Configuration Error: {e}")
+        print(f"\n[FAIL] Configuration Error: {e}")
         raise

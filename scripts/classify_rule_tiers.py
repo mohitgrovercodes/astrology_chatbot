@@ -92,32 +92,32 @@ class TierClassifier:
         print("=" * 60)
         
         self.stats['total'] = len(rules)
-        print(f"📊 Classifying {len(rules)} rules into tiers")
+        print(f"[STATS] Classifying {len(rules)} rules into tiers")
         print(f"🎯 Tier 1 target: {self.tier1_size} rules")
         print(f"🎯 Tier 2 target: {self.tier2_size} rules")
         print(f"🎯 Tier 3 target: {self.tier3_size} rules")
         
         # Step 1: Calculate importance scores
-        print("\n🔍 Step 1: Calculating importance scores...")
+        print("\n[SEARCH] Step 1: Calculating importance scores...")
         scored_rules = self._score_rules(rules)
         
         # Step 2: Assign tiers
-        print("\n🔍 Step 2: Assigning tiers...")
+        print("\n[SEARCH] Step 2: Assigning tiers...")
         tiered_rules = self._assign_tiers(scored_rules)
         
         # Step 3: Validate tier assignments
-        print("\n🔍 Step 3: Validating tier assignments...")
+        print("\n[SEARCH] Step 3: Validating tier assignments...")
         tiered_rules = self._validate_tiers(tiered_rules)
         
         # Calculate statistics
         self._calculate_stats(tiered_rules)
         
         print("\n" + "=" * 60)
-        print("✅ TIER CLASSIFICATION COMPLETE")
-        print(f"📊 Tier 1 (Essential):     {self.stats['tier1']} rules")
-        print(f"📊 Tier 2 (Important):     {self.stats['tier2']} rules")
-        print(f"📊 Tier 3 (Detailed):      {self.stats['tier3']} rules")
-        print(f"📊 Tier 4 (Comprehensive): {self.stats['tier4']} rules")
+        print("[OK] TIER CLASSIFICATION COMPLETE")
+        print(f"[STATS] Tier 1 (Essential):     {self.stats['tier1']} rules")
+        print(f"[STATS] Tier 2 (Important):     {self.stats['tier2']} rules")
+        print(f"[STATS] Tier 3 (Detailed):      {self.stats['tier3']} rules")
+        print(f"[STATS] Tier 4 (Comprehensive): {self.stats['tier4']} rules")
         print("=" * 60)
         
         return tiered_rules
@@ -271,7 +271,7 @@ class TierClassifier:
                 rule['tier_name'] = 'Essential'
                 tiered_rules['tier1'].append(rule)
         else:
-            print(f"   ✅ No critical+halt_on_failure rules need promotion")
+            print(f"   [OK] No critical+halt_on_failure rules need promotion")
         
         return tiered_rules
     
@@ -396,7 +396,7 @@ def main():
     rules = data.get('rules', data if isinstance(data, list) else [])
     metadata = data.get('metadata', {})
     
-    print(f"   ✅ Loaded {len(rules)} rules")
+    print(f"   [OK] Loaded {len(rules)} rules")
     
     # Classify
     classifier = TierClassifier(
@@ -408,7 +408,7 @@ def main():
     tiered_rules = classifier.classify(rules)
     
     # Analyze tiers
-    print("\n📊 Analyzing tier composition...")
+    print("\n[STATS] Analyzing tier composition...")
     analysis = classifier.analyze_tiers(tiered_rules)
     
     # Prepare output
@@ -438,22 +438,22 @@ def main():
     }
     
     # Save tiered rules
-    print(f"\n💾 Saving tiered rules to {args.output}...")
+    print(f"\n[SAVE] Saving tiered rules to {args.output}...")
     
     with open(args.output, 'w', encoding='utf-8') as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
     
-    print(f"   ✅ Saved tiered structure")
+    print(f"   [OK] Saved tiered structure")
     
     # Save analysis if requested
     if args.analysis_file:
         with open(args.analysis_file, 'w', encoding='utf-8') as f:
             json.dump(analysis, f, indent=2)
-        print(f"   ✅ Analysis saved to {args.analysis_file}")
+        print(f"   [OK] Analysis saved to {args.analysis_file}")
     
     # Print detailed summary
     print("\n" + "=" * 60)
-    print("📊 TIER ANALYSIS")
+    print("[STATS] TIER ANALYSIS")
     print("=" * 60)
     
     for tier_name in ['tier1', 'tier2', 'tier3', 'tier4']:
@@ -475,7 +475,7 @@ def main():
             print(f"  By Stage:           {tier_data['by_stage']}")
     
     print("\n" + "=" * 60)
-    print("💡 USAGE RECOMMENDATIONS:")
+    print("[IDEA] USAGE RECOMMENDATIONS:")
     print("=" * 60)
     print(f"Tier 1: Quick validation (~{classifier.stats['tier1']} rules, <100ms)")
     print(f"Tier 2: Standard validation (~{classifier.stats['tier2']} rules, <500ms)")

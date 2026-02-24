@@ -31,7 +31,7 @@ class ValidationCategory(str, Enum):
     PLANETARY_STATE = "planetary_state"           # Combustion, retrogression, etc.
     DIVISIONAL_CONFIRMATION = "divisional_confirmation"  # D9 confirmation, etc.
     LAGNA_SPECIFIC = "lagna_specific"            # Functional nature by ascendant
-    HIERARCHICAL_LOGIC = "hierarchical_logic"    # Promise→Timing→Trigger
+    HIERARCHICAL_LOGIC = "hierarchical_logic"    # Promise->Timing->Trigger
     STRENGTH_ASSESSMENT = "strength_assessment"  # Shadbala, dignity
     LUNAR_CONSIDERATION = "lunar_consideration"  # Moon's paksha, state
     KARMIC_AXIS = "karmic_axis"                 # Rahu/Ketu effects

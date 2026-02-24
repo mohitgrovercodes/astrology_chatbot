@@ -303,8 +303,8 @@ def detect_mahapurusha_yogas(
             name=f"{yoga_name} Yoga",
             category=YogaCategory.MAHAPURUSHA,
             is_present=yoga_formed,
-            forming_planets=(planet),
-            forming_houses=(bhava.bhava) if is_in_kendra else (),
+            forming_planets=(planet,),
+            forming_houses=(bhava.bhava,) if is_in_kendra else (),
             strength=strength,
             conditions_met=tuple(conditions)
         ))
@@ -364,8 +364,8 @@ def detect_raja_yogas(
                     name="Raja Yoga" if not is_same else "Lagna Lord Raja Yoga",
                     category=YogaCategory.RAJA,
                     is_present=True,
-                    forming_planets=(kp) if is_same else (kp, tp),
-                    forming_houses=(house),
+                    forming_planets=(kp,) if is_same else (kp, tp),
+                    forming_houses=(house,),
                     strength=0.8,
                     conditions_met=(
                         f"Kendra lord {kp.name} conjunct Trikona lord {tp.name} in house {house}",
@@ -408,7 +408,7 @@ def detect_dhana_yogas(
             category=YogaCategory.DHANA,
             is_present=True,
             forming_planets=(lord_2, lord_11),
-            forming_houses=(house_2.bhava),
+            forming_houses=(house_2.bhava,),
             strength=0.75,
             conditions_met=(
                 f"2nd lord {lord_2.name} conjunct 11th lord {lord_11.name}",
@@ -426,7 +426,7 @@ def detect_dhana_yogas(
             category=YogaCategory.DHANA,
             is_present=True,
             forming_planets=tuple(benefics_in_2),
-            forming_houses=(2),
+            forming_houses=(2,),
             strength=0.6,
             conditions_met=tuple(f"{p.name} in 2nd house" for p in benefics_in_2)
         ))

@@ -119,7 +119,7 @@ def get_divisional_chart_context(
                            'vehicle', 'car', 'apartment', 'flat', 'asset']
         query_lower = original_query.lower()
         if any(keyword in query_lower for keyword in property_keywords):
-            print(f"[DIVISIONAL] Smart detection: finance→property based on keywords")
+            print(f"[DIVISIONAL] Smart detection: finance->property based on keywords")
             query_type = 'property'
     
     if query_type not in DIVISIONAL_CHART_MAP:
@@ -164,7 +164,7 @@ def get_divisional_chart_context(
         
         for planet, rashi in chart_info.get('planets', {}).items():
             if planet in key_planets:
-                context += f"  • {planet:10} → {rashi:15} ⭐ (Key for {query_type})\n"
+                context += f"  • {planet:10} -> {rashi:15} * (Key for {query_type})\n"
             else:
                 other_planets.append((planet, rashi))
         
@@ -172,7 +172,7 @@ def get_divisional_chart_context(
         if verbose and other_planets:
             context += "\nOther Planets:\n"
             for planet, rashi in other_planets:
-                context += f"  • {planet:10} → {rashi}\n"
+                context += f"  • {planet:10} -> {rashi}\n"
         
         context += "\n"
     
