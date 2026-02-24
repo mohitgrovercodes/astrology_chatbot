@@ -1,0 +1,251 @@
+# src/session/manager.py
+"""
+Unified Session Manager for NakshatraAI.
+
+Combines high-performance Redis caching for:
+1. User Profiles & Conversation History
+2. Astrological Calculations (D1-D60, Dashas, Transits)
+3. Conversation Summarization Status
+"""
+
+import json
+import redis
+import logging
+from typing import Dict, List, Optional, Any
+from datetime import datetime, timedelta
+from dataclasses import dataclass, asdict
+
+# Standardize key patterns
+# session:{user_id}:user_profile
+# session:{user_id}:history
+# session:{user_id}:summary
+# session:{user_id}:metadata
+# session:{user_id}:calculations:<type>
+# session:{user_id}:transits:current
+
+logger = logging.getLogger(__name__)
+
+@dataclass
+class CalculationStatus:
+    """Metadata about what's been calculated."""
+    has_d1_chart: bool = False
+    has_d9_chart: bool = False
+    has_d10_chart: bool = False
+    has_dasha_data: bool = False
+    has_transit_data: bool = False
+    has_ayanamsa: bool = False
+    last_calculated: Optional[str] = None
+
+class SessionManager:
+    """
+    State-of-the-art Session Manager merging all Redis functionality.
+    """
+    
+    # TTL values
+    TTL_24H = 86400           # History, Profile, Summary
+    TTL_30D = 2592000         # Calculations (Birth charts don't change)
+    TTL_2H = 7200             # Transits (Dynamic)
+    
+    # Divisional charts supported
+    DIVISIONAL_CHARTS = ['d1', 'd9', 'd10', 'd12', 'd16', 'd20', 'd24', 'd27', 'd30', 'd40', 'd45', 'd60']
+
+    def __init__(self, host: str = 'localhost', port: int = 6379, db: int = 0, password: str = None):
+        self.redis = None
+        # Try multiple hosts for resilience
+        for h in [host, '127.0.0.1', 'localhost']:
+            try:
+                client = redis.Redis(
+                    host=h, 
+                    port=port, 
+                    db=db, 
+                    password=password,
+                    decode_responses=True, 
+                    socket_connect_timeout=2
+                )
+                client.ping()
+                self.redis = client
+                logger.info(f"[SESSION] Redis connected on {h}:{port}")
+                break
+            except Exception as e:
+                continue
+                
+        if not self.redis:
+            logger.error("[SESSION] Redis not available - persistence disabled")
+
+    def _key(self, user_id: str, data_type: str, sub_type: str = None) -> str:
+        if sub_type:
+            return f"session:{user_id}:{data_type}:{sub_type}"
+        return f"session:{user_id}:{data_type}"
+
+    # --- Profile & History ---
+
+    def get_user_profile(self, user_id: str) -> Optional[Dict]:
+        if not self.redis: return None
+        data = self.redis.get(self._key(user_id, "user_profile"))
+        return json.loads(data) if data else None
+
+    def get_conversation_history(self, user_id: str) -> List[Dict]:
+        if not self.redis: return []
+        data = self.redis.get(self._key(user_id, "history"))
+        return json.loads(data) if data else []
+
+    def add_message(self, user_id: str, role: str, content: str, metadata: Dict = None):
+        if not self.redis: return False
+        try:
+            history = self.get_conversation_history(user_id)
+            message = {
+                "role": role,
+                "content": content,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            if metadata: message["metadata"] = metadata
+            
+            history.append(message)
+            # Keep last 20 messages to keep LLM context clean
+            if len(history) > 20:
+                history = history[-20:]
+            
+            self.redis.setex(self._key(user_id, "history"), self.TTL_24H, json.dumps(history))
+            return True
+        except Exception as e:
+            logger.error(f"[SESSION] Add message error: {e}")
+            return False
+
+    # --- Initialization ---
+
+    def initialize_session(self, user_id: str, user_profile: Dict, conversation_history: List = None):
+        if not self.redis: return {"status": "error", "message": "Redis offline"}
+        try:
+            # 1. Store Profile
+            self.redis.setex(self._key(user_id, "user_profile"), self.TTL_24H, json.dumps(user_profile))
+            
+            # 2. Process History (Handle external backend formats)
+            internal_history = []
+            if conversation_history:
+                for msg in conversation_history:
+                    # Support both standard role/content and backend question/answer formats
+                    if msg.get('question'):
+                        internal_history.append({"role": "user", "content": msg['question'], "timestamp": msg.get('timestamp')})
+                    elif msg.get('role') == 'user':
+                        internal_history.append(msg)
+                        
+                    if msg.get('answer'):
+                        internal_history.append({"role": "assistant", "content": msg['answer'], "timestamp": msg.get('timestamp')})
+                    elif msg.get('role') == 'assistant':
+                        internal_history.append(msg)
+            
+            self.redis.setex(self._key(user_id, "history"), self.TTL_24H, json.dumps(internal_history))
+            
+            # 3. Store Metadata
+            metadata = {
+                "user_id": user_id,
+                "created_at": datetime.utcnow().isoformat(),
+                "messages_imported": len(internal_history)
+            }
+            self.redis.setex(self._key(user_id, "metadata"), self.TTL_24H, json.dumps(metadata))
+            
+            return {"status": "success", "user_id": user_id}
+        except Exception as e:
+            logger.error(f"[SESSION] Init error: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def session_exists(self, user_id: str) -> bool:
+        if not self.redis: return False
+        return self.redis.exists(self._key(user_id, "user_profile")) > 0
+
+    # --- Summarization Logic ---
+
+    def get_conversation_summary(self, user_id: str) -> Optional[str]:
+        if not self.redis: return None
+        data = self.redis.get(self._key(user_id, "summary"))
+        return json.loads(data).get('summary') if data else None
+
+    def store_conversation_summary(self, user_id: str, summary: str):
+        if not self.redis: return
+        data = {
+            "summary": summary,
+            "updated_at": datetime.utcnow().isoformat(),
+            "message_count": len(self.get_conversation_history(user_id))
+        }
+        self.redis.setex(self._key(user_id, "summary"), self.TTL_24H, json.dumps(data))
+
+    def should_update_summary(self, user_id: str) -> bool:
+        """Update every 6 messages (3 exchanges)."""
+        history = self.get_conversation_history(user_id)
+        current_count = len(history)
+        
+        data = self.redis.get(self._key(user_id, "summary"))
+        last_count = json.loads(data).get('message_count', 0) if data else 0
+        
+        return (current_count - last_count) >= 6
+
+    # --- Advanced Calculation Caching ---
+
+    def get_divisional_chart(self, user_id: str, chart_type: str) -> Optional[Dict]:
+        if not self.redis or chart_type not in self.DIVISIONAL_CHARTS: return None
+        data = self.redis.get(self._key(user_id, "calculations", f"{chart_type}_chart"))
+        return json.loads(data) if data else None
+
+    def store_divisional_chart(self, user_id: str, chart_type: str, chart_data: Dict):
+        if not self.redis or chart_type not in self.DIVISIONAL_CHARTS: return
+        self.redis.setex(self._key(user_id, "calculations", f"{chart_type}_chart"), self.TTL_30D, json.dumps(chart_data))
+
+    def get_dasha_data(self, user_id: str) -> Optional[Dict]:
+        if not self.redis: return None
+        data = self.redis.get(self._key(user_id, "calculations", "dasha_data"))
+        return json.loads(data) if data else None
+
+    def store_dasha_data(self, user_id: str, dasha_data: Dict):
+        if not self.redis: return
+        self.redis.setex(self._key(user_id, "calculations", "dasha_data"), self.TTL_30D, json.dumps(dasha_data))
+
+    def get_transit_data(self, user_id: str) -> Optional[Dict]:
+        if not self.redis: return None
+        data = self.redis.get(self._key(user_id, "transits", "current"))
+        return json.loads(data) if data else None
+
+    def store_transit_data(self, user_id: str, transit_data: Dict):
+        if not self.redis: return
+        transit_data['calculated_at'] = datetime.utcnow().isoformat()
+        self.redis.setex(self._key(user_id, "transits", "current"), self.TTL_2H, json.dumps(transit_data))
+
+    def get_calculation_status(self, user_id: str) -> CalculationStatus:
+        status = CalculationStatus()
+        if not self.redis: return status
+        
+        status.has_d1_chart = self.redis.exists(self._key(user_id, "calculations", "d1_chart")) > 0
+        status.has_d9_chart = self.redis.exists(self._key(user_id, "calculations", "d9_chart")) > 0
+        status.has_d10_chart = self.redis.exists(self._key(user_id, "calculations", "d10_chart")) > 0
+        status.has_dasha_data = self.redis.exists(self._key(user_id, "calculations", "dasha_data")) > 0
+        status.has_transit_data = self.redis.exists(self._key(user_id, "transits", "current")) > 0
+        
+        return status
+
+    # --- Cleanup ---
+
+    def clear_session(self, user_id: str, clear_calculations: bool = False):
+        if not self.redis: return False
+        keys = [
+            self._key(user_id, "user_profile"),
+            self._key(user_id, "history"),
+            self._key(user_id, "summary"),
+            self._key(user_id, "metadata")
+        ]
+        if clear_calculations:
+            # Delete all calculation keys for this user
+            calc_keys = self.redis.keys(f"session:{user_id}:calculations:*")
+            transit_keys = self.redis.keys(f"session:{user_id}:transits:*")
+            keys.extend(calc_keys)
+            keys.extend(transit_keys)
+            
+        if keys:
+            self.redis.delete(*keys)
+        return True
+
+# Global instance
+_manager = None
+def get_session_manager():
+    global _manager
+    if _manager is None:
+        _manager = SessionManager()
+    return _manager
