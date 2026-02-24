@@ -1,3 +1,5 @@
+# src/engines/vedic/aspects_yogas.py
+# src\engines\vedic\aspects_yogas.py
 """
 Layer 3C: Aspects (Drishti) and Yoga Detection
 ==============================================

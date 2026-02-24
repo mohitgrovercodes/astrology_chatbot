@@ -1,64 +1,147 @@
+# src/llm/factory.py
 """
-LLM Factory for Astrology AI Chatbot.
+LLM Factory for NakshatraAI - Two Provider Support
 
-This module provides a factory pattern to create LLM instances from multiple providers:
-- OpenAI (GPT-4o, GPT-4o-mini)
-- Google (Gemini 1.5 Pro, Flash)
-- xAI (Grok-2, Grok-2-mini)
-- Anthropic (Claude Sonnet)
+This factory supports two LLM providers:
+1. OpenAI (GPT-4o-mini) - Production deployment (default)
+2. Free (Llama 3.2 via Ollama) - Local testing and fallback
 
-All LLMs are created using LangChain abstractions for consistency.
+Provider Selection:
+- Set via LLM_PROVIDER environment variable ("openai" | "free")
+- Defaults to "openai" if not set
+- Automatic model selection based on purpose (general vs classification)
+
+Rate Limiting:
+- Built-in protection against 429 errors
+- Configurable delays and retry logic
+- Exponential backoff on failures
 """
 
-from typing import Optional, Dict, Any, List
+import os
+import time
+from typing import Optional
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_openai import ChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_anthropic import ChatAnthropic
 
-# Note: langchain-xai requires installation of langchain-xai package
-# If not available, it will be handled gracefully
+# Utilities
 try:
-    from langchain_xai import ChatXAI
-    XAI_AVAILABLE = True
+    from src.utils.config import get_config
+    from src.utils.logger import get_logger
+    logger = get_logger(__name__)
+    CONFIG_AVAILABLE = True
 except ImportError:
-    XAI_AVAILABLE = False
-
-from src.utils.config import get_config
-from src.utils.logger import get_logger
-
-
-logger = get_logger(__name__)
+    import logging
+    logger = logging.getLogger(__name__)
+    CONFIG_AVAILABLE = False
 
 
-# ============================================
-# LLM Factory
-# ============================================
+# ============================================================================
+# RATE-LIMITED LLM WRAPPER
+# ============================================================================
+
+from langchain_core.runnables import Runnable
+
+class RateLimitedLLM(Runnable):
+    """
+    Wrapper that adds rate limiting to any LangChain LLM.
+
+    Prevents 429 errors by enforcing minimum delays between calls and
+    implementing exponential backoff on failures.
+    """
+
+    def __init__(
+        self,
+        llm: BaseChatModel,
+        min_delay: float = 2.0,
+        max_retries: int = 3,
+        base_backoff: float = 4.0
+    ):
+        super().__init__()
+        self.llm = llm
+        self.min_delay = min_delay
+        self.max_retries = max_retries
+        self.base_backoff = base_backoff
+        self._last_call_time = 0
+
+    def _wait_if_needed(self):
+        """Enforce minimum delay between API calls."""
+        current_time = time.time()
+        elapsed = current_time - self._last_call_time
+
+        if elapsed < self.min_delay:
+            time.sleep(self.min_delay - elapsed)
+
+        self._last_call_time = time.time()
+
+    def invoke(self, input, config=None, **kwargs):
+        """Invoke with rate limiting and exponential backoff retry logic."""
+        for attempt in range(self.max_retries):
+            try:
+                self._wait_if_needed()
+                return self.llm.invoke(input, config=config, **kwargs)
+
+            except Exception as e:
+                error_str = str(e).lower()
+                is_rate_limit = any([
+                    "429" in error_str,
+                    "rate limit" in error_str,
+                    "resource exhausted" in error_str,
+                    "quota" in error_str
+                ])
+
+                if is_rate_limit and attempt < self.max_retries - 1:
+                    wait_time = self.base_backoff * (2 ** attempt)
+                    logger.warning(
+                        f"Rate limit hit. Waiting {wait_time}s... "
+                        f"(Attempt {attempt+1}/{self.max_retries})"
+                    )
+                    time.sleep(wait_time)
+                else:
+                    raise
+
+        raise RuntimeError(f"Failed after {self.max_retries} retries")
+
+    def stream(self, input, config=None, **kwargs):
+        """Stream with rate limiting."""
+        self._wait_if_needed()
+        yield from self.llm.stream(input, config=config, **kwargs)
+
+    async def ainvoke(self, input, config=None, **kwargs):
+        """Async invoke with rate limiting."""
+        import asyncio
+        for attempt in range(self.max_retries):
+            try:
+                self._wait_if_needed()
+                return await self.llm.ainvoke(input, config=config, **kwargs)
+            except Exception as e:
+                if attempt < self.max_retries - 1:
+                    await asyncio.sleep(self.base_backoff * (2 ** attempt))
+                else:
+                    raise
+
+    def __getattr__(self, name):
+        """Delegate to underlying LLM."""
+        return getattr(self.llm, name)
+
+
+# ============================================================================
+# TWO-PROVIDER LLM FACTORY
+# ============================================================================
 
 class LLMFactory:
     """
-    Factory class for creating LLM instances from multiple providers.
-    
-    Supports:
-    - OpenAI (gpt-4o, gpt-4o-mini, gpt-4-turbo)
-    - Google (gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash-exp)
-    - xAI (grok-2, grok-2-mini)
-    - Anthropic (claude-sonnet-4, claude-3-5-sonnet)
-    
-    Uses configuration from config.yaml and .env for defaults and API keys.
+    Factory for creating LLM instances across two providers.
+
+    Provider Decision Tree:
+    1. Check LLM_PROVIDER environment variable
+    2. If not set, use config.yaml default
+    3. If no config, default to "openai"
+
+    Model Selection:
+    - Purpose "general": Use best model for quality responses
+    - Purpose "classification": Use fast model for routing/validation
+    - Purpose "validation": Use model suitable for rule evaluation
     """
-    
-    # Mapping of provider names to LangChain classes
-    PROVIDER_MAP = {
-        "openai": ChatOpenAI,
-        "google": ChatGoogleGenerativeAI,
-        "anthropic": ChatAnthropic,
-    }
-    
-    # Add xAI if available
-    if XAI_AVAILABLE:
-        PROVIDER_MAP["xai"] = ChatXAI
-    
+
     @classmethod
     def create(
         cls,
@@ -66,376 +149,346 @@ class LLMFactory:
         model: Optional[str] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
-        api_key: Optional[str] = None,
+        use_rate_limiting: bool = True,
+        rate_limit_delay: float = 1.5,
+        purpose: str = "general",
         **kwargs
     ) -> BaseChatModel:
         """
-        Create an LLM instance.
-        
+        Create an LLM instance with automatic provider and model selection.
+
         Args:
-            provider: Provider name (openai, google, xai, anthropic)
-                     If None, uses default from config
-            model: Model name (e.g., gpt-4o-mini)
-                  If None, uses default from config
-            temperature: Sampling temperature (0.0 to 1.0)
-                       If None, uses default from config
-            max_tokens: Maximum tokens in response
-                      If None, uses default from config
-            api_key: API key for the provider
-                    If None, loads from environment
-            **kwargs: Additional provider-specific parameters
-        
+            provider: "openai" | "free" (overrides env and config)
+            model: Specific model name (overrides automatic selection)
+            temperature: Sampling temperature (0.0-1.0)
+            max_tokens: Maximum output tokens
+            use_rate_limiting: Wrap with RateLimitedLLM
+            rate_limit_delay: Minimum seconds between calls
+            purpose: "general" | "classification" | "validation"
+            **kwargs: Additional provider-specific arguments
+
         Returns:
-            LangChain BaseChatModel instance
-        
-        Raises:
-            ValueError: If provider is not supported or API key is missing
-        
-        Example:
-            >>> # Use defaults from config
-            >>> llm = LLMFactory.create()
-            
-            >>> # Use specific provider and model
-            >>> llm = LLMFactory.create(provider="google", model="gemini-1.5-pro")
-            
-            >>> # Override temperature
-            >>> llm = LLMFactory.create(temperature=0.7)
+            Configured LLM instance (optionally rate-limited)
+
+        Environment Variables Required by Provider:
+            OpenAI:
+                - OPENAI_API_KEY
+
+            Free (Ollama):
+                - OLLAMA_BASE_URL (optional, default: http://localhost:11434)
         """
-        config = get_config()
-        
-        # Use defaults from config if not provided
-        if provider is None:
-            provider = config.llm.default_provider
+
+        # Step 1: Determine Provider
+        provider = cls._determine_provider(provider)
+
+        # Step 2: Select Model (if not explicitly provided)
         if model is None:
-            model = config.llm.default_model
+            model = cls._select_model_for_provider(provider, purpose)
+
+        # Step 3: Get Temperature and Max Tokens
         if temperature is None:
-            temperature = config.llm.temperature
+            temperature = 0.3 if purpose == "classification" else 0.5
+
         if max_tokens is None:
-            max_tokens = config.llm.max_tokens
-        
-        # Validate provider
-        provider = provider.lower()
-        if provider not in cls.PROVIDER_MAP:
-            available = list(cls.PROVIDER_MAP.keys())
-            raise ValueError(
-                f"Unsupported provider: {provider}. "
-                f"Available providers: {available}"
-            )
-        
-        # Get API key
-        if api_key is None:
-            api_key = config.get_api_key(provider)
-            if not api_key:
-                raise ValueError(
-                    f"API key for provider '{provider}' not found. "
-                    f"Please set {provider.upper()}_API_KEY in your .env file."
-                )
-        
-        # Get LangChain class for provider
-        llm_class = cls.PROVIDER_MAP[provider]
-        
-        # Build kwargs for LLM
-        llm_kwargs = {
-            "model": model,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            **kwargs
-        }
-        
-        # Add API key with provider-specific parameter name
+            # Purpose-based token allocation
+            purpose_token_map = {
+                "classification": 1024,   # Fast classification (intent, safety)
+                "chitchat": 1024,          # Brief conversational responses
+                "general": 4096,           # Standard responses
+                "prediction": 4096,        # Detailed predictions with timing
+                "rag": 4096,               # Knowledge-heavy RAG responses
+                "validation": 4096,        # Validation engine batch processing
+            }
+            max_tokens = purpose_token_map.get(purpose, 2048)  # Default: 2048
+
+            logger.debug(f"Token allocation for purpose '{purpose}': {max_tokens}")
+
+        logger.info(
+            f"Creating LLM: provider={provider}, model={model}, "
+            f"purpose={purpose}, temp={temperature}, max_tokens={max_tokens}"
+        )
+
+        # Step 4: Create Provider-Specific LLM
         if provider == "openai":
-            llm_kwargs["api_key"] = api_key
-        elif provider == "google":
-            llm_kwargs["google_api_key"] = api_key
-        elif provider == "xai":
-            llm_kwargs["xai_api_key"] = api_key
-        elif provider == "anthropic":
-            llm_kwargs["anthropic_api_key"] = api_key
-        
-        # Create and return LLM instance
-        try:
-            llm = llm_class(**llm_kwargs)
-            logger.info(
-                f"Created LLM: provider={provider}, model={model}, "
-                f"temperature={temperature}, max_tokens={max_tokens}"
+            llm = cls._create_openai_llm(model, temperature, max_tokens, **kwargs)
+
+        elif provider == "free":
+            llm = cls._create_free_llm(model, temperature, max_tokens, **kwargs)
+
+        else:
+            raise ValueError(
+                f"Unknown provider: '{provider}'. "
+                f"Must be 'openai' or 'free'. "
+                f"Set LLM_PROVIDER env variable accordingly."
             )
+
+        # Step 5: Optionally Wrap with Rate Limiter
+        if use_rate_limiting:
+            llm = RateLimitedLLM(llm, min_delay=rate_limit_delay)
+
+        return llm
+
+    # ------------------------------------------------------------------------
+    # PROVIDER DETERMINATION
+    # ------------------------------------------------------------------------
+
+    @classmethod
+    def _determine_provider(cls, override: Optional[str] = None) -> str:
+        """
+        Determine which LLM provider to use.
+
+        Priority:
+        1. Function argument (override)
+        2. Environment variable LLM_PROVIDER
+        3. Config file default
+        4. Hardcoded default ("openai")
+        """
+        if override:
+            return override.lower()
+
+        # Check environment variable
+        env_provider = os.getenv("LLM_PROVIDER", "").lower()
+        if env_provider in ["openai", "free"]:
+            return env_provider
+
+        # Check config file
+        if CONFIG_AVAILABLE:
+            config_provider = get_config().llm.default_provider
+            if config_provider and config_provider.lower() in ["openai", "free"]:
+                return config_provider.lower()
+
+        # Default to OpenAI (production-ready)
+        return "openai"
+
+    @classmethod
+    def _select_model_for_provider(cls, provider: str, purpose: str) -> str:
+        """
+        Select appropriate model based on provider and purpose.
+
+        Model Selection Strategy:
+        - OpenAI: gpt-4o-mini for all purposes (cost-effective + good quality)
+        - Free: llama3.2:3b (decent quality, runs locally)
+        """
+        if provider == "openai":
+            # gpt-4o-mini: cost-effective and capable for all purposes
+            return "gpt-4o-mini"
+
+        elif provider == "free":
+            # Ollama local models
+            if purpose == "classification":
+                return "llama3.2:1b"  # Ultra-fast for simple tasks
+            else:
+                return "llama3.2:3b"  # Good quality for 3B parameter model
+
+        else:
+            raise ValueError(f"Unknown provider: '{provider}'")
+
+    # ------------------------------------------------------------------------
+    # OPENAI LLM CREATION
+    # ------------------------------------------------------------------------
+
+    @classmethod
+    def _create_openai_llm(
+        cls,
+        model: str,
+        temperature: float,
+        max_tokens: int,
+        **kwargs
+    ) -> BaseChatModel:
+        """
+        Create OpenAI LLM.
+
+        Requires:
+            - OPENAI_API_KEY environment variable
+            - langchain-openai package installed
+        """
+        try:
+            from langchain_openai import ChatOpenAI
+        except ImportError:
+            raise ImportError(
+                "OpenAI not available. Install with:\n"
+                "pip install langchain-openai"
+            )
+
+        # Get API key
+        api_key = kwargs.pop("api_key", None) or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "OPENAI_API_KEY not found in environment or kwargs"
+            )
+
+        logger.info(f"Initializing OpenAI: model={model}")
+
+        # Create OpenAI LLM
+        llm = ChatOpenAI(
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            api_key=api_key,
+            **kwargs
+        )
+
+        return llm
+
+    # ------------------------------------------------------------------------
+    # FREE (OLLAMA) LLM CREATION
+    # ------------------------------------------------------------------------
+
+    @classmethod
+    def _create_free_llm(
+        cls,
+        model: str,
+        temperature: float,
+        max_tokens: int,
+        **kwargs
+    ) -> BaseChatModel:
+        """
+        Create free Llama model via Ollama.
+
+        Requires:
+            - Ollama running locally (or OLLAMA_BASE_URL set)
+            - langchain-ollama package installed
+            - Model pulled: `ollama pull llama3.2:3b`
+        """
+        try:
+            from langchain_ollama import ChatOllama
+        except ImportError:
+            raise ImportError(
+                "Ollama not available. Install with:\n"
+                "pip install langchain-ollama"
+            )
+
+        # Get Ollama base URL
+        base_url = kwargs.pop("base_url", None) or os.getenv(
+            "OLLAMA_BASE_URL",
+            "http://localhost:11434"
+        )
+
+        logger.info(f"Initializing Ollama: model={model}, base_url={base_url}")
+
+        try:
+            # Create Ollama LLM
+            llm = ChatOllama(
+                model=model,
+                temperature=temperature,
+                base_url=base_url,
+                **kwargs
+            )
+
             return llm
+
         except Exception as e:
-            logger.error(f"Failed to create LLM: {e}")
+            error_msg = str(e).lower()
+
+            if "404" in error_msg or "not found" in error_msg:
+                logger.error(
+                    f"Ollama model '{model}' not found. "
+                    f"Please run: ollama pull {model}"
+                )
+
             raise
-    
-    @classmethod
-    def create_default(cls) -> BaseChatModel:
-        """
-        Create an LLM using default configuration.
-        
-        Returns:
-            LangChain BaseChatModel instance with default settings
-        
-        Example:
-            >>> llm = LLMFactory.create_default()
-        """
-        return cls.create()
-    
-    @classmethod
-    def get_available_providers(cls) -> List[str]:
-        """
-        Get list of available providers with configured API keys.
-        
-        Returns:
-            List of provider names
-        
-        Example:
-            >>> providers = LLMFactory.get_available_providers()
-            >>> print(providers)
-            ['openai', 'google']
-        """
-        config = get_config()
-        return config.get_available_providers()
-    
-    @classmethod
-    def get_supported_models(cls, provider: str) -> List[str]:
-        """
-        Get list of supported models for a provider.
-        
-        Args:
-            provider: Provider name
-        
-        Returns:
-            List of model names
-        
-        Raises:
-            ValueError: If provider is not supported
-        
-        Example:
-            >>> models = LLMFactory.get_supported_models("openai")
-            >>> print(models)
-            ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo']
-        """
-        config = get_config()
-        provider = provider.lower()
-        
-        if provider not in config.llm.providers:
-            raise ValueError(f"Unknown provider: {provider}")
-        
-        # Access the provider config and get models
-        provider_config = config.llm.providers[provider]
-        return provider_config.models
 
 
-# ============================================
-# Convenience Functions
-# ============================================
+# ============================================================================
+# CONVENIENCE FUNCTIONS
+# ============================================================================
 
 def create_llm(
     provider: Optional[str] = None,
     model: Optional[str] = None,
+    purpose: str = "general",
     **kwargs
 ) -> BaseChatModel:
     """
-    Convenience function to create an LLM instance.
-    
-    This is a shorthand for LLMFactory.create().
-    
-    Args:
-        provider: Provider name (if None, uses default)
-        model: Model name (if None, uses default)
-        **kwargs: Additional parameters
-    
-    Returns:
-        LangChain BaseChatModel instance
-    
-    Example:
-        >>> from src.llm.factory import create_llm
-        >>> llm = create_llm()
-        >>> llm = create_llm(provider="google", temperature=0.5)
+    Convenience function for creating LLMs.
+
+    Usage:
+        # Use default provider and model (OpenAI gpt-4o-mini)
+        llm = create_llm()
+
+        # Use Ollama locally
+        llm = create_llm(provider="free")
+
+        # Use specific model
+        llm = create_llm(provider="openai", model="gpt-4o")
+
+        # Fast LLM for classification
+        fast_llm = create_llm(purpose="classification")
     """
-    return LLMFactory.create(provider=provider, model=model, **kwargs)
+    return LLMFactory.create(provider=provider, model=model, purpose=purpose, **kwargs)
 
 
-def create_default_llm() -> BaseChatModel:
+def get_validation_llm() -> BaseChatModel:
     """
-    Create an LLM with default configuration.
-    
-    Returns:
-        LangChain BaseChatModel instance
-    
-    Example:
-        >>> from src.llm.factory import create_default_llm
-        >>> llm = create_default_llm()
-    """
-    return LLMFactory.create_default()
+    Get LLM specifically configured for validation engine use.
 
-
-# ============================================
-# Provider-Specific Helpers
-# ============================================
-
-def create_openai_llm(
-    model: str = "gpt-4o-mini",
-    temperature: float = 0.3,
-    **kwargs
-) -> ChatOpenAI:
+    Uses the primary LLM provider but optimized for batch rule evaluation.
+    Higher max_tokens for detailed reasoning, moderate temperature.
     """
-    Create an OpenAI LLM instance.
-    
-    Args:
-        model: OpenAI model name
-        temperature: Sampling temperature
-        **kwargs: Additional parameters
-    
-    Returns:
-        ChatOpenAI instance
-    """
-    return LLMFactory.create(
-        provider="openai",
-        model=model,
-        temperature=temperature,
-        **kwargs
+    return create_llm(
+        purpose="validation",
+        temperature=0.2,  # Lower for consistency
+        max_tokens=4096,  # Higher for batch processing
+        use_rate_limiting=True,
+        rate_limit_delay=2.0
     )
 
 
-def create_google_llm(
-    model: str = "gemini-1.5-flash",
-    temperature: float = 0.3,
-    **kwargs
-) -> ChatGoogleGenerativeAI:
-    """
-    Create a Google Gemini LLM instance.
-    
-    Args:
-        model: Gemini model name
-        temperature: Sampling temperature
-        **kwargs: Additional parameters
-    
-    Returns:
-        ChatGoogleGenerativeAI instance
-    """
-    return LLMFactory.create(
-        provider="google",
-        model=model,
-        temperature=temperature,
-        **kwargs
-    )
+# ============================================================================
+# MODULE-LEVEL DEFAULTS
+# ============================================================================
+
+# Default LLM for general use (lazy-loaded)
+_default_llm = None
+
+def get_default_llm() -> BaseChatModel:
+    """Get or create the default LLM instance."""
+    global _default_llm
+    if _default_llm is None:
+        _default_llm = create_llm()
+    return _default_llm
 
 
-def create_anthropic_llm(
-    model: str = "claude-sonnet-4-20250514",
-    temperature: float = 0.3,
-    **kwargs
-) -> ChatAnthropic:
-    """
-    Create an Anthropic Claude LLM instance.
-    
-    Args:
-        model: Claude model name
-        temperature: Sampling temperature
-        **kwargs: Additional parameters
-    
-    Returns:
-        ChatAnthropic instance
-    """
-    return LLMFactory.create(
-        provider="anthropic",
-        model=model,
-        temperature=temperature,
-        **kwargs
-    )
-
-
-def create_xai_llm(
-    model: str = "grok-2-mini",
-    temperature: float = 0.3,
-    **kwargs
-):
-    """
-    Create an xAI Grok LLM instance.
-    
-    Args:
-        model: Grok model name
-        temperature: Sampling temperature
-        **kwargs: Additional parameters
-    
-    Returns:
-        ChatXAI instance
-    
-    Raises:
-        ImportError: If langchain-xai is not installed
-    """
-    if not XAI_AVAILABLE:
-        raise ImportError(
-            "langchain-xai is not installed. "
-            "Install it with: pip install langchain-xai"
-        )
-    
-    return LLMFactory.create(
-        provider="xai",
-        model=model,
-        temperature=temperature,
-        **kwargs
-    )
-
-
-# ============================================
-# Testing
-# ============================================
+# ============================================================================
+# TESTING
+# ============================================================================
 
 if __name__ == "__main__":
-    """
-    Test LLM factory functionality.
-    
-    Run: python -m src.llm.factory
-    """
-    import sys
-    
-    print("=" * 60)
-    print("LLM FACTORY TEST")
-    print("=" * 60)
+    """Test two-provider LLM creation"""
+    print("=" * 70)
+    print("LLM FACTORY - Provider Test")
+    print("=" * 70)
     print()
-    
-    # Check available providers
-    print("Available Providers:")
-    available = LLMFactory.get_available_providers()
-    for provider in available:
-        print(f"  ✅ {provider}")
+
+    # Test provider determination
+    print("1. Provider Determination Test:")
+    print(f"   Default provider: {LLMFactory._determine_provider()}")
+    print(f"   Override to 'free': {LLMFactory._determine_provider('free')}")
     print()
-    
-    if not available:
-        print("❌ No providers configured! Please set API keys in .env")
-        sys.exit(1)
-    
-    # Test creating default LLM
-    print("Creating default LLM...")
+
+    # Test model selection
+    print("2. Model Selection Test:")
+    for provider in ["openai", "free"]:
+        for purpose in ["general", "classification"]:
+            model = LLMFactory._select_model_for_provider(provider, purpose)
+            print(f"   {provider}/{purpose}: {model}")
+    print()
+
+    # Test actual LLM creation
+    print("3. LLM Creation Test:")
+
     try:
-        llm = create_default_llm()
-        print(f"✅ Created: {type(llm).__name__}")
-        print(f"   Model: {llm.model_name if hasattr(llm, 'model_name') else 'N/A'}")
-        print()
+        current_provider = LLMFactory._determine_provider()
+        print(f"   Creating LLM with current provider ({current_provider})...")
+        llm = create_llm()
+        print(f"   ✅ Successfully created {current_provider} LLM")
+
+        # Test invocation
+        response = llm.invoke("Say 'Hello from NakshatraAI' in one sentence.")
+        print(f"   Test response: {response.content[:100]}...")
+
     except Exception as e:
-        print(f"❌ Failed: {e}")
-        print()
-    
-    # Test creating LLMs for each available provider
-    for provider in available:
-        print(f"Testing {provider}...")
-        try:
-            # Get supported models
-            models = LLMFactory.get_supported_models(provider)
-            print(f"  Supported models: {', '.join(models)}")
-            
-            # Create LLM with first model
-            llm = create_llm(provider=provider, model=models[0])
-            print(f"  ✅ Created: {type(llm).__name__}")
-            
-            # Test a simple invoke
-            response = llm.invoke("Say 'Hello' in one word")
-            print(f"  Test response: {response.content[:50]}")
-            print()
-            
-        except Exception as e:
-            print(f"  ❌ Failed: {e}")
-            print()
-    
-    print("=" * 60)
-    print("✅ LLM Factory test complete!")
-    print("=" * 60)
+        print(f"   ❌ Error: {e}")
+
+    print()
+    print("=" * 70)

@@ -1,3 +1,5 @@
+# src/engines/western/western_signs.py
+# src\engines\western\western_signs.py
 """
 Zodiac Sign Utilities for Western Astrology
 ===========================================

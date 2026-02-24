@@ -1,3 +1,5 @@
+# src/rag/extraction/vision_pipeline.py
+# src\rag\extraction\vision_pipeline.py
 """
 Complete Vision LLM Pipeline for Astrology Text Extraction.
 
@@ -21,8 +23,8 @@ import numpy as np
 from pdf2image import convert_from_path
 from PIL import Image
 
-from vision_extractor import VisionExtractor, BatchExtractor, ExtractionConfig
-from extraction_schemas import (
+from .vision_extractor import VisionExtractor, BatchExtractor, ExtractionConfig
+from .extraction_schemas import (
     PageType,
     ExtractedPage,
     ExtractionResult,
@@ -42,10 +44,10 @@ logger = logging.getLogger(__name__)
 class PipelineConfig:
     """Configuration for the Vision Pipeline"""
     # PDF Processing
-    pdf_dpi: int = 200  # DPI for PDF to image conversion
+    pdf_dpi: int = 250  # DPI for PDF to image conversion
     
     # Gemini Settings
-    gemini_model: str = "gemini-1.5-pro"
+    gemini_model: str = "gemini-2.5-flash"
     temperature: float = 0.1
     max_output_tokens: int = 8192
     
@@ -92,14 +94,21 @@ class VisionPipeline:
         self.output_dir = Path(self.config.output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Initialize the Vision Extractor
+        # Initialize the Vision Extractor with two-tier configuration
         extractor_config = ExtractionConfig(
-            model_name=self.config.gemini_model,
+            primary_model=self.config.gemini_model,  # Use configured model as primary
+            upgrade_model="models/gemini-2.5-pro",   # Pro model for upgrades
+            confidence_threshold=0.8,                # Upgrade if confidence < 0.8
+            enable_auto_upgrade=True,                # Enable two-tier strategy
             temperature=self.config.temperature,
             max_output_tokens=self.config.max_output_tokens,
             delay_between_requests=self.config.delay_between_requests,
             save_raw_responses=self.config.save_raw_responses,
             output_dir=str(self.output_dir / "raw_responses"),
+            enable_parallel=True,                    # Enable parallel processing
+            max_workers=5,                           # 5 concurrent workers
+            enable_checkpoints=True,                 # Enable checkpointing
+            checkpoint_interval=10,                  # Save every 10 pages
         )
         
         self.extractor = VisionExtractor(extractor_config)
@@ -537,7 +546,7 @@ def main():
     parser.add_argument("--end", type=int, help="End page (1-indexed)")
     parser.add_argument("--title", help="Book title")
     parser.add_argument("--output", default="./extraction_output", help="Output directory")
-    parser.add_argument("--dpi", type=int, default=200, help="PDF rendering DPI")
+    parser.add_argument("--dpi", type=int, default=250, help="PDF rendering DPI")
     parser.add_argument("--api-key", help="Google API key (or set GOOGLE_API_KEY env)")
     
     args = parser.parse_args()

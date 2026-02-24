@@ -1,0 +1,19 @@
+{
+  "session_id": "d1eb6b16-06c8-427c-ab48-628175af31e7",
+  "user_id": "user001",
+  "created_at": "2026-01-29T17:52:30.344166",
+  "updated_at": "2026-01-29T17:52:43.877610",
+  "metadata": {
+    "phase": "5.1",
+    "orchestrated": true,
+    "user_name": "Rajesh Kumar"
+  },
+  "turns": [
+    {
+      "user": "Hi, what is my name",
+      "assistant": "Namaste!\n\nAs a Jyotishi AI, I do not have access to any personal information about you, including your name. My purpose is to provide insights and guidance based on the principles of Vedic astrology, and for that, I would typically need your birth details (date, time, and place of birth) to cast your horoscope (Kundali).\n\nPlease let me know if you have any questions about Vedic astrology or your birth chart, and I would be happy to assist you within my capabilities.",
+      "timestamp": "2026-01-29T17:52:43.877610",
+      "metadata": {}
+    }
+  ]
+}

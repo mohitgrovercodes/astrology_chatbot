@@ -1,3 +1,5 @@
+# src/engines/core/ephemeris.py
+# src\engines\core\ephemeris.py
 """
 Swiss Ephemeris Wrapper for Planetary Calculations
 ==================================================
@@ -445,11 +447,16 @@ def get_house_cusps(
         
         cusps, angles = swe.houses(jd, latitude, longitude, hsys)
         
-        # cusps[0] is unused, cusps[1-12] are the house cusps
-        # angles: [ASC, MC, ARMC, Vertex, Equatorial ASC]
-        
+        # Determine house cusps based on return length
+        # Standard: cusps[0] unused, cusps[1-12] are houses
+        # Alternative: cusps[0-11] are houses
+        if len(cusps) >= 13:
+            cusp_data = tuple(cusps[1:13])
+        else:
+            cusp_data = tuple(cusps[:12])
+            
         return HouseCusps(
-            cusps=tuple(cusps[1:13]),
+            cusps=cusp_data,
             ascendant=angles[0],
             mc=angles[1],
             armc=angles[2],

@@ -1,3 +1,5 @@
+# src/engines/western/western_constants.py
+# src\engines\western\western_constants.py
 """
 Western Astrology Constants
 ===========================
@@ -6,7 +8,7 @@ Constants for Western/Tropical astrology calculations.
 """
 
 from enum import IntEnum, Enum
-from typing import NamedTuple
+from typing import NamedTuple, Optional
 from src.engines.core.celestial_bodies import CelestialBody
 
 
@@ -59,6 +61,32 @@ class EssentialDignity(Enum):
     DETRIMENT = "detriment"         # Opposite of domicile
     FALL = "fall"                   # Opposite of exaltation
     PEREGRINE = "peregrine"         # No dignity
+    NEUTRAL = "neutral"             # Mid-strength
+
+
+# House Classifications
+class HouseClassification(Enum):
+    """Three-fold classification of houses."""
+    ANGULAR = "angular"
+    SUCCEDENT = "succedent"
+    CADENT = "cadent"
+
+
+# Map house numbers to classifications
+HOUSE_CLASSIFICATIONS = {
+    1: HouseClassification.ANGULAR,
+    2: HouseClassification.SUCCEDENT,
+    3: HouseClassification.CADENT,
+    4: HouseClassification.ANGULAR,
+    5: HouseClassification.SUCCEDENT,
+    6: HouseClassification.CADENT,
+    7: HouseClassification.ANGULAR,
+    8: HouseClassification.SUCCEDENT,
+    9: HouseClassification.CADENT,
+    10: HouseClassification.ANGULAR,
+    11: HouseClassification.SUCCEDENT,
+    12: HouseClassification.CADENT,
+}
 
 
 # Sign Info
@@ -78,7 +106,7 @@ SIGN_DATA = {
     ZodiacSign.ARIES: SignInfo(
         sign=ZodiacSign.ARIES,
         name="Aries",
-        symbol="♈",
+        symbol="Aries",
         element=Element.FIRE,
         modality=Modality.CARDINAL,
         polarity=Polarity.MASCULINE,
@@ -87,7 +115,7 @@ SIGN_DATA = {
     ZodiacSign.TAURUS: SignInfo(
         sign=ZodiacSign.TAURUS,
         name="Taurus",
-        symbol="♉",
+        symbol="Taurus",
         element=Element.EARTH,
         modality=Modality.FIXED,
         polarity=Polarity.FEMININE,
@@ -96,7 +124,7 @@ SIGN_DATA = {
     ZodiacSign.GEMINI: SignInfo(
         sign=ZodiacSign.GEMINI,
         name="Gemini",
-        symbol="♊",
+        symbol="Gemini",
         element=Element.AIR,
         modality=Modality.MUTABLE,
         polarity=Polarity.MASCULINE,
@@ -105,7 +133,7 @@ SIGN_DATA = {
     ZodiacSign.CANCER: SignInfo(
         sign=ZodiacSign.CANCER,
         name="Cancer",
-        symbol="♋",
+        symbol="Cancer",
         element=Element.WATER,
         modality=Modality.CARDINAL,
         polarity=Polarity.FEMININE,
@@ -114,7 +142,7 @@ SIGN_DATA = {
     ZodiacSign.LEO: SignInfo(
         sign=ZodiacSign.LEO,
         name="Leo",
-        symbol="♌",
+        symbol="Leo",
         element=Element.FIRE,
         modality=Modality.FIXED,
         polarity=Polarity.MASCULINE,
@@ -123,7 +151,7 @@ SIGN_DATA = {
     ZodiacSign.VIRGO: SignInfo(
         sign=ZodiacSign.VIRGO,
         name="Virgo",
-        symbol="♍",
+        symbol="Virgo",
         element=Element.EARTH,
         modality=Modality.MUTABLE,
         polarity=Polarity.FEMININE,
@@ -132,7 +160,7 @@ SIGN_DATA = {
     ZodiacSign.LIBRA: SignInfo(
         sign=ZodiacSign.LIBRA,
         name="Libra",
-        symbol="♎",
+        symbol="Libra",
         element=Element.AIR,
         modality=Modality.CARDINAL,
         polarity=Polarity.MASCULINE,
@@ -141,7 +169,7 @@ SIGN_DATA = {
     ZodiacSign.SCORPIO: SignInfo(
         sign=ZodiacSign.SCORPIO,
         name="Scorpio",
-        symbol="♏",
+        symbol="Scorpio",
         element=Element.WATER,
         modality=Modality.FIXED,
         polarity=Polarity.FEMININE,
@@ -150,7 +178,7 @@ SIGN_DATA = {
     ZodiacSign.SAGITTARIUS: SignInfo(
         sign=ZodiacSign.SAGITTARIUS,
         name="Sagittarius",
-        symbol="♐",
+        symbol="Sagittarius",
         element=Element.FIRE,
         modality=Modality.MUTABLE,
         polarity=Polarity.MASCULINE,
@@ -159,7 +187,7 @@ SIGN_DATA = {
     ZodiacSign.CAPRICORN: SignInfo(
         sign=ZodiacSign.CAPRICORN,
         name="Capricorn",
-        symbol="♑",
+        symbol="Capricorn",
         element=Element.EARTH,
         modality=Modality.CARDINAL,
         polarity=Polarity.FEMININE,
@@ -168,7 +196,7 @@ SIGN_DATA = {
     ZodiacSign.AQUARIUS: SignInfo(
         sign=ZodiacSign.AQUARIUS,
         name="Aquarius",
-        symbol="♒",
+        symbol="Aquarius",
         element=Element.AIR,
         modality=Modality.FIXED,
         polarity=Polarity.MASCULINE,
@@ -177,7 +205,7 @@ SIGN_DATA = {
     ZodiacSign.PISCES: SignInfo(
         sign=ZodiacSign.PISCES,
         name="Pisces",
-        symbol="♓",
+        symbol="Pisces",
         element=Element.WATER,
         modality=Modality.MUTABLE,
         polarity=Polarity.FEMININE,
@@ -201,20 +229,21 @@ MUTABLE_SIGNS = {ZodiacSign.GEMINI, ZodiacSign.VIRGO, ZodiacSign.SAGITTARIUS, Zo
 MASCULINE_SIGNS = {ZodiacSign.ARIES, ZodiacSign.GEMINI, ZodiacSign.LEO, ZodiacSign.LIBRA, ZodiacSign.SAGITTARIUS, ZodiacSign.AQUARIUS}
 FEMININE_SIGNS = {ZodiacSign.TAURUS, ZodiacSign.CANCER, ZodiacSign.VIRGO, ZodiacSign.SCORPIO, ZodiacSign.CAPRICORN, ZodiacSign.PISCES}
 
-# Domicile rulers
+# Domicile rulers (Sign -> List of rulers)
+# Includes modern rulers for Scorpio, Aquarius, Pisces
 DOMICILE_RULERS = {
-    ZodiacSign.ARIES: CelestialBody.MARS,
-    ZodiacSign.TAURUS: CelestialBody.VENUS,
-    ZodiacSign.GEMINI: CelestialBody.MERCURY,
-    ZodiacSign.CANCER: CelestialBody.MOON,
-    ZodiacSign.LEO: CelestialBody.SUN,
-    ZodiacSign.VIRGO: CelestialBody.MERCURY,
-    ZodiacSign.LIBRA: CelestialBody.VENUS,
-    ZodiacSign.SCORPIO: CelestialBody.MARS,
-    ZodiacSign.SAGITTARIUS: CelestialBody.JUPITER,
-    ZodiacSign.CAPRICORN: CelestialBody.SATURN,
-    ZodiacSign.AQUARIUS: CelestialBody.SATURN,
-    ZodiacSign.PISCES: CelestialBody.JUPITER,
+    ZodiacSign.ARIES: [CelestialBody.MARS],
+    ZodiacSign.TAURUS: [CelestialBody.VENUS],
+    ZodiacSign.GEMINI: [CelestialBody.MERCURY],
+    ZodiacSign.CANCER: [CelestialBody.MOON],
+    ZodiacSign.LEO: [CelestialBody.SUN],
+    ZodiacSign.VIRGO: [CelestialBody.MERCURY],
+    ZodiacSign.LIBRA: [CelestialBody.VENUS],
+    ZodiacSign.SCORPIO: [CelestialBody.MARS, CelestialBody.PLUTO],
+    ZodiacSign.SAGITTARIUS: [CelestialBody.JUPITER],
+    ZodiacSign.CAPRICORN: [CelestialBody.SATURN],
+    ZodiacSign.AQUARIUS: [CelestialBody.SATURN, CelestialBody.URANUS],
+    ZodiacSign.PISCES: [CelestialBody.JUPITER, CelestialBody.NEPTUNE],
 }
 
 
@@ -227,6 +256,10 @@ EXALTATION = {
     CelestialBody.MARS: (ZodiacSign.CAPRICORN, 28),
     CelestialBody.JUPITER: (ZodiacSign.CANCER, 5),
     CelestialBody.SATURN: (ZodiacSign.LIBRA, 21),
+    # Modern / Inner sense (optional, but keep keys to avoid KeyError)
+    CelestialBody.URANUS: (ZodiacSign.SCORPIO, 3),
+    CelestialBody.NEPTUNE: (ZodiacSign.CANCER, 21),
+    CelestialBody.PLUTO: (ZodiacSign.ARIES, 3),
 }
 
 # Keep EXALTATIONS for backward compatibility
@@ -242,6 +275,9 @@ FALL = {
     CelestialBody.MARS: (ZodiacSign.CANCER, 28),
     CelestialBody.JUPITER: (ZodiacSign.CAPRICORN, 5),
     CelestialBody.SATURN: (ZodiacSign.ARIES, 21),
+    CelestialBody.URANUS: (ZodiacSign.TAURUS, 3),
+    CelestialBody.NEPTUNE: (ZodiacSign.CAPRICORN, 21),
+    CelestialBody.PLUTO: (ZodiacSign.LIBRA, 3),
 }
 
 # Keep DEBILITATIONS for backward compatibility
@@ -250,34 +286,41 @@ DEBILITATIONS = FALL
 
 # Detriments (opposite of domicile)
 DETRIMENT = {
-    CelestialBody.SUN: ZodiacSign.AQUARIUS,
-    CelestialBody.MOON: ZodiacSign.CAPRICORN,
-    CelestialBody.MERCURY: ZodiacSign.SAGITTARIUS,
-    CelestialBody.VENUS: ZodiacSign.ARIES,
-    CelestialBody.MARS: ZodiacSign.LIBRA,
-    CelestialBody.JUPITER: ZodiacSign.GEMINI,
-    CelestialBody.SATURN: ZodiacSign.CANCER,
+    CelestialBody.SUN: [ZodiacSign.AQUARIUS],
+    CelestialBody.MOON: [ZodiacSign.CAPRICORN],
+    CelestialBody.MERCURY: [ZodiacSign.SAGITTARIUS, ZodiacSign.PISCES],
+    CelestialBody.VENUS: [ZodiacSign.ARIES, ZodiacSign.SCORPIO],
+    CelestialBody.MARS: [ZodiacSign.LIBRA, ZodiacSign.TAURUS],
+    CelestialBody.JUPITER: [ZodiacSign.GEMINI, ZodiacSign.VIRGO],
+    CelestialBody.SATURN: [ZodiacSign.CANCER, ZodiacSign.LEO],
+    CelestialBody.URANUS: [ZodiacSign.LEO],
+    CelestialBody.NEPTUNE: [ZodiacSign.VIRGO],
+    CelestialBody.PLUTO: [ZodiacSign.TAURUS],
 }
 
 
 # House Systems
-class HouseType(Enum):
-    """Supported house systems."""
-    PLACIDUS = "P"
-    KOCH = "K"
-    EQUAL = "E"
-    WHOLE_SIGN = "W"
-    CAMPANUS = "C"
-    REGIOMONTANUS = "R"
+class HouseSystemCode(Enum):
+    """Supported house system codes for Swiss Ephemeris."""
+    PLACIDUS = ord("P")
+    KOCH = ord("K")
+    EQUAL = ord("E")
+    WHOLE_SIGN = ord("W")
+    CAMPANUS = ord("C")
+    REGIOMONTANUS = ord("R")
 
 
-HOUSE_TYPES = {
-    "PLACIDUS": HouseType.PLACIDUS,
-    "KOCH": HouseType.KOCH,
-    "EQUAL": HouseType.EQUAL,
-    "WHOLE_SIGN": HouseType.WHOLE_SIGN,
-    "CAMPANUS": HouseType.CAMPANUS,
-    "REGIOMONTANUS": HouseType.REGIOMONTANUS,
+# Alias for backward compatibility
+HouseType = HouseSystemCode
+
+
+HOUSE_SYSTEM_CODES = {
+    "PLACIDUS": HouseSystemCode.PLACIDUS,
+    "KOCH": HouseSystemCode.KOCH,
+    "EQUAL": HouseSystemCode.EQUAL,
+    "WHOLE_SIGN": HouseSystemCode.WHOLE_SIGN,
+    "CAMPANUS": HouseSystemCode.CAMPANUS,
+    "REGIOMONTANUS": HouseSystemCode.REGIOMONTANUS,
 }
 
 
@@ -308,21 +351,22 @@ MAJOR_ASPECTS = {
 class AspectInfo(NamedTuple):
     """Aspect information."""
     angle: float
-    orb: float
+    default_orb: float
     name: str
     is_major: bool
+    is_hard: Optional[bool]
 
 
 ASPECT_DATA = {
-    AspectType.CONJUNCTION: AspectInfo(0, 8, "Conjunction", True),
-    AspectType.OPPOSITION: AspectInfo(180, 8, "Opposition", True),
-    AspectType.TRINE: AspectInfo(120, 8, "Trine", True),
-    AspectType.SQUARE: AspectInfo(90, 8, "Square", True),
-    AspectType.SEXTILE: AspectInfo(60, 6, "Sextile", True),
-    AspectType.QUINCUNX: AspectInfo(150, 3, "Quincunx", False),
-    AspectType.SEMISEXTILE: AspectInfo(30, 2, "Semi-sextile", False),
-    AspectType.SEMISQUARE: AspectInfo(45, 2, "Semi-square", False),
-    AspectType.SESQUIQUADRATE: AspectInfo(135, 2, "Sesquiquadrate", False),
+    AspectType.CONJUNCTION: AspectInfo(0, 8, "Conjunction", True, None),
+    AspectType.OPPOSITION: AspectInfo(180, 8, "Opposition", True, True),
+    AspectType.TRINE: AspectInfo(120, 8, "Trine", True, False),
+    AspectType.SQUARE: AspectInfo(90, 8, "Square", True, True),
+    AspectType.SEXTILE: AspectInfo(60, 6, "Sextile", True, False),
+    AspectType.QUINCUNX: AspectInfo(150, 3, "Quincunx", False, True),
+    AspectType.SEMISEXTILE: AspectInfo(30, 2, "Semi-sextile", False, False),
+    AspectType.SEMISQUARE: AspectInfo(45, 2, "Semi-square", False, True),
+    AspectType.SESQUIQUADRATE: AspectInfo(135, 2, "Sesquiquadrate", False, True),
 }
 
 

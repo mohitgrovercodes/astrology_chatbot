@@ -1,3 +1,5 @@
+# src/rag/extraction/extraction_prompts.py
+# src\rag\extraction\extraction_prompts.py
 """
 Specialized prompts for Vision LLM extraction of astrology texts.
 These prompts are designed to handle:
@@ -116,9 +118,26 @@ TEXT_EXTRACTION_PROMPT = """Extract ALL text content from this astrology book pa
     ],
     "raw_text": "<complete raw text as fallback>",
     "extraction_quality": "<good|fair|poor>",
-    "issues": ["<any issues encountered>"]
+    "issues": ["<any issues encountered>"],
+    "confidence": {
+        "overall_score": 0.95,
+        "criteria": {
+            "image_quality": 0.98,
+            "text_clarity": 0.95,
+            "layout_detection": 0.92
+        },
+        "reasoning": "Clear scan with sharp text. Minor blur in Sanskrit portion but overall very readable.",
+        "flags": []
+    }
 }
 ```
+
+**CONFIDENCE SCORING**: Provide a confidence score (0.0-1.0) based on:
+- **Image Quality** (0-1): Resolution, clarity, artifacts, distortion
+- **Text Clarity** (0-1): Font legibility, OCR accuracy, completeness  
+- **Layout Detection** (0-1): Certainty in identifying structure (verses, notes, etc.)
+
+Flag any issues: "low_ocr_quality", "partial_page", "blur", "distortion", "missing_text"
 
 Extract the content now, preserving the original structure and language."""
 
@@ -177,9 +196,21 @@ TABLE_EXTRACTION_PROMPT = """Extract ALL tables from this astrology book page. T
     ],
     "other_text": "<any non-table text on page>",
     "extraction_quality": "<good|fair|poor>",
-    "issues": ["<any issues encountered>"]
+    "issues": ["<any issues encountered>"],
+    "confidence": {
+        "overall_score": 0.90,
+        "criteria": {
+            "image_quality": 0.92,
+            "text_clarity": 0.88,
+            "layout_detection": 0.90
+        },
+        "reasoning": "Table borders clearly visible. Some cells have faint text but overall structure is clear.",
+        "flags": []
+    }
 }
 ```
+
+**CONFIDENCE SCORING**: Rate quality (0.0-1.0) based on image clarity, table border visibility, and cell content legibility.
 
 Extract all tables now, ensuring accurate structure."""
 
@@ -233,9 +264,21 @@ MIXED_EXTRACTION_PROMPT = """Extract ALL content from this astrology book page. 
     ],
     "raw_text": "<complete raw text fallback>",
     "extraction_quality": "<good|fair|poor>",
-    "issues": ["<any issues>"]
+    "issues": ["<any issues>"],
+    "confidence": {
+        "overall_score": 0.88,
+        "criteria": {
+            "image_quality": 0.90,
+            "text_clarity": 0.85,
+            "layout_detection": 0.90
+        },
+        "reasoning": "Mixed content with clear structure. Tables slightly faint but readable.",
+        "flags": []
+    }
 }
 ```
+
+**CONFIDENCE SCORING**: Assess overall extraction quality (0.0-1.0) considering image clarity, text legibility, and layout complexity.
 
 Extract all content in sequence now."""
 

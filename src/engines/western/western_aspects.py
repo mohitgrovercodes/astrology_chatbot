@@ -1,3 +1,5 @@
+# src/engines/western/western_aspects.py
+# src\engines\western\western_aspects.py
 """
 Aspect Calculations for Western Astrology
 =========================================

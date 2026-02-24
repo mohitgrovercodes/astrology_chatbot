@@ -1,3 +1,5 @@
+# config/logger.py
+# config\logger.py
 """
 Logging utility for Astrology AI Chatbot.
 
@@ -363,8 +365,8 @@ if __name__ == "__main__":
     
     # Test convenience functions
     log_llm_call(
-        provider="openai",
-        model="gpt-4o-mini",
+        provider="google",
+        model="gemini-2.5-flash",
         prompt_length=150,
         response_length=500,
         duration_ms=1234.56

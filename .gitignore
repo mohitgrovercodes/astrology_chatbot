@@ -53,6 +53,19 @@ data/cache/*
 *.log
 logs/
 
+# Temporary verification scripts
+verify_*.py
+inspect_*.py
+
 # OS
 .DS_Store
 Thumbs.db
+
+
+# Embeddings and extraction
+embeddings/
+extraction_output/
+preprocessing_output/
+*.zip
+
+*.json

@@ -1,10 +1,12 @@
+# src/rag/extraction/extraction_schemas.py
+# src\rag\extraction\extraction_schemas.py
 """
 Pydantic schemas for structured extraction output.
 These schemas define the RAG-ready format for astrology texts.
 """
 
 from typing import List, Optional, Dict, Any, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 
 
@@ -45,7 +47,15 @@ class ExtractedTable(BaseModel):
     """Structured representation of a table"""
     title: Optional[str] = Field(None, description="Table title/caption if present")
     headers: List[str] = Field(default_factory=list, description="Column headers")
-    rows: List[List[str]] = Field(default_factory=list, description="Table rows as list of lists")
+    rows: List[List[Optional[str]]] = Field(default_factory=list, description="Table rows as list of lists")
+    
+    @field_validator('rows')
+    @classmethod
+    def clean_rows(cls, v: List[List[Optional[str]]]) -> List[List[str]]:
+        """Convert None values to empty strings."""
+        if not v:
+            return v
+        return [[(cell or "") for cell in row] for row in v]
     markdown: str = Field(description="Markdown representation of the table")
     context: Optional[str] = Field(None, description="Surrounding context explaining the table")
     table_type: Optional[str] = Field(None, description="Type of table (e.g., planetary_friendships, exaltation_degrees)")
@@ -56,7 +66,7 @@ class VerseBlock(BaseModel):
     verse_number: Optional[str] = Field(None, description="Verse number (e.g., '13-14', '॥९५॥')")
     sanskrit_text: str = Field(description="Original Sanskrit/Hindi verse in Devanagari")
     transliteration: Optional[str] = Field(None, description="Romanized transliteration if available")
-    translation: str = Field(description="English translation")
+    translation: Optional[str] = Field(None, description="English translation")
     notes: Optional[str] = Field(None, description="Additional notes or commentary")
     topic: Optional[str] = Field(None, description="Topic of this verse (e.g., 'Virgo described', 'Jupiter Mahadasha')")
 
@@ -87,6 +97,32 @@ class PageMetadata(BaseModel):
     )
 
 
+class ConfidenceMetadata(BaseModel):
+    """Metadata about LLM confidence in generated output."""
+    overall_score: float = Field(..., ge=0.0, le=1.0, description="Overall confidence score")
+    criteria: Dict[str, float] = Field(
+        default_factory=dict,
+        description="Breakdown by criteria (e.g., image_quality, text_clarity, layout_detection)"
+    )
+    reasoning: Optional[str] = Field(None, description="Explanation of confidence score")
+    flags: List[str] = Field(
+        default_factory=list,
+        description="Quality flags (e.g., 'low_ocr_quality', 'partial_page', 'blur')"
+    )
+
+
+class RetryMetadata(BaseModel):
+    """Track extraction retries with upgraded models."""
+    initial_model: str = Field(..., description="Model used for initial extraction")
+    retry_model: Optional[str] = Field(None, description="Model used for retry (if any)")
+    initial_confidence: Optional[float] = Field(
+        None,
+        description="Confidence score from initial extraction"
+    )
+    retry_reason: Optional[str] = Field(None, description="Reason for retry")
+    retry_count: int = Field(default=0, description="Number of retries performed")
+
+
 class ExtractedPage(BaseModel):
     """Complete extraction result for a single page"""
     metadata: PageMetadata = Field(description="Page metadata")
@@ -99,6 +135,16 @@ class ExtractedPage(BaseModel):
         description="Confidence in extraction quality (0-1)"
     )
     extraction_notes: Optional[str] = Field(None, description="Notes about extraction quality/issues")
+    
+    # Quality tracking (new fields)
+    confidence: Optional[ConfidenceMetadata] = Field(
+        None,
+        description="Detailed confidence breakdown for extraction quality"
+    )
+    retry_metadata: Optional[RetryMetadata] = Field(
+        None,
+        description="Metadata about extraction retries and model upgrades"
+    )
 
 
 class RAGChunk(BaseModel):

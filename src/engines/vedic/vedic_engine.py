@@ -1,3 +1,5 @@
+# src/engines/vedic/vedic_engine.py
+# src\engines\vedic\vedic_engine.py
 """
 Vedic Astrology Engine - Main Orchestrator
 ===========================================
@@ -31,7 +33,7 @@ Usage:
 """
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 
 from src.engines.core.celestial_bodies import CelestialBody, VEDIC_GRAHAS
@@ -50,6 +52,7 @@ from src.engines.vedic.graha_stats import AllGrahaStats, compute_all_graha_stats
 from src.engines.vedic.rashi_nakshatra import VedicMapping, compute_vedic_mapping, LagnaData
 from src.engines.vedic.dasha_systems import VimshottariDasha, compute_vimshottari_dasha
 from src.engines.vedic.aspects_yogas import AspectGrid, YogaAnalysis, compute_aspect_grid, detect_all_yogas
+from src.engines.vedic.divisional_charts import AllVargaPositions, compute_all_vargas
 
 
 # =============================================================================
@@ -101,6 +104,7 @@ class VedicChart:
     dasha: VimshottariDasha
     aspects: AspectGrid
     yogas: YogaAnalysis
+    vargas: Dict[CelestialBody, AllVargaPositions]
     
     # Convenience accessors
     @property
@@ -173,6 +177,247 @@ class VedicChart:
     def get_present_yogas(self) -> List:
         """Get all yogas that are present in this chart."""
         return [y for y in self.yogas.detected_yogas if y.is_present]
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize chart to a dictionary for caching."""
+        import json
+        from enum import Enum
+        from dataclasses import is_dataclass, asdict
+        
+        def _serialize(obj):
+            if is_dataclass(obj):
+                result = {}
+                for field in obj.__dataclass_fields__:
+                    val = getattr(obj, field)
+                    result[field] = _serialize(val)
+                return result
+            elif isinstance(obj, Enum):
+                return {"__enum__": obj.__class__.__name__, "value": obj.value}
+            elif isinstance(obj, datetime):
+                return {"__datetime__": obj.isoformat()}
+            elif isinstance(obj, dict):
+                return {str(k.name if isinstance(k, Enum) else k): _serialize(v) for k, v in obj.items()}
+            elif isinstance(obj, (list, tuple)):
+                return [_serialize(v) for v in obj]
+            return obj
+
+        return _serialize(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'VedicChart':
+        """Reconstruct chart from dictionary."""
+        from src.engines.core.celestial_bodies import CelestialBody
+        from src.engines.vedic.vedic_constants import Rashi, Nakshatra, VargaChart
+        
+        def _deserialize(obj):
+            if isinstance(obj, dict):
+                if "__datetime__" in obj:
+                    return datetime.fromisoformat(obj["__datetime__"])
+                if "__enum__" in obj:
+                    enum_name = obj["__enum__"]
+                    val = obj["value"]
+                    if enum_name == "CelestialBody": return CelestialBody(val)
+                    if enum_name == "Rashi": return Rashi(val)
+                    if enum_name == "Nakshatra": return Nakshatra(val)
+                    if enum_name == "Ayanamsa": return Ayanamsa(val)
+                    if enum_name == "HouseSystem": return HouseSystem(val)
+                    if enum_name == "VargaChart": return VargaChart(val)
+                    if enum_name == "YogaCategory": return YogaCategory(val)
+                return {k: _deserialize(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [_deserialize(v) for v in obj]
+            return obj
+            
+        # This is a complex reconstruction. For now, we'll store and return a simplified
+        # version or just the serialized dict for the LLM. 
+        # However, to maintain compatibility with the generate_chart return type,
+        # we'll use a trick: return a Namespace-like object if full reconstruction is too brittle,
+        # OR perform full reconstruction here. 
+        # Given the "Principal Engineer" persona, I will implement full reconstruction.
+        
+        # NOTE: Full reconstruction requires importing all nested classes.
+        # This implementation is a placeholder for the logic.
+        return _reconstruct_vedic_chart(data)
+
+def _reconstruct_vedic_chart(data: Dict[str, Any]) -> VedicChart:
+    """Helper to reconstruct the complex VedicChart object with strict schema adherence."""
+    from src.engines.core.celestial_bodies import CelestialBody
+    from src.engines.core.ephemeris import (
+        PlanetPosition, HouseCusps, Ayanamsa, HouseSystem
+    )
+    from src.engines.vedic.vedic_constants import Rashi, Nakshatra, VargaChart
+    from src.engines.vedic.graha_stats import (
+        AllGrahaStats, GrahaMotion, CombustionData, PlanetaryWar,
+        MotionStatus, CombustionStatus
+    )
+    from src.engines.vedic.rashi_nakshatra import (
+        VedicMapping, LagnaData, BhavaPlacement, DignityStatus, 
+        RashiPosition, NakshatraPosition, Dignity, Relationship
+    )
+    from src.engines.vedic.dasha_systems import VimshottariDasha, DashaBalance, DashaPeriod
+    from src.engines.vedic.aspects_yogas import (
+        AspectGrid, YogaAnalysis, Aspect, YogaDetection, YogaCategory
+    )
+    
+    def _d(obj):
+        """Deep deserialization helper for markers (__datetime__, __enum__)."""
+        if isinstance(obj, dict):
+            if "__datetime__" in obj:
+                return datetime.fromisoformat(obj["__datetime__"])
+            if "__enum__" in obj:
+                ename, evalue = obj["__enum__"], obj["value"]
+                # Resolve Enum classes
+                if ename == "CelestialBody": return CelestialBody(evalue)
+                if ename == "Rashi": return Rashi(evalue)
+                if ename == "Nakshatra": return Nakshatra(evalue)
+                if ename == "Ayanamsa": return Ayanamsa(evalue)
+                if ename == "HouseSystem": return HouseSystem(evalue)
+                if ename == "VargaChart": return VargaChart(evalue)
+                if ename == "YogaCategory": return YogaCategory(evalue)
+                if ename == "Dignity": return Dignity(evalue)
+                if ename == "Relationship": return Relationship(evalue)
+                if ename == "MotionStatus": return MotionStatus(evalue)
+                if ename == "CombustionStatus": return CombustionStatus(evalue)
+            return {k: _d(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [_d(v) for v in obj]
+        return obj
+
+    # 1. Basic Fields
+    birth_data = BirthData(**_d(data['birth_data']))
+    
+    # 2. Layer 1: Positions and House Cusps
+    positions = {CelestialBody(int(k) if k.isdigit() else CelestialBody[k].value): PlanetPosition(**_d(v)) 
+                 for k, v in data['positions'].items()}
+    house_cusps = HouseCusps(**_d(data['house_cusps']))
+    
+    # 3. Layer 2: Graha Stats (Astronomical facts)
+    gs_raw = data['graha_stats']
+    graha_stats = AllGrahaStats(
+        positions={CelestialBody(int(k) if k.isdigit() else CelestialBody[k].value): PlanetPosition(**_d(v)) 
+                   for k, v in gs_raw['positions'].items()},
+        motions={CelestialBody(int(k) if k.isdigit() else CelestialBody[k].value): GrahaMotion(**_d(v)) 
+                 for k, v in gs_raw['motions'].items()},
+        combustions={CelestialBody(int(k) if k.isdigit() else CelestialBody[k].value): CombustionData(**_d(v)) 
+                     for k, v in gs_raw['combustions'].items()},
+        planetary_wars=[PlanetaryWar(**_d(w)) for w in gs_raw['planetary_wars']],
+        julian_day=gs_raw['julian_day'],
+        ayanamsa_value=gs_raw['ayanamsa_value']
+    )
+    
+    # 4. Layer 3: Vedic Mapping (Rashi, Nakshatra, Houses, Dignities)
+    vm_raw = data['vedic_mapping']
+    vedic_mapping = VedicMapping(
+        rashi_positions={CelestialBody(int(k) if k.isdigit() else CelestialBody[k].value): RashiPosition(**_d(v)) 
+                         for k, v in vm_raw['rashi_positions'].items()},
+        nakshatra_positions={CelestialBody(int(k) if k.isdigit() else CelestialBody[k].value): NakshatraPosition(**_d(v)) 
+                             for k, v in vm_raw['nakshatra_positions'].items()},
+        dignities={CelestialBody(int(k) if k.isdigit() else CelestialBody[k].value): DignityStatus(**_d(v)) 
+                   for k, v in vm_raw['dignities'].items()},
+        bhava_placements={CelestialBody(int(k) if k.isdigit() else CelestialBody[k].value): BhavaPlacement(**_d(v)) 
+                          for k, v in vm_raw['bhava_placements'].items()},
+        lagna=LagnaData(**_d(vm_raw['lagna'])),
+        sign_occupancy={Rashi(int(k) if k.isdigit() else Rashi[k].value): _d(v) 
+                        for k, v in vm_raw['sign_occupancy'].items()},
+        house_occupancy={int(k): _d(v) for k, v in vm_raw['house_occupancy'].items()}
+    )
+    
+    # 5. Layer 4: Dasha System
+    dasha_raw = data['dasha']
+    mahadashas = []
+    for m_raw in dasha_raw['mahadashas']:
+        mahadashas.append(DashaPeriod(
+            lord=CelestialBody(m_raw['lord']['value']),
+            start_date=_d(m_raw['start_date']),
+            end_date=_d(m_raw['end_date']),
+            duration_years=m_raw['duration_years'],
+            level=m_raw['level'],
+            parent=None
+        ))
+    
+    dasha = VimshottariDasha(
+        birth_date=_d(dasha_raw['birth_date']),
+        moon_nakshatra=Nakshatra(dasha_raw['moon_nakshatra']['value']),
+        moon_longitude=dasha_raw['moon_longitude'],
+        dasha_balance=DashaBalance(
+            first_lord=CelestialBody(dasha_raw['dasha_balance']['first_lord']['value']),
+            elapsed_years=dasha_raw['dasha_balance']['elapsed_years'],
+            remaining_years=dasha_raw['dasha_balance']['remaining_years'],
+            total_years=dasha_raw['dasha_balance']['total_years']
+        ),
+        mahadashas=mahadashas
+    )
+    
+    # 6. Layer 4: Aspects and Yogas
+    # 6. Layer 4: Aspects and Yogas
+    aspects_raw = data['aspects']
+    
+    def _ensure_list(obj):
+        if isinstance(obj, (list, tuple)): return list(obj)
+        return [obj] if obj is not None else []
+
+    aspects = AspectGrid(
+        planet_to_houses={CelestialBody(int(k) if k.isdigit() else CelestialBody[k].value): v 
+                          for k, v in aspects_raw['planet_to_houses'].items()},
+        house_aspects={int(k): [Aspect(
+            aspecting_planet=_d(a['aspecting_planet']),
+            aspected_house=a['aspected_house'],
+            aspected_planets=tuple(_d(_ensure_list(a['aspected_planets']))),
+            aspect_type=a['aspect_type'],
+            strength=a['strength']
+        ) for a in l] for k, l in aspects_raw['house_aspects'].items()},
+        planet_aspects={CelestialBody(int(k) if k.isdigit() else CelestialBody[k].value): [Aspect(
+            aspecting_planet=_d(a['aspecting_planet']),
+            aspected_house=a['aspected_house'],
+            aspected_planets=tuple(_d(_ensure_list(a['aspected_planets']))),
+            aspect_type=a['aspect_type'],
+            strength=a['strength']
+        ) for a in l] for k, l in aspects_raw['planet_aspects'].items()},
+        mutual_aspects=[tuple(_d(pair)) for pair in aspects_raw['mutual_aspects']]
+    )
+    
+    yoga_raw = data['yogas']
+    def _recon_yogas(yl):
+        return [YogaDetection(
+            name=y['name'],
+            category=_d(y['category']),
+            is_present=y['is_present'],
+            forming_planets=tuple(_d(_ensure_list(y['forming_planets']))),
+            forming_houses=tuple(_ensure_list(y['forming_houses'])),
+            strength=y['strength'],
+            conditions_met=tuple(_ensure_list(y['conditions_met']))
+        ) for y in yl]
+        
+    yogas = YogaAnalysis(
+        detected_yogas=_recon_yogas(yoga_raw['detected_yogas']),
+        mahapurusha_yogas=_recon_yogas(yoga_raw['mahapurusha_yogas']),
+        dhana_yogas=_recon_yogas(yoga_raw['dhana_yogas']),
+        raja_yogas=_recon_yogas(yoga_raw['raja_yogas']),
+        spiritual_yogas=_recon_yogas(yoga_raw['spiritual_yogas']),
+        arishtya_yogas=_recon_yogas(yoga_raw['arishtya_yogas'])
+    )
+    
+    # 7. Divisional Charts
+    from src.engines.vedic.divisional_charts import AllVargaPositions
+    vargas = {CelestialBody(int(k) if k.isdigit() else CelestialBody[k].value): AllVargaPositions(**_d(v)) 
+              for k, v in data['vargas'].items()}
+    
+    # Construct final chart object
+    return VedicChart(
+        birth_data=birth_data,
+        julian_day=data['julian_day'],
+        ayanamsa=_d(data['ayanamsa']),
+        ayanamsa_value=data['ayanamsa_value'],
+        house_system=_d(data['house_system']),
+        positions=positions,
+        house_cusps=house_cusps,
+        graha_stats=graha_stats,
+        vedic_mapping=vedic_mapping,
+        dasha=dasha,
+        aspects=aspects,
+        yogas=yogas,
+        vargas=vargas
+    )
 
 
 # =============================================================================
@@ -296,6 +541,10 @@ class VedicEngine:
         # Layer 4C: Yoga detection
         yogas = detect_all_yogas(vedic_mapping)
         
+        # Layer 4D: Divisional Charts (All 16)
+        graha_longitudes = {body: pos.longitude for body, pos in positions.items()}
+        vargas = compute_all_vargas(graha_longitudes, tuple(VargaChart))
+        
         return VedicChart(
             birth_data=birth_data,
             julian_day=jd,
@@ -308,7 +557,8 @@ class VedicEngine:
             vedic_mapping=vedic_mapping,
             dasha=dasha,
             aspects=aspects,
-            yogas=yogas
+            yogas=yogas,
+            vargas=vargas
         )
     
     def compute_transits(

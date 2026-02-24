@@ -1,3 +1,5 @@
+# src/engines/western/western_engine.py
+# src\engines\western\western_engine.py
 """
 Western Astrology Engine - Main Orchestrator
 ============================================
@@ -196,6 +198,10 @@ class WesternChart:
         """Get the IC (4th house cusp) longitude."""
         return self.house_cusps.ic
     
+    def get_house_cusp(self, house: int) -> float:
+        """Get the longitude of a specific house cusp (1-12)."""
+        return self.house_cusps.get_house_cusp(house)
+    
     # =========================================================================
     # PLANET ACCESSORS
     # =========================================================================
@@ -212,9 +218,27 @@ class WesternChart:
         """Get the house number a planet is in."""
         return self.house_placements[planet].house
     
+    @property
+    def dignity_score(self) -> int:
+        """Get the total essential dignity score for the chart."""
+        return sum(d.score for d in self.dignities.dignities.values())
+    
     def get_planet_dignity(self, planet: CelestialBody) -> PlanetDignity:
         """Get essential dignity for a planet."""
-        return self.dignities.dignities[planet]
+        dignity = self.dignities.dignities.get(planet)
+        if dignity:
+            return dignity
+            
+        # Fallback if not calculated
+        return PlanetDignity(
+            planet=planet,
+            sign=longitude_to_sign(self.positions[planet].longitude),
+            dignity_type=EssentialDignity.NEUTRAL,
+            score=0,
+            is_dignified=False,
+            is_debilitated=False,
+            description="Dignity not calculated"
+        )
     
     def format_planet_position(
         self,

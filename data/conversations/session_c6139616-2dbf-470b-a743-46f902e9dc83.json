@@ -1,0 +1,31 @@
+{
+  "session_id": "c6139616-2dbf-470b-a743-46f902e9dc83",
+  "user_id": "user001",
+  "created_at": "2026-01-29T18:28:48.868387",
+  "updated_at": "2026-01-29T18:29:18.277195",
+  "metadata": {
+    "phase": "5.1",
+    "orchestrated": true,
+    "user_name": "Rajesh Kumar"
+  },
+  "turns": [
+    {
+      "user": "hi",
+      "assistant": "Namaste! 🙏 How may I assist you with your astrological questions today?",
+      "timestamp": "2026-01-29T18:28:50.775680",
+      "metadata": {}
+    },
+    {
+      "user": "who are you?",
+      "assistant": "Namaste! 🙏 How may I assist you with your astrological questions today?",
+      "timestamp": "2026-01-29T18:28:56.340692",
+      "metadata": {}
+    },
+    {
+      "user": "What is my name?",
+      "assistant": "Namaste Rajesh Kumar!\n\nYour name is Rajesh Kumar. I have this information from your user profile.\n\nHow may I help you with your Jyotish queries today?\n\n\n**Sources:**\n1. Saravali Vol1\n2. Saravali Vol1 - Chapter 1\n3. Saravali Vol1",
+      "timestamp": "2026-01-29T18:29:18.277195",
+      "metadata": {}
+    }
+  ]
+}

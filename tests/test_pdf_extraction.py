@@ -1,6 +1,8 @@
+# tests/test_pdf_extraction.py
+# tests\test_pdf_extraction.py
 #!/usr/bin/env python3
 """
-Test PDF Extraction with AI Studio API
+Test PDF Extraction with Vertex AI (with AI Studio fallback)
 Demonstrates Vision LLM extraction with rate limiting
 """
 
@@ -15,9 +17,9 @@ sys.path.insert(0, str(project_root))
 from dotenv import load_dotenv
 load_dotenv(project_root / ".env")
 
-import google.generativeai as genai
 from pdf2image import convert_from_path
 import numpy as np
+import google.generativeai as genai
 
 def extract_pdf_page(pdf_path: str, page_number: int, output_dir: str = "./test_output"):
     """
@@ -35,17 +37,57 @@ def extract_pdf_page(pdf_path: str, page_number: int, output_dir: str = "./test_
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
     
-    # Check API key
-    api_key = os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
-        print("[FAIL] GOOGLE_API_KEY not set!")
+    # Initialize model (Vertex AI with fallback to AI Studio)
+    model = None
+    is_vertex_ai = False
+    
+    # Try Vertex AI first
+    print(f"\n[1/5] Attempting Vertex AI initialization...")
+    try:
+        from langchain_google_vertexai import ChatVertexAI
+        
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        location = os.environ.get("VERTEX_AI_LOCATION", "us-central1")
+        
+        if project:
+            # Use Vertex AI via LangChain wrapper
+            model = ChatVertexAI(
+                model="gemini-2.5-flash",
+                project=project,
+                location=location,
+                temperature=0.1,
+            )
+            is_vertex_ai = True
+            print(f"[OK] Using Vertex AI (project={project}, location={location})")
+        else:
+            print(f"[SKIP] GOOGLE_CLOUD_PROJECT not set, trying AI Studio...")
+    except ImportError:
+        print(f"[SKIP] langchain-google-vertexai not installed, trying AI Studio...")
+    except Exception as e:
+        print(f"[SKIP] Vertex AI init failed ({e}), trying AI Studio...")
+    
+    # Fallback to AI Studio
+    if model is None:
+        try:
+            api_key = os.environ.get("GOOGLE_API_KEY")
+            if api_key:
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel('models/gemini-2.5-flash')
+                is_vertex_ai = False
+                print("[OK] Using AI Studio API (fallback)")
+            else:
+                print("[FAIL] No GOOGLE_API_KEY found for AI Studio")
+                return None
+        except Exception as e:
+            print(f"[FAIL] AI Studio init failed: {e}")
+            return None
+    
+    if model is None:
+        print("[FAIL] Could not initialize any LLM provider")
         return None
     
-    print(f"[OK] API Key found")
-    genai.configure(api_key=api_key)
-    
     # Convert PDF page to image
-    print(f"\n[1/4] Converting PDF page {page_number} to image...")
+    print(f"\n[2/5] Converting PDF page {page_number} to image...")
     try:
         images = convert_from_path(
             pdf_path, 
@@ -65,14 +107,9 @@ def extract_pdf_page(pdf_path: str, page_number: int, output_dir: str = "./test_
         print(f"[FAIL] PDF conversion failed: {e}")
         return None
     
-    # Initialize Gemini Vision model
-    print(f"\n[2/4] Initializing Gemini Vision model...")
-    try:
-        model = genai.GenerativeModel('models/gemini-flash-lite-latest')
-        print(f"[OK] Model ready: gemini-flash-lite-latest (auto-cheapest)")
-    except Exception as e:
-        print(f"[FAIL] Model initialization failed: {e}")
-        return None
+    # Model already initialized above
+    print(f"\n[3/5] Model ready: gemini-2.5-flash")
+    print(f"      Provider: {'Vertex AI' if is_vertex_ai else 'AI Studio'}")
     
     # Create extraction prompt
     prompt = """
@@ -97,10 +134,33 @@ Provide the extraction in the following JSON format:
 """
     
     # Extract content with Vision API
-    print(f"\n[3/4] Extracting content with Vision API...")
+    print(f"\n[4/5] Extracting content with Vision API...")
     try:
-        response = model.generate_content([prompt, image])
-        extracted_text = response.text
+        if is_vertex_ai:
+            # Vertex AI (LangChain) - needs different invocation
+            import base64
+            from io import BytesIO
+            
+            # Convert PIL image to base64
+            buffer = BytesIO()
+            image.save(buffer, format="PNG")
+            image_base64 = base64.b64encode(buffer.getvalue()).decode()
+            
+            # Invoke with text + image (LangChain pattern)
+            from langchain_core.messages import HumanMessage
+            message = HumanMessage(
+                content=[
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}}
+                ]
+            )
+            response = model.invoke([message])
+            extracted_text = response.content
+            
+        else:
+            # AI Studio (genai) - direct invocation
+            response = model.generate_content([prompt, image])
+            extracted_text = response.text
         print(f"[OK] Extraction complete ({len(extracted_text)} characters)")
         
         # Save extracted text
@@ -114,7 +174,7 @@ Provide the extraction in the following JSON format:
         return None
     
     # Display preview
-    print(f"\n[4/4] Extraction Preview:")
+    print(f"\n[5/5] Extraction Preview:")
     print("-" * 70)
     preview = extracted_text[:500] + "..." if len(extracted_text) > 500 else extracted_text
     print(preview)

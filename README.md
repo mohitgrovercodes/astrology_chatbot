@@ -1,133 +1,66 @@
-# Astrology AI Chatbot
+<!-- README.md -->
+# 🌟 Astrology AI Chatbot
 
-An expert-level Astrology Chatbot supporting **Vedic and Western Astrology**, built with LangChain, LangGraph, and RAG.
+> **Production-grade AI conversational system for Vedic and Western Astrology**  
+> Combining deterministic astronomical calculations with LLM-powered interpretations.
 
-## Features
+[![Status](https://img.shields.io/badge/status-active-brightgreen)]()
+[![Progress](https://img.shields.io/badge/progress-Phase%2012%20Complete-blue)]()
 
-- 🔮 **Birth Chart Calculations** - Accurate planetary positions using pyswisseph
-- 🌟 **Vedic & Western Astrology** - Support for both systems
-- 🤖 **AI-Powered Interpretations** - LLM + RAG for expert-level readings
-- 🔄 **Multi-Provider LLM Support** - OpenAI, Google, Anthropic, xAI
-- 🛡️ **Safety Guardrails** - Blocks harmful predictions
-- 🚀 **Production-Ready API** - FastAPI with async support
+---
 
-## Architecture
+## 🚀 Quick Links
 
-```
-┌─────────────────────────────────────────────────┐
-│                  Mobile App                      │
-└────────────────────┬────────────────────────────┘
-                     │ REST API
-┌────────────────────▼────────────────────────────┐
-│              FastAPI + Pydantic                  │
-└────────────────────┬────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────┐
-│           LangGraph Orchestration                │
-│  Intent → Safety → Router → Response Synthesis   │
-└───────┬─────────────────────────────┬───────────┘
-        │                             │
-┌───────▼───────┐           ┌─────────▼──────────┐
-│  Calculation  │           │   RAG Pipeline     │
-│    Engine     │           │  ChromaDB + OpenAI │
-│  (pyswisseph) │           │    Embeddings      │
-└───────────────┘           └────────────────────┘
-```
+- **[Project Status & Roadmap](docs/project_status_master.md)** - detailed progress report.
+- **[API Reference](docs/API_REFERENCE.md)** - detailed API documentation & integration guide.
+- **[Architecture](docs/ARCHITECTURE.md)** - system design overview.
 
-## Quick Start
+---
 
-### 1. Clone and Setup
+## 🎯 Overview
+
+An expert-level **Astrology AI Chatbot** designed for integration into mobile applications. The system features:
+
+- **Backend Integration Ready**: Specialized `/chat` endpoint with Redis-based session management.
+- **24h Session Persistence**: Maintains conversation context for up to 20 messages.
+- **Internal Service Auth**: Secured via high-security shared secret headers.
+- **Semantic AI Routing**: Uses embeddings to understand intent (no fragile regex).
+- **Dual-Engine Calculations**: Vedic (Parasara) + Western (Tropical).
+- **RAG Pipeline**: Grounded in classical texts (BPHS, etc.) to prevent hallucinations.
+- **Multilingual**: Supports English, Hindi, Tamil, and Romanized scripts ("Hinglish").
+- **Safety**: Robust guardrails against harmful/unethical queries.
+
+---
+
+## 📂 Documentation
+
+All detailed documentation has been moved to the `docs/` folder:
+
+- `docs/PROJECT_STATUS_V3.md` (Legacy Status)
+- `docs/PLATFORM_HANDOFF.md`
+- `docs/QUICKSTART.md`
+- `docs/QUICK_REFERENCE.md`
+
+---
+
+## 🛠️ Installation
 
 ```bash
-cd astro_chatbot
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Clone repository
+git clone <repository-url>
+cd astro-chatbot
+
+# Install dependencies
 pip install -r requirements.txt
-```
 
-### 2. Configure Environment
-
-```bash
+# Set up environment
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env with your keys
 ```
 
-### 3. Run the API (after development is complete)
+## 💡 Usage
 
 ```bash
-uvicorn src.api.main:app --reload
+# Run the chatbot interface
+python chatbot_phase5_1.py
 ```
-
-## Project Structure
-
-```
-astro_chatbot/
-├── src/
-│   ├── api/            # FastAPI routes
-│   ├── engine/         # Astrology calculation engine wrapper
-│   ├── rag/            # Document ingestion & retrieval
-│   ├── orchestration/  # LangGraph workflow
-│   ├── safety/         # Content guardrails
-│   └── utils/          # Config, logging utilities
-├── data/
-│   ├── raw/            # Astrology texts for RAG
-│   └── vectordb/       # ChromaDB persistence
-├── config/
-│   └── config.yaml     # Application configuration
-├── tests/              # Unit and integration tests
-├── .env.example        # Environment template
-└── requirements.txt    # Dependencies
-```
-
-## Configuration
-
-### LLM Providers
-
-The chatbot supports multiple LLM providers. Set your preferred provider in `.env`:
-
-| Provider | Env Variable | Models |
-|----------|--------------|--------|
-| OpenAI | `OPENAI_API_KEY` | gpt-4o, gpt-4o-mini |
-| Google | `GOOGLE_API_KEY` | gemini-1.5-pro, gemini-1.5-flash |
-| Anthropic | `ANTHROPIC_API_KEY` | claude-sonnet-4-20250514 |
-| xAI | `XAI_API_KEY` | grok-2, grok-2-mini |
-
-### Embeddings
-
-Embeddings are fixed to OpenAI's `text-embedding-3-large` for consistency.
-
-## Development Phases
-
-- [x] Phase 1: Foundation (config, logging, LLM factory)
-- [ ] Phase 2: Engine Integration
-- [ ] Phase 3: RAG Pipeline
-- [ ] Phase 4: LLM Integration
-- [ ] Phase 5: LangGraph Orchestration
-- [ ] Phase 6: Safety & Guardrails
-- [ ] Phase 7: API Layer
-- [ ] Phase 8: Testing & Evaluation
-- [ ] Phase 9: Fine-Tuning
-- [ ] Phase 10: Deployment
-
-## Key Principles
-
-```
-CALCULATIONS = Deterministic (Python/pyswisseph, no LLM)
-INTERPRETATIONS = LLM + RAG (no hardcoded rules)
-```
-
-## Safety
-
-The chatbot includes guardrails for:
-- ❌ Death timing predictions
-- ❌ Medical diagnosis/treatment
-- ❌ Gambling/lottery advice
-- ❌ Legal advice
-
-## License
-
-[Your License Here]
-
-## Contributing
-
-[Your Contributing Guidelines Here]

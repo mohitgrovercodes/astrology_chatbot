@@ -1,3 +1,5 @@
+# src/engines/core/exceptions.py
+# src\engines\core\exceptions.py
 """
 Custom Exceptions for the Nakshatra Chatbot Astrology Engine
 ============================================================

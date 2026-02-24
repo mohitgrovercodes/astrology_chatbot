@@ -1,0 +1,19 @@
+{
+  "session_id": "53516d2b-7e84-4dfa-9989-e3ee84a0bf21",
+  "user_id": "user001",
+  "created_at": "2026-01-29T19:13:32.505598",
+  "updated_at": "2026-01-29T19:13:47.484437",
+  "metadata": {
+    "phase": "5.1",
+    "orchestrated": true,
+    "user_name": "Rajesh Kumar"
+  },
+  "turns": [
+    {
+      "user": "hi",
+      "assistant": "Namaste Rajesh Kumar!\n\nIt's a pleasure to connect with you. How may I assist you today with insights from the timeless wisdom of Jyotish? Please feel free to ask your question.\n\n\n**Sources:**\n1. Saravali Vol1\n2. Saravali Vol1\n3. Saravali Vol1",
+      "timestamp": "2026-01-29T19:13:47.484437",
+      "metadata": {}
+    }
+  ]
+}

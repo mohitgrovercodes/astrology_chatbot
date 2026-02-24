@@ -1,0 +1,19 @@
+{
+  "session_id": "d856fef5-541b-4277-9d70-9c4af8810a10",
+  "user_id": "user001",
+  "created_at": "2026-01-29T18:01:08.397451",
+  "updated_at": "2026-01-29T18:02:11.511234",
+  "metadata": {
+    "phase": "5.1",
+    "orchestrated": true,
+    "user_name": "Rajesh Kumar"
+  },
+  "turns": [
+    {
+      "user": "Hi",
+      "assistant": "Namaste! Welcome.\n\nI am here to assist you with insights from Vedic Astrology. Please feel free to ask any questions you may have about your birth chart, planetary influences, yogas, dasha periods, or any other aspect of Jyotish. I will do my best to provide a clear and insightful response based on classical texts.\n\n\n**Sources:**\n1. Saravali Vol1\n2. Saravali Vol1\n3. Saravali Vol1",
+      "timestamp": "2026-01-29T18:02:11.511234",
+      "metadata": {}
+    }
+  ]
+}

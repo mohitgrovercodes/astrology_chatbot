@@ -1,3 +1,5 @@
+# src/engines/core/coordinates.py
+# src\engines\core\coordinates.py
 """
 Geographic Coordinates and Position Handling
 =============================================

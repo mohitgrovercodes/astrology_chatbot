@@ -1,3 +1,5 @@
+# src/engines/core/__init__.py
+# src\engines\core\__init__.py
 """
 Core Astronomical Calculation Module
 ====================================

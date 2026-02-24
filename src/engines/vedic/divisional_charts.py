@@ -1,3 +1,5 @@
+# src/engines/vedic/divisional_charts.py
+# src\engines\vedic\divisional_charts.py
 """
 Divisional Charts (Varga Charts) - Complete Implementation
 ==========================================================
