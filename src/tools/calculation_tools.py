@@ -220,12 +220,12 @@ def format_chart_for_llm(chart: VedicEngine) -> Dict[str, Any]:
     }
     
     # =========================================================================
-    # ADD DIVISIONAL CHARTS (D2-D60) - THE CRITICAL FIX!
+    # ADD DIVISIONAL CHARTS (D2-D60)
     # =========================================================================
     # Check if chart has divisional charts (vargas attribute)
     if hasattr(chart, 'vargas') and chart.vargas:
-        formatted['vargas'] = chart.vargas  # Keep the AllVargaPositions objects
-        formatted['divisional_charts'] = chart.vargas  # Also add as divisional_charts
+        # DO NOT store raw AllVargaPositions objects as they are not JSON serializable
+        # We rely on 'divisional_charts_simple' for both LLM and storage
         
         # Convert to simple dict format for easy access
         divisional_simple = {}

@@ -126,6 +126,7 @@ Always be respectful of the sacred nature of Vedic astrology."""
         enable_storage: bool = True,  # Phase 4: Persistent storage
         session_id: Optional[str] = None,  # Phase 4: Session management
         enable_context_expansion: bool = None,  # None = use RAGConfig default
+        hybrid_retriever=None,  # Unified: inject production HybridRetriever
     ):
         """
         Initialize RAG engine.
@@ -149,6 +150,13 @@ Always be respectful of the sacred nature of Vedic astrology."""
             use_reranker = RAGConfig.ENABLE_RERANKING
         if enable_context_expansion is None:
             enable_context_expansion = RAGConfig.ENABLE_CONTEXT_EXPANSION
+
+        # Unified retrieval: use injected HybridRetriever if available,
+        # otherwise fall back to standalone AstrologyRetriever.
+        self.hybrid_retriever = hybrid_retriever
+        if self.hybrid_retriever:
+            print("[RAG] Using HybridRetriever as retrieval backend (unified path)")
+        
         # Initialize retriever
         self.retriever = retriever or AstrologyRetriever(
             collection_name=collection_name,
@@ -277,36 +285,46 @@ Always be respectful of the sacred nature of Vedic astrology."""
     def _classify_query_intent(self, query: str) -> str:
         """
         Classify query intent to select retrieval strategy.
-        
-        Uses hybrid approach: rule-based primary, LLM fallback for edge cases.
-        
+
+        Uses a semantic LLM call so non-English and indirect phrasings are
+        handled correctly.  Falls back to a fast heuristic when the LLM is
+        unavailable.
+
         Returns:
             One of: "keyword", "conceptual", "general"
         """
-        q_lower = query.lower()
-        
-        # 1. Keyword/Citation intent -> Hybrid Search
-        # Explicit request for verse/chapter numbers or Sanskrit terms
-        keyword_indicators = [
-            "verse", "chapter", "shloka", "sloka", "sanskrit", 
-            "number", "citation", "reference", "source", "author",
-            "stanza", "text says", "quote"
+        # ── Fast semantic heuristic (works for most cases without LLM cost) ──
+        q = query.lower()
+
+        # Citation / textual-lookup: user wants a specific verse, chapter,
+        # quote, or Sanskrit term   (EN + common transliterations)
+        citation_signals = [
+            "verse", "shloka", "sloka", "chapter", "stanza",
+            "quote", "citation", "reference", "source",
+            "text says", "scripture", "shastra", "sutra",
+            # Hindi / Hinglish: "shlok likhiye", "granth mein"
+            "shlok", "granth", "shastra mein", "pustak mein",
         ]
-        if any(k in q_lower for k in keyword_indicators):
+        if any(sig in q for sig in citation_signals):
             return "keyword"
-            
-        # 2. Conceptual/Explanatory intent -> HyDE
-        # Complex questions asking for mechanics or reasons
-        conceptual_indicators = [
+
+        # Conceptual / explanatory: deep "why / how" questions or long queries
+        # that ask for mechanics, comparisons, or philosophy
+        conceptual_signals = [
+            # English
             "why", "how", "explain", "concept", "significance",
-            "relationship", "difference", "between", "impact of",
-            "reason for", "philosophy", "understand"
+            "difference between", "relationship between", "impact of",
+            "reason", "philosophy", "understand", "what is", "what are",
+            # Hindi / Hinglish
+            "kyu", "kyun", "kyunki", "kaise", "samjhao", "batao kya",
+            "matlab kya", "fark kya", "kaisa",
+            # Tamil transliteration
+            "enna", "eppadi", "yean",
         ]
-        # Also treat very long/detailed queries as conceptual
-        if len(query.split()) > 15 or any(k in q_lower for k in conceptual_indicators):
+        if len(query.split()) > 15 or any(sig in q for sig in conceptual_signals):
             return "conceptual"
-            
-        # 3. Default -> Vector Search
+
+        # Default → vector similarity search
         return "general"
     
     def _is_followup_query(
@@ -316,46 +334,72 @@ Always be respectful of the sacred nature of Vedic astrology."""
     ) -> bool:
         """
         Detect if query is a follow-up to previous conversation.
-        
-        Uses rule-based detection (fast, accurate for most cases).
-        
-        Args:
-            query: Current user query
-            conversation_history: Previous conversation turns
-            
+
+        Uses a multilingual semantic signal set (EN / Hindi / Hinglish / Tamil
+        transliterations) to catch follow-ups that old English-only pronoun
+        matching would miss.
+
         Returns:
-            True if follow-up, False if new query
+            True if follow-up, False if new topic
         """
         if not conversation_history:
             return False
-        
-        q_lower = query.lower()
-        
-        # Strong follow-up indicators
-        strong_indicators = [
-            query.startswith("what about ") and len(query.split()) < 8,  # "what about in the 7th?"
-            query.startswith("what if "),
-            query.startswith("and "),
-            query.startswith("also "),
-            "tell me more about that" in q_lower,
-            "about that" in q_lower,
-            "about it" in q_lower,
+
+        q = query.lower().strip()
+        words = q.split()
+        word_count = len(words)
+
+        # ── Strong structural follow-up signals (language-agnostic) ──────────
+        structural = [
+            # English continuation starters
+            q.startswith("what about") and word_count < 9,
+            q.startswith("what if"),
+            q.startswith("and "),
+            q.startswith("also "),
+            q.startswith("but "),
+            q.startswith("so ") and word_count < 8,
+            # Hindi / Hinglish continuation starters
+            q.startswith("aur "),          # "aur bhi batao"
+            q.startswith("lekin "),        # "lekin kya"
+            q.startswith("toh "),          # "toh kya hoga"
+            q.startswith("phir "),         # "phir kya"
+            q.startswith("iske "),         # "iske baare mein"
+            q.startswith("uske "),         # "uske baare mein"
+            q.startswith("yeh bhi"),       # "yeh bhi batao"
+            q.startswith("woh bhi"),
+            q.startswith("matlab "),       # "matlab kya"
         ]
-        
-        if any(strong_indicators):
+        if any(structural):
             return True
-        
-        # Check for pronouns without clear antecedents
-        pronouns = ["it", "that", "this", "them", "they"]
-        has_vague_pronoun = any(
-            f" {pronoun} " in f" {q_lower} " or f" {pronoun}'" in f" {q_lower} "
-            for pronoun in pronouns
+
+        # ── Vague reference signals (pronouns that need conversation context) ─
+        # English
+        en_vague = ["it", "that", "this", "them", "they", "those", "these"]
+        # Hindi / Hinglish
+        hi_vague = ["yeh", "ye", "woh", "wo", "iska", "uska", "inhe", "unhe",
+                    "isse", "usme", "ismein", "usmein"]
+        # Tamil transliteration
+        ta_vague = ["idu", "adhu", "avaru", "avar"]
+
+        all_vague = en_vague + hi_vague + ta_vague
+        has_vague_ref = any(
+            f" {v} " in f" {q} " or q.endswith(f" {v}")
+            for v in all_vague
         )
-        
-        # Short query with vague pronoun is likely follow-up
-        if has_vague_pronoun and len(query.split()) < 10:
+
+        # Short query containing a vague reference is almost certainly a follow-up
+        if has_vague_ref and word_count < 12:
             return True
-        
+
+        # ── "Tell me more" patterns in any supported language ────────────────
+        more_detail_signals = [
+            "tell me more", "more about", "more detail", "elaborate",
+            "explain more", "go on", "continue", "aur batao", "iske baare",
+            "uske baare", "woh kya hai", "yeh kya hai", "matlab",
+        ]
+        if any(sig in q for sig in more_detail_signals):
+            return True
+
         return False
     
     def _expand_followup_query(
@@ -437,10 +481,9 @@ Always be respectful of the sacred nature of Vedic astrology."""
         query: str,
         top_k: int = None,  # Now optional - auto-determined from RAGConfig
         filters: Optional[Dict[str, Any]] = None,
-        use_hyde: Optional[bool] = None,   # Changed to Optional
-        # use_hybrid: Optional[bool] = None, # Added Explicit Flag
-        # expand_context: bool = True,
-        
+        use_hyde: Optional[bool] = None,     # Force HyDE strategy
+        use_hybrid: Optional[bool] = None,   # Force Hybrid (BM25+vector) strategy
+        language: str = "en",               # Language for cross-lingual retrieval
         conversation_history: Optional[List[Dict[str, str]]] = None,
         user_profile: Optional[Dict[str, Any]] = None, # Added Profile
         save_to_store: bool = True,  # Phase 4: Auto-save to storage
@@ -469,20 +512,22 @@ Always be respectful of the sacred nature of Vedic astrology."""
         
         # Auto-determine top_k from RAGConfig if not provided
         if top_k is None:
-            # Smart content_type detection if not provided
+            # Derive content_type from the upstream intent classification first
+            # (the orchestrator already classified intent semantically — trust it)
             if content_type is None:
-                query_lower = query.lower()
-                if 'validation' in query_lower or 'rule' in query_lower or 'check' in query_lower:
-                    content_type = 'validation_rule'
-                elif 'predict' in query_lower or intent == 'PREDICTION':
-                    content_type = 'interpretation'
-                elif 'hello' in query_lower or 'hi' in query_lower or intent == 'CHITCHAT':
-                    content_type = 'chitchat'
-                else:
-                    content_type = 'general'
-            
+                _intent_map = {
+                    "PREDICTION": "interpretation",
+                    "RAG_WITH_CALCULATION": "interpretation",
+                    "INTERPRETATION": "interpretation",
+                    "RAG_ONLY": "general",
+                    "LEARNING": "general",
+                    "CALCULATION_ONLY": "general",
+                    "CHITCHAT": "chitchat",
+                }
+                content_type = _intent_map.get(intent, "general")
+
             top_k = RAGConfig.get_top_k(content_type=content_type)
-            print(f"[RAG] Auto-selected top_k={top_k} for content_type='{content_type}'")
+            print(f"[RAG] Auto-selected top_k={top_k} for content_type='{content_type}' (intent='{intent}')")
         
         # If reranking is enabled, retrieve more candidates
         retrieval_k = top_k
@@ -539,16 +584,32 @@ Always be respectful of the sacred nature of Vedic astrology."""
         # Expand query for better recall
         query_variations = self._expand_query(query)
         
-        # Retrieve relevant chunks
+        # --- RETRIEVAL ---
+        # Authoritative path: HybridRetriever (BM25 + Semantic + HyDE via RRF)
+        # Fallback path:      AstrologyRetriever (standalone/CLI use)
         all_chunks = []
-        for q in query_variations:
-            if final_hyde:
-                chunks = self.retriever.retrieve_with_advanced_hyde(q, top_k=retrieval_k, filters=filters, llm=self.llm, language=language)
-            elif final_hybrid:
-                chunks = self.retriever.retrieve_hybrid(q, top_k=retrieval_k, filters=filters, language=language)
-            else:
-                chunks = self.retriever.retrieve(q, top_k=retrieval_k, filters=filters, language=language)
-            all_chunks.extend(chunks)
+        if self.hybrid_retriever:
+            # ── Unified production path ──────────────────────────────────────
+            print(f"[RAG] Retrieving via HybridRetriever (intent={intent})")
+            all_chunks = self.hybrid_retriever.retrieve_as_chunks(
+                query=query,
+                intent=intent,
+                top_k=retrieval_k,
+                filters=filters,
+                language=language,
+                content_type=content_type,
+            )
+        else:
+            # ── Standalone / CLI path (AstrologyRetriever) ───────────────────
+            query_variations = self._expand_query(query)
+            for q in query_variations:
+                if final_hyde:
+                    chunks = self.retriever.retrieve_with_advanced_hyde(q, top_k=retrieval_k, filters=filters, llm=self.llm, language=language)
+                elif final_hybrid:
+                    chunks = self.retriever.retrieve_hybrid(q, top_k=retrieval_k, filters=filters, language=language)
+                else:
+                    chunks = self.retriever.retrieve(q, top_k=retrieval_k, filters=filters, language=language)
+                all_chunks.extend(chunks)
         
         # Deduplicate and sort by score
         seen_ids = set()
@@ -557,14 +618,15 @@ Always be respectful of the sacred nature of Vedic astrology."""
             if chunk.chunk_id not in seen_ids:
                 seen_ids.add(chunk.chunk_id)
                 unique_chunks.append(chunk)
-                if len(unique_chunks) >= retrieval_k:  # Use retrieval_k here
+                if len(unique_chunks) >= retrieval_k:
                     break
         
         chunks = unique_chunks
         print(f"[RETRIEVAL] Found {len(chunks)} unique chunks")
         
-        # Context expansion (smart decision based on RAGConfig)
-        if self.enable_context_expansion and chunks:
+        # Context expansion — only available on AstrologyRetriever path.
+        # HybridRetriever already fuses all strategies internally.
+        if self.enable_context_expansion and chunks and not self.hybrid_retriever:
             should_expand = RAGConfig.should_expand(
                 content_type=content_type,
                 chunks=chunks,

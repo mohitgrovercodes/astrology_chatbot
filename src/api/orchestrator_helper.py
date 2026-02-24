@@ -21,71 +21,76 @@ _orchestrator_instance = None
 
 class SimpleIntentClassifier:
     """
-    Simple LLM-based intent classifier.
-    
-    Classifies user queries into intents using the LLM.
+    Semantic LLM-based intent classifier (fallback for orchestrator_helper).
+    Uses the same semantic approach as the main LLMIntentClassifier.
     """
-    
+
+    SEMANTIC_PROMPT = """You are an intelligent intent classifier for a Vedic astrology chatbot.
+The user ALWAYS has birth details on file. The query may be in ANY language — English, Hindi, Tamil, Hinglish, or mixed.
+
+Classify into exactly ONE of four categories based on what the user fundamentally wants to achieve:
+
+**CHITCHAT** — Casual conversation: greeting, thanking, asking about the bot, saying goodbye.
+Core signal: No astrological intent.
+
+**CALCULATION_ONLY** — User wants raw astrological data displayed (positions, placements, dashas), not interpreted.
+Core signal: Wants data shown, not explained or predicted.
+
+**RAG_WITH_CALCULATION** — User wants a personalized prediction, guidance, or insight tailored to their own life.
+Core signal: The answer must be specific to THIS person's chart. Includes any life area (career, marriage, health, timing).
+This includes queries in any language that express personal intent: "mere liye", "mujhe batao", "for me", "my career", etc.
+When uncertain between RAG_ONLY and RAG_WITH_CALCULATION, always prefer RAG_WITH_CALCULATION.
+
+**RAG_ONLY** — User asks about astrology as a subject — concepts, theories, general principles.
+Core signal: Answer would be the same for any person, no personalization needed.
+Only choose this if the query is clearly educational with no personal framing.
+
+Think: What does the user want — data, a personal answer, education, or just conversation?
+If personal even slightly → RAG_WITH_CALCULATION.
+
+Respond ONLY with valid JSON:
+{{"intent": "CATEGORY_NAME", "confidence": 0.95, "reasoning": "One sentence."}}"""
+
     def __init__(self):
         self.llm = None
         print("[INTENT] Simple classifier initialized")
-    
+
     def set_llm(self, llm):
         """Set the LLM to use for classification."""
         self.llm = llm
         print("[INTENT] LLM-based classifier initialized")
-    
+
+    def _pure_logic_fallback(self, query: str) -> dict:
+        """Pure-logic fallback when LLM is unavailable. Semantic > pattern."""
+        q = query.lower().strip()
+
+        # Greetings — short, no astrological content
+        greeting_words = ['hi', 'hello', 'hey', 'namaste', 'vanakkam', 'jai', 'shukriya',
+                          'thanks', 'thank you', 'bye', 'goodbye', 'dhanyawad']
+        if any(q == w or q.startswith(w + ' ') or q.endswith(' ' + w) for w in greeting_words):
+            return {'intent': 'CHITCHAT', 'confidence': 0.92, 'reasoning': 'Greeting/farewell detected', 'cached': False}
+
+        # Raw data display — no interpretation desire
+        display_signals = ['show my', 'display my', 'show chart', 'my chart', 'my kundali',
+                           'my kundli', 'my horoscope', 'my lagna', 'my ascendant',
+                           'my dasha', 'planetary positions', 'current transits']
+        if any(s in q for s in display_signals) and not any(
+            w in q for w in ['predict', 'when will', 'will i', 'should i', 'career', 'marriage']):
+            return {'intent': 'CALCULATION_ONLY', 'confidence': 0.88, 'reasoning': 'Raw data display request', 'cached': False}
+
+        # Default: any ambiguous personal query → safest route
+        return {'intent': 'RAG_WITH_CALCULATION', 'confidence': 0.80, 'reasoning': 'Default: personal or prediction query', 'cached': False}
+
     def classify(self, query: str, user_profile: dict = None, conversation_history: list = None):
-        """
-        Classify intent using LLM.
-        
-        Returns classification result with intent, confidence, and reasoning.
-        """
+        """Classify intent using semantic LLM prompt with smart fallback."""
         if not self.llm:
-            # Fallback to simple rule-based classification
-            query_lower = query.lower()
-            
-            # Check for greetings
-            if any(word in query_lower for word in ['hi', 'hello', 'hey', 'namaste']):
-                return {
-                    'intent': 'CHITCHAT',
-                    'confidence': 0.95,
-                    'reasoning': 'Greeting detected',
-                    'cached': False
-                }
-            
-            # Check for chart display requests
-            if any(phrase in query_lower for phrase in ['show', 'display', 'what is my']):
-                return {
-                    'intent': 'CALCULATION_ONLY',
-                    'confidence': 0.90,
-                    'reasoning': 'Display request detected',
-                    'cached': False
-                }
-            
-            # Default to RAG_WITH_CALCULATION for predictions
-            return {
-                'intent': 'RAG_WITH_CALCULATION',
-                'confidence': 0.85,
-                'reasoning': 'Prediction query',
-                'cached': False
-            }
-        
-        # Use LLM for classification
+            return self._pure_logic_fallback(query)
+
         from langchain_core.prompts import ChatPromptTemplate
         from langchain_core.output_parsers import JsonOutputParser
-        
+
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an intent classifier for a Vedic astrology chatbot.
-
-Classify queries into one of these intents:
-- CHITCHAT: Greetings, thanks, or questions about the bot
-- CALCULATION_ONLY: Requests to show/display chart data (moon sign, ascendant, etc.)
-- RAG_WITH_CALCULATION: Prediction queries requiring chart analysis + knowledge
-- RAG_ONLY: General astrology questions (no personal chart needed)
-- AMBIGUOUS: Unclear queries
-
-Return JSON: {{"intent": "...", "confidence": 0.0-1.0, "reasoning": "..."}}"""),
+            ("system", self.SEMANTIC_PROMPT),
             ("user", "Query: {query}")
         ])
         

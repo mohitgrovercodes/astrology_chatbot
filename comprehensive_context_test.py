@@ -61,7 +61,7 @@ class ContextTestResult:
     
     def print_result(self):
         """Print test results with color coding and detailed analysis."""
-        status = f"{Colors.GREEN}✅ PASSED{Colors.ENDC}" if self.passed else f"{Colors.RED}❌ FAILED{Colors.ENDC}"
+        status = f"{Colors.GREEN}[PASS] PASSED{Colors.ENDC}" if self.passed else f"{Colors.RED}[FAIL] FAILED{Colors.ENDC}"
         
         print(f"\n{'='*80}")
         print(f"{Colors.BOLD}{self.test_name}{Colors.ENDC}")
@@ -82,11 +82,11 @@ class ContextTestResult:
             # Show analysis if available
             if i-1 < len(self.analysis):
                 analysis_text = self.analysis[i-1]
-                if "✅" in analysis_text:
+                if "[PASS]" in analysis_text:
                     print(f"  {Colors.GREEN}{analysis_text}{Colors.ENDC}")
-                elif "❌" in analysis_text:
+                elif "[FAIL]" in analysis_text:
                     print(f"  {Colors.RED}{analysis_text}{Colors.ENDC}")
-                elif "⚠️" in analysis_text:
+                elif "[WARN]" in analysis_text:
                     print(f"  {Colors.YELLOW}{analysis_text}{Colors.ENDC}")
                 else:
                     print(f"  {Colors.YELLOW}Analysis:{Colors.ENDC} {analysis_text}")
@@ -99,15 +99,15 @@ class ContextTestResult:
             
             # Add debugging hints
             if "Could not detect moon sign" in str(self.errors):
-                print(f"\n{Colors.YELLOW}💡 Debugging Hint:{Colors.ENDC}")
+                print(f"\n{Colors.YELLOW}? Debugging Hint:{Colors.ENDC}")
                 print(f"  The bot may be using Hindi zodiac names (Meena, Karka, etc.)")
                 print(f"  This is not an error - test has been updated to handle this.")
             elif "Context lost" in str(self.errors):
-                print(f"\n{Colors.YELLOW}💡 Debugging Hint:{Colors.ENDC}")
+                print(f"\n{Colors.YELLOW}? Debugging Hint:{Colors.ENDC}")
                 print(f"  Check orchestrator logs for: '[LLM] Sending X messages'")
                 print(f"  Should be > 1 (system prompt + conversation history)")
             elif "lost topic" in str(self.errors).lower():
-                print(f"\n{Colors.YELLOW}💡 Debugging Hint:{Colors.ENDC}")
+                print(f"\n{Colors.YELLOW}? Debugging Hint:{Colors.ENDC}")
                 print(f"  This might indicate the LLM is not receiving conversation history")
                 print(f"  or the context window is too small (current: {self.CONTEXT_WINDOW})")
 
@@ -145,14 +145,14 @@ class ContextTester:
             response = requests.post(f"{API_BASE_URL}/initialize", json=payload, timeout=10)
             if response.status_code == 200:
                 data = response.json()
-                print(f"{Colors.GREEN}✓ Session initialized: {data['user_id']}{Colors.ENDC}")
-                print(f"{Colors.GREEN}✓ Status: {data['status']}{Colors.ENDC}\n")
+                print(f"{Colors.GREEN}[OK] Session initialized: {data['user_id']}{Colors.ENDC}")
+                print(f"{Colors.GREEN}[OK] Status: {data['status']}{Colors.ENDC}\n")
                 return True
             else:
-                print(f"{Colors.RED}✗ Initialize failed: {response.status_code}{Colors.ENDC}")
+                print(f"{Colors.RED}[FAIL] Initialize failed: {response.status_code}{Colors.ENDC}")
                 return False
         except Exception as e:
-            print(f"{Colors.RED}✗ Error: {e}{Colors.ENDC}")
+            print(f"{Colors.RED}[ERROR] Error: {e}{Colors.ENDC}")
             return False
     
     def send_message(self, question: str) -> Dict[str, Any]:
@@ -174,12 +174,12 @@ class ContextTester:
     def run_all_tests(self):
         """Run comprehensive test suite."""
         print(f"\n{Colors.BOLD}{Colors.MAGENTA}")
-        print("╔═══════════════════════════════════════════════════════════════════╗")
-        print("║                                                                   ║")
-        print("║           COMPREHENSIVE CONTEXT MANAGEMENT TEST SUITE             ║")
-        print("║                   Enhanced with Semantic Analysis                 ║")
-        print("║                                                                   ║")
-        print("╚═══════════════════════════════════════════════════════════════════╝")
+        print("+-------------------------------------------------------------------+")
+        print("|                                                                   |")
+        print("|           COMPREHENSIVE CONTEXT MANAGEMENT TEST SUITE             |")
+        print("|                   Enhanced with Semantic Analysis                 |")
+        print("|                                                                   |")
+        print("+-------------------------------------------------------------------+")
         print(f"{Colors.ENDC}\n")
         
         # Initialize session
@@ -225,7 +225,7 @@ class ContextTester:
         answer1 = r1.get('answer', '').lower()
         moon_sign = None
         
-        # Zodiac mapping: Hindi → English
+        # Zodiac mapping: Hindi ? English
         zodiac_mapping = {
             # English names
             'aries': 'aries', 'taurus': 'taurus', 'gemini': 'gemini',
@@ -242,7 +242,7 @@ class ContextTester:
         for sign_name, sign_value in zodiac_mapping.items():
             if sign_name in answer1:
                 moon_sign = sign_value
-                print(f"[DEBUG] Detected moon sign: {sign_name} → {sign_value}")
+                print(f"[DEBUG] Detected moon sign: {sign_name} ? {sign_value}")
                 break
         
         if not moon_sign:
@@ -268,14 +268,14 @@ class ContextTester:
             result.add_exchange(
                 "Analysis",
                 "",
-                f"✅ Bot correctly understood 'it' refers to {moon_sign} moon sign"
+                f"[PASS] Bot correctly understood 'it' refers to {moon_sign} moon sign"
             )
             result.mark_passed()
         elif moon_sign:
             result.add_exchange(
                 "Analysis",
                 "",
-                f"❌ Bot did NOT reference {moon_sign} when responding to 'it'"
+                f"[FAIL] Bot did NOT reference {moon_sign} when responding to 'it'"
             )
             result.add_error(f"Expected '{moon_sign}' in response, not found")
         else:
@@ -313,13 +313,13 @@ class ContextTester:
             result.add_exchange(
                 "Analysis",
                 "",
-                f"✅ Bot resolved 'this' → Jupiter/7th house context"
+                f"[PASS] Bot resolved 'this' ? Jupiter/7th house context"
             )
         else:
             result.add_exchange(
                 "Analysis",
                 "",
-                f"❌ Bot did not reference Jupiter or 7th house when asked about 'this'"
+                f"[FAIL] Bot did not reference Jupiter or 7th house when asked about 'this'"
             )
             result.add_error("Pronoun 'this' not resolved to previous topic")
         
@@ -337,14 +337,14 @@ class ContextTester:
             result.add_exchange(
                 "Analysis",
                 "",
-                f"✅ Bot maintained context when resolving 'that'"
+                f"[PASS] Bot maintained context when resolving 'that'"
             )
             result.mark_passed()
         else:
             result.add_exchange(
                 "Analysis",
                 "",
-                f"❌ Bot lost context when asked about 'that'"
+                f"[FAIL] Bot lost context when asked about 'that'"
             )
             result.add_error("Failed to maintain context across multiple pronouns")
         
@@ -379,13 +379,13 @@ class ContextTester:
             result.add_exchange(
                 "Analysis",
                 "",
-                f"✅ Bot connected 'why that time' to promotion timing"
+                f"[PASS] Bot connected 'why that time' to promotion timing"
             )
         else:
             result.add_exchange(
                 "Analysis",
                 "",
-                f"❌ Bot did not connect question to promotion context"
+                f"[FAIL] Bot did not connect question to promotion context"
             )
             result.add_error("Lost topic continuity on 'why' question")
         
@@ -403,14 +403,14 @@ class ContextTester:
             result.add_exchange(
                 "Analysis",
                 "",
-                f"✅ Bot maintained career topic across 3 turns"
+                f"[PASS] Bot maintained career topic across 3 turns"
             )
             result.mark_passed()
         else:
             result.add_exchange(
                 "Analysis",
                 "",
-                f"❌ Bot lost topic context by turn 3"
+                f"[FAIL] Bot lost topic context by turn 3"
             )
             result.add_error("Topic continuity failed after multiple turns")
         
@@ -452,13 +452,13 @@ class ContextTester:
                 result.add_exchange(
                     f"Turn {i} Analysis",
                     "",
-                    f"✅ Context maintained"
+                    f"[PASS] Context maintained"
                 )
             else:
                 result.add_exchange(
                     f"Turn {i} Analysis",
                     "",
-                    f"❌ Context lost"
+                    f"[FAIL] Context lost"
                 )
                 all_passed = False
                 result.add_error(f"Context lost at turn {i}")
@@ -500,7 +500,7 @@ class ContextTester:
             result.add_exchange(
                 "Analysis",
                 "",
-                f"✅ Bot switched to career topic"
+                f"[PASS] Bot switched to career topic"
             )
             
             # Check if it inappropriately maintained moon sign context
@@ -508,7 +508,7 @@ class ContextTester:
                 result.add_exchange(
                     "Analysis",
                     "",
-                    f"⚠️  Bot may have confused topics (mentioned moon in career context)"
+                    f"[WARN]  Bot may have confused topics (mentioned moon in career context)"
                 )
             
             result.mark_passed()
@@ -516,7 +516,7 @@ class ContextTester:
             result.add_exchange(
                 "Analysis",
                 "",
-                f"❌ Bot did not properly switch to career topic"
+                f"[FAIL] Bot did not properly switch to career topic"
             )
             result.add_error("Failed to handle topic switch")
         
@@ -568,14 +568,14 @@ class ContextTester:
             result.add_exchange(
                 "Analysis",
                 "",
-                f"✅ Bot appropriately handled ambiguous query"
+                f"[PASS] Bot appropriately handled ambiguous query"
             )
             result.mark_passed()
         else:
             result.add_exchange(
                 "Analysis",
                 "",
-                f"⚠️  Bot answered 'is this good' without asking what 'this' refers to"
+                f"[WARN]  Bot answered 'is this good' without asking what 'this' refers to"
             )
             # This is not necessarily a failure - bot might have made a reasonable assumption
             result.mark_passed()
@@ -629,13 +629,13 @@ class ContextTester:
                     result.add_exchange(
                         f"Test {i} Analysis",
                         "",
-                        f"✅ {test['description']}: Context properly expanded"
+                        f"[PASS] {test['description']}: Context properly expanded"
                     )
                 else:
                     result.add_exchange(
                         f"Test {i} Analysis",
                         "",
-                        f"❌ {test['description']}: Failed to expand reference"
+                        f"[FAIL] {test['description']}: Failed to expand reference"
                     )
                     all_passed = False
             
@@ -649,13 +649,13 @@ class ContextTester:
                     result.add_exchange(
                         f"Test {i} Analysis",
                         "",
-                        f"✅ {test['description']}: Appropriately requested clarification"
+                        f"[PASS] {test['description']}: Appropriately requested clarification"
                     )
                 else:
                     result.add_exchange(
                         f"Test {i} Analysis",
                         "",
-                        f"⚠️  {test['description']}: Answered without seeking clarification"
+                        f"[WARN]  {test['description']}: Answered without seeking clarification"
                     )
                     # Not a hard failure
             
@@ -703,14 +703,14 @@ class ContextTester:
                     result.add_exchange(
                         "Analysis",
                         "",
-                        f"✅ Bot maintained context from message 5-6 (career/promotion) in message 7"
+                        f"[PASS] Bot maintained context from message 5-6 (career/promotion) in message 7"
                     )
                     result.mark_passed()
                 else:
                     result.add_exchange(
                         "Analysis",
                         "",
-                        f"❌ Bot lost context from earlier messages"
+                        f"[FAIL] Bot lost context from earlier messages"
                     )
                     result.add_error("Conversation summary may not be working")
             
@@ -752,14 +752,14 @@ class ContextTester:
             result.add_exchange(
                 "Analysis",
                 "",
-                f"✅ Bot auto-expanded 'it' without asking for clarification (score likely > 0.6)"
+                f"[PASS] Bot auto-expanded 'it' without asking for clarification (score likely > 0.6)"
             )
             result.mark_passed()
         else:
             result.add_exchange(
                 "Analysis",
                 "",
-                f"❌ Bot asked for clarification on clear follow-up (score likely < 0.6)"
+                f"[FAIL] Bot asked for clarification on clear follow-up (score likely < 0.6)"
             )
             result.add_error("Semantic interpreter may need threshold adjustment")
             print(f"\n{Colors.RED}[FAIL DETAILS] Bot asked: {answer2[:150]}{Colors.ENDC}")
@@ -776,11 +776,11 @@ class ContextTester:
     def print_summary(self):
         """Print comprehensive test summary."""
         print(f"\n{Colors.BOLD}{Colors.CYAN}")
-        print("╔═══════════════════════════════════════════════════════════════════╗")
-        print("║                                                                   ║")
-        print("║                         TEST SUMMARY                              ║")
-        print("║                                                                   ║")
-        print("╚═══════════════════════════════════════════════════════════════════╝")
+        print("+===================================================================+")
+        print("|                                                                   |")
+        print("|                         TEST SUMMARY                              |")
+        print("|                                                                   |")
+        print("+===================================================================+")
         print(f"{Colors.ENDC}\n")
         
         # Print individual results
@@ -802,44 +802,44 @@ class ContextTester:
         print(f"{'='*80}\n")
         
         # What's working
-        print(f"{Colors.GREEN}{Colors.BOLD}✅ WHAT'S WORKING:{Colors.ENDC}")
+        print(f"{Colors.GREEN}{Colors.BOLD}[PASS] WHAT'S WORKING:{Colors.ENDC}")
         for result in self.results:
             if result.passed:
-                print(f"  • {result.test_name}")
+                print(f"  ? {result.test_name}")
         
         # What's not working
         if failed > 0:
-            print(f"\n{Colors.RED}{Colors.BOLD}❌ WHAT'S NOT WORKING:{Colors.ENDC}")
+            print(f"\n{Colors.RED}{Colors.BOLD}[FAIL] WHAT'S NOT WORKING:{Colors.ENDC}")
             for result in self.results:
                 if not result.passed:
-                    print(f"  • {result.test_name}")
+                    print(f"  ? {result.test_name}")
                     for error in result.errors:
                         print(f"    - {error}")
         
         # Recommendations
-        print(f"\n{Colors.YELLOW}{Colors.BOLD}💡 RECOMMENDATIONS:{Colors.ENDC}")
+        print(f"\n{Colors.YELLOW}{Colors.BOLD}? RECOMMENDATIONS:{Colors.ENDC}")
         
         if failed == 0:
-            print(f"  {Colors.GREEN}🎉 All tests passed! Context management is working perfectly.{Colors.ENDC}")
+            print(f"  {Colors.GREEN}? All tests passed! Context management is working perfectly.{Colors.ENDC}")
         else:
             # Check for semantic interpreter issues
             semantic_failed = not any(r.passed for r in self.results if "Semantic Interpreter" in r.test_name)
             if semantic_failed:
-                print(f"  {Colors.RED}🔴 CRITICAL: Semantic Interpreter asking for clarification on clear follow-ups{Colors.ENDC}")
+                print(f"  {Colors.RED}? CRITICAL: Semantic Interpreter asking for clarification on clear follow-ups{Colors.ENDC}")
                 print(f"     {Colors.YELLOW}FIX: Update ambiguity_prompt in chat_stateless.py{Colors.ENDC}")
                 print(f"     {Colors.CYAN}See: CHAT_STATELESS_MODIFICATIONS.md{Colors.ENDC}")
             
             if not any(r.passed for r in self.results if "Basic Context" in r.test_name):
-                print(f"  {Colors.RED}• CRITICAL: Basic context not working - check if conversation_history is being sent to LLM{Colors.ENDC}")
+                print(f"  {Colors.RED}? CRITICAL: Basic context not working - check if conversation_history is being sent to LLM{Colors.ENDC}")
             
             if not any(r.passed for r in self.results if "Pronoun" in r.test_name):
-                print(f"  {Colors.YELLOW}• Semantic interpreter may need tuning for pronoun resolution{Colors.ENDC}")
+                print(f"  {Colors.YELLOW}? Semantic interpreter may need tuning for pronoun resolution{Colors.ENDC}")
             
             if not any(r.passed for r in self.results if "Multi-Turn" in r.test_name):
-                print(f"  {Colors.YELLOW}• Context window might be too small (current: 5 messages){Colors.ENDC}")
+                print(f"  {Colors.YELLOW}? Context window might be too small (current: 5 messages){Colors.ENDC}")
             
             if not any(r.passed for r in self.results if "Summary" in r.test_name):
-                print(f"  {Colors.YELLOW}• Conversation summary may not be generated or used effectively{Colors.ENDC}")
+                print(f"  {Colors.YELLOW}? Conversation summary may not be generated or used effectively{Colors.ENDC}")
 
 
 # ============================================================================

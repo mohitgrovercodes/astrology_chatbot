@@ -74,7 +74,7 @@ class PromptBuilder:
             sections.append(f"\nGUIDANCE:\n{guidance}")
         
         # Query
-        sections.append(f"\nQUESTION:\n\"{query}\"")
+        sections.append(f"\n====USER_QUERY_MARKER====\n\"{query}\"")
         
         # Instructions
         sections.append(f"\nRESPOND:\n{self._get_instructions(intent, language)}")
@@ -115,64 +115,99 @@ class PromptBuilder:
         return "\n".join(texts)
     
     def _get_guidance(self, intent: str, query: str) -> Optional[str]:
-        if intent == "PREDICTION":
-            timing_guidance = ""
-            # Check if user is asking about timing/when
-            if any(word in query.lower() for word in ['when', 'timing', 'what time', 'which period', 'which year']):
-                timing_guidance = """
+        """Generate contextual guidance based on WHAT the user is actually asking."""
+        q = query.lower()
+        parts = []
 
-    CRITICAL FOR TIMING QUESTIONS:
-    You MUST provide SPECIFIC timeframes:
-    - Immediate (next 1-3 months): "February-March 2026"
-    - Near-term (3-6 months): "April-June 2026"  
-    - Medium-term (6-12 months): "August-September 2026"
-    - Long-term (1-3 years): "2027-2028"
+        if intent in ["PREDICTION", "RAG_WITH_CALCULATION"]:
+            parts.append("Analyze the chart, dasha, and transits together. Be insightful but realistic — never guarantee outcomes.")
 
-    NEVER say just "during Saturn Mahadasha" - always give actual months/seasons!
-    Example: "March-April 2026 when Jupiter transits your 7th house" ✅
-    Not: "During your Saturn period" ❌"""
-            
-            return f"""Analyze chart + transits. Be optimistic but realistic. Never guarantee.{timing_guidance}
+            # Timing guidance — activated when user asks about timing semantically
+            if any(w in q for w in ['when', 'timing', 'what time', 'which year', 'kab', 'kab hoga',
+                                     'which month', 'what period', 'kitne din', 'how long']):
+                parts.append("""
+TIMING — You MUST give specific timeframes:
+- Near-term: "February–March 2026"
+- Mid-term: "April–June 2026"
+- Longer: "Late 2026 to 2027"
+NEVER say just "during Saturn Mahadasha" — always include actual months or seasons.""")
 
-    CONVERSATIONAL TONE:
-    - Use English names FIRST: "Mars (Mangal)" not "Mangal (Mars)"
-    - Maximum 2-3 Sanskrit terms per paragraph
-    - Explain what things MEAN, don't just state positions
-    - Example: "Your Moon in Gemini shows..." not "Chandra in Mithuna indicates..."
-    """
-        elif intent == "INTERPRETATION":
-            return """Explain meaning. Cite texts when relevant.
+            # Compatibility guidance — marriage, relationships, partner
+            if any(w in q for w in ['marriage', 'shaadi', 'vivah', 'partner', 'spouse', 'compatibility',
+                                     'relationship', 'love', 'husband', 'wife', 'rishta']):
+                parts.append("""
+COMPATIBILITY — Discuss 7th house, Venus, and Jupiter placement. Speak of tendencies and patterns, not guarantees.""")
 
-    CONVERSATIONAL TONE:
-    - Use English names FIRST, Sanskrit in parentheses
-    - Simplify: "your career house" not "the 10th Bhava"
-    - Explain what it means for THEM personally"""
+            # Career guidance — job, profession, business
+            if any(w in q for w in ['career', 'job', 'profession', 'business', 'work', 'naukri',
+                                     'promotion', 'success', 'money', 'income', 'finance', 'wealth',
+                                     'paisa', 'kaam', 'vyapar']):
+                parts.append("""
+CAREER — Focus on 10th house, Saturn, Sun, and active Dasha lord's significations. Discuss periods of professional growth.""")
+
+            # Health guidance
+            if any(w in q for w in ['health', 'illness', 'disease', 'sick', 'body', 'swasth',
+                                     'problem', 'pain', 'bimari', 'sehat']):
+                parts.append("""
+HEALTH — Discuss constitutional tendencies from 6th house and lagna. Always add: chart shows tendencies, not diagnosis — consult a doctor.""")
+
+            parts.append("""
+VOICE — English names first, Sanskrit in parentheses. Example: "Mars (Mangal)" not "Mangal (Mars)". Max 2-3 Sanskrit terms per paragraph. Always explain what a placement MEANS for this person.""")
+
+        elif intent in ["INTERPRETATION", "RAG_ONLY"]:
+            parts.append("Explain the astrological meaning clearly. Cite classical texts when relevant.")
+            parts.append("Keep language accessible: say 'career house' before '10th Bhava', 'planetary period' before 'Dasha'. Explain concepts, don't just list them.")
+
         elif intent == "LEARNING":
-            return "Teach concept clearly with examples."
-        return None
+            parts.append("Teach the concept clearly with a real example. Use analogies where helpful. Verify accuracy against classical principles.")
+
+        return "\n".join(parts) if parts else None
     
     def _get_instructions(self, intent: str, language: str = "en") -> str:
-        base = "Be professional, warm, conversational. Explain clearly."
-        
-        # Determine language name and script instruction
+        """Generate response instructions dynamically based on intent AND language."""
         from .language_detector import get_language_detector
         detector = get_language_detector()
         lang_name = detector.get_language_name(language)
-        
-        lang_instruction = ""
+
+        # Build language enforcement instruction
         if "-lat" in language:
-            lang_instruction = f" Respond entirely in {lang_name} using ROMAN ALPHABET (English Script). Do NOT use native script."
+            lang_instr = f"Respond entirely in {lang_name} using ROMAN ALPHABET (English script only, NOT native script)."
         elif language != "en":
-            lang_instruction = f" Respond entirely in {lang_name} (Native Script)."
-        
-        if intent == "PREDICTION":
-            pred = " Focus on timing with SPECIFIC months/dates. Emphasize free will. Be conversational (English names first, Sanskrit in parentheses)."
-            return base + pred + lang_instruction
-        elif intent == "INTERPRETATION":
-            interpret = " Be conversational. Use English names first, Sanskrit in parentheses."
-            return base + interpret + lang_instruction
-            
-        return base + lang_instruction
+            lang_instr = f"Respond entirely in {lang_name} (native script)."
+        else:
+            lang_instr = "Respond in clear, professional English."
+
+        # Build tone instruction based on what the conversation is about
+        base = (
+            "Be professional, warm, and conversational. "
+            "Speak as a knowledgeable astrologer — insightful and empathetic, not robotic. "
+            "Explain clearly without unnecessary jargon."
+        )
+
+        if intent in ["PREDICTION", "RAG_WITH_CALCULATION"]:
+            return (
+                f"{base} "
+                "Focus on the most relevant astrological factor for this specific question. "
+                "When timing is asked, give specific months or seasons — never just dasha names. "
+                "Emphasize that free will and effort shape outcomes. "
+                f"{lang_instr}"
+            )
+        elif intent in ["INTERPRETATION", "RAG_ONLY"]:
+            return (
+                f"{base} "
+                "Ground your interpretation in classical principles. "
+                "Cite texts only when they genuinely support the point. "
+                "Prioritize clarity: English planet names first, Sanskrit in parentheses. "
+                f"{lang_instr}"
+            )
+        elif intent == "LEARNING":
+            return (
+                f"{base} "
+                "Teach the concept step by step. Use one concrete example per key idea. "
+                f"{lang_instr}"
+            )
+
+        return f"{base} {lang_instr}"
 
 if __name__ == "__main__":
     print("PromptBuilder class loaded successfully")

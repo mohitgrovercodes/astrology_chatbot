@@ -85,41 +85,53 @@ class LLMIntentClassifier:
         "predict my future": "RAG_WITH_CALCULATION",
     }
     
-    CLASSIFICATION_PROMPT = """You are an intent classifier for a Vedic astrology chatbot. The user ALWAYS has birth details available.
+    CLASSIFICATION_PROMPT = """You are an intelligent intent classifier for a Vedic astrology chatbot.
 
-Classify the user's query into exactly ONE of these categories:
+The user ALWAYS has birth details on file, so personalized predictions are always possible.
+The query may be in ANY language — English, Hindi, Tamil, Hinglish, or mixed. Understand the semantic meaning regardless of language.
 
-**CHITCHAT**: Greetings, casual conversation, or questions about the bot itself.
-Examples: "Hi", "Hello", "Who are you?", "Thanks", "Bye"
-
-**CALCULATION_ONLY**: User wants to SEE their raw birth chart data WITHOUT interpretation.
-- They want numbers, positions, or chart details displayed
-- NO prediction, NO explanation of meaning
-Examples: "Show my birth chart", "What's my moon sign?", "Display my D1 chart", "What are my current dashas?", "Show my planetary positions"
-
-**RAG_WITH_CALCULATION**: User wants a PERSONALIZED prediction or interpretation about THEIR life.
-- Uses their birth chart for PERSONALIZED answers
-- Requires calculation + knowledge + interpretation
-Examples: "When will I get married?", "How is my career this year?", "What does Jupiter mean for ME?", "Is this a good time to start a business?", "Predict my health"
-
-**RAG_ONLY**: User asks about GENERAL astrology theory, NOT specific to their chart.
-- Educational/theoretical questions
-- NO personalization needed
-Examples: "What does Mars in 7th house generally mean?", "Explain the 10th house", "What is a Raj Yoga?", "Define Ketu", "What are the effects of Saturn return?"
+Classify the query into exactly ONE of these four categories based on what the user is fundamentally trying to achieve:
 
 ---
-IMPORTANT RULES:
-1. If query contains "my" or "me" or "I" with a prediction -> RAG_WITH_CALCULATION
-2. If query asks for chart/positions/dashas without interpretation -> CALCULATION_ONLY  
-3. If query is theoretical/educational with no personal reference -> RAG_ONLY
+
+**CHITCHAT**
+The user is having casual conversation — greeting, thanking, asking about the bot, or saying goodbye.
+Core signal: No astrological intent. The user just wants to connect or wrap up.
+Examples: "Hi", "Thanks", "Who are you?", "Namaste", "Bye", "Shukriya"
+
+**CALCULATION_ONLY**
+The user wants to *see* raw astrological data from their birth chart — positions, placements, dashas, divisional charts.
+Core signal: They want data *displayed*, not interpreted. No prediction or meaning is being asked for.
+Examples: "Show my birth chart", "What is my lagna?", "My planetary positions", "Current dasha period", "Display D9 chart"
+
+**RAG_WITH_CALCULATION**
+The user wants a *personalized* prediction, guidance, or interpretation specific to their own life situation.
+Core signal: The answer must be tailored to THIS person's chart. It could be about future events, life areas (career, marriage, health, finance, relationships), or timing — and it requires understanding who they are astrologically.
+This includes ANY language variant: "mere liye", "mujhe batao", "kab hoga", "meri kismat", "mera career", "for me", "in my chart", etc.
+Also includes follow-up questions in an ongoing personal reading: "Why that time?", "What about my health?", "Is this good or bad?"
+When the intent feels personal — even slightly — prefer this category over RAG_ONLY.
+Examples: "When will I get married?", "Is 2025 good for my career?", "Mere liye kaisi job sahi rahegi?", "What does my Jupiter placement mean for me?", "Will I travel abroad?"
+
+**RAG_ONLY**
+The user is asking about astrology as a *subject* — concepts, theories, general interpretations.
+Core signal: The answer would be the same for ANY person. No personalization needed.
+This should only be chosen if the query is clearly educational or conceptual with no personal framing.
+Examples: "What is a Raj Yoga?", "Explain the 10th house in general", "What does Saturn return mean?", "What are the qualities of a Scorpio moon in Vedic astrology?"
+
+---
 
 USER QUERY: "{query}"
 
-PREVIOUS CONTEXT:
+CONVERSATION CONTEXT (last few messages):
 {context}
 
-Respond with ONLY a JSON object:
-{{"intent": "CATEGORY_NAME", "confidence": 0.95, "reasoning": "Brief explanation"}}
+Think step by step:
+1. What does the user fundamentally want — data, a personal answer, education, or just conversation?
+2. Is the query personal to their life situation (even implicitly)?
+3. If the query is ambiguous between RAG_ONLY and RAG_WITH_CALCULATION, always prefer RAG_WITH_CALCULATION.
+
+Respond with ONLY a valid JSON object — no extra text:
+{{"intent": "CATEGORY_NAME", "confidence": 0.95, "reasoning": "One sentence explanation of why."}}
 """
 
     def __init__(self, llm=None, use_cache: bool = True):

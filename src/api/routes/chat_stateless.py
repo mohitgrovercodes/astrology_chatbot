@@ -18,7 +18,7 @@ import time
 import redis
 import json
 from datetime import datetime
-from langchain_openai import ChatOpenAI
+from src.llm.factory import LLMFactory
 
 from src.api.orchestrator_helper import get_orchestrator
 from src.api.config import settings
@@ -38,9 +38,9 @@ class ContextManager:
     """
     
     def __init__(self):
-        """Initialize fast LLM for context analysis."""
-        self.fast_llm = ChatOpenAI(
-            model="gpt-4o-mini",
+        """Initialize fast LLM for context analysis via centralized factory."""
+        self.fast_llm = LLMFactory.create(
+            purpose="classification",
             temperature=0.1  # Low temperature for consistent analysis
         )
     
@@ -100,11 +100,11 @@ Respond in JSON format:
     "intent_type": "CONTINUATION" | "NEW_TOPIC" | "CLARIFICATION",
     "confidence": 0.0-1.0,
     "reasoning": "Brief explanation of why",
-    "referenced_topic": "What topic they're referring to (if CONTINUATION or CLARIFICATION)",
+    "referenced_topic": "What SPECIFIC topic they're referring to (e.g., 'Pisces moon sign' instead of just 'moon sign')",
     "requires_context": true/false
 }}
 
-Be accurate - analyze the semantic meaning, not just keywords.
+Be accurate - analyze the semantic meaning, not just keywords. If a user asks about their placement (like moon sign), and it was just discussed, include the specific placement in the referenced_topic.
 """
         
         try:
@@ -164,13 +164,56 @@ Be accurate - analyze the semantic meaning, not just keywords.
             }
         
         conv_text = self._format_conversation(conversation_history[-3:])
+
+        # ── DETERMINISTIC PRE-CHECK ───────────────────────────────────────────
+        # If conversation has a clear single-topic context (≤4 messages) AND
+        # the query has an obvious pronoun/follow-up phrase, skip LLM scoring
+        # entirely and EXPAND immediately. This prevents the LLM from
+        # under-scoring crystal-clear follow-ups like "Tell me more about it".
+        CLEAR_FOLLOWUP_PHRASES = [
+            'tell me more about it', 'more about it', 'what else about it',
+            'tell me more', 'what else', 'say more', 'expand on that',
+            'elaborate', 'go on', 'continue',
+        ]
+        PRONOUN_WORDS = ['it', 'this', 'that', 'these', 'those']
+        query_lower = current_query.lower().strip()
+        referenced_topic = intent_analysis.get('referenced_topic', 'the previous topic')
+
+        is_clear_followup = any(phrase in query_lower for phrase in CLEAR_FOLLOWUP_PHRASES)
+        has_pronoun = any(word in query_lower.split() for word in PRONOUN_WORDS)
+        is_short_followup = len(current_query.split()) <= 6 and (
+            query_lower.startswith('why') or query_lower.startswith('how') or
+            query_lower.startswith('when') or query_lower.startswith('what')
+        )
+        single_topic_context = len(conversation_history) <= 4  # ≤2 exchanges
+
+        if (is_clear_followup or (has_pronoun and single_topic_context) or
+                (is_short_followup and single_topic_context)):
+            # Build an inline expansion without a second LLM call
+            expanded = current_query
+            for pron in PRONOUN_WORDS:
+                if f' {pron} ' in f' {query_lower} ':
+                    expanded = current_query.replace(pron, referenced_topic)
+                    expanded = expanded.replace(pron.capitalize(), referenced_topic.capitalize())
+                    break
+            print(f"\n[SEMANTIC INTERPRETER] [EXPAND] Deterministic EXPAND (skipping LLM)")
+            print(f"  Pattern matched: clear_followup={is_clear_followup}, pronoun={has_pronoun}, short={is_short_followup}")
+            print(f"  Expanded: '{expanded}'")
+            return {
+                "action": "EXPAND",
+                "processed_query": expanded,
+                "ambiguity_score": 0.95,
+                "clarification_needed": False,
+                "explanation": "Single-topic follow-up: deterministically expanded"
+            }
+        # ─────────────────────────────────────────────────────────────────────
         referenced_topic = intent_analysis.get('referenced_topic', 'Previous topic')
         
         # Build ambiguity analysis prompt (your existing improved prompt here)
         ambiguity_prompt = f"""You are a semantic analyzer for an astrology chatbot.
 
 Analyze the user's query to determine:
-1. How ambiguous is it? (0.0 = perfectly clear, 1.0 = completely vague)
+1. How clear and resolvable is it? (1.0 = perfectly clear with context, 0.0 = completely vague/ambiguous)
 2. Can we confidently resolve references without changing meaning?
 
 ⚠️ CRITICAL: Be LIBERAL with confidence scores! Most follow-up questions have clear context.
@@ -422,18 +465,19 @@ class EnhancedSessionManager:
     """Session manager with conversation summary support."""
     
     def __init__(self):
-        try:
-            self.redis = redis.Redis(
-                host='localhost',
-                port=6379,
-                db=0,
-                decode_responses=True
-            )
-            self.redis.ping()
-            print("[SESSION] Redis connection established")
-        except:
-            self.redis = None
-            print("[SESSION] Redis not available")
+        self.redis = None
+        # Try multiple hosts to handle WSL/native Redis differences
+        for host in ['localhost', '127.0.0.1']:
+            try:
+                client = redis.Redis(host=host, port=6379, db=0, decode_responses=True, socket_connect_timeout=2)
+                client.ping()
+                self.redis = client
+                print(f"[SESSION] ✅ Redis connected on {host}:6379")
+                break
+            except Exception as e:
+                print(f"[SESSION] Redis {host}:6379 failed: {e}")
+        if not self.redis:
+            print("[SESSION] ❌ Redis not available on any host — sessions will not persist")
     
     def get_user_profile(self, user_id: str):
         if not self.redis:
@@ -448,7 +492,8 @@ class EnhancedSessionManager:
         if not self.redis:
             return []
         try:
-            data = self.redis.get(f"session:{user_id}:conversation")
+            key = f"session:{user_id}:history"
+            data = self.redis.get(key)
             return json.loads(data) if data else []
         except:
             return []
@@ -458,7 +503,8 @@ class EnhancedSessionManager:
         if not self.redis:
             return None
         try:
-            data = self.redis.get(f"session:{user_id}:conversation_summary")
+            key = f"session:{user_id}:summary"
+            data = self.redis.get(key)
             if data:
                 summary_data = json.loads(data)
                 return summary_data.get('summary')
@@ -477,12 +523,13 @@ class EnhancedSessionManager:
                 "message_count": len(self.get_conversation_history(user_id))
             }
             # TTL: 24 hours (same as conversation)
+            key = f"session:{user_id}:summary"
             self.redis.setex(
-                f"session:{user_id}:conversation_summary",
+                key,
                 86400,
                 json.dumps(summary_data)
             )
-            print(f"[SUMMARY] 💾 Stored conversation summary for {user_id}")
+            print(f"[SUMMARY] 💾 Stored conversation summary at key: {key}")
         except Exception as e:
             print(f"[SUMMARY] Error storing summary: {e}")
     
@@ -490,27 +537,51 @@ class EnhancedSessionManager:
         if not self.redis:
             return None
         try:
-            data = self.redis.get(f"session:{user_id}:chart_data")
-            return json.loads(data) if data else None
-        except:
+            key = f"session:{user_id}:chart"
+            print(f"[REDIS] GET key={key}")
+            data = self.redis.get(key)
+            if data:
+                print(f"[REDIS] ✅ Found chart in Redis")
+                return json.loads(data)
+            else:
+                print(f"[REDIS] ❌ No chart found at key: {key}")
+                return None
+        except Exception as e:
+            print(f"[SESSION] ERROR: Failed to get chart data for {user_id}: {e}")
             return None
     
     def get_dasha_data(self, user_id: str):
         if not self.redis:
             return None
         try:
-            data = self.redis.get(f"session:{user_id}:dasha_data")
-            return json.loads(data) if data else None
-        except:
+            key = f"session:{user_id}:dasha"
+            print(f"[REDIS] GET key={key}")
+            data = self.redis.get(key)
+            if data:
+                print(f"[REDIS] ✅ Found dasha in Redis")
+                return json.loads(data)
+            else:
+                print(f"[REDIS] ❌ No dasha found at key: {key}")
+                return None
+        except Exception as e:
+            print(f"[SESSION] ERROR: Failed to get dasha data for {user_id}: {e}")
             return None
     
     def get_transit_data(self, user_id: str):
         if not self.redis:
             return None
         try:
-            data = self.redis.get(f"session:{user_id}:transit_data")
-            return json.loads(data) if data else None
-        except:
+            key = f"session:{user_id}:transit"
+            print(f"[REDIS] GET key={key}")
+            data = self.redis.get(key)
+            if data:
+                print(f"[REDIS] ✅ Found transit in Redis")
+                return json.loads(data)
+            else:
+                print(f"[REDIS] ❌ No transit found at key: {key}")
+                return None
+        except Exception as e:
+            print(f"[SESSION] ERROR: Failed to get transit data for {user_id}: {e}")
             return None
     
     def session_exists(self, user_id: str):
@@ -520,7 +591,7 @@ class EnhancedSessionManager:
     
     def initialize_session(self, user_id: str, user_profile: dict, conversation_history: list = None):
         if not self.redis:
-            return {"status": "error", "message": "Redis not available"}
+            return {"status": "error", "user_id": user_id, "message": "Redis not available"}
         
         try:
             # Store user profile (24h)
@@ -548,7 +619,7 @@ class EnhancedSessionManager:
                         })
             
             # Store conversation (24h)
-            self.redis.setex(f"session:{user_id}:conversation", 86400, json.dumps(internal_conversation))
+            self.redis.setex(f"session:{user_id}:history", 86400, json.dumps(internal_conversation))
             
             # Initialize empty summary
             self.store_conversation_summary(user_id, "New conversation started.")
@@ -567,6 +638,8 @@ class EnhancedSessionManager:
                 "user_id": user_id
             }
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             print(f"[SESSION] Error initializing: {e}")
             return {
                 "status": "error",
@@ -594,7 +667,7 @@ class EnhancedSessionManager:
             if len(conversation) > 20:
                 conversation = conversation[-20:]
             
-            self.redis.setex(f"session:{session_id}:conversation", 86400, json.dumps(conversation))
+            self.redis.setex(f"session:{session_id}:history", 86400, json.dumps(conversation))
             return True
         except:
             return False
@@ -605,7 +678,7 @@ class EnhancedSessionManager:
         
         # Get last summary metadata
         try:
-            summary_data_str = self.redis.get(f"session:{user_id}:conversation_summary")
+            summary_data_str = self.redis.get(f"session:{user_id}:summary")
             if summary_data_str:
                 summary_data = json.loads(summary_data_str)
                 last_summary_count = summary_data.get('message_count', 0)
@@ -623,27 +696,36 @@ class EnhancedSessionManager:
         if not self.redis:
             return
         try:
-            self.redis.setex(f"session:{user_id}:chart_data", 604800, json.dumps(chart_data))
-            print(f"[CACHE] 💾 Stored chart data for {user_id} (TTL: 7d)")
-        except:
+            key = f"session:{user_id}:chart"
+            print(f"[REDIS] STORE key={key}")
+            self.redis.setex(key, 604800, json.dumps(chart_data))
+            print(f"[CACHE] ✅ Chart stored (TTL: 7d)")
+        except Exception as e:
+            print(f"[CACHE] Error storing chart: {e}")
             pass
     
     def store_dasha_data(self, user_id: str, dasha_data: dict):
         if not self.redis:
             return
         try:
-            self.redis.setex(f"session:{user_id}:dasha_data", 604800, json.dumps(dasha_data))
-            print(f"[CACHE] 💾 Stored dasha data for {user_id} (TTL: 7d)")
-        except:
+            key = f"session:{user_id}:dasha"
+            print(f"[REDIS] STORE key={key}")
+            self.redis.setex(key, 604800, json.dumps(dasha_data))
+            print(f"[CACHE] ✅ Dasha stored (TTL: 7d)")
+        except Exception as e:
+            print(f"[CACHE] Error storing dasha: {e}")
             pass
     
     def store_transit_data(self, user_id: str, transit_data: dict):
         if not self.redis:
             return
         try:
-            self.redis.setex(f"session:{user_id}:transit_data", 7200, json.dumps(transit_data))
-            print(f"[CACHE] 💾 Stored transit data for {user_id} (TTL: 2h)")
-        except:
+            key = f"session:{user_id}:transit"
+            print(f"[REDIS] STORE key={key}")
+            self.redis.setex(key, 7200, json.dumps(transit_data))
+            print(f"[CACHE] ✅ Transit stored (TTL: 2h)")
+        except Exception as e:
+            print(f"[CACHE] Error storing transit: {e}")
             pass
     
     def extend_session(self, user_id: str):
@@ -652,8 +734,8 @@ class EnhancedSessionManager:
         try:
             keys = [
                 f"session:{user_id}:user_profile",
-                f"session:{user_id}:conversation",
-                f"session:{user_id}:conversation_summary",
+                f"session:{user_id}:history",
+                f"session:{user_id}:summary",
                 f"session:{user_id}:metadata"
             ]
             for key in keys:
@@ -668,12 +750,12 @@ class EnhancedSessionManager:
         try:
             keys = [
                 f"session:{session_id}:user_profile",
-                f"session:{session_id}:conversation",
-                f"session:{session_id}:conversation_summary",
+                f"session:{session_id}:history",
+                f"session:{session_id}:summary",
                 f"session:{session_id}:metadata",
-                f"session:{session_id}:chart_data",
-                f"session:{session_id}:dasha_data",
-                f"session:{session_id}:transit_data"
+                f"session:{session_id}:chart",
+                f"session:{session_id}:dasha",
+                f"session:{session_id}:transit"
             ]
             self.redis.delete(*keys)
             return True
@@ -915,9 +997,9 @@ async def send_message(request: SendMessageRequest):
         print(f"  Original Query: {question}")
         print(f"  Processed Query: {processed_query}")
         if processed_query != question:
-            print(f"  ✅ Query enhanced for clarity")
+            print(f"  [OK] Query enhanced for clarity")
         else:
-            print(f"  ℹ️  No modification needed")
+            print(f"  [INFO]  No modification needed")
         
         # ====================================================================
         # STEP 4: PREPARE CONTEXT FOR ORCHESTRATOR
@@ -933,11 +1015,11 @@ async def send_message(request: SendMessageRequest):
             print(f"Sending all {len(full_history)} messages")
         
         # Log what's being sent to orchestrator
-        print(f"\n{'─'*80}")
+        print(f"\n{'-'*80}")
         print(f"[MESSAGES SENT TO ORCHESTRATOR]")
-        print(f"{'─'*80}")
+        print(f"{'-'*80}")
         for i, msg in enumerate(recent_history, 1):
-            role_label = "👤 USER" if msg['role'] == 'user' else "🤖 BOT"
+            role_label = "[USER]" if msg['role'] == 'user' else "[BOT]"
             content_preview = msg['content'][:70] + "..." if len(msg['content']) > 70 else msg['content']
             print(f"{i}. {role_label}: {content_preview}")
         
@@ -947,10 +1029,10 @@ async def send_message(request: SendMessageRequest):
         print(f"  Intent Type: {intent_analysis['intent_type']}")
         print(f"  Resolution Action: {resolution_result['action']}")
         if resolution_result['action'] == 'EXPAND':
-            print(f"  ✅ Query expanded for clarity (confidence: {resolution_result['ambiguity_score']:.2f})")
+            print(f"  [OK] Query expanded for clarity (confidence: {resolution_result['ambiguity_score']:.2f})")
         elif resolution_result['action'] == 'HINT':
-            print(f"  ℹ️  Hint added for context (confidence: {resolution_result['ambiguity_score']:.2f})")
-        print(f"{'─'*80}\n")
+            print(f"  [INFO]  Hint added for context (confidence: {resolution_result['ambiguity_score']:.2f})")
+        print(f"{'-'*80}\n")
         
         # ====================================================================
         # STEP 5: GET CACHED CALCULATIONS
@@ -960,25 +1042,25 @@ async def send_message(request: SendMessageRequest):
         cached_transit = session_manager.get_transit_data(user_id)
         
         print(f"[CACHED DATA]")
-        print(f"  Chart: {'✅ Cached' if cached_chart else '❌ Not cached'}")
-        print(f"  Dasha: {'✅ Cached' if cached_dasha else '❌ Not cached'}")
-        print(f"  Transit: {'✅ Cached' if cached_transit else '❌ Not cached'}")
+        print(f"  Chart: {'[OK] Cached' if cached_chart else '[MISSING] Not cached'}")
+        print(f"  Dasha: {'[OK] Cached' if cached_dasha else '[MISSING] Not cached'}")
+        print(f"  Transit: {'[OK] Cached' if cached_transit else '[MISSING] Not cached'}")
         
         orchestrator_session_data = {
             "chart_data": cached_chart,
             "dasha_data": cached_dasha,
             "transit_data": cached_transit,
-            "conversation_summary": conversation_summary,
+            "summary": conversation_summary,
             "intent_analysis": intent_analysis
         }
         
         # Log what cached data is being passed to orchestrator
         if cached_chart:
-            print(f"[CACHE] ✅ Passing cached chart to orchestrator")
+            print(f"[CACHE] [OK] Passing cached chart to orchestrator")
         if cached_dasha:
-            print(f"[CACHE] ✅ Passing cached dasha to orchestrator")
+            print(f"[CACHE] [OK] Passing cached dasha to orchestrator")
         if cached_transit:
-            print(f"[CACHE] ✅ Passing cached transit to orchestrator")
+            print(f"[CACHE] [OK] Passing cached transit to orchestrator")
         
         # ====================================================================
         # STEP 6: PROCESS QUERY WITH ORCHESTRATOR
@@ -1010,19 +1092,19 @@ async def send_message(request: SendMessageRequest):
         # ====================================================================
         # Only store if not already cached
         if result.get('chart_data') and not cached_chart:
-            print(f"[CACHE] 💾 Storing NEW chart data...")
+            print(f"[CACHE] Storing NEW chart data...")
             session_manager.store_chart_data(user_id, result['chart_data'])
-            print(f"[CACHE] ✅ Chart stored")
+            print(f"[CACHE] [OK] Chart stored")
         
         if result.get('dasha_data') and not cached_dasha:
-            print(f"[CACHE] 💾 Storing NEW dasha data...")
+            print(f"[CACHE] Storing NEW dasha data...")
             session_manager.store_dasha_data(user_id, result['dasha_data'])
-            print(f"[CACHE] ✅ Dasha stored")
+            print(f"[CACHE] [OK] Dasha stored")
         
         if result.get('transit_data') and not cached_transit:
-            print(f"[CACHE] 💾 Storing NEW transit data...")
+            print(f"[CACHE] Storing NEW transit data...")
             session_manager.store_transit_data(user_id, result['transit_data'])
-            print(f"[CACHE] ✅ Transit stored")
+            print(f"[CACHE] [OK] Transit stored")
         
         # ====================================================================
         # STEP 8: UPDATE CONVERSATION HISTORY

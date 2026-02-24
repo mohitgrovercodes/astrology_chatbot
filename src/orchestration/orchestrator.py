@@ -177,10 +177,38 @@ class EnhancedLangGraphOrchestrator:
                 name="identity",
                 examples=[
                     "who are you", "what are you", "tell me about yourself",
-                    "what can you do", "introduce yourself", "what is your name",
-                    "kaun ho tum", "kya ho tum", "aap kaun hain"
+                    "what can you do", "introduce yourself",
+                    # Bot name questions ONLY ("your" / "aap" / "tum")
+                    "what is your name", "what's your name",
+                    "kaun ho tum", "kya ho tum", "aap kaun hain",
+                    "aapka naam kya hai", "tumhara naam kya hai",
                 ],
                 metadata={"type": "chitchat", "subtype": "identity"}
+            )
+
+            # Route 2b: Personal profile questions (what is MY name/DOB/chart)
+            # MUST be added BEFORE identity so the router resolves correctly
+            self.semantic_router.add_route(
+                name="personal_profile_query",
+                examples=[
+                    # English
+                    "what is my name", "what's my name", "do you know my name",
+                    "what is my date of birth", "what is my birth date",
+                    "what is my sun sign", "what is my moon sign", "what is my ascendant",
+                    "tell me my details", "what do you know about me",
+                    "what city am I from", "where was I born",
+                    # Hindi (Hinglish)
+                    "mera naam kya hai", "mera name kya hai", "mera naam batao",
+                    "meri date of birth kya hai", "meri DOB kya hai",
+                    "mera janam kab hua", "main kahan paida hua", "meri birthplace kya hai",
+                    "mera sign kya hai", "meri rashi kya hai", "mera lagna kya hai",
+                    "tum mujhe jaante ho", "aap mujhe jaante hain",
+                    "mere baare mein kya jaante ho",
+                    # Hindi (native script)
+                    "मेरा नाम क्या है", "मेरी जन्म तिथि क्या है",
+                    "आप मुझे जानते हैं",
+                ],
+                metadata={"type": "chitchat", "subtype": "personal_profile_query"}
             )
             
             # Route 3: Gratitude
@@ -241,6 +269,7 @@ class EnhancedLangGraphOrchestrator:
         workflow.add_node("calculation_only", self._handle_calculation_only_node)
         workflow.add_node("rag_with_calculation", self._handle_rag_with_calculation_node)
         workflow.add_node("rag_only", self._handle_rag_only_node)
+        workflow.add_node("clarification", self._handle_clarification_node)
         workflow.add_node("format_response", self._format_response_node)
         
         # Set entry point
@@ -273,6 +302,8 @@ class EnhancedLangGraphOrchestrator:
                 return "rag_with_calculation"
             elif intent == 'RAG_ONLY':
                 return "rag_only"
+            elif intent == 'AMBIGUOUS':
+                return "clarification"
             else:
                 return "chitchat"  # Default fallback
         
@@ -283,7 +314,8 @@ class EnhancedLangGraphOrchestrator:
                 "chitchat": "chitchat",
                 "calculation_only": "calculation_only",
                 "rag_with_calculation": "rag_with_calculation",
-                "rag_only": "rag_only"
+                "rag_only": "rag_only",
+                "clarification": "clarification"
             }
         )
         
@@ -292,6 +324,7 @@ class EnhancedLangGraphOrchestrator:
         workflow.add_edge("calculation_only", "format_response")
         workflow.add_edge("rag_with_calculation", "format_response")
         workflow.add_edge("rag_only", "format_response")
+        workflow.add_edge("clarification", "format_response")
         
         # End node
         workflow.add_edge("format_response", END)
@@ -471,7 +504,34 @@ class EnhancedLangGraphOrchestrator:
     def _classify_intent_node(self, state: NakshatraState) -> NakshatraState:
         """Node 2: Classify intent."""
         print(f"[INTENT] Classifying query: '{state['query'][:50]}...'")
-        
+
+        # ── CONTINUATION GUARD ────────────────────────────────────────────────
+        # Bare follow-up phrases must reach the RAG node — not CHITCHAT/BLOCKED.
+        # "Tell me more", "Why that time?", "What else?" are valid astrological
+        # queries when conversation history exists.  Without this guard they
+        # fall through to the semantic router (chitchat) or safety classifier
+        # (SOFT_BLOCK_OUT_OF_SCOPE), producing "beyond scope" responses.
+        _CONTINUATION_PHRASES = {
+            'tell me more', 'what else', 'say more', 'elaborate', 'continue',
+            'go on', 'and then', 'expand', 'explain more', 'more details',
+            'more information', 'tell me',
+        }
+        _SHORT_QUESTION_STARTERS = ('why', 'how', 'when', 'what', 'where', 'who')
+        q = state['query'].lower().strip().rstrip('?.')
+        history = state.get('conversation_history', [])
+        is_continuation = (
+            any(phrase == q or q.startswith(phrase) for phrase in _CONTINUATION_PHRASES)
+            or (len(q.split()) <= 5 and q.split()[0] in _SHORT_QUESTION_STARTERS)
+        )
+        if is_continuation and len(history) > 0:
+            print(f"[INTENT] [CONTINUATION] CONTINUATION GUARD: routed to RAG_ONLY (history={len(history)} msgs)")
+            state['intent'] = 'RAG_ONLY'
+            state['confidence'] = 0.85
+            state['intent_reasoning'] = 'Bare continuation query with active conversation'
+            state['is_safe'] = True
+            return state
+        # ─────────────────────────────────────────────────────────────────────
+
         # PHASE 11: Semantic Chitchat Router
         # Check for simple greetings semantically
         chitchat_match = None
@@ -507,7 +567,7 @@ class EnhancedLangGraphOrchestrator:
                     # Let it fall through to intent classifier which handles chitchat better
                     pass 
                 else:
-                    print(f"[GUARD] 🚫 BLOCKING REQUEST: {safety_result.decision.category} ({safety_result.decision.reason})")
+                    print(f"[GUARD] [BLOCK] BLOCKING REQUEST: {safety_result.decision.category} ({safety_result.decision.reason})")
                     state['intent'] = 'safety_block'
                     state['answer'] = get_template(safety_result.get_template_key())
                     state['is_safe'] = False
@@ -516,7 +576,7 @@ class EnhancedLangGraphOrchestrator:
                 
             # 2. REFRAME: Transform query and proceed
             if safety_result.decision.category == "REFRAME":
-                print(f"[GUARD] 🔄 REFRAMING QUERY: {state['query']} -> {safety_result.processed_query}")
+                print(f"[GUARD] [REFRAME] REFRAMING QUERY: {state['query']} -> {safety_result.processed_query}")
                 state['original_query'] = state['query']
                 state['query'] = safety_result.processed_query
                 state['is_reframed'] = True
@@ -524,7 +584,7 @@ class EnhancedLangGraphOrchestrator:
                 
             # 3. CONDITIONAL: Mark for disclaimer (handled in format_response)
             if safety_result.decision.disclaimer_type:
-                print(f"[GUARD] ⚠️ CONDITIONAL: Needs {safety_result.decision.disclaimer_type} disclaimer")
+                print(f"[GUARD] [WARN] CONDITIONAL: Needs {safety_result.decision.disclaimer_type} disclaimer")
                 state['disclaimer_type'] = safety_result.decision.disclaimer_type
         
         result = self.intent_classifier.classify(
@@ -566,6 +626,14 @@ class EnhancedLangGraphOrchestrator:
             confidence = chitchat_match.confidence
             print(f"[CHITCHAT] Semantic match: {match_type} (confidence: {confidence:.2f})")
             
+            # 0. PERSONAL PROFILE QUERIES — "Mera naam kya hai?", "What is my name?"
+            #    Must be checked BEFORE identity to avoid misrouting.
+            if match_type == "personal_profile_query":
+                state['answer'] = self._answer_personal_profile_query(
+                    query=query, user_profile=state['user_profile'], language=lang
+                )
+                return state
+
             # 1. GREETING
             if match_type == "greeting":
                 greeting = get_contextual_greeting(
@@ -655,6 +723,30 @@ class EnhancedLangGraphOrchestrator:
                     formatted_history = builder._format_conversation(history_turns)
                     history_context = f"\nCONVERSATION CONTEXT:\n{formatted_history}\n"
 
+                # Build user profile context for LLM (safety net for novel personal queries)
+                _up = state.get('user_profile', {})
+                _bd = _up.get('birth_details', {})
+                _loc = _bd.get('location', {})
+                _profile_lines = []
+                if _up.get('name'):
+                    _profile_lines.append(f"User name: {_up['name']}")
+                if _bd.get('date'):
+                    _profile_lines.append(f"Date of birth: {_bd['date']}")
+                if _bd.get('time'):
+                    _profile_lines.append(f"Time of birth: {_bd['time']}")
+                if _loc.get('city') or _loc.get('address'):
+                    _profile_lines.append(f"Birth place: {_loc.get('city') or _loc.get('address')}")
+                if _up.get('sun_sign'):
+                    _profile_lines.append(f"Sun sign: {_up['sun_sign']}")
+                if _up.get('moon_sign'):
+                    _profile_lines.append(f"Moon sign: {_up['moon_sign']}")
+                if _up.get('ascendant'):
+                    _profile_lines.append(f"Ascendant: {_up['ascendant']}")
+                user_profile_context = (
+                    "USER PROFILE (use this if the user asks about their own details):\n"
+                    + "\n".join(_profile_lines)
+                ) if _profile_lines else ""
+
                 prompt = f"""{system_prompt}
                 
         {history_context}
@@ -666,7 +758,9 @@ class EnhancedLangGraphOrchestrator:
         3. If the user asks about previous messages or personal context, ANSWER DIRECTLY based on CONVERSATION CONTEXT.
         4. If the question is entirely outside astrology and NOT in history, politely explain your scope.
         5. {script_instruction}
-        6. Keep it brief (under 50 words).
+        6. Keep it brief (under 60 words).
+
+        {user_profile_context}
 
         Response:"""
                 
@@ -675,10 +769,121 @@ class EnhancedLangGraphOrchestrator:
                 
             except Exception as e:
                 print(f"[CHITCHAT] Error generating response: {e}")
-                # Fallback to language-specific greeting
                 state['answer'] = get_greeting(lang)
-                
+
             return state
+
+    # ------------------------------------------------------------------
+    # PERSONAL PROFILE QUERY HELPER
+    # ------------------------------------------------------------------
+    def _answer_personal_profile_query(
+        self, query: str, user_profile: dict, language: str
+    ) -> str:
+        """
+        Answer questions about the USER's own details (name, DOB, location, sign)
+        using the structured user_profile dict — no LLM guesswork.
+        """
+        name = user_profile.get('name', '')
+        bd = user_profile.get('birth_details', {})
+        dob = bd.get('date', '')
+        tob = bd.get('time', '')
+        location = bd.get('location', {})
+        city = location.get('city', '') or location.get('address', '')
+        sun_sign = user_profile.get('sun_sign', '')
+        moon_sign = user_profile.get('moon_sign', '')
+        ascendant = user_profile.get('ascendant', '')
+
+        q = query.lower()
+
+        # --- Name questions ---
+        naam_triggers = [
+            'naam kya', 'name kya', 'naam batao', 'what is my name',
+            "what's my name", 'do you know my name', 'मेरा नाम',
+        ]
+        if any(t in q for t in naam_triggers):
+            if name:
+                if language in ('hi', 'hi-lat'):
+                    return f"Aapka naam **{name}** hai! 😊"
+                return f"Your name is **{name}**! 😊"
+            else:
+                if language in ('hi', 'hi-lat'):
+                    return "Mujhe aapka naam nahi pata. Kya aap bata sakte hain?"
+                return "I don't have your name on file yet. Could you tell me?"
+
+        # --- DOB / Birth date questions ---
+        dob_triggers = [
+            'date of birth', 'dob', 'birth date', 'janam kab', 'date of birth kya',
+            'meri dob', 'मेरी जन्म तिथि',
+        ]
+        if any(t in q for t in dob_triggers):
+            if dob:
+                if language in ('hi', 'hi-lat'):
+                    return f"Aapki date of birth **{dob}** hai."
+                return f"Your date of birth on file is **{dob}**."
+            else:
+                if language in ('hi', 'hi-lat'):
+                    return "Mujhe aapki DOB nahi pata abhi. Kya aap bata sakte hain?"
+                return "I don't have your date of birth on file. Could you share it?"
+
+        # --- Location questions ---
+        loc_triggers = [
+            'kahan paida', 'birthplace', 'birth place', 'city am i from',
+            'where was i born', 'birth city', 'main kahan se', 'janmsthan',
+        ]
+        if any(t in q for t in loc_triggers):
+            if city:
+                if language in ('hi', 'hi-lat'):
+                    return f"Aapka janam sthan **{city}** hai."
+                return f"Your birth place on file is **{city}**."
+            else:
+                if language in ('hi', 'hi-lat'):
+                    return "Mujhe aapki birthplace nahi pata. Kya aap bata sakte hain?"
+                return "I don't have your birth location. Could you share it?"
+
+        # --- Sign questions ---
+        sign_triggers = [
+            'sun sign', 'moon sign', 'ascendant', 'lagna', 'rashi', 'sign kya', 'meri rashi',
+        ]
+        if any(t in q for t in sign_triggers):
+            parts = []
+            if sun_sign:
+                parts.append(f"Sun sign: **{sun_sign}**")
+            if moon_sign:
+                parts.append(f"Moon sign: **{moon_sign}**")
+            if ascendant:
+                parts.append(f"Ascendant: **{ascendant}**")
+            if parts:
+                return "Your signs — " + ", ".join(parts) + "."
+
+        # --- Generic fallback: summarise everything we know ---
+        summary_parts = []
+        if name:
+            summary_parts.append(f"Name: **{name}**")
+        if dob:
+            summary_parts.append(f"DOB: **{dob}**")
+        if tob:
+            summary_parts.append(f"Time of birth: **{tob}**")
+        if city:
+            summary_parts.append(f"Birth place: **{city}**")
+        if sun_sign:
+            summary_parts.append(f"Sun sign: **{sun_sign}**")
+        if moon_sign:
+            summary_parts.append(f"Moon sign: **{moon_sign}**")
+
+        if summary_parts:
+            intro = "Yeh hai aapki profile:" if language in ('hi', 'hi-lat') else "Here's what I have on file for you:"
+            return intro + "\n" + " | ".join(summary_parts)
+
+        # Nothing known
+        if language in ('hi', 'hi-lat'):
+            return (
+                "Abhi mere paas aapki details nahi hain. "
+                "Kya aap apni janam tithi, samay aur jagah bata sakte hain?"
+            )
+        return (
+            "I don't have your details on file yet. "
+            "Could you share your date of birth, time, and place?"
+        )
         
     def _extract_topic(self, query: str) -> str:
         """Extract the main topic from an ambiguous query."""
@@ -915,7 +1120,34 @@ Provide a concise answer:"""
             
             # Store chart data for potential follow-up questions
             state['chart_data'] = chart_data
-            
+
+            # Calculate current dasha if missing
+            if not state.get('dasha_data'):
+                try:
+                    print("[CALCULATION_ONLY] Calculating dasha...")
+                    dasha_tool = self.calculation_tools['current_dasha']
+                    dasha_data = dasha_tool.invoke({
+                        "date_of_birth": user_profile.get('date_of_birth'),
+                        "time_of_birth": user_profile.get('time_of_birth'),
+                        "latitude": user_profile.get('latitude'),
+                        "longitude": user_profile.get('longitude')
+                    })
+                    if "error" not in dasha_data:
+                        state['dasha_data'] = dasha_data
+                except Exception as e:
+                    print(f"[CALCULATION_ONLY] Dasha calculation error: {e}")
+
+            # Calculate current transits if missing
+            if not state.get('transit_data'):
+                try:
+                    print("[CALCULATION_ONLY] Calculating transits...")
+                    transit_tool = self.calculation_tools['current_transits']
+                    transit_data = transit_tool.invoke({})
+                    if "error" not in transit_data:
+                        state['transit_data'] = transit_data
+                except Exception as e:
+                    print(f"[CALCULATION_ONLY] Transit calculation error: {e}")
+
         except Exception as e:
             print(f"[ERROR] Calculation failed: {e}")
             import traceback
@@ -963,34 +1195,40 @@ Provide a concise answer:"""
                             
                         if state.get('chart_data'):
                             print(f"[RAG_WITH_CALCULATION] Chart ready: Lagna={state['chart_data'].get('lagna') or state['chart_data'].get('ascendant', {}).get('rashi', 'Unknown')}")
-                        
-                        # Calculate current dasha
-                        if not state.get('dasha_data'):
-                            print("[RAG_WITH_CALCULATION] Calculating dasha...")
-                            dasha_tool = self.calculation_tools['current_dasha']
-                            dasha_data = dasha_tool.invoke({
-                                "date_of_birth": user_profile.get('date_of_birth'),
-                                "time_of_birth": user_profile.get('time_of_birth'),
-                                "latitude": user_profile.get('latitude'),
-                                "longitude": user_profile.get('longitude')
-                            })
-                            
-                            if "error" not in dasha_data:
-                                state['dasha_data'] = dasha_data
-                                print(f"[RAG_WITH_CALCULATION] Dasha: {dasha_data.get('dasha_sequence', 'Unknown')}")
-                        
-                        # Calculate current transits
-                        if not state.get('transit_data'):
-                            print("[RAG_WITH_CALCULATION] Calculating transits...")
-                            transit_tool = self.calculation_tools['current_transits']
-                            transit_data = transit_tool.invoke({})
-                            
-                            if "error" not in transit_data:
-                                state['transit_data'] = transit_data
-                                print(f"[RAG_WITH_CALCULATION] Transits for {transit_data.get('date', 'current')}")
-                        
                     except Exception as e:
-                        print(f"[RAG_WITH_CALCULATION] Calculation error: {e}")
+                        print(f"[RAG_WITH_CALCULATION] Chart calculation error: {e}")
+
+                # Calculate current dasha (UN-NESTED from chart check)
+                if not state.get('dasha_data'):
+                    try:
+                        print("[RAG_WITH_CALCULATION] Calculating dasha...")
+                        dasha_tool = self.calculation_tools['current_dasha']
+                        dasha_data = dasha_tool.invoke({
+                            "date_of_birth": user_profile.get('date_of_birth'),
+                            "time_of_birth": user_profile.get('time_of_birth'),
+                            "latitude": user_profile.get('latitude'),
+                            "longitude": user_profile.get('longitude')
+                        })
+                        
+                        if "error" not in dasha_data:
+                            state['dasha_data'] = dasha_data
+                            print(f"[RAG_WITH_CALCULATION] Dasha: {dasha_data.get('dasha_sequence', 'Unknown')}")
+                    except Exception as e:
+                        print(f"[RAG_WITH_CALCULATION] Dasha calculation error: {e}")
+                
+                # Calculate current transits (UN-NESTED from chart check)
+                if not state.get('transit_data'):
+                    try:
+                        print("[RAG_WITH_CALCULATION] Calculating transits...")
+                        transit_tool = self.calculation_tools['current_transits']
+                        transit_data = transit_tool.invoke({})
+                        
+                        if "error" not in transit_data:
+                            state['transit_data'] = transit_data
+                            print(f"[RAG_WITH_CALCULATION] Transits for {transit_data.get('date', 'current')}")
+                    except Exception as e:
+                        print(f"[RAG_WITH_CALCULATION] Transit calculation error: {e}")
+
             else:
                 print("[RAG_WITH_CALCULATION] No birth data - proceeding without chart")
 
@@ -1076,12 +1314,12 @@ Provide a concise answer:"""
                             state['validation_strength'] = val_result.overall_strength
                             state['validation_can_proceed'] = val_result.can_proceed
                             
-                            print(f"[VALIDATION] ✅ Strength: {val_result.overall_strength:.1f}/10")
+                            print(f"[VALIDATION] [OK] Strength: {val_result.overall_strength:.1f}/10")
                             print(f"[VALIDATION] Critical failures: {len(val_result.critical_failures)}")
                             
                             # HARD HALT CHECK (only for extreme cases)
                             if should_hard_halt(val_result.overall_strength, val_result.critical_failures):
-                                print(f"[VALIDATION] 🛑 HARD HALT - Refusing prediction")
+                                print(f"[VALIDATION] [STOP] HARD HALT - Refusing prediction")
                                 state['answer'] = build_halt_response(
                                     state['validation_result'],
                                     state['user_profile'],
@@ -1165,7 +1403,7 @@ Provide a concise answer:"""
             # Add system prompt
             messages.append({
                 "role": "system",
-                "content": prompt.split("USER'S QUERY:")[0].strip()  # System part
+                "content": prompt.split("====USER_QUERY_MARKER====")[0].strip()  # System part
             })
 
             # Add conversation history (CRITICAL for context!)
@@ -1176,7 +1414,7 @@ Provide a concise answer:"""
                 print(f"[RAG_WITH_CALCULATION] Including {len(formatted_history)} previous messages")
 
             # Add current query with chart context
-            user_prompt = "USER'S QUERY:" + prompt.split("USER'S QUERY:")[1]
+            user_prompt = "USER_QUERY:" + prompt.split("====USER_QUERY_MARKER====")[1]
             messages.append({
                 "role": "user",
                 "content": user_prompt
@@ -1286,7 +1524,7 @@ I prefer to say "I don't know" rather than provide information not grounded in c
             # System prompt
             messages.append({
                 "role": "system", 
-                "content": prompt.split("USER'S QUERY:")[0].strip()
+                "content": prompt.split("====USER_QUERY_MARKER====")[0].strip()
             })
 
             # Add conversation history
@@ -1297,7 +1535,7 @@ I prefer to say "I don't know" rather than provide information not grounded in c
                 print(f"[RAG_ONLY] Including {len(formatted_history)} previous messages")
 
             # Current query
-            user_prompt = "USER'S QUERY:" + prompt.split("USER'S QUERY:")[1]
+            user_prompt = "USER_QUERY:" + prompt.split("====USER_QUERY_MARKER====")[1]
             messages.append({
                 "role": "user",
                 "content": user_prompt
@@ -1306,6 +1544,7 @@ I prefer to say "I don't know" rather than provide information not grounded in c
             # Invoke with full context
             print(f"[LLM] Sending {len(messages)} messages to LLM")
             response = self.llm.invoke(messages)
+            state['answer'] = response.content if hasattr(response, 'content') else str(response)
             
         except Exception as e:
             print(f"[ERROR] RAG_ONLY path failed: {e}")
@@ -1362,53 +1601,36 @@ I prefer to say "I don't know" rather than provide information not grounded in c
         # Map language code to descriptive name for LLM
         loc_manager = get_localization_manager()
         lang_name = loc_manager.get_language_name(language)
-        
-        # Detect if user wants detailed explanation
-        wants_detail = self._user_wants_detail(query)
-        
-        if wants_detail:
-            # User asked for details - provide comprehensive explanation
-            instructions = f"""INSTRUCTIONS:
-1. **GROUNDING**: Base answer ONLY on the provided texts above
-2. **DETAILED EXPLANATION**: Provide a comprehensive, detailed explanation with examples
-3. **CITE BOOK NAMES**: Only cite books that appear in the sources above
-4. **FORBIDDEN**: Do NOT cite any book unless it appears in the retrieved sources
-5. Respond entirely in {lang_name}
-6. At the end, list the book names from the retrieved sources
 
-Provide a detailed, thorough explanation:"""
+        # Build script instruction for language enforcement
+        if '-lat' in language:
+            script_instruction = f"Respond in {lang_name} using ROMAN ALPHABET only (no native script)."
+        elif language != 'en':
+            script_instruction = f"Respond entirely in {lang_name} (native script)."
         else:
-            # Default: Brief response
-            instructions = f"""🚨 CRITICAL INSTRUCTIONS - MUST FOLLOW:
-1. **MAXIMUM 100-150 WORDS** - Your ENTIRE response must be between 100-150 words maximum, nothing more
-2. **GROUNDING**: Base answer ONLY on the provided texts above - DO NOT mention any book names unless they appear in the sources above
-3. **CITE BOOK NAMES FROM SOURCES**: Only cite books that are explicitly shown in the knowledge above
-4. **FORBIDDEN**: Do NOT cite Brihat Parasara Hora Shastra, Jataka Parijata, Uttara Kalamrita, or any other text UNLESS it appears in the sources above
-5. **FORMAT**: Write 2-3 concise sentences covering the key points
-6. Respond entirely in {lang_name}
-7. At the end: "**Sources:** [book names if any, otherwise skip this line]"
+            script_instruction = "Respond in clear, professional English."
 
-✅ CORRECT FORMAT (THIS IS YOUR TARGET):
-[2-3 concise sentences with key information, 100-150 words total]
+        # Use dynamic instruction builder (adapts to query content and verbosity preference)
+        instructions = self._build_response_instructions(
+            query=query,
+            lang_name=lang_name,
+            script_instruction=script_instruction,
+            mode='theory'
+        )
 
-**Sources:** [Only books from retrieved sources, if any]
-
-❌ DO NOT write long paragraphs, detailed explanations, bullet lists, or multiple sections
-❌ DO NOT exceed 150 words
-❌ DO NOT cite books not in the retrieved sources
-❌ User can ask "tell me more" if they want elaboration
-
-Provide brief 100-150 word answer:"""
-        
+        _p = user_profile or {}
         prompt = f"""You are an expert Vedic astrologer explaining astrological concepts.
 
 USER PROFILE:
-• Name: {user_profile.get('name', 'User')}
-• Date of Birth: {user_profile.get('date_of_birth', 'Unknown')}
-• Time of Birth: {user_profile.get('time_of_birth', 'Unknown')}
-• Place of Birth: {user_profile.get('place_of_birth', 'Unknown')}
+• Name: {_p.get('name', 'User')}
+• Date of Birth: {_p.get('date_of_birth', 'Unknown')}
+• Time of Birth: {_p.get('time_of_birth', 'Unknown')}
+• Place of Birth: {_p.get('place_of_birth', 'Unknown')}
+• Moon Sign: {(_p.get('chart_data') or {}).get('moon_sign', _p.get('moon_sign', 'Unknown'))}
+• Lagna (Ascendant): {(_p.get('chart_data') or {}).get('lagna', _p.get('lagna', 'Unknown'))}
 
-USER'S QUESTION: "{query}"
+====USER_QUERY_MARKER====
+"{query}"
 
 RELEVANT KNOWLEDGE FROM CLASSICAL TEXTS:
 {context}
@@ -1578,30 +1800,107 @@ Retain the astrological data but remove the violating content (e.g., remove deat
 
     def _user_wants_detail(self, query: str) -> bool:
         """
-        Detect if user is asking for more detail/elaboration.
-        
-        Returns:
-            True if query contains phrases requesting more information
+        Detect if user is asking for more detail or elaboration.
+        Semantic approach: checks for intent to expand, not just specific phrases.
+        Covers English, Hindi, Hinglish, and Tamil.
         """
-        query_lower = query.lower()
-        detail_phrases = [
-            'tell me more',
-            'more detail',
-            'more information',
-            'elaborate',
-            'explain in detail',
-            'explain more',
-            'detailed explanation',
-            'full explanation',
-            'complete explanation',
-            'विस्तार से',  # Hindi: in detail
-            'और बताओ',    # Hindi: tell more
-            'aur batao',   # Hinglish: tell more
-            'detail me',
-            'details',
+        q = query.lower().strip()
+
+        # Direct expansion signals (any language)
+        expansion_signals = [
+            # English
+            'tell me more', 'more detail', 'more information', 'elaborate',
+            'explain in detail', 'explain more', 'explain fully',
+            'detailed explanation', 'full explanation', 'complete explanation',
+            'in depth', 'in-depth', 'give me more', 'expand on',
+            'break it down', 'walk me through', 'go deeper', 'dig deeper',
+            'what else', 'tell me everything', 'full breakdown', 'more please',
+            'yes', 'yes please', 'sure', 'go ahead', 'please explain',
+            # Hindi / Hinglish
+            'aur batao', 'aur bataiye', 'aur samjhao', 'seedha batao',
+            'detail mein', 'detail se', 'vistar se', 'poora batao',
+            'aur detail', 'haan', 'bilkul', 'haan bataiye',
+            # General short affirmatives after a bot offer
+            'details', 'detail', 'yes, please', 'please',
         ]
-        
-        return any(phrase in query_lower for phrase in detail_phrases)
+
+        return any(sig in q for sig in expansion_signals)
+
+    def _build_response_instructions(
+        self,
+        query: str,
+        lang_name: str,
+        script_instruction: str,
+        mode: str = 'theory'  # 'theory' or 'prediction'
+    ) -> str:
+        """
+        Build adaptive response instructions based on what the user is actually asking.
+        Returns fuller instructions for detail requests, concise for standard queries.
+        Dynamically adds domain-specific guidance (career, timing, health, compatibility).
+        """
+        q = query.lower()
+        wants_detail = self._user_wants_detail(query)
+
+        # Domain-specific additions
+        domain_hints = []
+
+        if any(w in q for w in ['when', 'kab', 'timing', 'which year', 'how long', 'kitne din',
+                                  'which month', 'period', 'dasha', 'antardasha']):
+            domain_hints.append("For timing: give specific months/seasons (e.g., 'March-April 2026'), never just dasha names alone.")
+
+        if any(w in q for w in ['career', 'job', 'business', 'naukri', 'profession',
+                                  'promotion', 'kaam', 'vyapar', 'work', 'income']):
+            domain_hints.append("Career: focus on 10th house, Saturn, Sun, and the active Dasha lord's work-related significations.")
+
+        if any(w in q for w in ['marriage', 'shaadi', 'vivah', 'partner', 'love',
+                                  'spouse', 'husband', 'wife', 'rishta', 'relationship']):
+            domain_hints.append("Relationships: analyze 7th house, Venus, Jupiter. Speak of tendencies, not certainties.")
+
+        if any(w in q for w in ['health', 'illness', 'sick', 'disease', 'bimari', 'sehat', 'swasth']):
+            domain_hints.append("Health: discuss constitutional tendencies from lagna and 6th house. Always note: consult a doctor for medical concerns.")
+
+        if any(w in q for w in ['money', 'wealth', 'paisa', 'dhan', 'rich', 'invest', 'finance']):
+            domain_hints.append("Finance: focus on 2nd/11th house lords and Jupiter. Note that effort and timing matter equally.")
+
+        domain_text = ("\n" + "\n".join(f"- {h}" for h in domain_hints)) if domain_hints else ""
+
+        if wants_detail:
+            if mode == 'prediction':
+                return f"""INSTRUCTIONS:
+1. Provide a comprehensive, detailed prediction with full reasoning.
+2. Ground every claim in specific chart data (actual houses, signs, planets listed above).
+3. Include dasha periods AND approximate calendar timeframes for any timing claims.
+4. Cite classical texts only if they appear in the retrieved sources above.
+5. {script_instruction}{domain_text}
+
+Provide a thorough, detailed prediction:"""
+            else:
+                return f"""INSTRUCTIONS:
+1. Provide a comprehensive explanation covering the concept fully.
+2. Ground the answer in the retrieved classical texts above.
+3. Only cite books that appear in the sources above.
+4. {script_instruction}{domain_text}
+
+Provide a detailed explanation:"""
+        else:
+            if mode == 'prediction':
+                return f"""INSTRUCTIONS (CONCISE MODE):
+1. Give a direct, astrological answer in 3-5 sentences.
+2. Mention up to TWO key chart factors (e.g., "Jupiter in your 7th house suggests...").
+3. If timing is relevant, give one specific period (e.g., "mid-2026").
+4. Cite sources only if genuinely referenced.
+5. {script_instruction}{domain_text}
+
+Provide a concise, self-contained response:"""
+            else:
+                return f"""INSTRUCTIONS (CONCISE MODE):
+1. Answer in 2-3 focused sentences (100-150 words maximum).
+2. Base the answer only on retrieved texts above.
+3. Only cite books that appear in the sources above.
+4. {script_instruction}{domain_text}
+5. End with: "Sources: [book names if any]" — skip this line if no sources.
+
+Provide a concise answer:"""
 
     def _format_conversation_for_llm(
         self, 
@@ -1629,37 +1928,6 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         
         return formatted
 
-    def _build_prediction_prompt(
-        self,
-        query: str,
-        chart_data: Dict,
-        dasha_data: Dict,
-        transit_data: Dict,
-        knowledge_chunks: List,
-        user_profile: Dict,
-        validation_result: Optional[Dict] = None,  # ADD THIS LINE
-        conversation_history: List = None,
-        language: str = "hi-lat"
-    ) -> str:
-        """
-        Build personalized prediction prompt with REAL chart context.
-        [DONE] UPDATED: Now uses rich data structure from VedicEngine
-        [DONE] UPDATED: Greeting suppression and Two-Tier response flow
-        """
-        
-        # Check if conversation is ongoing (to suppress greetings)
-        # We need to know if there's history passed to the orchestrator, 
-        # but this method doesn't receive full history. 
-        # Ideally, we'd pass a flag. For now, we'll assume if this method is called,
-        # it's part of a flow that might have history.
-        # But wait, self.process_query passes history to graph, but graph nodes might not pass it here?
-        # Actually, let's just add the instruction conditionally if we can determine context.
-        # Or better yet, just add a generic instruction to the system prompt if not first turn.
-        # Since we don't have history length here easily without changing signature, 
-        # let's add it to the BASE INSTRUCTIONS for all turns except maybe the very first?
-        # A safer bet is to change the signature to accept `is_first_turn` or `conversation_history`.
-        # Let's add `conversation_history` to the signature.
-    
     def _build_prediction_prompt(
         self,
         query: str,
@@ -1769,49 +2037,22 @@ ONGOING CONVERSATION - CONTEXT HANDLING:
         # Map language code to descriptive name for LLM
         loc_manager = get_localization_manager()
         lang_name = loc_manager.get_language_name(language)
+
+        # Build script instruction for language enforcement
         if '-lat' in language:
-            script_instruction = f"IMPORTANT: You must writing in {lang_name} using ROMAN ALPHABET (English Script). Do NOT use native script."
+            script_instruction = f"Respond in {lang_name} using ROMAN ALPHABET only (no native script)."
+        elif language != 'en':
+            script_instruction = f"Respond entirely in {lang_name} (native script)."
         else:
-            script_instruction = f"Respond entirely in {lang_name} (Native Script)."
-            
-        # Detect if user wants detailed explanation
-        wants_detail = self._user_wants_detail(query)
-        
-        if wants_detail:
-            # User asked for details - provide comprehensive prediction
-            instructions = f"""INSTRUCTIONS:
-1. **DETAILED PREDICTION**: Provide a comprehensive, detailed prediction with reasoning
-2. **SPECIFIC TO THEIR CHART**: Use actual placements (houses, signs, planets) from the chart data above
-3. **TIMING**: Include approximate timeframes based on dasha periods provided
-4. **GROUNDING**: Base on chart data + classical texts above - Do NOT cite books unless they appear in sources
-5. **FORBIDDEN**: Do NOT cite any book unless it appears in the retrieved sources above
-6. {script_instruction}
-7. At the end, list the book names from retrieved sources (if any)
+            script_instruction = "Respond in clear, professional English."
 
-Provide a detailed, comprehensive prediction:"""
-        else:
-            # Default: Brief response with follow-up offer
-            instructions = f"""🚨 CRITICAL INSTRUCTIONS - BRIEF RESPONSE MODE:
-1. **CONCISE ANSWER**: Provide a direct, astrological answer in 2-3 sentences.
-2. **KEY FACTORS**: Mention ONLY the most important chart factor (e.g., "Due to Jupiter in your 7th house...").
-3. **NO FLUFF**: Do not write long introductions or general philosophy.
-4. **SOURCES**: Cite sources ONLY if used.
-5. {script_instruction}
-6. **MANDATORY ENDING**: You MUST end your response by asking: "Would you like a detailed explanation of the planetary positions and reasoning?" (in the target language).
-
-✅ CORRECT FORMAT:
-[Direct answer + key astrological reason]. [Timing if relevant].
-
-SOURCES: [Book Name] (Optional)
-
-[Question asking if user wants detailed breakdown]
-
-❌ DO NOT write long paragraphs
-❌ DO NOT list all planetary positions
-❌ DO NOT say greetings
-❌ User can say "yes" or "explian" to get the full details you skipped.
-
-Provide brief response:"""
+        # Use dynamic instruction builder — adapts to query content (timing, career, etc) and verbosity
+        instructions = self._build_response_instructions(
+            query=query,
+            lang_name=lang_name,
+            script_instruction=script_instruction,
+            mode='prediction'
+        )
 
         # CHANGE 5: Add conversation summary section
         conversation_summary_section = ""
@@ -1838,7 +2079,8 @@ USER PROFILE:
 • Time of Birth: {user_profile.get('time_of_birth')}
 • Place of Birth: {user_profile.get('place_of_birth')}
 
-USER'S QUERY: "{query}"
+====USER_QUERY_MARKER====
+"{query}"
 
 BIRTH CHART DATA (Sidereal/Lahiri):
 • Ascendant (Lagna): {chart_data.get('ascendant', {}).get('rashi', 'Not available')} ({chart_data.get('ascendant', {}).get('degrees', 0.0):.2f}°)
