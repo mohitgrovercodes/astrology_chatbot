@@ -100,7 +100,7 @@ Run the comprehensive test suite to verify system integrity:
 python test_routing.py
 
 # Test Calculation Engines
-python src/tools/calculation_tools.py
+python src/tools/tools.py
 
 # Test Safety Classifier
 # (integration via chatbot.py)

@@ -127,7 +127,7 @@ def get_orchestrator():
             prompt_builder = PromptBuilder()
 
             # Get calculation tools
-            from src.tools.calculation_tools import get_calculation_tools
+            from src.tools.tools import get_calculation_tools
             calculation_tools = get_calculation_tools()
 
             _orchestrator_instance = create_enhanced_orchestrator(

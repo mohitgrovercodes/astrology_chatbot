@@ -11,10 +11,7 @@ Root package for all astrology calculation engines and utilities.
 __version__ = "1.0.0"
 __author__ = "Astrology AI Chatbot"
 
-# Make modules accessible
-from src import engines, utils
+# Make modules accessible (optional - usually better to import directly)
+# from src import engines, utils
 
-__all__ = [
-    "engines",
-    "utils",
-]
+__all__ = []

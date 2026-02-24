@@ -22,7 +22,8 @@ from langgraph.graph import StateGraph, END  # ← ADD CompiledStateGraph
 from langchain_core.messages import HumanMessage, AIMessage
 
 # NEW: Import calculation tools
-from src.tools.calculation_tools import get_calculation_tools, format_chart_for_llm
+from src.tools.tools import get_calculation_tools
+from src.utils.serializers import serialize_vedic_chart
 
 # PHASE 10.5: Import new safety framework
 from src.safety import create_safety_classifier, get_template, get_disclaimer
@@ -139,6 +140,28 @@ class EnhancedLangGraphOrchestrator:
             print(f"[LANGGRAPH] Loaded {len(calculation_tools)} calculation tools")
         
         self.calculation_tools = calculation_tools
+
+        # [NEW] Auto-load prompt builder if not provided
+        if prompt_builder is None:
+            try:
+                from src.ai.prompt_builder import PromptBuilder
+                print("[LANGGRAPH] Auto-loading PromptBuilder...")
+                prompt_builder = PromptBuilder()
+            except ImportError as e:
+                print(f"[LANGGRAPH] [ERROR] Failed to auto-load PromptBuilder: {e}")
+        
+        self.prompt_builder = prompt_builder
+
+        # [NEW] Auto-load intent classifier if not provided
+        if intent_classifier is None:
+            try:
+                from src.ai.intent_classifier import LLMIntentClassifier
+                print("[LANGGRAPH] Auto-loading LLMIntentClassifier...")
+                intent_classifier = LLMIntentClassifier(llm=fast_llm or llm)
+            except ImportError as e:
+                print(f"[LANGGRAPH] [ERROR] Failed to auto-load LLMIntentClassifier: {e}")
+        
+        self.intent_classifier = intent_classifier
         
         # [PHASE 6] Auto-load LLM if not provided
         if llm is None:
@@ -975,9 +998,9 @@ Reply with "1" for theory or "2" for personalized analysis."""
                 # We also need the tool-compatible dict formatting for the LLM
                 # (The tool 'calculate_vedic_birth_chart' provides this formatting)
                 # For now, we'll re-calculate the tool-dict from the full_chart to ensure consistency
-                from src.tools.calculation_tools import calculate_vedic_birth_chart
+                from src.tools.tools import calculate_vedic_chart
                 # Mock the tool logic to get the formatted dict from existing chart
-                # Actually, simpler: have a helper in calculation_tools to format a chart
+                # Actually, simpler: have a helper in tools.py to format a chart
                 return None, full_chart # We'll let the node handle the dict conversion
             except Exception as e:
                 print(f"[CACHE] [WARN] Failed to load cached chart: {e}")
@@ -1072,7 +1095,7 @@ These details are used to calculate your Vedic birth chart with precise planetar
                 chart_data = chart_data_from_helper
             elif full_chart:
                 # Standard conversion from object
-                chart_data = format_chart_for_llm(full_chart)
+                chart_data = serialize_vedic_chart(full_chart)
             else:
                 state['answer'] = "Could not generate or load your birth chart. Please check your birth details."
                 return state
@@ -1125,15 +1148,16 @@ Provide a concise answer:"""
             if not state.get('dasha_data'):
                 try:
                     print("[CALCULATION_ONLY] Calculating dasha...")
-                    dasha_tool = self.calculation_tools['current_dasha']
-                    dasha_data = dasha_tool.invoke({
-                        "date_of_birth": user_profile.get('date_of_birth'),
-                        "time_of_birth": user_profile.get('time_of_birth'),
-                        "latitude": user_profile.get('latitude'),
-                        "longitude": user_profile.get('longitude')
-                    })
-                    if "error" not in dasha_data:
-                        state['dasha_data'] = dasha_data
+                    dasha_tool = self.calculation_tools.get('calculate_current_dasha')
+                    if dasha_tool:
+                        dasha_data = dasha_tool.invoke({
+                            "date_of_birth": user_profile.get('date_of_birth'),
+                            "time_of_birth": user_profile.get('time_of_birth'),
+                            "latitude": user_profile.get('latitude'),
+                            "longitude": user_profile.get('longitude')
+                        })
+                        if "error" not in dasha_data:
+                            state['dasha_data'] = dasha_data
                 except Exception as e:
                     print(f"[CALCULATION_ONLY] Dasha calculation error: {e}")
 
@@ -1141,10 +1165,11 @@ Provide a concise answer:"""
             if not state.get('transit_data'):
                 try:
                     print("[CALCULATION_ONLY] Calculating transits...")
-                    transit_tool = self.calculation_tools['current_transits']
-                    transit_data = transit_tool.invoke({})
-                    if "error" not in transit_data:
-                        state['transit_data'] = transit_data
+                    transit_tool = self.calculation_tools.get('calculate_current_transits')
+                    if transit_tool:
+                        transit_data = transit_tool.invoke({})
+                        if "error" not in transit_data:
+                            state['transit_data'] = transit_data
                 except Exception as e:
                     print(f"[CALCULATION_ONLY] Transit calculation error: {e}")
 
@@ -1191,7 +1216,7 @@ Provide a concise answer:"""
                         if isinstance(chart_data_from_helper, dict):
                             state['chart_data'] = chart_data_from_helper
                         elif full_chart:
-                            state['chart_data'] = format_chart_for_llm(full_chart)
+                            state['chart_data'] = serialize_vedic_chart(full_chart)
                             
                         if state.get('chart_data'):
                             print(f"[RAG_WITH_CALCULATION] Chart ready: Lagna={state['chart_data'].get('lagna') or state['chart_data'].get('ascendant', {}).get('rashi', 'Unknown')}")
@@ -1202,17 +1227,17 @@ Provide a concise answer:"""
                 if not state.get('dasha_data'):
                     try:
                         print("[RAG_WITH_CALCULATION] Calculating dasha...")
-                        dasha_tool = self.calculation_tools['current_dasha']
-                        dasha_data = dasha_tool.invoke({
-                            "date_of_birth": user_profile.get('date_of_birth'),
-                            "time_of_birth": user_profile.get('time_of_birth'),
-                            "latitude": user_profile.get('latitude'),
-                            "longitude": user_profile.get('longitude')
-                        })
-                        
-                        if "error" not in dasha_data:
-                            state['dasha_data'] = dasha_data
-                            print(f"[RAG_WITH_CALCULATION] Dasha: {dasha_data.get('dasha_sequence', 'Unknown')}")
+                        dasha_tool = self.calculation_tools.get('calculate_current_dasha')
+                        if dasha_tool:
+                            dasha_data = dasha_tool.invoke({
+                                "date_of_birth": user_profile.get('date_of_birth'),
+                                "time_of_birth": user_profile.get('time_of_birth'),
+                                "latitude": user_profile.get('latitude'),
+                                "longitude": user_profile.get('longitude')
+                            })
+                            if "error" not in dasha_data:
+                                state['dasha_data'] = dasha_data
+                                print(f"[RAG_WITH_CALCULATION] Dasha: {dasha_data.get('dasha_sequence', 'Unknown')}")
                     except Exception as e:
                         print(f"[RAG_WITH_CALCULATION] Dasha calculation error: {e}")
                 
@@ -1220,12 +1245,12 @@ Provide a concise answer:"""
                 if not state.get('transit_data'):
                     try:
                         print("[RAG_WITH_CALCULATION] Calculating transits...")
-                        transit_tool = self.calculation_tools['current_transits']
-                        transit_data = transit_tool.invoke({})
-                        
-                        if "error" not in transit_data:
-                            state['transit_data'] = transit_data
-                            print(f"[RAG_WITH_CALCULATION] Transits for {transit_data.get('date', 'current')}")
+                        transit_tool = self.calculation_tools.get('calculate_current_transits')
+                        if transit_tool:
+                            transit_data = transit_tool.invoke({})
+                            if "error" not in transit_data:
+                                state['transit_data'] = transit_data
+                                print(f"[RAG_WITH_CALCULATION] Transits for {transit_data.get('date', 'current')}")
                     except Exception as e:
                         print(f"[RAG_WITH_CALCULATION] Transit calculation error: {e}")
 
@@ -1386,14 +1411,18 @@ Provide a concise answer:"""
                     language=state.get('detected_language', 'en')
                 )
             else:
-                prompt = self.prompt_builder.build_prompt(
-                    query=state['query'],
-                    intent="RAG_WITH_CALCULATION",
-                    user_profile=state['user_profile'],
-                    knowledge_chunks=knowledge_chunks,
-                    conversation_history=state.get('conversation_history', []),
-                    language=state.get('detected_language', 'en')
-                )
+                if self.prompt_builder:
+                    prompt = self.prompt_builder.build_prompt(
+                        query=state['query'],
+                        intent="RAG_WITH_CALCULATION",
+                        user_profile=state['user_profile'],
+                        knowledge_chunks=knowledge_chunks,
+                        conversation_history=state.get('conversation_history', []),
+                        language=state.get('detected_language', 'en')
+                    )
+                else:
+                    print("[RAG_WITH_CALCULATION] [ERROR] No prompt_builder - using fallback template")
+                    prompt = f"Analyze the following query for user {user_profile.get('name', 'Client')}: {state['query']}"
             
             # ================================================================
             # STEP 4: Build Messages Array with Conversation History
@@ -2288,7 +2317,7 @@ if __name__ == "__main__":
     print("This orchestrator now uses REAL VedicEngine calculations!")
     print()
     print("Changes made:")
-    print("  1. Auto-loads calculation tools from src/tools/calculation_tools.py")
+    print("  1. Auto-loads calculation tools from src/tools/tools.py")
     print("  2. _handle_calculation_node uses real chart calculations")
     print("  3. _handle_rag_node uses real chart/dasha/transit calculations")
     print("  4. _build_prediction_prompt uses rich chart data structure")

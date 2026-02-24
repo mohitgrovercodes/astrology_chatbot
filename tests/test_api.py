@@ -101,39 +101,16 @@ class TestChatEndpoint:
         assert response.status_code == 422  # Validation error
 
 
-class TestUserEndpoints:
-    """User management endpoint tests."""
-    
-    def test_get_user(self):
-        """Test get user endpoint."""
-        response = client.get(
-            "/api/v1/user/user001",
-            headers={"X-API-Key": "test-key"}
-        )
-        # User may or may not exist depending on dummy DB
-        assert response.status_code in [200, 404]
-    
-    def test_create_user(self):
-        """Test create user endpoint."""
-        response = client.post(
-            "/api/v1/user",
-            headers={"X-API-Key": "test-key"},
-            json={
-                "user_id": "test_new_user",
-                "name": "Test User",
-                "email": "test@example.com",
-                "birth_data": {
-                    "date_of_birth": "1990-01-01",
-                    "time_of_birth": "12:00:00",
-                    "latitude": 26.9124,
-                    "longitude": 75.7873,
-                    "timezone": "UTC"
-                }
-            }
-        )
-        # May succeed or fail depending on if user exists
-        assert response.status_code in [201, 409]
-
+    def test_health_check(self):
+        """Test health check endpoint."""
+        response = client.get("/api/v1/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert "status" in data
+        assert "version" in data
+        assert "uptime" in data
+        assert "components" in data
+        assert data["version"] == "1.0.0"
 
 class TestCalculationEndpoints:
     """Calculation endpoint tests."""

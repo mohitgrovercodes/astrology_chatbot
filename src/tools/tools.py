@@ -1,5 +1,4 @@
 # src/tools/tools.py
-# src\tools\tools.py
 """
 LangChain Tool Wrappers for Astrology Calculation Engines
 ==========================================================
@@ -9,37 +8,28 @@ deterministic Vedic and Western astrology calculation engines.
 
 These tools are used by the LangGraph orchestration layer to perform
 calculations when needed during a conversation.
-
-Design Principles:
------------------
-1. Thin wrapper - no calculation logic here
-2. Input validation using existing schemas
-3. Serialized output for LLM consumption
-4. Error handling with informative messages
-5. Type hints for LangChain's benefit
 """
 
-from typing import Dict, Any, Optional, Literal
+from typing import Dict, Any, Optional, List
 from datetime import datetime
-import time
-
+import time as time_module
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 # Import calculation engines
-from src.engines.vedic.vedic_engine import VedicEngine, generate_vedic_chart
-from src.engines.western.western_engine import WesternAstroEngine, generate_western_chart
+from src.engines.vedic.vedic_engine import generate_vedic_chart, VedicEngine
+from src.engines.western.western_engine import generate_western_chart
 from src.engines.core.ephemeris import HouseSystem
+from src.engines.core.celestial_bodies import CelestialBody
 
 # Import utilities
-from src.utils.schemas import BirthDataInput, ChartOptions
+from src.utils.schemas import BirthDataInput
 from src.utils.serializers import serialize_vedic_chart, serialize_western_chart
 from src.utils.validators import validate_birth_data
-from src.utils.formatters import format_for_llm, format_chart_summary
 from src.engines.core.datetime_utils import parse_birth_datetime
 from src.engines.core.exceptions import AstrologyEngineError
-from src.engines.vedic.vedic_constants import Ayanamsa
+from src.engines.vedic.vedic_constants import Ayanamsa, RASHI_SANSKRIT_NAMES, NAKSHATRA_NAMES
 
 
 # =============================================================================
@@ -48,436 +38,222 @@ from src.engines.vedic.vedic_constants import Ayanamsa
 
 class ChartCalculationInput(BaseModel):
     """Input schema for chart calculation tools."""
-    
-    date: str = Field(
-        ...,
-        description="Birth date in YYYY-MM-DD format",
-        examples=["1990-03-15"]
-    )
-    
-    time: str = Field(
-        ...,
-        description="Birth time in HH:MM format (24-hour)",
-        examples=["15:30", "03:45"]
-    )
-    
-    latitude: float = Field(
-        ...,
-        description="Birth place latitude (-90 to +90)",
-        examples=[26.9124, 40.7128]
-    )
-    
-    longitude: float = Field(
-        ...,
-        description="Birth place longitude (-180 to +180)",
-        examples=[75.7873, -74.0060]
-    )
-    
-    timezone: Optional[str] = Field(
-        None,
-        description="IANA timezone string (auto-detected if not provided)",
-        examples=["Asia/Kolkata", "America/New_York"]
-    )
-    
-    ayanamsa: Optional[str] = Field(
-        "LAHIRI",
-        description="Ayanamsa system for Vedic charts"
-    )
-    
-    house_system: Optional[str] = Field(
-        "WHOLE_SIGN",
-        description="House system to use"
-    )
+    date: str = Field(..., description="Birth date in YYYY-MM-DD format", examples=["1990-03-15"])
+    time: str = Field(..., description="Birth time in HH:MM:SS format (24-hour)", examples=["14:30:00"])
+    latitude: float = Field(..., description="Birth place latitude (-90 to +90)", examples=[26.9124])
+    longitude: float = Field(..., description="Birth place longitude (-180 to +180)", examples=[75.7873])
+    timezone: Optional[str] = Field("Asia/Kolkata", description="IANA timezone string", examples=["Asia/Kolkata"])
+    ayanamsa: Optional[str] = Field("LAHIRI", description="Ayanamsa system (LAHIRI, RAMAN, etc.)")
+    house_system: Optional[str] = Field("WHOLE_SIGN", description="House system to use")
+
+
+class DashaCalculationInput(BaseModel):
+    """Input schema for dasha calculation."""
+    date_of_birth: str = Field(..., description="Date in YYYY-MM-DD format")
+    time_of_birth: str = Field(..., description="Time in HH:MM:SS format")
+    latitude: float = Field(...)
+    longitude: float = Field(...)
+    current_date: Optional[str] = Field(None, description="Optional date for dasha calculation (YYYY-MM-DD)")
+
+
+class TransitCalculationInput(BaseModel):
+    """Input schema for transit calculation."""
+    current_date: Optional[str] = Field(None, description="Date for transit calculation (YYYY-MM-DD)")
+    latitude: Optional[float] = Field(26.9124, description="Observer latitude")
+    longitude: Optional[float] = Field(75.7873, description="Observer longitude")
 
 
 # =============================================================================
 # VEDIC CHART CALCULATION TOOL
 # =============================================================================
 
-@tool
+@tool(args_schema=ChartCalculationInput)
 def calculate_vedic_chart(
     date: str,
     time: str,
     latitude: float,
     longitude: float,
-    timezone: Optional[str] = None,
+    timezone: str = "Asia/Kolkata",
     ayanamsa: str = "LAHIRI",
-    house_system: str = "WHOLE_SIGN",
-    include_summary: bool = True
+    house_system: str = "WHOLE_SIGN"
 ) -> Dict[str, Any]:
     """
     Calculate a complete Vedic (Jyotish) birth chart.
-    
-    This tool computes:
-    - Planetary positions (sidereal zodiac)
-    - Lagna (Ascendant) and house placements
-    - Nakshatras and padas
-    - Planetary dignities
-    - Yogas (planetary combinations)
-    - Vimshottari Dasha periods
-    
-    Args:
-        date: Birth date in YYYY-MM-DD format
-        time: Birth time in HH:MM format (24-hour)
-        latitude: Geographic latitude (-90 to +90)
-        longitude: Geographic longitude (-180 to +180)
-        timezone: IANA timezone (auto-detected if not provided)
-        ayanamsa: Ayanamsa system (LAHIRI, RAMAN, KRISHNAMURTI, etc.)
-        house_system: House system (WHOLE_SIGN, PLACIDUS, EQUAL, etc.)
-        include_summary: Whether to include a text summary
-        
-    Returns:
-        Dictionary with complete chart data serialized for LLM consumption
-        
-    Example:
-        >>> result = calculate_vedic_chart(
-        ...     date="1990-03-15",
-        ...     time="15:30",
-        ...     latitude=26.9124,
-        ...     longitude=75.7873,
-        ...     timezone="Asia/Kolkata"
-        ... )
-        >>> print(result['lagna']['sign'])
-        'Taurus'
+    Returns planetary positions, houses, nakshatras, dashas, and yogas.
     """
-    start_time = time.time()
-    
+    start_perf = time_module.perf_counter()
     try:
-        # Validate input
-        birth_data = BirthDataInput(
-            date=date,
-            time=time,
-            latitude=latitude,
-            longitude=longitude,
-            timezone=timezone
-        )
-        
-        validate_birth_data(birth_data)
-        
+        # Map constants
+        ayanamsa_enum = getattr(Ayanamsa, ayanamsa.upper(), Ayanamsa.LAHIRI)
+        house_system_enum = getattr(HouseSystem, house_system.upper(), HouseSystem.WHOLE_SIGN)
+
         # Parse datetime
-        birth_datetime = parse_birth_datetime(
-            date, time, timezone or "UTC"
-        )
-        
-        # Map ayanamsa string to enum
-        ayanamsa_map = {
-            "LAHIRI": Ayanamsa.LAHIRI,
-            "RAMAN": Ayanamsa.RAMAN,
-            "KRISHNAMURTI": Ayanamsa.KRISHNAMURTI,
-            "FAGAN_BRADLEY": Ayanamsa.FAGAN_BRADLEY,
-        }
-        ayanamsa_enum = ayanamsa_map.get(ayanamsa.upper(), Ayanamsa.LAHIRI)
-        
-        # Map house system string to enum
-        house_system_map = {
-            "WHOLE_SIGN": HouseSystem.WHOLE_SIGN,
-            "PLACIDUS": HouseSystem.PLACIDUS,
-            "EQUAL": HouseSystem.EQUAL,
-            "KOCH": HouseSystem.KOCH,
-        }
-        house_system_enum = house_system_map.get(
-            house_system.upper(), HouseSystem.WHOLE_SIGN
-        )
-        
-        # Generate chart using the calculation engine
+        full_dt_str = f"{date} {time}"
+        try:
+            birth_dt = datetime.strptime(full_dt_str, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            birth_dt = datetime.strptime(full_dt_str, "%Y-%m-%d %H:%M")
+
+        # Generate chart
         chart = generate_vedic_chart(
-            birth_date=birth_datetime,
+            birth_date=birth_dt,
             latitude=latitude,
             longitude=longitude,
             timezone_str=timezone,
             ayanamsa=ayanamsa_enum,
             house_system=house_system_enum
         )
-        
-        # Serialize for LLM consumption
+
+        # Serialize using enhanced global serializer
         serialized = serialize_vedic_chart(chart)
         
-        # Add computation metadata
-        computation_time = (time.time() - start_time) * 1000
-        serialized['_computation'] = {
-            'time_ms': round(computation_time, 2),
-            'engine': 'vedic',
-            'ayanamsa': ayanamsa,
-            'house_system': house_system
-        }
-        
-        # Add human-readable summary if requested
-        if include_summary:
-            serialized['_summary'] = format_chart_summary(serialized)
-        
+        # Add performance metrics
+        serialized["_runtime_ms"] = round((time_module.perf_counter() - start_perf) * 1000, 2)
         return serialized
-        
-    except AstrologyEngineError as e:
-        return {
-            'error': True,
-            'error_type': 'calculation_error',
-            'message': str(e),
-            'details': e.details if hasattr(e, 'details') else {}
-        }
+
     except Exception as e:
-        return {
-            'error': True,
-            'error_type': 'unexpected_error',
-            'message': f"Failed to calculate Vedic chart: {str(e)}"
-        }
+        return {"error": str(e), "status": "failed"}
 
 
 # =============================================================================
 # WESTERN CHART CALCULATION TOOL
 # =============================================================================
 
-@tool
+@tool(args_schema=ChartCalculationInput)
 def calculate_western_chart(
     date: str,
     time: str,
     latitude: float,
     longitude: float,
-    timezone: Optional[str] = None,
-    house_system: str = "PLACIDUS",
-    include_summary: bool = True
+    timezone: str = "UTC",
+    house_system: str = "PLACIDUS"
 ) -> Dict[str, Any]:
     """
     Calculate a complete Western (Tropical) birth chart.
-    
-    This tool computes:
-    - Planetary positions (tropical zodiac)
-    - Ascendant and house placements
-    - Planetary aspects (conjunctions, trines, squares, etc.)
-    - Essential dignities (domicile, exaltation, etc.)
-    - Major chart patterns
-    
-    Args:
-        date: Birth date in YYYY-MM-DD format
-        time: Birth time in HH:MM format (24-hour)
-        latitude: Geographic latitude (-90 to +90)
-        longitude: Geographic longitude (-180 to +180)
-        timezone: IANA timezone (auto-detected if not provided)
-        house_system: House system (PLACIDUS, KOCH, EQUAL, WHOLE_SIGN)
-        include_summary: Whether to include a text summary
-        
-    Returns:
-        Dictionary with complete chart data serialized for LLM consumption
-        
-    Example:
-        >>> result = calculate_western_chart(
-        ...     date="1990-03-15",
-        ...     time="15:30",
-        ...     latitude=40.7128,
-        ...     longitude=-74.0060,
-        ...     timezone="America/New_York"
-        ... )
-        >>> print(result['key_points']['sun_sign'])
-        'Pisces'
+    Returns planetary positions, houses, and major aspects.
     """
-    start_time = time.time()
-    
     try:
-        # Validate input
-        birth_data = BirthDataInput(
-            date=date,
-            time=time,
-            latitude=latitude,
-            longitude=longitude,
-            timezone=timezone
-        )
+        house_enum = getattr(HouseSystem, house_system.upper(), HouseSystem.PLACIDUS)
         
-        validate_birth_data(birth_data)
-        
-        # Parse datetime
-        birth_datetime = parse_birth_datetime(
-            date, time, timezone or "UTC"
-        )
-        
-        # Map house system string to enum
-        house_system_map = {
-            "PLACIDUS": HouseSystem.PLACIDUS,
-            "KOCH": HouseSystem.KOCH,
-            "EQUAL": HouseSystem.EQUAL,
-            "WHOLE_SIGN": HouseSystem.WHOLE_SIGN,
-            "CAMPANUS": HouseSystem.CAMPANUS,
-        }
-        house_system_enum = house_system_map.get(
-            house_system.upper(), HouseSystem.PLACIDUS
-        )
-        
-        # Generate chart using the calculation engine
+        full_dt_str = f"{date} {time}"
+        try:
+            birth_dt = datetime.strptime(full_dt_str, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            birth_dt = datetime.strptime(full_dt_str, "%Y-%m-%d %H:%M")
+
         chart = generate_western_chart(
-            birth_datetime=birth_datetime,
+            birth_datetime=birth_dt,
             latitude=latitude,
             longitude=longitude,
             timezone=timezone,
-            house_system=house_system_enum
+            house_system=house_enum
         )
-        
-        # Serialize for LLM consumption
-        serialized = serialize_western_chart(chart)
-        
-        # Add computation metadata
-        computation_time = (time.time() - start_time) * 1000
-        serialized['_computation'] = {
-            'time_ms': round(computation_time, 2),
-            'engine': 'western',
-            'house_system': house_system
-        }
-        
-        # Add human-readable summary if requested
-        if include_summary:
-            serialized['_summary'] = format_chart_summary(serialized)
-        
-        return serialized
-        
-    except AstrologyEngineError as e:
-        return {
-            'error': True,
-            'error_type': 'calculation_error',
-            'message': str(e),
-            'details': e.details if hasattr(e, 'details') else {}
-        }
+        return serialize_western_chart(chart)
     except Exception as e:
-        return {
-            'error': True,
-            'error_type': 'unexpected_error',
-            'message': f"Failed to calculate Western chart: {str(e)}"
-        }
+        return {"error": str(e), "status": "failed"}
 
 
 # =============================================================================
-# CHART COMPARISON TOOL
+# DASHA CALCULATION TOOL
 # =============================================================================
 
-@tool
-def calculate_both_charts(
-    date: str,
-    time: str,
+@tool(args_schema=DashaCalculationInput)
+def calculate_current_dasha(
+    date_of_birth: str,
+    time_of_birth: str,
     latitude: float,
     longitude: float,
-    timezone: Optional[str] = None
+    current_date: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Calculate both Vedic and Western charts for comparison.
-    
-    This is useful when a user wants to understand the differences
-    between the two astrological systems.
-    
-    Args:
-        date: Birth date in YYYY-MM-DD format
-        time: Birth time in HH:MM format (24-hour)
-        latitude: Geographic latitude (-90 to +90)
-        longitude: Geographic longitude (-180 to +180)
-        timezone: IANA timezone (auto-detected if not provided)
-        
-    Returns:
-        Dictionary containing both Vedic and Western chart data
+    Calculate current Vimshottari dasha periods (Mahadasha, Antardasha, Pratyantardasha).
     """
     try:
-        vedic = calculate_vedic_chart(
-            date=date,
-            time=time,
-            latitude=latitude,
-            longitude=longitude,
-            timezone=timezone,
-            include_summary=False
-        )
+        birth_dt_str = f"{date_of_birth} {time_of_birth}"
+        try:
+            birth_dt = datetime.strptime(birth_dt_str, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            birth_dt = datetime.strptime(birth_dt_str, "%Y-%m-%d %H:%M")
         
-        western = calculate_western_chart(
-            date=date,
-            time=time,
-            latitude=latitude,
-            longitude=longitude,
-            timezone=timezone,
-            include_summary=False
-        )
+        calc_dt = datetime.strptime(current_date, "%Y-%m-%d") if current_date else datetime.now()
         
-        return {
-            'vedic': vedic,
-            'western': western,
-            '_summary': (
-                f"Vedic: {vedic.get('_summary', 'Calculated')} | "
-                f"Western: {western.get('_summary', 'Calculated')}"
-            )
+        engine = VedicEngine()
+        chart = engine.generate_chart(birth_date=birth_dt, latitude=latitude, longitude=longitude)
+        
+        periods = chart.get_current_dasha(calc_dt)
+        
+        # Format for LLM consumption
+        result = {
+            "mahadasha": {
+                "planet": periods["mahadasha"].lord.name,
+                "start": periods["mahadasha"].start_date.strftime("%Y-%m-%d"),
+                "end": periods["mahadasha"].end_date.strftime("%Y-%m-%d")
+            },
+            "antardasha": {
+                "planet": periods["antardasha"].lord.name,
+                "start": periods["antardasha"].start_date.strftime("%Y-%m-%d"),
+                "end": periods["antardasha"].end_date.strftime("%Y-%m-%d")
+            },
+            "pratyantardasha": {
+                "planet": periods["pratyantardasha"].lord.name,
+                "start": periods["pratyantardasha"].start_date.strftime("%Y-%m-%d"),
+                "end": periods["pratyantardasha"].end_date.strftime("%Y-%m-%d")
+            },
+            "sequence": f"{periods['mahadasha'].lord.name}/{periods['antardasha'].lord.name}/{periods['pratyantardasha'].lord.name}"
         }
-        
+        return result
     except Exception as e:
+        return {"error": str(e)}
+
+
+# =============================================================================
+# TRANSIT CALCULATION TOOL
+# =============================================================================
+
+@tool(args_schema=TransitCalculationInput)
+def calculate_current_transits(
+    current_date: Optional[str] = None,
+    latitude: float = 26.9124,
+    longitude: float = 75.7873
+) -> Dict[str, Any]:
+    """
+    Calculate current planetary transits for a given date and location.
+    """
+    try:
+        transit_dt = datetime.strptime(current_date, "%Y-%m-%d") if current_date else datetime.now()
+        
+        engine = VedicEngine()
+        transit_chart = engine.generate_chart(birth_date=transit_dt, latitude=latitude, longitude=longitude)
+        
+        transits = {}
+        for planet in [CelestialBody.SUN, CelestialBody.MOON, CelestialBody.MARS, CelestialBody.MERCURY, 
+                       CelestialBody.JUPITER, CelestialBody.VENUS, CelestialBody.SATURN, CelestialBody.RAHU, CelestialBody.KETU]:
+            transits[planet.name] = RASHI_SANSKRIT_NAMES[transit_chart.get_planet_rashi(planet).value]
+            
         return {
-            'error': True,
-            'message': f"Failed to calculate both charts: {str(e)}"
+            "date": transit_dt.strftime("%Y-%m-%d"),
+            "transits": transits,
+            "retrograde_status": {
+                p.name: transit_chart.is_planet_retrograde(p)
+                for p in [CelestialBody.MERCURY, CelestialBody.VENUS, CelestialBody.MARS, CelestialBody.JUPITER, CelestialBody.SATURN]
+            }
         }
+    except Exception as e:
+        return {"error": str(e)}
 
 
 # =============================================================================
 # TOOL REGISTRY
 # =============================================================================
 
-# Export all tools for easy import
-ASTROLOGY_TOOLS = [
-    calculate_vedic_chart,
-    calculate_western_chart,
-    calculate_both_charts,
-]
+def get_calculation_tools() -> Dict[str, Any]:
+    """Returns a dictionary of all available astrology calculation tools."""
+    return {
+        "calculate_vedic_chart": calculate_vedic_chart,
+        "calculate_western_chart": calculate_western_chart,
+        "calculate_current_dasha": calculate_current_dasha,
+        "calculate_current_transits": calculate_current_transits
+    }
 
-
-def get_tool_by_name(name: str):
-    """
-    Get a tool by its name.
-    
-    Args:
-        name: Tool name (function name)
-        
-    Returns:
-        The tool function
-        
-    Raises:
-        ValueError: If tool not found
-    """
-    tool_map = {tool.name: tool for tool in ASTROLOGY_TOOLS}
-    
-    if name not in tool_map:
-        raise ValueError(
-            f"Tool '{name}' not found. Available tools: {list(tool_map.keys())}"
-        )
-    
-    return tool_map[name]
-
-
-# =============================================================================
-# USAGE EXAMPLE (for testing)
-# =============================================================================
-
-if __name__ == "__main__":
-    # Test the tools
-    print("Testing Vedic Chart Calculation Tool...")
-    
-    result = calculate_vedic_chart(
-        date="1990-03-15",
-        time="15:30",
-        latitude=26.9124,
-        longitude=75.7873,
-        timezone="Asia/Kolkata"
-    )
-    
-    if result.get('error'):
-        print(f"Error: {result.get('message')}")
-    else:
-        print(f"[OK] Vedic chart calculated successfully")
-        print(f"  Lagna: {result.get('lagna', {}).get('sign')}")
-        print(f"  Computation time: {result.get('_computation', {}).get('time_ms')}ms")
-        print(f"  Summary: {result.get('_summary')}")
-    
-    print("\nTesting Western Chart Calculation Tool...")
-    
-    result = calculate_western_chart(
-        date="1990-03-15",
-        time="15:30",
-        latitude=40.7128,
-        longitude=-74.0060,
-        timezone="America/New_York"
-    )
-    
-    if result.get('error'):
-        print(f"Error: {result.get('message')}")
-    else:
-        print(f"[OK] Western chart calculated successfully")
-        sun_sign = result.get('key_points', {}).get('sun_sign')
-        print(f"  Sun Sign: {sun_sign}")
-        print(f"  Computation time: {result.get('_computation', {}).get('time_ms')}ms")
-        print(f"  Summary: {result.get('_summary')}")
+# Legacy support
+ASTROLOGY_TOOLS = list(get_calculation_tools().values())

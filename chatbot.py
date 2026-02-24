@@ -22,7 +22,7 @@ from src.ai.user_manager import get_user_manager
 from src.ai.hybrid_retriever import HybridRetriever
 from src.ai.prompt_builder import PromptBuilder
 from src.orchestration.orchestrator import create_enhanced_orchestrator
-from src.tools.calculation_tools import CALCULATION_TOOLS
+from src.tools.tools import ASTROLOGY_TOOLS as CALCULATION_TOOLS
 import argparse
 
 

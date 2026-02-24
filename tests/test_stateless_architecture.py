@@ -21,6 +21,7 @@ load_dotenv()
 from src.orchestration.orchestrator import EnhancedLangGraphOrchestrator
 from src.ai.intent_classifier import LLMIntentClassifier
 from src.ai.prompt_builder import PromptBuilder
+from src.tools.tools import calculate_vedic_chart
 
 def test_stateless_flow():
     print("="*70)
@@ -33,7 +34,6 @@ def test_stateless_flow():
     # Calculation tools and retriever will be bypassed
     orchestrator = EnhancedLangGraphOrchestrator(
         intent_classifier=LLMIntentClassifier(),
-        user_manager=None, # NO DATABASE
         hybrid_retriever=None, # NO RETRIEVER
         prompt_builder=PromptBuilder(),
         calculation_tools={}, # NO CALCULATION ENGINE

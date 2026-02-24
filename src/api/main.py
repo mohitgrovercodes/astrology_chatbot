@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 
 # Import routers
-from src.api.routes import chat_stateless
+from src.api.routes import chat_stateless, calculation, health
 
 # Create FastAPI app
 app = FastAPI(
@@ -37,6 +37,18 @@ app.include_router(
     tags=["chat"]
 )
 
+app.include_router(
+    calculation.router,
+    prefix="/api/v1",
+    tags=["calculation"]
+)
+
+app.include_router(
+    health.router,
+    prefix="/api/v1",
+    tags=["monitoring"]
+)
+
 # Root endpoint
 @app.get("/")
 async def root():
@@ -47,17 +59,11 @@ async def root():
         "status": "running",
         "endpoints": {
             "docs": "/docs",
-            "chat_initialize": "/api/v1/chat/initialize",
-            "chat_message": "/api/v1/chat/message",
-            "stats": "/api/v1/chat/stats"
+            "chat": "/api/v1/chat",
+            "calculation": "/api/v1/calculate",
+            "health": "/api/v1/health"
         }
     }
-
-# Health check
-@app.get("/health")
-async def health():
-    """Health check endpoint."""
-    return {"status": "healthy"}
 
 
 if __name__ == "__main__":

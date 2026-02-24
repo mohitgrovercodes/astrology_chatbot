@@ -4,12 +4,12 @@
 LangChain Tool wrappers for calculation engines.
 """
 
-from .calculation_tools import (
-    calculate_vedic_birth_chart,
+from .tools import (
+    calculate_vedic_chart as calculate_vedic_birth_chart,
     calculate_current_dasha,
     calculate_current_transits,
     get_calculation_tools,
-    CALCULATION_TOOLS
+    ASTROLOGY_TOOLS as CALCULATION_TOOLS
 )
 
 __all__ = [

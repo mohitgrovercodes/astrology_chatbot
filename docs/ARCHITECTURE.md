@@ -43,7 +43,7 @@ graph TB
         VEDIC["Vedic Engine<br/>(vedic_engine.py)"]
         WEST["Western Engine<br/>(western_engine.py)"]
         CORE["Core Ephemeris<br/>(ephemeris.py)"]
-        TOOLS["Calculation Tools<br/>(calculation_tools.py)"]
+        TOOLS["Calculation Tools<br/>(tools.py)"]
         VALID["Validation Engine<br/>(vedic_validation_engine_v2.py)"]
     end
 
@@ -489,7 +489,7 @@ astro_chatbot/
 │   ├── safety/                     # Safety & guardrails (7 files)
 │   ├── api/                        # FastAPI REST API (routes, schemas)
 │   ├── services/                   # Data services & caching
-│   ├── tools/                      # Calculation tool wrappers
+│   ├── tools/                      # Calculation tool wrappers (tools.py)
 │   ├── routing/                    # Semantic router
 │   ├── locales/                    # i18n (6 languages)
 │   ├── prediction/                 # Validation engine
