@@ -43,11 +43,9 @@ app.include_router(
     tags=["calculation"]
 )
 
-app.include_router(
-    health.router,
-    prefix="/api/v1",
-    tags=["monitoring"]
-)
+# Health router (available at root for monitoring /health and versioned for API consistency)
+app.include_router(health.router, tags=["monitoring"])
+app.include_router(health.router, prefix="/api/v1", tags=["monitoring"])
 
 # Root endpoint
 @app.get("/")
@@ -61,7 +59,8 @@ async def root():
             "docs": "/docs",
             "chat": "/api/v1/chat",
             "calculation": "/api/v1/calculate",
-            "health": "/api/v1/health"
+            "health": "/health",
+            "health_v1": "/api/v1/health"
         }
     }
 
