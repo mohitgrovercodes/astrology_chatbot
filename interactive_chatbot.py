@@ -295,7 +295,7 @@ def chat_loop(user_id: str, user_name: str):
                 
                 # Show cache info on first few messages
                 if message_count <= 3:
-                    print(f"{Colors.CYAN}💡 Tip: Your chart data is being cached for faster responses{Colors.ENDC}\n")
+                    print(f"{Colors.CYAN}[IDEA] Tip: Your chart data is being cached for faster responses{Colors.ENDC}\n")
             else:
                 print(f"{Colors.RED}Failed to get response. Please try again.{Colors.ENDC}\n")
         

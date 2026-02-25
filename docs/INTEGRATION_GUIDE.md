@@ -112,7 +112,7 @@ SAFETY_THRESHOLD = 0.75    # NEVER lower this
 ### 2. Understand the Architecture
 1. **`docs/ARCHITECTURE.md`** - System design overview
 2. **`src/orchestration/orchestrator.py`** (lines 1-200) - Main workflow
-3. **`src/tools/calculation_tools.py`** - Available calculation tools
+3. **`src/tools/tools.py`** - Available calculation tools
 
 ### 3. Deep Dive (As Needed)
 1. **`src/engines/vedic/vedic_engine.py`** - Vedic calculation details
@@ -385,7 +385,7 @@ class MarriagePredictionEngine:
 
 **Birth Chart:**
 ```python
-from src.tools.calculation_tools import get_calculation_tools
+from src.tools.tools import get_calculation_tools
 
 tools = get_calculation_tools()
 chart = tools['vedic_birth_chart'].invoke({
@@ -623,7 +623,7 @@ print(result['answer'])
 **Calculations:**
 - Read `docs/CALCULATION_ENGINES.md`
 - Check `src/engines/vedic/vedic_engine.py`
-- Review `src/tools/calculation_tools.py`
+- Review `src/tools/tools.py`
 
 **RAG System:**
 - Read `docs/RAG_PIPELINE_DETAILED.md`

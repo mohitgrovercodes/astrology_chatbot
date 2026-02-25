@@ -38,7 +38,7 @@ class AstrologyDataService:
     - Comprehensive logging
     
     Architecture:
-        User Request → Service → Cache Check → API Call → Format → RAG
+        User Request -> Service -> Cache Check -> API Call -> Format -> RAG
     """
     
     def __init__(

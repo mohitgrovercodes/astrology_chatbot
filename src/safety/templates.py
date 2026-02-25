@@ -137,27 +137,27 @@ Is there something about YOUR chart I can help you with instead?"""
 
 DISCLAIMER_HEALTH = """
 
-⚕️ **Important Disclaimer**: The astrological insights I provide are for educational and self-reflection purposes only. Astrology indicates *tendencies* and *areas of focus*, not medical diagnoses. Always consult qualified healthcare providers for health concerns, diagnoses, or treatment decisions."""
+[HEALTH] **Important Disclaimer**: The astrological insights I provide are for educational and self-reflection purposes only. Astrology indicates *tendencies* and *areas of focus*, not medical diagnoses. Always consult qualified healthcare providers for health concerns, diagnoses, or treatment decisions."""
 
 DISCLAIMER_FINANCIAL = """
 
-💼 **Important Disclaimer**: Astrological insights about finances and career are for guidance and timing awareness only. They should not be your sole basis for major financial decisions. Always consult financial advisors and make practical assessments before significant investments or career changes."""
+[FINANCIAL] **Important Disclaimer**: Astrological insights about finances and career are for guidance and timing awareness only. They should not be your sole basis for major financial decisions. Always consult financial advisors and make practical assessments before significant investments or career changes."""
 
 DISCLAIMER_RELATIONSHIP = """
 
-💕 **Important Reminder**: Astrological compatibility is one factor among many in relationships. Real-world communication, shared values, mutual respect, and effort are far more important than chart compatibility. Use these insights as a tool for understanding, not as a relationship verdict."""
+[RELATIONSHIP] **Important Reminder**: Astrological compatibility is one factor among many in relationships. Real-world communication, shared values, mutual respect, and effort are far more important than chart compatibility. Use these insights as a tool for understanding, not as a relationship verdict."""
 
 DISCLAIMER_CHILDREN = """
 
-👶 **Important Note**: Questions about children and fertility are deeply personal. While astrology can indicate favorable periods, it cannot predict specific outcomes. Medical consultation is essential for fertility and family planning decisions. These astrological insights are for timing awareness only."""
+[CHILDREN] **Important Note**: Questions about children and fertility are deeply personal. While astrology can indicate favorable periods, it cannot predict specific outcomes. Medical consultation is essential for fertility and family planning decisions. These astrological insights are for timing awareness only."""
 
 DISCLAIMER_CAREER = """
 
-💼 **Important Reminder**: Career decisions should be based on practical factors—skills, market conditions, financial stability, and personal circumstances. Astrological timing is one input among many. Use this guidance to inform your decision-making, not replace it."""
+[CAREER] **Important Reminder**: Career decisions should be based on practical factors—skills, market conditions, financial stability, and personal circumstances. Astrological timing is one input among many. Use this guidance to inform your decision-making, not replace it."""
 
 DISCLAIMER_GENERAL = """
 
-🔮 **Important Reminder**: Astrological insights are for self-reflection and timing awareness. They show tendencies and potentials, not fixed destinies. Your free will, choices, and circumstances all play crucial roles in shaping outcomes."""
+[ASTROLOGY] **Important Reminder**: Astrological insights are for self-reflection and timing awareness. They show tendencies and potentials, not fixed destinies. Your free will, choices, and circumstances all play crucial roles in shaping outcomes."""
 
 
 # ============================================================================
@@ -193,11 +193,85 @@ REFRAME_SUGGESTIONS = {
     }
 }
 
+# ============================================================================
+# REFRAME — Semantic LLM-based reframing (replaces hardcoded regex patterns)
+# ============================================================================
+
+# Legacy patterns kept ONLY as final fallback examples for the LLM prompt;
+# actual reframing is now done by the LLM (see get_semantic_reframe below).
+_REFRAME_EXAMPLES = [
+    ("Will I get rich?",
+     "What periods in my chart support wealth accumulation and financial growth?"),
+    ("Will I get married?",
+     "What does my 7th house reveal about relationship timing and partnership potential?"),
+    ("Will I be successful?",
+     "What are my chart's indicators for career achievement and when are the favorable periods?"),
+    ("Why is God punishing me?",
+     "What challenging planetary periods am I in, and how can I grow through them?"),
+    ("Will I get the job?",
+     "What does my current planetary period indicate about career opportunities?"),
+]
+
+
+def get_semantic_reframe(query: str, llm=None, language: str = "en") -> str:
+    """
+    Reframe a fatalistic or fortune-telling query into an empowering,
+    guidance-oriented question using the LLM.
+
+    Works in any language — if the user asked in Hindi, the LLM reframes in Hindi.
+    Falls back to a graceful generic reframe when no LLM is available.
+
+    Args:
+        query:    The original user query (any language)
+        llm:      A LangChain-compatible LLM instance, or None
+        language: ISO language code (e.g. 'en', 'hi', 'hi-lat', 'ta')
+
+    Returns:
+        A reframed question string that redirects the user constructively
+    """
+    if llm is None:
+        # LLM unavailable — return a sensible generic
+        return (
+            "What astrological patterns and planetary periods are active in my chart "
+            "that are relevant to this area of my life, and how can I navigate them wisely?"
+        )
+
+    examples_block = "\n".join(
+        f'  Original: "{orig}"\n  Reframed: "{ref}"'
+        for orig, ref in _REFRAME_EXAMPLES
+    )
+
+    prompt = (
+        f"You are a professional Vedic astrologer who reframes fortune-telling questions "
+        f"into empowering, guidance-oriented questions.\n\n"
+        f"EXAMPLES:\n{examples_block}\n\n"
+        f"TASK: Reframe the following query into an empowering question that:\n"
+        f"1. Focuses on understanding patterns and opportunities (not fixed outcomes)\n"
+        f"2. Is answerable with astrological analysis\n"
+        f"3. Uses the SAME LANGUAGE as the original query\n"
+        f"4. Preserves the user's core interest\n\n"
+        f'Original query: "{query}"\n\n'
+        f"Reframed question (ONLY output the reframed question, nothing else):"
+    )
+    try:
+        response = llm.invoke(prompt)
+        reframed = (response.content if hasattr(response, 'content') else str(response)).strip()
+        # Sanity check — must be shorter than a paragraph
+        if reframed and len(reframed) < 300:
+            return reframed
+    except Exception:
+        pass
+
+    # Fallback
+    return (
+        "What astrological patterns and planetary periods are active in my chart "
+        "that are relevant to this area of my life, and how can I navigate them wisely?"
+    )
+
 
 # ============================================================================
 # EMPATHY TEMPLATES (For Difficult Topics)
 # ============================================================================
-
 EMPATHY_LOSS = """I can sense you're going through a difficult time with loss or grief. While I cannot predict specific timing or outcomes around such sensitive matters, I can offer some astrological perspective on navigating challenging periods.
 
 If you're open to it, we could explore:
@@ -231,38 +305,48 @@ Would you like to explore any of these? And consider reaching out to a relations
 
 
 # ============================================================================
-# GREETING TEMPLATES (Context-Aware)
+# GREETING TEMPLATES
+# Note: First-time greeting is handled by the mobile application.
+# These pools are used for all in-session greetings.
 # ============================================================================
 
-GREETING_FIRST_TIME = """Hello! I'm NakshatraAI, your professional astrology consultant.
-
-I'm here to help you understand your birth chart and navigate life's journey through astrological wisdom.
-
-How may I assist you today, {user_name}? You can ask me about:
-• Birth chart interpretations
-• Timing for important life events
-• Current planetary transits and their effects
-• Understanding astrological concepts
-• Relationship compatibility"""
-
+# English — varied, warm, short
 GREETING_RETURNING = [
-    "Hello, {user_name}! How can I help you further?",
-    "Namaste, {user_name}. What else would you like to know?",
-    "Yes, {user_name}, I'm here. What's your question?",
-    "Hello! What can I clarify for you?",
-    "I'm listening, {user_name}. How may I assist you?",
+    "Hey {user_name}! What's on your mind?",
+    "Namaste, {user_name} — I'm here. What would you like to explore?",
+    "Good to hear from you, {user_name}. What's your question?",
+    "Yes, {user_name}! What can I look into for you?",
+    "I'm listening — what would you like to know?",
+    "Always here, {user_name}. Ask away!",
+    "The stars are aligned — what's your question, {user_name}?",
+    "Hi again! What would you like to explore today?",
 ]
 
-GREETING_HINDI_FIRST = """नमस्ते! मैं NakshatraAI हूं, आपका व्यावसायिक ज्योतिष सलाहकार।
-
-मैं यहां आपकी जन्मकुंडली को समझने और ज्योतिषीय ज्ञान के माध्यम से जीवन यात्रा में मार्गदर्शन करने के लिए हूं।
-
-आज मैं {user_name} की कैसे सहायता कर सकता हूं?"""
-
+# Hindi (Native Script) - natural, conversational
 GREETING_HINDI_RETURNING = [
-    "नमस्ते, {user_name}। और क्या जानना चाहेंगे?",
-    "हां, {user_name}?",
-    "मैं यहां हूं। आपका प्रश्न क्या है?",
+    "Namaste, {user_name}! Bataiye, kya jaanna chahenge?",
+    "Han {user_name}, main yahan hoon. Kya poochhna hai?",
+    "Ji {user_name}, boliye!",
+    "Kya jaanna chahte hain aap?",
+    "Bataiye - main sun raha hoon.",
+    "Aapke liye kya dekh sakta hoon?",
+]
+
+# Hinglish (Romanized Hindi) — for hi-lat language code
+GREETING_HINGLISH_RETURNING = [
+    "Namaste {user_name}! Kya jaanna chahte hain?",
+    "Haan {user_name}, batao — kya sawaal hai?",
+    "Main yahan hoon. Kya poochhna hai?",
+    "Bolo {user_name}, kya dekhein aapke liye?",
+    "Suno raha hoon — kya jaanna hai?",
+]
+
+# Tamil (Romanized) — for ta-lat language code
+GREETING_TAMIL_RETURNING = [
+    "Vanakkam {user_name}! Enna theriyanum?",
+    "Sollunga {user_name} — enna kekka virumbareengal?",
+    "Inge irukken — enna kekka poreenga?",
+    "Jolly ah kettunga {user_name}!",
 ]
 
 
@@ -284,23 +368,23 @@ TONE & LANGUAGE GUIDELINES:
    - Maximum 2-3 Sanskrit terms per paragraph
 
 3. **Simplify Technical Concepts:**
-   ❌ "The 10th Bhava lord positioned in the 4th Bhava"
-   ✅ "Your career planet is in your home sector"
+   [FAIL] "The 10th Bhava lord positioned in the 4th Bhava"
+   [OK] "Your career planet is in your home sector"
    
-   ❌ "Shani in Kumbha in the 6th Bhava"
-   ✅ "Saturn in Aquarius in your 6th house (daily work)"
+   [FAIL] "Shani in Kumbha in the 6th Bhava"
+   [OK] "Saturn in Aquarius in your 6th house (daily work)"
    
-   ❌ "Chandra in Mithuna indicates"
-   ✅ "Your Moon in Gemini shows"
+   [FAIL] "Chandra in Mithuna indicates"
+   [OK] "Your Moon in Gemini shows"
 
 4. **Explain, Don't Just State:**
-   ❌ "Jupiter aspects your 7th house"
-   ✅ "Jupiter sends its beneficial energy to your relationship sector, supporting harmonious partnerships"
+   [FAIL] "Jupiter aspects your 7th house"
+   [OK] "Jupiter sends its beneficial energy to your relationship sector, supporting harmonious partnerships"
 
 5. **Use Parentheticals for Sanskrit:**
-   ✅ "Your Moon (Chandra) in Gemini..."
-   ✅ "The 7th house (marriage sector)..."
-   ✅ "During Saturn's period (Shani dasha)..."
+   [OK] "Your Moon (Chandra) in Gemini..."
+   [OK] "The 7th house (marriage sector)..."
+   [OK] "During Saturn's period (Shani dasha)..."
 
 6. **Conversational Connectors:**
    Use: "This means...", "In other words...", "Think of it like...", "Here's what this means for you..."
@@ -308,14 +392,14 @@ TONE & LANGUAGE GUIDELINES:
 
 7. **For Timing Questions:**
    ALWAYS provide specific months/timeframes:
-   ✅ "March-April 2026 when Jupiter transits..."
-   ❌ "During your Saturn Mahadasha" (too vague)
+   [OK] "March-April 2026 when Jupiter transits..."
+   [FAIL] "During your Saturn Mahadasha" (too vague)
 
 EXAMPLE TRANSFORMATION:
 
-❌ BAD: "Your Chandra positioned in Mithuna Rashi in the 10th Bhava indicates communicative faculties in professional endeavors."
+[FAIL] BAD: "Your Chandra positioned in Mithuna Rashi in the 10th Bhava indicates communicative faculties in professional endeavors."
 
-✅ GOOD: "Your Moon in Gemini (your career house) shows you're naturally great at communication and adapting to change at work. This placement often means you thrive in dynamic environments where you can use your quick thinking."
+[OK] GOOD: "Your Moon in Gemini (your career house) shows you're naturally great at communication and adapting to change at work. This placement often means you thrive in dynamic environments where you can use your quick thinking."
 """
 
 
@@ -366,9 +450,7 @@ RESPONSE_TEMPLATES: Dict[str, str] = {
     "SOFT_BLOCK_THIRD_PARTY_PREDICTION": SOFT_BLOCK_THIRD_PARTY_PREDICTION,
     "SOFT_BLOCK_THIRD_PARTY": SOFT_BLOCK_THIRD_PARTY_PREDICTION,
     
-    # Greetings
-    "GREETING_FIRST_TIME": GREETING_FIRST_TIME,
-    "GREETING_HINDI_FIRST": GREETING_HINDI_FIRST,
+    # Greetings (first-time greeting is owned by mobile app)
     
     # System Prompts
     "CONVERSATIONAL_TONE_SYSTEM_PROMPT": CONVERSATIONAL_TONE_SYSTEM_PROMPT,
@@ -493,88 +575,217 @@ I'm here to help with astrological guidance and chart interpretation. What would
 # Helper Functions for Context-Aware Responses
 # ============================================================================
 
+# ============================================================================
+# CHITCHAT RESPONSE POOLS
+# Varied replies for common social signals so the bot never sounds scripted.
+# ============================================================================
+
+CHITCHAT_RESPONSES = {
+    # User says thanks / expresses gratitude
+    "thanks": [
+        "You're very welcome, {user_name}!",
+        "Glad I could help! Anything else on your mind?",
+        "Happy to assist — the stars are always talking.",
+        "Anytime, {user_name}! Just ask.",
+        "Of course! Let me know if you'd like to explore anything else.",
+    ],
+    "thanks_hi": [
+        "Koi baat nahi, {user_name}!",
+        "Khushi hui! Aur kuch jaanna hai?",
+        "Bilkul! Koi aur sawaal ho toh poochhein.",
+        "Shukriya {user_name} — aur kuch hoga toh zaroor bataein.",
+    ],
+
+    # User says goodbye
+    "bye": [
+        "Take care, {user_name}! The planets will guide you.",
+        "Goodbye! Come back whenever the stars call.",
+        "See you soon, {user_name}! Wishing you clear skies.",
+        "Until next time, {user_name}. Namaste!",
+        "Farewell — may Jupiter bless your path!",
+    ],
+    "bye_hi": [
+        "Alvida, {user_name}! Shubhkaamnaen.",
+        "Namaste {user_name} — phir milenge!",
+        "Take care! Grahon ki kripa bani rahe.",
+        "Dhanyawad! Jab bhi zaroorat ho, yahan hoon.",
+    ],
+
+    # User asks how the bot is doing
+    "how_are_you": [
+        "I'm doing well, tuned in to the cosmic frequencies! How can I help?",
+        "Energized and ready — the planets are active today! What's on your mind?",
+        "All good on this end! What would you like to explore?",
+        "Ready and listening, {user_name}. How can I assist?",
+    ],
+    "how_are_you_hi": [
+        "Main theek hoon, shukriya! Aap ke liye kya kar sakta hoon?",
+        "Graho ke saath bahut accha chal raha hai! Batao kya jaanna hai.",
+        "Main yahan hoon aur tayyar hoon — kya poochhna hai?",
+    ],
+
+    # User asks who/what the bot is
+    "who_are_you": [
+        "I'm NakshatraAI — your personal Vedic astrology guide. Ask me anything about your chart!",
+        "Think of me as your digital jyotishi, {user_name}. Vedic and Western astrology, all in one place.",
+        "I'm NakshatraAI, trained in Vedic and Western astrology. What would you like to know?",
+        "Your friendly astrology consultant! Planets, dashas, transits — I've got you covered.",
+    ],
+    "who_are_you_hi": [
+        "Main NakshatraAI hoon — aapka Vedic jyotish sahayak! Kya jaanna hai?",
+        "Sochiye mujhe apna digital jyotishi! Kundali, dasha, transit — sab kuch yahan hai.",
+        "Main aapka astrology guide hoon, {user_name}. Kuch poochhein!",
+    ],
+}
+
+
 def get_contextual_greeting(user_name: str, conversation_length: int, language: str = 'en') -> str:
     """
-    Get greeting based on conversation context.
-    
+    Get a short, varied greeting from the appropriate language pool.
+    First-time greeting is handled by the mobile app; this always returns
+    a brief, conversational returning-user response.
+
     Args:
         user_name: User's name
-        conversation_length: Number of messages in history (including current)
-        language: User's language preference ('en' or 'hi')
-    
+        conversation_length: Not used for selection (kept for API compatibility)
+        language: ISO language code ('en', 'hi', 'hi-lat', 'ta', 'ta-lat')
+
     Returns:
-        Appropriate greeting message
+        Randomly selected greeting string, formatted with user_name
     """
     import random
-    
-    # First interaction (0-2 messages)
-    if conversation_length <= 2:
-        if language == 'hi':
-            return GREETING_HINDI_FIRST.format(user_name=user_name)
-        else:
-            return GREETING_FIRST_TIME.format(user_name=user_name)
-    
-    # Returning user (3+ messages) - use brief greeting
+
+    if language == 'hi':
+        pool = GREETING_HINDI_RETURNING
+    elif language in ('hi-lat', 'hi_lat'):
+        pool = GREETING_HINGLISH_RETURNING
+    elif language.startswith('ta'):
+        pool = GREETING_TAMIL_RETURNING
     else:
-        if language == 'hi':
-            greetings = GREETING_HINDI_RETURNING
-        else:
-            greetings = GREETING_RETURNING
-        
-        return random.choice(greetings).format(user_name=user_name)
+        pool = GREETING_RETURNING
+
+    return random.choice(pool).format(user_name=user_name)
+
+
+def get_chitchat_response(
+    trigger: str,
+    user_name: str = "friend",
+    language: str = "en",
+    llm=None,
+    query: str = "",
+) -> str:
+    """
+    Return a varied, humanised response for common chitchat signals.
+
+    Falls back to an LLM-generated response when the trigger doesn't match
+    any pool, maintaining personality even for novel social inputs.
+
+    Args:
+        trigger:   One of 'thanks', 'bye', 'how_are_you', 'who_are_you', or 'unknown'
+        user_name: User's display name
+        language:  ISO language code
+        llm:       Optional LangChain LLM instance for novel triggers
+        query:     Original user query (used when falling back to LLM)
+
+    Returns:
+        A varied, natural-sounding response string
+    """
+    import random
+
+    # Pick language-appropriate pool suffix
+    lang_suffix = "_hi" if language in ('hi', 'hi-lat', 'hi_lat') else ""
+    pool_key = f"{trigger}{lang_suffix}"
+
+    pool = CHITCHAT_RESPONSES.get(pool_key) or CHITCHAT_RESPONSES.get(trigger)
+    if pool:
+        return random.choice(pool).format(user_name=user_name)
+
+    # Unknown chitchat trigger — use LLM for a characterful response
+    if llm and query:
+        try:
+            prompt = (
+                f"You are NakshatraAI, a warm, professional Vedic astrology assistant.\n"
+                f"Keep the response SHORT (1-2 sentences), friendly and in character.\n"
+                f"Do NOT give astrological analysis. This is casual conversation.\n"
+                f"User: {query}\n"
+                f"NakshatraAI:"
+            )
+            resp = llm.invoke(prompt)
+            text = (resp.content if hasattr(resp, 'content') else str(resp)).strip()
+            if text:
+                return text
+        except Exception:
+            pass
+
+    # Final generic fallback
+    generic = [
+        f"I'm here whenever you're ready, {user_name}!",
+        "Feel free to ask anything astrology-related!",
+        "The stars are always ready — so am I.",
+    ]
+    return random.choice(generic)
 
 
 def detect_third_party_query(query: str) -> tuple[bool, str]:
     """
     Detect if user is asking about someone else's chart/prediction.
-    
-    Args:
-        query: User's query text
-    
+
+    Covers English AND Hindi/Hinglish relationship terms so privacy
+    protections are applied for multilingual users.
+
     Returns:
         (is_third_party, person_mentioned)
     """
-    query_lower = query.lower()
-    
-    # Third-party indicators
-    third_party_patterns = [
-        # Direct mentions
+    q = query.lower()
+
+    # Third-party indicators — English
+    en_patterns = [
         'my friend', 'my sister', 'my brother', 'my mother', 'my father',
         'my husband', 'my wife', 'my boyfriend', 'my girlfriend',
         'my son', 'my daughter', 'my child', 'my children',
-        'my boss', 'my colleague', 'my partner',
-        
-        # Possessive pronouns
+        'my boss', 'my colleague', 'my partner', 'my aunt', 'my uncle',
+        # Possessive third-person
         'her chart', 'his chart', 'their chart',
         'her horoscope', 'his horoscope',
         'her birth', 'his birth',
-        
-        # Question patterns about others
+        # Predictive third-person
         'when will he', 'when will she', 'when will they',
         'will he', 'will she', 'will they',
         'does he', 'does she', 'do they',
     ]
-    
-    # Check for patterns
+
+    # Third-party indicators — Hindi / Hinglish
+    hi_patterns = [
+        'mera dost', 'meri saheli', 'mera bhai', 'meri behen',
+        'meri maa', 'mere papa', 'mera pati', 'meri patni',
+        'mera beta', 'meri beti', 'mere bacche',
+        'mera boss', 'mere saathi', 'mera partner',
+        # Possessive third-person (Hinglish)
+        'uski kundali', 'unki kundali', 'uska chart',
+        'uska janm', 'unka janm',
+        # Predictive third-person
+        'woh kab', 'unka kab', 'kya woh', 'kya unka',
+    ]
+
+    all_patterns = en_patterns + hi_patterns
+
     person_mentioned = "someone else"
-    for pattern in third_party_patterns:
-        if pattern in query_lower:
+    for pattern in all_patterns:
+        if pattern in q:
             # Try to extract name if present
             import re
-            # Look for capitalized words that might be names
-            words_after = query.split(pattern)[-1] if pattern in query.lower() else ""
+            words_after = query[query.lower().find(pattern) + len(pattern):]
             names = re.findall(r'\b[A-Z][a-z]+\b', words_after[:50])
             if names:
                 person_mentioned = names[0]
-            
-            # Check for "name is X" pattern
-            if 'name is' in query_lower or 'named' in query_lower:
+
+            if 'name is' in q or 'named' in q:
                 name_match = re.search(r'name is ([A-Z][a-z]+)', query, re.IGNORECASE)
                 if name_match:
                     person_mentioned = name_match.group(1)
-            
+
             return True, person_mentioned
-    
+
     return False, None
 
 

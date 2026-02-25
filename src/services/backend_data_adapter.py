@@ -6,13 +6,13 @@ Backend Data Adapter for Chatbot
 This module receives pre-fetched astrology data from the application backend
 and prepares it for RAG consumption. Includes:
 - Data validation (Pydantic schemas)
-- RAG context formatting (JSON → semantic text)
+- RAG context formatting (JSON -> semantic text)
 - Backend data processing
 
 The chatbot does NOT make direct API calls.
 
 Architecture:
-    Application Backend → [This Adapter] → RAG-formatted text → RAG Engine
+    Application Backend -> [This Adapter] -> RAG-formatted text -> RAG Engine
 """
 
 import logging

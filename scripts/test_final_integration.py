@@ -34,7 +34,7 @@ def print_test(number, title):
     print("=" * 80)
 
 def print_result(passed, message):
-    status = "✅ PASS" if passed else "❌ FAIL"
+    status = "[OK] PASS" if passed else "[FAIL] FAIL"
     print(f"{status} - {message}")
     return passed
 
@@ -292,7 +292,7 @@ def main():
     total = len(results)
     
     for test_name, result in results:
-        status = "✅ PASS" if result else "❌ FAIL"
+        status = "[OK] PASS" if result else "[FAIL] FAIL"
         print(f"{status}  {test_name}")
     
     print("\n" + "=" * 80)
@@ -300,15 +300,15 @@ def main():
     
     if passed == total:
         print("\n🎉 ALL TESTS PASSED!")
-        print("\n✅ Your NakshatraAI system is fully operational:")
+        print("\n[OK] Your NakshatraAI system is fully operational:")
         print("   • English is default language")
         print("   • Multilingual support working")
         print("   • Validation engine integrated")
         print("   • RAG retrieval from classical texts")
         print("   • Language-specific responses")
-        print("\n🚀 READY FOR PRODUCTION!")
+        print("\n[LAUNCH] READY FOR PRODUCTION!")
     else:
-        print(f"\n⚠️  {total - passed} test(s) failed")
+        print(f"\n[WARN]  {total - passed} test(s) failed")
         print("Review the output above to identify issues.")
     
     print("=" * 80 + "\n")

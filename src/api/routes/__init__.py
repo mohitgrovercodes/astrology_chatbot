@@ -5,6 +5,6 @@ Routes Package Initialization
 ===============================
 """
 
-from src.api.routes import chat, user, calculation, health
+from . import chat_stateless, user, calculation, health
 
-__all__ = ["chat", "user", "calculation", "health"]
+__all__ = ["chat_stateless", "user", "calculation", "health"]

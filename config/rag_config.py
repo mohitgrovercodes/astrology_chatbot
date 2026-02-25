@@ -17,7 +17,7 @@ class RAGConfig:
     # ============================================
     
     # Default retrieval (general queries)
-    DEFAULT_TOP_K = 10  # Changed from 5 → 10 ✅
+    DEFAULT_TOP_K = 10  # Changed from 5 -> 10 [OK]
     
     # By content type (for validation-aware retrieval)
     VALIDATION_RULES_TOP_K = 15  # More rules = better coverage
@@ -48,10 +48,10 @@ class RAGConfig:
     
     # When to rerank (by content type)
     RERANK_BY_CONTENT_TYPE = {
-        'validation_rule': True,   # ✅ Always rerank validation rules (critical accuracy)
-        'interpretation': True,    # ✅ Always rerank interpretations (high-stakes predictions)
-        'general': False,          # ❌ Skip for general queries (save time)
-        'chitchat': False          # ❌ Skip for chitchat (not needed)
+        'validation_rule': True,   # [OK] Always rerank validation rules (critical accuracy)
+        'interpretation': True,    # [OK] Always rerank interpretations (high-stakes predictions)
+        'general': False,          # [FAIL] Skip for general queries (save time)
+        'chitchat': False          # [FAIL] Skip for chitchat (not needed)
     }
     
     # Rerank threshold (only rerank if top score < threshold)
@@ -73,10 +73,10 @@ class RAGConfig:
     
     # When to expand context (by content type)
     EXPAND_BY_CONTENT_TYPE = {
-        'validation_rule': True,   # ✅ Always expand (rules often span multiple chunks)
-        'interpretation': False,   # ❌ Usually not needed (interpretations are complete)
-        'general': False,          # ❌ Skip (save time)
-        'chitchat': False          # ❌ Skip (not relevant)
+        'validation_rule': True,   # [OK] Always expand (rules often span multiple chunks)
+        'interpretation': False,   # [FAIL] Usually not needed (interpretations are complete)
+        'general': False,          # [FAIL] Skip (save time)
+        'chitchat': False          # [FAIL] Skip (not relevant)
     }
     
     # Score penalty for adjacent chunks (they're less relevant than original)
@@ -292,7 +292,7 @@ if __name__ == "__main__":
     print("RAG CONFIGURATION TEST")
     print("=" * 60)
     
-    print(f"\n📊 TOP_K Settings:")
+    print(f"\n[STATS] TOP_K Settings:")
     print(f"  Default: {RAGConfig.DEFAULT_TOP_K}")
     print(f"  Validation rules: {RAGConfig.VALIDATION_RULES_TOP_K}")
     print(f"  Interpretations: {RAGConfig.INTERPRETATIONS_TOP_K}")
@@ -332,5 +332,5 @@ if __name__ == "__main__":
     print(f"  Top_k for tier 2: {RAGConfig.get_top_k(validation_tier=2)}")
     
     print("\n" + "=" * 60)
-    print("✅ Configuration loaded successfully")
+    print("[OK] Configuration loaded successfully")
     print("=" * 60)

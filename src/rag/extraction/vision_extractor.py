@@ -1101,7 +1101,7 @@ class BatchExtractor:
             with open(checkpoint_path, 'w', encoding='utf-8') as f:
                 json.dump(checkpoint_data, f, ensure_ascii=False, indent=2)
             
-            logger.info(f"💾 Checkpoint saved: {len(pages)}/{stats['total_pages']} pages")
+            logger.info(f"[SAVE] Checkpoint saved: {len(pages)}/{stats['total_pages']} pages")
             
         except Exception as e:
             logger.warning(f"Failed to save checkpoint: {e}")

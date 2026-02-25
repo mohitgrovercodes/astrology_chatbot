@@ -166,8 +166,9 @@ class AstrologyRetriever:
             
         where_clause = self._build_where_clause(filters) if filters else {}
         
-        # APPLY INTENT-BASED CONTENT TYPE FILTERING
+        # APPLY INTENT-BASED CONTENT TYPE FILTERING (Optional - only if metadata exists)
         # Different intents benefit from different content types
+        # NOTE: Only applied if content_type metadata exists in your chunks
         if intent and not filters:  # Only if user didn't provide custom filters
             intent_content_preferences = {
                 'PREDICTION': ['interpretation', 'prediction'],
@@ -178,28 +179,62 @@ class AstrologyRetriever:
             
             if intent in intent_content_preferences:
                 preferred_types = intent_content_preferences[intent]
-                content_filter = {"content_type": {"$in": preferred_types}}
                 
-                if where_clause:
-                    where_clause = {"$and": [where_clause, content_filter]}
-                else:
-                    where_clause = content_filter
+                # [OK] FIX: Check if content_type metadata exists before filtering
+                try:
+                    test_result = self.collection.get(
+                        limit=1, 
+                        where={"content_type": {"$in": preferred_types}},
+                        include=["metadatas"]
+                    )
+                    has_content_type = (
+                        test_result and 
+                        test_result.get('metadatas') and 
+                        len(test_result['metadatas']) > 0
+                    )
                     
-                logger.info(f"Applied content type filter for intent {intent}: {preferred_types}")
+                    if has_content_type:
+                        content_filter = {"content_type": {"$in": preferred_types}}
+                        
+                        if where_clause:
+                            where_clause = {"$and": [where_clause, content_filter]}
+                        else:
+                            where_clause = content_filter
+                            
+                        logger.info(f"Applied content type filter for intent {intent}: {preferred_types}")
+                    else:
+                        logger.info(f"Skipping content type filter (metadata not present in chunks)")
+                except Exception as e:
+                    logger.warning(f"Could not check content_type metadata: {e}. Skipping filter.")
         
-        # APPLY LANGUAGE FILTERING
-        # If language is provided, filter by that language. 
-        # Typically we want to pull [detected_language] AND 'en' (as a primary source).
+        # APPLY LANGUAGE FILTERING (Optional - only if metadata exists)
         if language:
-            # Map hi-lat back to hi for retrieval filtering if necessary, 
-            # but usually it's just 'hi' in metadata.
-            target_lang = language.split('-')[0]
-            lang_filter = {"language": {"$in": [target_lang, "en"]}}
-            
-            if where_clause:
-                where_clause = {"$and": [where_clause, lang_filter]}
-            else:
-                where_clause = lang_filter
+            try:
+                # Check if language metadata exists by querying for it
+                target_lang = language.split('-')[0]
+                test_result = self.collection.get(
+                    limit=1, 
+                    where={"language": {"$in": [target_lang, "en"]}},
+                    include=["metadatas"]
+                )
+                has_language = (
+                    test_result and 
+                    test_result.get('metadatas') and 
+                    len(test_result['metadatas']) > 0
+                )
+                
+                if has_language:
+                    lang_filter = {"language": {"$in": [target_lang, "en"]}}
+                    
+                    if where_clause:
+                        where_clause = {"$and": [where_clause, lang_filter]}
+                    else:
+                        where_clause = lang_filter
+                    logger.info(f"Applied language filter: {target_lang}/en")
+                else:
+                    logger.info(f"Skipping language filter (metadata not present in chunks)")
+            except Exception as e:
+                logger.warning(f"Could not check language metadata: {e}. Skipping filter.")
                 
         query_embedding = self.embedder.embed_texts([query])[0]
         
@@ -400,7 +435,7 @@ class AstrologyRetriever:
                     logger.debug(f"[EXPAND] Error fetching adjacent chunk at offset {offset}: {e}")
                     continue
         
-        logger.info(f"[EXPAND] Expanded {len(chunks)} → {len(expanded)} chunks")
+        logger.info(f"[EXPAND] Expanded {len(chunks)} -> {len(expanded)} chunks")
         return expanded
 
     def _parse_results(self, results) -> List[RetrievedChunk]:

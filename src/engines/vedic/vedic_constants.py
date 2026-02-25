@@ -25,32 +25,8 @@ These constants are derived from classical texts, primarily:
 from enum import IntEnum, Enum
 from typing import NamedTuple
 from src.engines.core.celestial_bodies import CelestialBody
+from src.engines.core.ephemeris import Ayanamsa
 import swisseph as swe
-
-
-class Ayanamsa(IntEnum):
-    """
-    Ayanamsa (precession correction) systems for sidereal calculations.
-    
-    The ayanamsa is the angular difference between the tropical and sidereal
-    zodiacs. Different traditions use different ayanamsas, which is why
-    Vedic astrologers may give slightly different positions.
-    
-    Common values (as of 2024):
-    - LAHIRI: ~24.17Â° (most popular in India, used by Indian government)
-    - RAMAN: ~22.47Â° (created by B.V. Raman)
-    - KRISHNAMURTI: ~23.76Â° (KP system)
-    - FAGAN_BRADLEY: ~24.85Â° (Western sidereal)
-    """
-    LAHIRI = swe.SIDM_LAHIRI                    # Official Indian standard
-    RAMAN = swe.SIDM_RAMAN                      # B.V. Raman's ayanamsa
-    KRISHNAMURTI = swe.SIDM_KRISHNAMURTI        # KP Astrology
-    FAGAN_BRADLEY = swe.SIDM_FAGAN_BRADLEY      # Western sidereal
-    TRUE_CITRA = swe.SIDM_TRUE_CITRA            # Citra at 0Â° Libra
-    TRUE_REVATI = swe.SIDM_TRUE_REVATI          # Revati at 29Â°50' Pisces
-    TRUE_PUSHYA = swe.SIDM_TRUE_PUSHYA          # Pushya at 16Â° Cancer
-    YUKTESHWAR = swe.SIDM_YUKTESHWAR            # Sri Yukteshwar
-    JN_BHASIN = swe.SIDM_JN_BHASIN              # J.N. Bhasin
 
 
 

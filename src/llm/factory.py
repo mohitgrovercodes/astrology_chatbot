@@ -481,14 +481,14 @@ if __name__ == "__main__":
         current_provider = LLMFactory._determine_provider()
         print(f"   Creating LLM with current provider ({current_provider})...")
         llm = create_llm()
-        print(f"   ✅ Successfully created {current_provider} LLM")
+        print(f"   [OK] Successfully created {current_provider} LLM")
 
         # Test invocation
         response = llm.invoke("Say 'Hello from NakshatraAI' in one sentence.")
         print(f"   Test response: {response.content[:100]}...")
 
     except Exception as e:
-        print(f"   ❌ Error: {e}")
+        print(f"   [FAIL] Error: {e}")
 
     print()
     print("=" * 70)

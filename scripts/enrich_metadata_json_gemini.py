@@ -123,7 +123,7 @@ def setup_gemini(
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
     
     if "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
-        print("⚠️  GOOGLE_APPLICATION_CREDENTIALS not set")
+        print("[WARN]  GOOGLE_APPLICATION_CREDENTIALS not set")
         print("   Set in .env file or export GOOGLE_APPLICATION_CREDENTIALS=path/to/key.json")
     
     try:
@@ -131,11 +131,11 @@ def setup_gemini(
             model=model,
             temperature=temperature,
         )
-        print(f"✅ Initialized Gemini: {model}")
+        print(f"[OK] Initialized Gemini: {model}")
         print(f"   Temperature: {temperature}")
         return llm
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[FAIL] Error: {e}")
         print("\nCheck:")
         print("1. .env has GOOGLE_APPLICATION_CREDENTIALS")
         print("2. Service account has Vertex AI access")
@@ -200,7 +200,7 @@ def enrich_chunk(chunk: Dict[str, Any], llm: ChatGoogleGenerativeAI) -> Dict[str
         return chunk
         
     except Exception as e:
-        # print(f"  ⚠️  Error: {str(e)[:50]}")
+        # print(f"  [WARN]  Error: {str(e)[:50]}")
         return chunk
 
 
@@ -227,7 +227,7 @@ def process_json_file(
             chunks = [data]
     
     except Exception as e:
-        print(f"  ❌ Error loading: {e}")
+        print(f"  [FAIL] Error loading: {e}")
         return 0
     
     # Enrich
@@ -245,7 +245,7 @@ def process_json_file(
             "chunks": enriched
         }, f, indent=2, ensure_ascii=False)
     
-    print(f"  ✅ {len(enriched)} chunks → {output_file.name}")
+    print(f"  [OK] {len(enriched)} chunks -> {output_file.name}")
     return len(enriched)
 
 
@@ -307,14 +307,14 @@ def main():
     output_dir = Path(args.output)
     
     if not input_dir.exists():
-        print(f"❌ Not found: {input_dir}")
+        print(f"[FAIL] Not found: {input_dir}")
         return
     
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    print("🚀 Metadata Enrichment (JSON + Gemini)")
+    print("[LAUNCH] Metadata Enrichment (JSON + Gemini)")
     print(f"📁 Input: {input_dir}")
-    print(f"💾 Output: {output_dir}")
+    print(f"[SAVE] Output: {output_dir}")
     print("=" * 60)
     
     # Initialize Gemini (will use .env defaults)
@@ -338,12 +338,12 @@ def main():
         total += count
     
     # Report
-    print("\n📊 Generating report...")
+    print("\n[STATS] Generating report...")
     stats = generate_report(output_dir)
     
     print("\n" + "=" * 60)
-    print("✅ ENRICHMENT COMPLETE")
-    print(f"📊 Total: {stats['total']}")
+    print("[OK] ENRICHMENT COMPLETE")
+    print(f"[STATS] Total: {stats['total']}")
     print(f"\n  Content Types:")
     for ct, count in sorted(stats["by_content_type"].items()):
         print(f"    - {ct}: {count}")
@@ -352,7 +352,7 @@ def main():
         print(f"  Categories:")
         for vc, count in stats["by_validation_category"].items():
             print(f"    - {vc}: {count}")
-    print(f"\n💾 Saved to: {output_dir}")
+    print(f"\n[SAVE] Saved to: {output_dir}")
     print("=" * 60)
 
 

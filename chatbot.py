@@ -22,7 +22,7 @@ from src.ai.user_manager import get_user_manager
 from src.ai.hybrid_retriever import HybridRetriever
 from src.ai.prompt_builder import PromptBuilder
 from src.orchestration.orchestrator import create_enhanced_orchestrator
-from src.tools.calculation_tools import CALCULATION_TOOLS
+from src.tools.tools import ASTROLOGY_TOOLS as CALCULATION_TOOLS
 import argparse
 
 
@@ -120,7 +120,7 @@ def main():
     
     print()
     print("=" * 60)
-    print("✅ NakshatraAI V2 initialized!")
+    print("[OK] NakshatraAI V2 initialized!")
     print("=" * 60)
     print()
     print("4-Category Intent System:")
@@ -134,7 +134,7 @@ def main():
     # Get user ID
     if args.stateless:
         user_id = "stateless_demo_user"
-        print(f"\n🚀 Running in STATELESS mode for: {user_id}")
+        print(f"\n[LAUNCH] Running in STATELESS mode for: {user_id}")
     else:
         user_id = input("\nEnter user_id (or press Enter for user011): ").strip()
         if not user_id:
@@ -144,7 +144,7 @@ def main():
         
         # Check if user exists
         if not user_manager.user_exists(user_id):
-            print(f"❌ User '{user_id}' not found!")
+            print(f"[FAIL] User '{user_id}' not found!")
             print("\nAvailable test users:")
             print("  • user001 - Arjun Kumar (Vedic)")
             print("  • user002 - Priya Sharma (Vedic)")
@@ -179,7 +179,7 @@ def main():
     }
     
     # Simple static greeting (no API calls, instant)
-    print(f"✨ Namaste, {session_data.get('name', 'Friend')}!")
+    print(f"* Namaste, {session_data.get('name', 'Friend')}!")
     print()
     print("I'm NakshatraAI, your professional Vedic astrology consultant.")
     print("I'm here to help you understand your birth chart and navigate")
@@ -203,13 +203,13 @@ def main():
     # Main loop
     while True:
         # Get query
-        query = input("🔮 You: ").strip()
+        query = input("[ASTRO] You: ").strip()
         
         if not query:
             continue
         
         if query.lower() in ['quit', 'exit', 'bye']:
-            print("\n✨ May the stars guide your path! Om Shanti! 🙏\n")
+            print("\n* May the stars guide your path! Om Shanti! 🙏\n")
             break
             
         if not args.stateless:
@@ -261,7 +261,7 @@ def main():
             )
             
             # Display streaming response
-            print("\n✨ NakshatraAI: ", end="", flush=True)
+            print("\n* NakshatraAI: ", end="", flush=True)
             
             full_answer = ""
             intent = "unknown"
@@ -293,7 +293,7 @@ def main():
                 user_manager.add_message(user_id, "assistant", full_answer, intent=intent)
             
         except Exception as e:
-            print(f"\n❌ Error: {e}\n")
+            print(f"\n[FAIL] Error: {e}\n")
             import traceback
             traceback.print_exc()
 

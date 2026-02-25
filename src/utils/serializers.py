@@ -54,6 +54,32 @@ class AstroJSONEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
+def deep_serialize_object(obj):
+    """Recursively serialize complex objects to JSON-friendly formats."""
+    if obj is None:
+        return None
+    elif isinstance(obj, (str, int, float, bool)):
+        return obj
+    elif isinstance(obj, (list, tuple)):
+        return [deep_serialize_object(item) for item in obj]
+    elif isinstance(obj, dict):
+        return {k: deep_serialize_object(v) for k, v in obj.items()}
+    elif isinstance(obj, Enum):
+        return obj.value
+    elif isinstance(obj, datetime):
+        return obj.isoformat()
+    elif hasattr(obj, 'to_dict'):
+        return obj.to_dict()
+    elif hasattr(obj, '__dict__'):
+        return {
+            k: deep_serialize_object(v) 
+            for k, v in obj.__dict__.items() 
+            if not k.startswith('_')
+        }
+    else:
+        return str(obj)
+
+
 def serialize_vedic_chart(chart: VedicChart) -> Dict[str, Any]:
     """
     Convert VedicChart to LLM-friendly JSON with metadata.
@@ -63,19 +89,8 @@ def serialize_vedic_chart(chart: VedicChart) -> Dict[str, Any]:
         
     Returns:
         Dictionary with comprehensive chart data and metadata
-        
-    Structure:
-        {
-            "chart_type": "vedic",
-            "birth_data": {...},
-            "lagna": {...},
-            "planets": {...},
-            "yogas": [...],
-            "dasha": {...},
-            "aspects": {...},
-            "_metadata": {...}  # For RAG retrieval
-        }
     """
+    from src.engines.vedic.vedic_constants import RASHI_SANSKRIT_NAMES, NAKSHATRA_NAMES, VargaChart
     
     # Serialize birth data
     birth_data = {
@@ -126,6 +141,21 @@ def serialize_vedic_chart(chart: VedicChart) -> Dict[str, Any]:
                 }
             }
     
+    # Serialize Divisional Charts (D2-D60) - Simple Format
+    vargas = {}
+    if hasattr(chart, 'vargas') and chart.vargas:
+        for v_type in ['D2', 'D3', 'D4', 'D7', 'D9', 'D10', 'D12', 'D16', 'D20', 'D24', 'D27', 'D30', 'D40', 'D45', 'D60']:
+            v_enum = getattr(VargaChart, v_type, None)
+            if v_enum:
+                varga_planets = {}
+                for planet in VEDIC_GRAHAS:
+                    if planet in chart.vargas:
+                        pos = chart.vargas[planet].get_position(v_enum)
+                        if pos:
+                            varga_planets[planet.name] = pos.rashi.name
+                if varga_planets:
+                    vargas[v_type] = {"planets": varga_planets}
+
     # Serialize Yogas
     yogas = [
         {
@@ -138,24 +168,25 @@ def serialize_vedic_chart(chart: VedicChart) -> Dict[str, Any]:
             "conditions_met": list(yoga.conditions_met)
         }
         for yoga in chart.yogas.detected_yogas
-        if yoga.is_present  # Only include present yogas
+        if yoga.is_present
     ]
     
-    # Serialize current Dasha
+    # Serialize Dasha
     current_dasha = chart.get_current_dasha(datetime.now())
-    dasha = {
-        "mahadasha": {
-            "lord": current_dasha.get("mahadasha").lord.name,
-            "start": current_dasha.get("mahadasha").start_date.isoformat(),
-            "end": current_dasha.get("mahadasha").end_date.isoformat(),
-        } if current_dasha.get("mahadasha") else None,
-        "antardasha": {
-            "lord": current_dasha.get("antardasha").lord.name,
-            "start": current_dasha.get("antardasha").start_date.isoformat(),
-            "end": current_dasha.get("antardasha").end_date.isoformat(),
-        } if current_dasha.get("antardasha") else None,
-    }
+    dasha_serialized = deep_serialize_object(current_dasha)
     
+    # Planetary Strengths
+    strengths = {}
+    if hasattr(chart, 'planetary_strengths') and chart.planetary_strengths:
+        strengths = deep_serialize_object(chart.planetary_strengths)
+    elif hasattr(chart, 'shadbala') and chart.shadbala:
+        strengths = deep_serialize_object(chart.shadbala)
+
+    # Aspects
+    aspects = {}
+    if hasattr(chart, 'aspects') and chart.aspects:
+        aspects = deep_serialize_object(chart.aspects)
+
     # Metadata for RAG retrieval
     metadata = {
         "ayanamsa": chart.ayanamsa.name,
@@ -172,8 +203,11 @@ def serialize_vedic_chart(chart: VedicChart) -> Dict[str, Any]:
         "birth_data": birth_data,
         "lagna": lagna,
         "planets": planets,
+        "vargas": vargas,
         "yogas": yogas,
-        "dasha": dasha,
+        "dasha": dasha_serialized,
+        "strengths": strengths,
+        "aspects": aspects,
         "_metadata": metadata
     }
 

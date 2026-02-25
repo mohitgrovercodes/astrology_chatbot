@@ -24,16 +24,26 @@ from src.api.config import settings
 _orchestrator_instance: Optional[object] = None
 _vedic_engine_instance: Optional[VedicEngine] = None
 _western_engine_instance: Optional[WesternAstroEngine] = None
-_redis_client_instance: Optional[object] = None
+_session_manager_instance: Optional[object] = None
+_context_manager_instance: Optional[object] = None
 
 
-def get_redis_client():
-    """Get singleton Redis client."""
-    global _redis_client_instance
-    if _redis_client_instance is None:
-        from src.db.redis_client import RedisClient
-        _redis_client_instance = RedisClient()
-    return _redis_client_instance
+def get_session_manager():
+    """Get singleton session manager."""
+    global _session_manager_instance
+    if _session_manager_instance is None:
+        from src.session.manager import SessionManager
+        _session_manager_instance = SessionManager()
+    return _session_manager_instance
+
+
+def get_context_manager():
+    """Get singleton context manager."""
+    global _context_manager_instance
+    if _context_manager_instance is None:
+        from src.ai.context_manager import ContextManager
+        _context_manager_instance = ContextManager()
+    return _context_manager_instance
 
 
 def get_llm():
@@ -105,9 +115,10 @@ def get_orchestrator():
             llm = get_llm()
             fast_llm = get_fast_llm()
             vector_store = get_vector_store()
+            embeddings = get_embeddings()
             
-            # Initialize intent classifier with fast LLM
-            intent_classifier = IntentClassifier(llm=fast_llm)
+            # Initialize intent classifier with fast LLM and embeddings
+            intent_classifier = IntentClassifier(llm=fast_llm, embeddings=embeddings)
 
             hybrid_retriever = HybridRetriever(
                 vector_store=vector_store,
@@ -117,7 +128,7 @@ def get_orchestrator():
             prompt_builder = PromptBuilder()
 
             # Get calculation tools
-            from src.tools.calculation_tools import get_calculation_tools
+            from src.tools.tools import get_calculation_tools
             calculation_tools = get_calculation_tools()
 
             _orchestrator_instance = create_enhanced_orchestrator(
@@ -129,10 +140,10 @@ def get_orchestrator():
                 fast_llm=fast_llm
             )
             
-            print("[API] ✅ Orchestrator initialized successfully")
+            print("[API] Orchestrator initialized successfully")
             
         except Exception as e:
-            print(f"[API] ❌ Orchestrator initialization failed: {e}")
+            print(f"[API] Orchestrator initialization failed: {e}")
             import traceback
             traceback.print_exc()
             raise
@@ -150,7 +161,7 @@ def get_vedic_engine() -> VedicEngine:
     if _vedic_engine_instance is None:
         print("[API] Initializing Vedic engine...")
         _vedic_engine_instance = VedicEngine()
-        print("[API] ✅ Vedic engine initialized")
+        print("[API] Vedic engine initialized")
     
     return _vedic_engine_instance
 
@@ -164,7 +175,7 @@ def get_western_engine() -> WesternAstroEngine:
     if _western_engine_instance is None:
         print("[API] Initializing Western engine...")
         _western_engine_instance = WesternAstroEngine()
-        print("[API] ✅ Western engine initialized")
+        print("[API] Western engine initialized")
     
     return _western_engine_instance
 
@@ -172,9 +183,10 @@ def get_western_engine() -> WesternAstroEngine:
 # Reset function for testing
 def reset_dependencies():
     """Reset all singleton instances (for testing)."""
-    global _orchestrator_instance, _vedic_engine_instance, _western_engine_instance, _redis_client_instance
+    global _orchestrator_instance, _vedic_engine_instance, _western_engine_instance, _session_manager_instance, _context_manager_instance
     _orchestrator_instance = None
     _vedic_engine_instance = None
     _western_engine_instance = None
-    _redis_client_instance = None
+    _session_manager_instance = None
+    _context_manager_instance = None
     print("[API] Dependencies reset")

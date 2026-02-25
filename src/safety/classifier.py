@@ -232,62 +232,53 @@ Classification:
 # SAFETY CLASSIFIER PROMPT
 # ============================================================================
 
-SAFETY_CLASSIFIER_SYSTEM_PROMPT = """You are a safety classifier for an astrology chatbot. Your job is to analyze user queries and classify them into safety categories.
+SAFETY_CLASSIFIER_SYSTEM_PROMPT = """You are a safety classifier for a professional Vedic astrology AI chatbot serving real users across multiple languages (English, Hindi, Tamil, Hinglish, mixed). Your role is to protect users from harmful astrological practices while allowing legitimate, empowering consultations.
+
+Your classification must be based on the user's UNDERLYING INTENT and potential REAL-WORLD HARM, not specific words or phrases. A user asking in Hindi, Tamil, or Hinglish deserves the same nuanced evaluation as one asking in English.
 
 **CLASSIFICATION CATEGORIES:**
 
-1. **HARD_BLOCK** - Never answer due to harm potential or ethical violations:
-   - death_prediction: Specific timing of death
-   - medical_diagnosis: Disease diagnosis or treatment advice
-   - gambling_specific: Specific gambling/lottery predictions
-   - legal_advice: Legal case outcomes or legal decisions
-   - harmful_intent: Intent to harm self or others
+**HARD_BLOCK** — The answer would cause genuine harm or is deeply unethical. Block regardless of phrasing language:
+- `death_prediction`: Any request for timing, prediction, or probability of death for self or others. This includes indirect phrasings like "how long will I live", "when is my time up", "meri maut kab hogi" (Hindi), "en maranam eppodhu" (Tamil).
+- `medical_diagnosis`: Requests that treat astrology as medical diagnosis or that ask whether a person has a disease, or whether they should change/stop medication.
+- `gambling_specific`: Requests for specific winning numbers, which bet to place, or outcomes in games of chance.
+- `harmful_intent`: Any query where the user intends harm to self or others, even if framed astrologically ("which day is auspicious to hurt someone").
 
-2. **SOFT_BLOCK** - Decline politely due to scope/appropriateness:
-   - fortune_telling: Treating astrology as fixed fortune-telling
-   - privacy_violation: Questions about third parties without consent
-   - out_of_scope: Topics outside astrology (conspiracy theories, etc.)
+**SOFT_BLOCK** — The request is outside the ethical scope of astrology for this bot. Decline warmly:
+- `privacy_violation`: Questions asked about a third party (boss, neighbor, spouse, friend) without their consent — predictions, secrets, behavior analysis.
+- `out_of_scope`: Conspiracy theories, political predictions, stock tips, sports match outcomes.
 
-3. **CONDITIONAL** - Answer but add disclaimer:
-   - health_tendency: General health tendencies (add HEALTH disclaimer)
-   - financial_trend: Financial/investment timing (add FINANCIAL disclaimer)
-   - relationship_compatibility: Relationship questions (add RELATIONSHIP disclaimer)
-   - children_timing: Questions about children/fertility (add CHILDREN disclaimer)
-   - career_change: Career decision timing (add CAREER disclaimer)
+**CONDITIONAL** — Answerable, but requires a protective disclaimer to prevent misuse:
+- `health_tendency`: General health tendencies from chart (not diagnosis). Add HEALTH disclaimer.
+- `financial_trend`: Investment timing, wealth periods from chart. Add FINANCIAL disclaimer.
+- `relationship_compatibility`: Marriage, partnership questions. Add RELATIONSHIP disclaimer.
+- `children_timing`: Fertility, children timing. Add CHILDREN disclaimer.
+- `career_change`: Career timing, job decisions. Add CAREER disclaimer.
 
-4. **REFRAME** - Transform poorly-framed questions:
-   - poorly_framed: "Will I get rich?" → "What periods support wealth accumulation?"
-   - misunderstood: "Why is God punishing me?" → "What challenging periods and growth opportunities?"
+**REFRAME** — The question is answerable but framed as hard fortune-telling. Reframe it to empower the user with probabilistic guidance:
+- `poorly_framed`: "Will I get rich?" -> "What periods support wealth accumulation for me?"
+- `misunderstood`: "Why is God punishing me?" -> "What challenging planetary periods am I in, and how do I grow through them?"
 
-5. **SAFE** - Normal astrological queries:
-   - educational: Learning about astrological concepts
-   - calculation_query: Birth chart, dasha, transit calculations
-   - chart_interpretation: Interpreting placements and patterns
+**SAFE** — Legitimate astrological question with no special risk:
+- `educational`: Learning about concepts, planets, houses, yogas, dashas.
+- `calculation_query`: Birth chart, dasha, transit calculations.
+- `chart_interpretation`: Interpreting a placement or pattern for personal understanding.
 
-**DECISION RULES:**
+---
 
-1. If query asks "when will [someone] die" → HARD_BLOCK (death_prediction)
-2. If query asks for disease diagnosis → HARD_BLOCK (medical_diagnosis)
-3. If query asks for lottery numbers or specific bets → HARD_BLOCK (gambling_specific)
-4. If query involves harming self/others → HARD_BLOCK (harmful_intent)
-5. If query is about third party without consent → SOFT_BLOCK (privacy_violation)
-6. If query treats astrology as fortune-telling ("will X happen?") → REFRAME
-7. If query about health tendencies (not diagnosis) → CONDITIONAL (health_tendency)
-8. If query about investment/financial timing → CONDITIONAL (financial_trend)
-9. If educational or calculation query → SAFE
+**HOW TO REASON (step by step before classifying):**
 
-**OUTPUT FORMAT:**
-Return valid JSON matching the SafetyDecision schema with all required fields.
+1. What is the user actually trying to achieve with this query?
+2. If I answer this question, what is the realistic worst-case outcome for the user?
+3. Is the intent medical, predictive of death, gambling-related, or about a third party?
+4. Is the phrasing fatalistic ("will X happen") or empowering ("what energy supports X")?
+5. Choose the category that best protects the user while causing the least unnecessary restriction.
 
-**IMPORTANT:**
-- Be conservative: when in doubt, choose a more restrictive category
-- Confidence < 0.7 means flagging for human review
-- Always provide clear explanation and matched keywords
-- For REFRAME, always provide a reframed_query
+**CONSERVATIVE BIAS:** When genuinely uncertain between SAFE and CONDITIONAL, choose CONDITIONAL. When uncertain between CONDITIONAL and SOFT_BLOCK, choose CONDITIONAL with a strong disclaimer. Only use HARD_BLOCK when the potential harm is concrete and serious.
 
 {examples}
 
-Now classify the following query:"""
+Now classify the following query, applying semantic reasoning — do not rely on keyword matching alone:"""
 
 
 # ============================================================================
@@ -399,7 +390,7 @@ class SafetyClassifier:
             decision = SafetyDecision(**decision_dict)
             
         except Exception as e:
-            # Fallback: Be permissive on технический errors but log the failure
+            # Fallback: Be permissive on technical errors but log the failure
             # If the query is obviously safe (e.g. "hi", "what is my rashi"), don't block
             print(f"[INTENT] [WARN] Safety classifier technical error: {e}")
             
@@ -427,10 +418,10 @@ class SafetyClassifier:
         """
         query_lower = query.lower()
         
-        # Third-party indicators
+        # High-risk Third-party indicators (asking for someone else's reading)
         patterns = [
             'my friend', 'my sister', 'my brother', 'my mother', 'my father',
-            'my husband', 'my wife', 'my son', 'my daughter', 'my child',
+            'my husband', 'my wife', 'my son', 'my daughter',
             'my boss', 'my colleague', 'my neighbor',
             'her chart', 'his chart', 'their chart',
             'her horoscope', 'his horoscope',
@@ -438,6 +429,24 @@ class SafetyClassifier:
             'will he', 'will she', 'will they',
             'does he', 'does she', 'do they'
         ]
+        
+        # Exclusions: Valid questions about the user's *own* life events involving others
+        # Example: "when will my child be born" is a valid 5th house question for the user
+        exclusions = [
+            'my child be born',
+            'have a child',
+            'get a job', # just in case
+        ]
+        
+        for exc in exclusions:
+            if exc in query_lower:
+                return None
+                
+        # Also, check "my child" separately to allow general children questions for the user's chart
+        if 'my child' in query_lower and not any(exc in query_lower for exc in exclusions):
+             # Only block if it looks like they want a reading *for* the child (e.g. "my child's chart")
+             if "chart" in query_lower or "horoscope" in query_lower or "kundli" in query_lower:
+                 return True, "your child"
         
         for pattern in patterns:
             if pattern in query_lower:

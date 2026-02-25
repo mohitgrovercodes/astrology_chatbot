@@ -10,8 +10,25 @@ from typing import List, Dict, Optional
 from langchain_core.documents import Document
 from config.rag_config import RAGConfig
 
+# Import RetrievedChunk for the retrieve_as_chunks() adapter
+try:
+    from src.rag.retriever import RetrievedChunk
+    _RETRIEVED_CHUNK_AVAILABLE = True
+except ImportError:
+    _RETRIEVED_CHUNK_AVAILABLE = False
+
 class HybridRetriever:
-    """Hybrid retriever with adaptive weighting."""
+    """
+    Hybrid retriever with adaptive weighting.
+
+    Primary retrieval backend for the production orchestrator.
+    Also supports RAGEngine integration via retrieve_as_chunks().
+
+    Retrieval strategies (all fused with RRF):
+      - Semantic  : ChromaDB vector similarity search
+      - Keyword   : BM25 full-text search (lazy-built on first call)
+      - HyDE      : Hypothetical Document Embedding (LLM-generated answer as query)
+    """
     
     WEIGHTS_BY_INTENT = {
         "PREDICTION": (0.5, 0.3, 0.2),
@@ -110,9 +127,9 @@ class HybridRetriever:
                 tokenized = [doc.page_content.lower().split() for doc in all_docs]
                 self.bm25_index = BM25Okapi(tokenized)
                 self.bm25_documents = all_docs
-                print(f"[BM25] ✅ Successfully built index with {len(all_docs)} documents")
+                print(f"[BM25] [OK] Successfully built index with {len(all_docs)} documents")
             else:
-                print("[BM25] ❌ All strategies failed - proceeding with vector search only")
+                print("[BM25] [FAIL] All strategies failed - proceeding with vector search only")
             
             self._bm25_built = True
             
@@ -192,12 +209,34 @@ class HybridRetriever:
         return []
     
     def _generate_hypothetical_answer(self, query: str) -> Optional[str]:
+        """Generate a hypothetical document passage for HyDE retrieval.
+
+        The generated passage is written in the style of a classical Vedic
+        astrology text so its embedding closely matches what actually exists
+        in the vector store.  A well-written HyDE passage dramatically
+        improves recall quality, especially for Hindi/multilingual queries
+        where the stored corpus is in English.
+        """
         try:
-            prompt = f"As an expert Vedic astrologer, briefly answer: {query}"
+            prompt = (
+                "You are producing a passage for a Vedic astrology reference database.\n"
+                "Write a short (3-5 sentence), dense, factual paragraph that a classical\n"
+                "Vedic astrology textbook would contain to answer the following question.\n"
+                "Use precise astrological terminology (house numbers, planet names in\n"
+                "English + Sanskrit in parentheses, dasha names, yoga names) so the\n"
+                "passage will match relevant scholarly chunks in retrieval.\n"
+                "Do NOT add disclaimers or first-person language. Write as if excerpted\n"
+                "from an authoritative text.\n\n"
+                f"Question: {query}\n\n"
+                "Classical text passage:"
+            )
             response = self.llm.invoke(prompt)
-            return (response.content if hasattr(response, 'content') else str(response))[:300]
-        except:
+            raw = (response.content if hasattr(response, 'content') else str(response)).strip()
+            # Trim to 400 chars — longer doesn't help embedding quality
+            return raw[:400]
+        except Exception:
             return None
+
     
     def _reciprocal_rank_fusion(self, result_lists: List[List[Document]], weights: List[float], k: int = 60) -> List[Document]:
         scores = {}
@@ -212,6 +251,57 @@ class HybridRetriever:
         
         ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
         return [docs_map[doc_id] for doc_id, _ in ranked]
+        
+    def retrieve_as_chunks(
+        self,
+        query: str,
+        intent: str = "DEFAULT",
+        top_k: int = None,
+        filters: Optional[Dict] = None,
+        language: str = "en",
+        content_type: str = None,
+    ):
+        """
+        Retrieve documents and return them as RetrievedChunk objects.
+
+        This is the integration point for RAGEngine — it delegates to the
+        authoritative retrieve() method then wraps results so they are
+        compatible with downstream pipeline (reranker, context expansion,
+        prompt builder).
+
+        Returns:
+            List[RetrievedChunk] if RetrievedChunk is importable, else List[Document].
+        """
+        documents = self.retrieve(
+            query=query,
+            intent=intent,
+            top_k=top_k,
+            filters=filters,
+            language=language,
+            content_type=content_type,
+        )
+        if not _RETRIEVED_CHUNK_AVAILABLE:
+            return documents  # Graceful degradation
+        return [self._document_to_chunk(doc, rank) for rank, doc in enumerate(documents)]
+
+    def _document_to_chunk(self, doc: Document, rank: int = 0):
+        """
+        Convert a LangChain Document to a RetrievedChunk.
+
+        Score is derived from rank position (best-rank = highest-score) so
+        downstream reranking logic can compare chunks on equal footing.
+        """
+        meta = doc.metadata if doc.metadata else {}
+        # Derive a pseudo-score from rank (1.0 for rank 0, decreasing)
+        score = 1.0 / (1.0 + rank)
+        return RetrievedChunk(
+            chunk_id=meta.get("chunk_id", str(hash(doc.page_content))),
+            text=doc.page_content,
+            display_text=meta.get("display_text", doc.page_content),
+            verse_sanskrit=meta.get("verse_sanskrit"),
+            score=score,
+            metadata=meta,
+        )
 
 
 if __name__ == "__main__":

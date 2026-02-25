@@ -616,7 +616,7 @@ Examples:
             elif os.path.exists(default_dir / val):
                  input_file = str(default_dir / val)
             else:
-                print(f"❌ File not found: {val}")
+                print(f"[FAIL] File not found: {val}")
                 input_file = None
     
     # 1b. Page Range (If PDF)
@@ -657,7 +657,7 @@ Examples:
                 tradition = choice.lower()
                 break
             else:
-                print("❌ Invalid choice.")
+                print("[FAIL] Invalid choice.")
     
     # 3b. LLM Usage
     # Default to False for speed (can enable with --use-llm)

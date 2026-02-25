@@ -59,6 +59,10 @@ class LLMIntentClassifier:
         "show my dashas": "CALCULATION_ONLY",
         "display my chart": "CALCULATION_ONLY",
         "give me my chart": "CALCULATION_ONLY",
+        "meri rashi kya hai": "CALCULATION_ONLY",
+        "mera lagna kya hai": "CALCULATION_ONLY",
+        "what is my rashi": "CALCULATION_ONLY",
+        "meri kundali dikhao": "CALCULATION_ONLY",
         
         # RAG_ONLY (95%+ confidence - general theory, no personal words)
         "what are panapara houses": "RAG_ONLY",
@@ -85,57 +89,167 @@ class LLMIntentClassifier:
         "predict my future": "RAG_WITH_CALCULATION",
     }
     
-    CLASSIFICATION_PROMPT = """You are an intent classifier for a Vedic astrology chatbot. The user ALWAYS has birth details available.
+    CLASSIFICATION_PROMPT = """You are an intelligent intent classifier for a Vedic astrology chatbot.
 
-Classify the user's query into exactly ONE of these categories:
+The user ALWAYS has birth details on file, so personalized predictions are always possible.
+The query may be in ANY language — English, Hindi, Tamil, Hinglish, or mixed. Understand the semantic meaning regardless of language.
 
-**CHITCHAT**: Greetings, casual conversation, or questions about the bot itself.
-Examples: "Hi", "Hello", "Who are you?", "Thanks", "Bye"
-
-**CALCULATION_ONLY**: User wants to SEE their raw birth chart data WITHOUT interpretation.
-- They want numbers, positions, or chart details displayed
-- NO prediction, NO explanation of meaning
-Examples: "Show my birth chart", "What's my moon sign?", "Display my D1 chart", "What are my current dashas?", "Show my planetary positions"
-
-**RAG_WITH_CALCULATION**: User wants a PERSONALIZED prediction or interpretation about THEIR life.
-- Uses their birth chart for PERSONALIZED answers
-- Requires calculation + knowledge + interpretation
-Examples: "When will I get married?", "How is my career this year?", "What does Jupiter mean for ME?", "Is this a good time to start a business?", "Predict my health"
-
-**RAG_ONLY**: User asks about GENERAL astrology theory, NOT specific to their chart.
-- Educational/theoretical questions
-- NO personalization needed
-Examples: "What does Mars in 7th house generally mean?", "Explain the 10th house", "What is a Raj Yoga?", "Define Ketu", "What are the effects of Saturn return?"
+Classify the query into exactly ONE of these four categories based on what the user is fundamentally trying to achieve:
 
 ---
-IMPORTANT RULES:
-1. If query contains "my" or "me" or "I" with a prediction -> RAG_WITH_CALCULATION
-2. If query asks for chart/positions/dashas without interpretation -> CALCULATION_ONLY  
-3. If query is theoretical/educational with no personal reference -> RAG_ONLY
+
+**CHITCHAT**
+The user is having casual conversation — greeting, thanking, asking about the bot, or saying goodbye.
+Core signal: No astrological intent. The user just wants to connect or wrap up.
+Examples: "Hi", "Thanks", "Who are you?", "Namaste", "Bye", "Shukriya"
+
+**CALCULATION_ONLY**
+The user wants to *see* raw astrological data from their birth chart — positions, placements, dashas, divisional charts.
+Core signal: They want data *displayed*, not interpreted. No prediction or meaning is being asked for.
+Examples: "Show my birth chart", "What is my lagna?", "Meri rashi kya hai?", "Mera lagna batao", "My planetary positions", "Current dasha period", "Display D9 chart"
+
+**RAG_WITH_CALCULATION**
+The user wants a *personalized* prediction, guidance, or interpretation specific to their own life situation.
+Core signal: The answer must be tailored to THIS person's chart. It could be about future events, life areas (career, marriage, health, finance, relationships), or timing — and it requires understanding who they are astrologically.
+This includes ANY language variant: "mere liye", "mujhe batao", "kab hoga", "meri kismat", "mera career", "for me", "in my chart", etc. (Note: Simple questions like "Meri rashi kya hai?" belong to CALCULATION_ONLY, NOT here).
+Also includes follow-up questions in an ongoing personal reading: "Why that time?", "What about my health?", "Is this good or bad?"
+When the intent feels personal — even slightly — prefer this category over RAG_ONLY.
+Examples: "When will I get married?", "Is 2025 good for my career?", "Mere liye kaisi job sahi rahegi?", "What does my Jupiter placement mean for me?", "Will I travel abroad?"
+
+**RAG_ONLY**
+The user is asking about astrology as a *subject* — concepts, theories, general interpretations.
+Core signal: The answer would be the same for ANY person. No personalization needed.
+This should only be chosen if the query is clearly educational or conceptual with no personal framing.
+Examples: "What is a Raj Yoga?", "Explain the 10th house in general", "What does Saturn return mean?", "What are the qualities of a Scorpio moon in Vedic astrology?"
+
+---
 
 USER QUERY: "{query}"
 
-PREVIOUS CONTEXT:
+CONVERSATION CONTEXT (last few messages):
 {context}
 
-Respond with ONLY a JSON object:
-{{"intent": "CATEGORY_NAME", "confidence": 0.95, "reasoning": "Brief explanation"}}
+Think step by step:
+1. What does the user fundamentally want — data, a personal answer, education, or just conversation?
+2. Is the query personal to their life situation (even implicitly)?
+3. If the query is ambiguous between RAG_ONLY and RAG_WITH_CALCULATION, always prefer RAG_WITH_CALCULATION.
+
+Respond with ONLY a valid JSON object — no extra text:
+{{"intent": "CATEGORY_NAME", "confidence": 0.95, "reasoning": "One sentence explanation of why."}}
 """
 
-    def __init__(self, llm=None, use_cache: bool = True):
+    def __init__(self, llm=None, use_cache: bool = True, embeddings=None):
         """
         Initialize LLM-based classifier.
         
         Args:
             llm: LangChain LLM instance (will be set by orchestrator if None)
             use_cache: Whether to cache classification results
+            embeddings: LangChain Embeddings instance for Semantic Routing
         """
         self.llm = llm
         self.use_cache = use_cache
         self.cache = {}
+        self.embeddings = embeddings
         
-        print("[INTENT] LLM-based classifier initialized")
+        # Level 2: Semantic Reference Dataset
+        self.SEMANTIC_REFERENCE = {
+            "CALCULATION_ONLY": [
+                "show me my birth chart",
+                "what is my lagna",
+                "mera lagna kya hai",
+                "meri rashi kya hai",
+                "what is my moon sign",
+                "display my d9 chart",
+                "what are my current dashas",
+                "give me my planetary positions",
+                "show my kundali",
+                "what is my ascendant",
+                "current dasha period",
+                "show my navamsha chart",
+                "what is my sun sign",
+                "mera janam kundli dikhao"
+            ],
+            "RAG_WITH_CALCULATION": [
+                "when will i get married",
+                "how is my career looking in 2025",
+                "will i get a job soon",
+                "mere liye kaisi job sahi rahegi",
+                "when will i buy a house",
+                "is this a good time for me",
+                "what does my jupiter placement mean for me",
+                "how is my health",
+                "meri kismat kaisi hai",
+                "predict my future",
+                "when will i travel abroad",
+                "how will my marriage be",
+                "what is the impact of saturn in my chart",
+                "mere career ka kya hoga"
+            ],
+            "RAG_ONLY": [
+                "what is a raj yoga",
+                "explain the 10th house in general",
+                "what does saturn return mean",
+                "what are the qualities of a scorpio moon",
+                "what is vimshottari dasha",
+                "define mahadasha",
+                "what are kendra houses",
+                "what does mars in 7th house mean",
+                "explain mangalik dosha",
+                "what is the significance of rahu",
+                "what are panapara houses",
+                "how are divisional charts used"
+            ],
+            "CHITCHAT": [
+                "hi",
+                "hello",
+                "good morning",
+                "thanks",
+                "thank you",
+                "bye",
+                "namaste",
+                "who are you",
+                "good evening",
+                "who are you?",
+                "mera naam kya hai?",
+            ]
+        }
+        
+        # Pre-computed vectors built lazily
+        self._reference_vectors = None
+        self._reference_labels = None
+        
+        print("[INTENT] 3-Level Intent Classifier initialized")
         print(f"[INTENT] Categories: {', '.join(self.CATEGORIES)}")
+        
+        if self.embeddings:
+            self._initialize_embeddings()
+
+    def _initialize_embeddings(self):
+        """Pre-compute embeddings for semantic reference dataset."""
+        import numpy as np
+        
+        print("[INTENT] Pre-computing semantic intent vectors...")
+        try:
+            all_queries = []
+            labels = []
+            
+            for intent, queries in self.SEMANTIC_REFERENCE.items():
+                for q in queries:
+                    all_queries.append(q)
+                    labels.append(intent)
+                    
+            vectors = self.embeddings.embed_documents(all_queries)
+            
+            # Convert to numpy arrays and normalize for fast cosine similarity via dot product
+            self._reference_vectors = np.array(vectors)
+            norms = np.linalg.norm(self._reference_vectors, axis=1, keepdims=True)
+            self._reference_vectors = self._reference_vectors / norms
+            self._reference_labels = labels
+            
+            print(f"[INTENT] Built semantic vector space with {len(all_queries)} reference points.")
+        except Exception as e:
+            print(f"[INTENT] [ERROR] Failed to initialize semantic vectors: {e}")
     
     def set_llm(self, llm):
         """Set the LLM instance (called by orchestrator during initialization)."""
@@ -191,34 +305,59 @@ Respond with ONLY a JSON object:
                 if any(marker in query_lower for marker in personal_markers):
                     return False  # Not ambiguous, user wants personalization
                 
-                # No clear markers → AMBIGUOUS!
+                # No clear markers -> AMBIGUOUS!
                 return True
         
         return False
     
-    def _is_nonsensical(self, query: str) -> bool:
+    def _semantic_route(self, query: str, threshold: float = 0.85) -> Optional[Dict]:
         """
-        Check if query is nonsensical (random numbers, gibberish, etc.).
-        
-        Returns:
-            True if query appears to be nonsensical
+        Level 2 Semantic Routing.
+        Compares query embedding to reference vectors using cosine similarity.
         """
-        q = query.strip()
+        if not self.embeddings or self._reference_vectors is None or self._reference_labels is None:
+            return None
+            
+        import numpy as np
         
-        # Check if query is just numbers
-        if q.isdigit() and len(q) > 4:
-            return True
-        
-        # Check if query is too short to be meaningful
-        if len(q) < 2:
-            return True
-        
-        # Check if query has no letters (only numbers/symbols)
-        if not any(c.isalpha() for c in q):
-            return True
-        
-        return False
-    
+        try:
+            # Embed the user query
+            query_vector = self.embeddings.embed_query(query)
+            query_array = np.array(query_vector).reshape(1, -1)
+            
+            # Normalize
+            q_norm = np.linalg.norm(query_array)
+            if q_norm == 0:
+                return None
+            query_array = query_array / q_norm
+            
+            # Calculate cosine similarity (dot product of normalized vectors)
+            similarities = np.dot(self._reference_vectors, query_array.T).flatten()
+            
+            # Find the best match
+            best_idx = np.argmax(similarities)
+            best_score = similarities[best_idx]
+            best_label = self._reference_labels[best_idx]
+            
+            # print(f"[INTENT] [DEBUG] Semantic best match: '{self.SEMANTIC_REFERENCE[best_label][best_idx]}' score={best_score:.3f}")
+            
+            # Return result if above confidence threshold
+            if best_score >= threshold:
+                result = {
+                    'intent': best_label,
+                    'confidence': float(best_score),
+                    'reasoning': f'Semantic match (score {best_score:.2f})',
+                    'cached': False,
+                    'cache_type': 'semantic'
+                }
+                print(f"[INTENT] [SEMANTIC_ROUTER] -> {best_label} (score: {best_score:.3f})")
+                return result
+                
+        except Exception as e:
+            print(f"[INTENT] [ERROR] Semantic routing failed: {e}")
+            
+        return None
+
     def classify(
         self,
         query: str,
@@ -273,7 +412,12 @@ Respond with ONLY a JSON object:
             print(f"[INTENT] [PATTERN_CACHE] -> {intent} (instant)")
             return result
         
-        # Step 2: Check LLM result cache
+        # Step 2: Semantic Routing (Level 2)
+        semantic_result = self._semantic_route(query)
+        if semantic_result:
+            return semantic_result
+            
+        # Step 3: Check LLM result cache
         cache_key = q
         if self.use_cache and cache_key in self.cache:
             result = self.cache[cache_key].copy()
@@ -282,7 +426,7 @@ Respond with ONLY a JSON object:
             print(f"[INTENT] [LLM_CACHE] -> {result['intent']}")
             return result
         
-        print(f"[INTENT] Classifying: '{query[:50]}...'")
+        print(f"[INTENT] [LLM_CLASSIFIER] Classifying: '{query[:50]}...'")
         
         # Check if LLM is available
         if self.llm is None:
@@ -395,13 +539,16 @@ Respond with ONLY a JSON object:
             }
         
         # CALCULATION_ONLY patterns
-        calc_triggers = ['show', 'display', 'give me', 'what is my', 'what are my']
-        calc_targets = ['chart', 'kundali', 'lagna', 'rashi', 'nakshatra', 'dasha', 'transit', 'position']
+        calc_triggers = ['show', 'display', 'give me', 'what is my', 'what are my', 'kya hai', 'batao', 'dikhao', 'mera', 'meri']
+        calc_targets = ['chart', 'kundali', 'lagna', 'rashi', 'nakshatra', 'dasha', 'transit', 'position', 'janm kundali']
         has_trigger = any(trigger in q for trigger in calc_triggers)
         has_target = any(target in q for target in calc_targets)
-        no_interpretation = not any(word in q for word in ['mean', 'effect', 'impact', 'when will', 'future', 'predict'])
+        no_interpretation = not any(word in q for word in ['mean', 'effect', 'impact', 'when will', 'future', 'predict', 'kaisi', 'kaisa', 'kab'])
         
-        if has_trigger and has_target and no_interpretation:
+        # Specific exact matches
+        is_exact_match = q in ['meri rashi kya hai', 'mera lagna kya hai', 'meri kundali dikhao', 'what is my rashi']
+
+        if (has_trigger and has_target and no_interpretation) or is_exact_match:
             return {
                 'intent': 'CALCULATION_ONLY',
                 'confidence': 0.80,

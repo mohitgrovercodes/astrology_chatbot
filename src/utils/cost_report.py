@@ -205,7 +205,7 @@ def main():
     try:
         cost_logger = get_cost_logger(db_path=args.db)
     except Exception as e:
-        print(f"❌ Failed to load cost database: {e}")
+        print(f"[ERROR] Failed to load cost database: {e}")
         sys.exit(1)
     
     # Determine date range
@@ -230,7 +230,7 @@ def main():
             start_date = datetime.fromisoformat(args.date_range[0]).isoformat()
             end_date = datetime.fromisoformat(args.date_range[1]).isoformat()
         except ValueError:
-            print("❌ Invalid date format. Use YYYY-MM-DD")
+            print("[ERROR] Invalid date format. Use YYYY-MM-DD")
             sys.exit(1)
     
     # Get and display summary

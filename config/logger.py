@@ -394,5 +394,5 @@ if __name__ == "__main__":
     
     print()
     print("=" * 60)
-    print("✅ Logger test complete!")
+    print("[OK] Logger test complete!")
     print("=" * 60)

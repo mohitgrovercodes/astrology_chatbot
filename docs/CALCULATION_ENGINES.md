@@ -396,7 +396,7 @@ for planet, data in chart.planets.items():
 
 ## Calculation Tools (LangChain Integration)
 
-**Location:** `src/tools/calculation_tools.py`  
+**Location:** `src/tools/tools.py`  
 **Purpose:** Wrap calculation engines as LangChain tools for orchestrator
 
 ### Available Tools
@@ -448,7 +448,7 @@ def calculate_current_transits(
 
 ```python
 # In orchestrator.py
-from src.tools.calculation_tools import get_calculation_tools
+from src.tools.tools import get_calculation_tools
 
 # Get all tools
 tools = get_calculation_tools()
