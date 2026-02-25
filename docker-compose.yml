@@ -27,7 +27,7 @@ services:
       - SESSION_EXPIRY_HOURS=${SESSION_EXPIRY_HOURS:-24}
 
       # CORS
-      - ALLOWED_ORIGINS=*
+      - ALLOWED_ORIGINS=["*"]
 
       # Rate Limiting
       - RATE_LIMIT_PER_MINUTE=10

@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 import time
+import os
 import redis
 import json
 from datetime import datetime
@@ -462,22 +463,27 @@ def get_context_manager() -> ContextManager:
 # ============================================================================
 
 class EnhancedSessionManager:
-    """Session manager with conversation summary support."""
-    
     def __init__(self):
         self.redis = None
-        # Try multiple hosts to handle WSL/native Redis differences
-        for host in ['localhost', '127.0.0.1']:
-            try:
-                client = redis.Redis(host=host, port=6379, db=0, decode_responses=True, socket_connect_timeout=2)
-                client.ping()
-                self.redis = client
-                print(f"[SESSION] [OK] Redis connected on {host}:6379")
-                break
-            except Exception as e:
-                print(f"[SESSION] Redis {host}:6379 failed: {e}")
-        if not self.redis:
-            print("[SESSION] [FAIL] Redis not available on any host — sessions will not persist")
+
+        redis_host = os.getenv("REDIS_HOST", "localhost")
+        redis_port = int(os.getenv("REDIS_PORT", 6379))
+        redis_password = os.getenv("REDIS_PASSWORD", None)
+
+        try:
+            self.redis = redis.Redis(
+                host=redis_host,
+                port=redis_port,
+                password=redis_password if redis_password else None,
+                db=0,
+                decode_responses=True,
+                socket_connect_timeout=5,
+            )
+            self.redis.ping()
+            print(f"[SESSION] ✅ Redis connected on {redis_host}:{redis_port}")
+        except Exception as e:
+            print(f"[SESSION] ❌ Redis connection failed: {e}")
+            self.redis = None
     
     def get_user_profile(self, user_id: str):
         if not self.redis:
