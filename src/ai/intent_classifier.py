@@ -256,6 +256,27 @@ Respond with ONLY a valid JSON object — no extra text:
         self.llm = llm
         print("[INTENT] LLM connected to classifier")
     
+    def _is_nonsensical(self, query: str) -> bool:
+        """
+        Check if a query is nonsensical or random noise.
+        
+        Returns:
+            True if input appears to be random characters or too short.
+        """
+        q = query.strip()
+        if not q or len(q) < 2:
+            return True
+        
+        # Check for strings with no vowels (often random typing)
+        # Excludes very short common words if any
+        if len(q) > 4 and not any(v in q.lower() for v in 'aeiouy'):
+            # Allow some common Hindi/Sanskrit transliterations like 'krish'
+            common_vowelless = ['krish', 'hmm', 'hmmm', 'kk']
+            if not any(cv in q.lower() for cv in common_vowelless):
+                return True
+                
+        return False
+
     def _is_ambiguous(self, query: str, user_profile: Optional[Dict] = None) -> bool:
         """
         Detect if a query is ambiguous (could be theory OR personalized).
@@ -397,7 +418,7 @@ Respond with ONLY a valid JSON object — no extra text:
             print(f"[INTENT] [AMBIGUITY] -> AMBIGUOUS (needs clarification)")
             return result
         
-        q = query.lower().strip()
+        q = query.lower().strip().rstrip('?!.')
         
         # Step 1: Check SAFE_PATTERN_CACHE first (instant, no LLM call!)
         if q in self.SAFE_PATTERN_CACHE:

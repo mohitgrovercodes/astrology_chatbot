@@ -181,7 +181,8 @@ VOICE — English names first, Sanskrit in parentheses. Example: "Mars (Mangal)"
         base = (
             "Be professional, warm, and conversational. "
             "Speak as a knowledgeable astrologer — insightful and empathetic, not robotic. "
-            "Explain clearly without unnecessary jargon."
+            "Explain clearly without unnecessary jargon. "
+            "IMPORTANT: Limit your response to a maximum of 300 words."
         )
 
         if intent in ["PREDICTION", "RAG_WITH_CALCULATION"]:

@@ -44,6 +44,14 @@ try:
 except ImportError:
     print("[VALIDATION] vedic_validation_engine_v2 not found - validation disabled")
     VALIDATION_AVAILABLE = False
+    
+try:
+    from src.engines.vedic.chart_analyzer import ChartAnalyzer, analyze_chart
+    from src.validation.chart_synthesis_engine import ChartSynthesisEngine, synthesize_chart_analysis
+    ENHANCED_ANALYSIS_AVAILABLE = True
+except ImportError:
+    print("[ENHANCED_ANALYSIS] chart_analyzer/synthesis_engine not found - using basic analysis")
+    ENHANCED_ANALYSIS_AVAILABLE = False
 
 from src.orchestration.orchestrator_validation_helpers import (
     detect_query_type,
@@ -277,6 +285,20 @@ class EnhancedLangGraphOrchestrator:
         print("[LANGGRAPH] [SUCCESS] Enhanced orchestrator initialized")
         print("[LANGGRAPH] Routes: CHITCHAT | CALCULATION_ONLY | RAG_WITH_CALCULATION | RAG_ONLY")
         print("[LANGGRAPH] Safety guardrails enabled (Phase 6)")
+
+        self.chart_analyzer = None
+        self.synthesis_engine = None
+        
+        if ENHANCED_ANALYSIS_AVAILABLE:
+            try:
+                self.chart_analyzer = ChartAnalyzer()
+                self.synthesis_engine = ChartSynthesisEngine(
+                    indexed_rules_path="optimized/indexed_rules.json",
+                    tiered_rules_path="optimized/tiered_rules.json"
+                )
+                print("[ENHANCED_ANALYSIS] Engines initialized")
+            except Exception as e:
+                print(f"[ENHANCED_ANALYSIS] Init failed: {e}")
     
     def _build_graph(self):
         """Build LangGraph workflow."""
@@ -734,9 +756,9 @@ class EnhancedLangGraphOrchestrator:
                 lang_name = loc_manager.get_language_name(lang)
                 
                 if '-lat' in lang:
-                    script_instruction = f"IMPORTANT: You must write in {lang_name} using ROMAN ALPHABET (English Script). Do NOT use native script."
+                    script_instruction = f"CRITICAL: You MUST respond in {lang_name} using ROMAN SCRIPT (English alphabet) only. Do NOT use any {lang_name.split(' (')[0]} characters or Devanagari script. Example: 'Main theek hoon' instead of 'मैं ठीक हूं'."
                 else:
-                    script_instruction = f"Respond entirely in {lang_name} (Native Script)."
+                    script_instruction = f"Respond entirely in {lang_name} (NATIVE SCRIPT ONLY)."
                 
                 # PHASE 6: Tiered History Support
                 history_context = ""
@@ -1259,6 +1281,28 @@ Provide a concise answer:"""
                 print("[RAG_WITH_CALCULATION] No birth data - proceeding without chart")
 
             # ================================================================
+            # STEP 1.25: ENHANCED CHART ANALYSIS (PHASE 13 - NEW)
+            # ================================================================
+            enhanced_analysis = None
+            synthesis = None
+            
+            if state.get('chart_data') and ENHANCED_ANALYSIS_AVAILABLE and self.chart_analyzer:
+                try:
+                    print("[ENHANCED_ANALYSIS] Calculating dignities, lords, aspects...")
+                    enhanced_analysis = self.chart_analyzer.analyze_chart(state['chart_data'])
+                    
+                    # Log key findings
+                    print(f"[ENHANCED_ANALYSIS] Found {len(enhanced_analysis['dignities'])} planetary dignities")
+                    print(f"[ENHANCED_ANALYSIS] Calculated {len(enhanced_analysis['house_lords'])} house lordships")
+                    print(f"[ENHANCED_ANALYSIS] Mapped {len(enhanced_analysis['aspects'])} aspect patterns")
+                    
+                    # Store in state for later use
+                    state['enhanced_analysis'] = enhanced_analysis
+                    
+                except Exception as e:
+                    print(f"[ENHANCED_ANALYSIS] Error: {e}")
+
+            # ================================================================
             # STEP 1.5: VALIDATE CHART (PHASE 12 - NEW)
             # ================================================================
             if state.get('chart_data') and VALIDATION_AVAILABLE:
@@ -1367,6 +1411,47 @@ Provide a concise answer:"""
                     import traceback
                     traceback.print_exc()
                     # Don't block on validation errors - proceed without validation
+            
+            # ================================================================
+            # STEP 1.75: RULE-BASED SYNTHESIS (PHASE 13 - NEW)
+            # ================================================================
+            if ENHANCED_ANALYSIS_AVAILABLE and enhanced_analysis:
+                try:
+                    # Get query_type from validation or detect it
+                    query_type_for_synthesis = state.get('validation_query_type')
+                    if not query_type_for_synthesis and state.get('chart_data'):
+                        try:
+                            query_type_for_synthesis = detect_query_type(
+                                state['query'],
+                                llm=self.fast_llm if hasattr(self, 'fast_llm') else None,
+                                use_llm_confirmation=False
+                            )
+                        except:
+                            query_type_for_synthesis = 'general'
+                    
+                    if query_type_for_synthesis and query_type_for_synthesis != 'general' and self.synthesis_engine:
+                        print(f"[SYNTHESIS] Building rule-based analysis for {query_type_for_synthesis}...")
+                        
+                        synthesis = self.synthesis_engine.synthesize(
+                            chart_data=state['chart_data'],
+                            chart_enhanced=enhanced_analysis,
+                            query_type=query_type_for_synthesis,
+                            validation_result=state.get('validation_result')
+                        )
+                        
+                        state['synthesis'] = synthesis
+                        
+                        print(f"[SYNTHESIS] ✓ Identified {len(synthesis.get('chart_strengths', []))} strengths")
+                        print(f"[SYNTHESIS] ✓ Identified {len(synthesis.get('chart_challenges', []))} challenges")
+                        print(f"[SYNTHESIS] ✓ Detected {len(synthesis.get('yogas_detected', []))} yogas")
+                        print(f"[SYNTHESIS] ✓ Analyzed {len(synthesis.get('key_houses', []))} key houses")
+                    else:
+                        print(f"[SYNTHESIS] Skipped - query_type is '{query_type_for_synthesis}'")
+                        
+                except Exception as e:
+                    print(f"[SYNTHESIS] Error: {e}")
+                    import traceback
+                    traceback.print_exc()
 
             # ================================================================
             # STEP 2: Retrieve Relevant Knowledge
@@ -1407,9 +1492,11 @@ Provide a concise answer:"""
                     transit_data=state.get('transit_data', {}),
                     knowledge_chunks=knowledge_chunks,
                     user_profile=user_profile,
-                    validation_result=state.get('validation_result'),  # NEW: Pass validation
                     conversation_history=state.get('conversation_history', []),
-                    language=state.get('detected_language', 'en')
+                    language=state.get('detected_language', 'en'),
+                    validation_result=state.get('validation_result'),
+                    enhanced_analysis=state.get('enhanced_analysis'),  # NEW
+                    synthesis=state.get('synthesis')  # NEW
                 )
             else:
                 if self.prompt_builder:
@@ -1958,6 +2045,100 @@ Provide a concise answer:"""
         
         return formatted
 
+    def _format_enhanced_analysis(
+        self, 
+        enhanced: Dict, 
+        synthesis: Dict,
+        query_type: str
+    ) -> str:
+        """
+        Format enhanced analysis and synthesis for LLM consumption.
+        
+        This is the SECRET SAUCE — gives LLM pre-analyzed astrological factors
+        instead of making it guess from raw positions.
+        """
+        lines = ["ENHANCED CHART ANALYSIS:", ""]
+        
+        # Planetary Strengths
+        lines.append("PLANETARY STRENGTHS (0-10 scale):")
+        strengths = synthesis.get('planetary_strengths', {})
+        for planet in ['SUN', 'MOON', 'MARS', 'MERCURY', 'JUPITER', 'VENUS', 'SATURN']:
+            if planet in strengths:
+                strength = strengths[planet]
+                assessment = "STRONG" if strength >= 7 else "MODERATE" if strength >= 4 else "WEAK"
+                lines.append(f"  • {planet}: {strength:.1f}/10 ({assessment})")
+        lines.append("")
+        
+        # Dignities
+        lines.append("PLANETARY DIGNITIES:")
+        for d in enhanced.get('dignities', [])[:7]:
+            deep = " [DEEP]" if d.get('is_deep') else ""
+            lines.append(f"  • {d['planet']}: {d['dignity'].upper()}{deep} in {d['sign']}")
+        lines.append("")
+        
+        # House Lords for Key Houses
+        key_houses = synthesis.get('key_houses', [])
+        if key_houses:
+            lines.append(f"KEY HOUSES FOR {query_type.upper()}:")
+            for ha in key_houses[:4]:  # Top 4 most relevant
+                lord_info = ha.get('lord_placement', {})
+                lines.append(
+                    f"  • House {ha['house']}: {ha['sign']} ruled by {ha['lord']} "
+                    f"(strength: {ha['lord_strength']:.1f}/10, placed in H{lord_info.get('house')} {lord_info.get('dignity', '')})"
+                )
+            lines.append("")
+        
+        # Yogas
+        yogas = synthesis.get('yogas_detected', [])
+        if yogas:
+            lines.append("YOGAS DETECTED:")
+            for y in yogas[:3]:
+                lines.append(f"  • {y['name']}: {y['description']}")
+            lines.append("")
+        
+        # Chart Strengths
+        strengths_list = synthesis.get('chart_strengths', [])
+        if strengths_list:
+            lines.append("CHART STRENGTHS:")
+            for s in strengths_list[:5]:
+                lines.append(f"  ✓ {s}")
+            lines.append("")
+        
+        # Chart Challenges
+        challenges_list = synthesis.get('chart_challenges', [])
+        if challenges_list:
+            lines.append("CHART CHALLENGES:")
+            for c in challenges_list[:5]:
+                lines.append(f"  ⚠ {c}")
+            lines.append("")
+        
+        # Aspects (top 3)
+        aspects = enhanced.get('aspects', [])
+        if aspects:
+            lines.append("KEY ASPECTS:")
+            for asp in aspects[:3]:
+                houses = ', '.join(map(str, asp['aspects_houses']))
+                lines.append(f"  • {asp['planet']} from H{asp['from_house']} aspects houses: {houses}")
+            lines.append("")
+        
+        # Combustion
+        combustion = enhanced.get('combustion', {})
+        combust_planets = [p for p, is_c in combustion.items() if is_c]
+        if combust_planets:
+            lines.append(f"COMBUST PLANETS: {', '.join(combust_planets)}")
+            lines.append("")
+        
+        # Retrograde
+        retrograde = enhanced.get('retrograde', [])
+        if retrograde:
+            lines.append(f"RETROGRADE: {', '.join(retrograde)}")
+            lines.append("")
+        
+        lines.append("─" * 60)
+        lines.append("")
+        
+        return "\n".join(lines)
+    
     def _build_prediction_prompt(
         self,
         query: str,
@@ -1966,9 +2147,11 @@ Provide a concise answer:"""
         transit_data: Dict,
         knowledge_chunks: List,
         user_profile: Dict,
-        conversation_history: List = None,  # Added argument
+        conversation_history: List = None,
         language: str = "hi-lat",
-        validation_result: Optional[Dict] = None  # ADD THIS LINE
+        validation_result: Optional[Dict] = None,
+        enhanced_analysis: Optional[Dict] = None,  # NEW
+        synthesis: Optional[Dict] = None,  # NEW
     ) -> str:
         
         context_parts = []
@@ -2104,9 +2287,17 @@ This is an ongoing conversation. Previous messages contain:
 When user uses "it", "this", "that" or asks "why", "how" -> connect to conversation history.
 """
 
+        enhanced_context = ""
+        if enhanced_analysis and synthesis:
+            enhanced_context = self._format_enhanced_analysis(
+                enhanced_analysis, synthesis, query_type=validation_result.get('query_type', 'general') if validation_result else 'general'
+            )
+
         prompt = f"""{system_prompt}
 
 {validation_context}
+
+{enhanced_context}
 
 {conversation_summary_section}
 

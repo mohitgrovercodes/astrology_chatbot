@@ -1,0 +1,523 @@
+Folder PATH listing
+Volume serial number is EC3C-D3A7
+D:.
+¦   .dockerignore
+¦   .env
+¦   .gitignore
+¦   chatbot.py
+¦   comprehensive_context_test.py
+¦   consolidated_final.json
+¦   docker-compose.yml
+¦   Dockerfile
+¦   interactive_chatbot.py
+¦   README.md
+¦   requirements.txt
+¦   structure.txt
+¦   
++---.pytest_cache
+¦   ¦   .gitignore
+¦   ¦   CACHEDIR.TAG
+¦   ¦   README.md
+¦   ¦   
+¦   +---v
+¦       +---cache
+¦               lastfailed
+¦               nodeids
+¦               stepwise
+¦               
++---config
+¦   ¦   config.py
+¦   ¦   config.yaml
+¦   ¦   logger.py
+¦   ¦   rag_config.py
+¦   ¦   
+¦   +---__pycache__
+¦           rag_config.cpython-311.pyc
+¦           
++---data
+¦   ¦   astro.db
+¦   ¦   
+¦   +---chroma_db
+¦   ¦       chroma.sqlite3
+¦   ¦       
+¦   +---conversations
+¦   ¦       session_0f84d41c-d3aa-4f83-96d0-0b99d86361c5.json
+¦   ¦       session_1cde0542-4831-4b4f-a397-5574e591973d.json
+¦   ¦       session_2cfcdaef-bd0b-4242-9685-50e0b87e7f27.json
+¦   ¦       session_40d10589-2b97-4dbc-a769-124a3fba7ac7.json
+¦   ¦       session_4ca10e1f-2c00-4770-93f4-198e8a65c993.json
+¦   ¦       session_53516d2b-7e84-4dfa-9989-e3ee84a0bf21.json
+¦   ¦       session_766d0dd6-99d3-4c9c-a621-7b4b7f77f2ec.json
+¦   ¦       session_994ef875-307e-446c-b053-ab809995ab50.json
+¦   ¦       session_c6139616-2dbf-470b-a743-46f902e9dc83.json
+¦   ¦       session_d1eb6b16-06c8-427c-ab48-628175af31e7.json
+¦   ¦       session_d856fef5-541b-4277-9d70-9c4af8810a10.json
+¦   ¦       
+¦   +---raw
+¦   ¦       .gitkeep
+¦   ¦       A_Manual_of_Hindu_Astrology_BVRaman.pdf
+¦   ¦       Bhava_and_Graha_Balas_BVRaman.pdf
+¦   ¦       BPHS_vol1.pdf
+¦   ¦       BPHS_vol2.pdf
+¦   ¦       Combinations_BVRaman.pdf
+¦   ¦       Hindu_Predictive_Astrology_BVRaman.pdf
+¦   ¦       Jaimini_Sutras.pdf
+¦   ¦       Jaimini_Sutras_SuryanarainRao.pdf
+¦   ¦       JP_vol1.pdf
+¦   ¦       JP_vol2.pdf
+¦   ¦       JP_vol3.pdf
+¦   ¦       Jyotish_Astrology_And_Timing_Of_Marriage_KNRao.pdf
+¦   ¦       Phaladeepika.pdf
+¦   ¦       Prasnatantra_BVRaman.pdf
+¦   ¦       raman-how-to-judge-horoscope-1.pdf
+¦   ¦       raman-how-to-judge-horoscope-2.pdf
+¦   ¦       Saravali_vol1.pdf
+¦   ¦       Saravali_vol2.pdf
+¦   ¦       Uttarakalamritam.pdf
+¦   ¦       VarahmihiraHorasastram.pdf
+¦   ¦       
+¦   +---vectordb
+¦       ¦   chroma.sqlite3
+¦       ¦   
+¦       +---e87d1fd2-fed5-4047-b716-1422de51cd25
+¦               data_level0.bin
+¦               header.bin
+¦               index_metadata.pickle
+¦               length.bin
+¦               link_lists.bin
+¦               
++---docs
+¦       API_REFERENCE.md
+¦       ARCHITECTURE.md
+¦       ARCHITECTURE_CLARIFICATION.md
+¦       ARCHITECTURE_V2.md
+¦       CALCULATION_ENGINES.md
+¦       COMPLETE_PACKAGE_SUMMARY.md
+¦       COST_TRACKING.md
+¦       CRITICAL_FIXES_CONTENT_TYPE_AND_CACHE.md
+¦       DEVELOPER_GUIDE.md
+¦       DOCUMENTATION_INDEX_V2.md
+¦       INDEX.md
+¦       INTEGRATION_GUIDE.md
+¦       PDF_EXTRACTION_GUIDE.md
+¦       PROJECT_DOCUMENTATION_V2.md
+¦       PROJECT_OVERVIEW.md
+¦       PROJECT_STATUS.md
+¦       QUICK_START_V2.md
+¦       RAG_PIPELINE_DETAILED.md
+¦       
++---examples
+¦       chatbot_backend_integration.py
+¦       production_integration_example.py
+¦       use_external_api.py
+¦       
++---logs
+¦       cost_tracker.db
+¦       
++---optimized
+¦   ¦   indexed_rules.json
+¦   ¦   tiered_rules.json
+¦   ¦   
+¦   +---stats
+¦           consolidation_stats.json
+¦           indexing_stats.json
+¦           tier_analysis.json
+¦           
++---scripts
+¦       batch_extract.py
+¦       build_rule_indices.py
+¦       check_merged.py
+¦       check_vectordb.py
+¦       classify_rule_tiers.py
+¦       consolidate_validation_rules.py
+¦       conversation_store.py
+¦       enrich_metadata_json_gemini.py
+¦       extract_pdf.py
+¦       extract_rules_json_gemini.py
+¦       generate_all_personas.py
+¦       inspect_rule_conditions.py
+¦       inspect_rule_fields.py
+¦       merge_validation_rules.py
+¦       optimize_rules.py
+¦       reassign_rule_ids.py
+¦       run_preprocessing_phases.py
+¦       set_book_source.py
+¦       test_final_integration.py
+¦       test_redis_ttl.py
+¦       test_validation_engine.py
+¦       vedic_validation_schema.py
+¦       
++---src
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---ai
+¦   ¦   ¦   context_manager.py
+¦   ¦   ¦   hybrid_retriever.py
+¦   ¦   ¦   intent_classifier.py
+¦   ¦   ¦   personas.py
+¦   ¦   ¦   prompt_builder.py
+¦   ¦   ¦   __init__.py
+¦   ¦   ¦   
+¦   ¦   +---__pycache__
+¦   ¦           context_manager.cpython-313.pyc
+¦   ¦           hybrid_retriever.cpython-311.pyc
+¦   ¦           intent_classifier.cpython-311.pyc
+¦   ¦           personas.cpython-311.pyc
+¦   ¦           persona_generator.cpython-311.pyc
+¦   ¦           prompt_builder.cpython-311.pyc
+¦   ¦           user_manager.cpython-311.pyc
+¦   ¦           __init__.cpython-311.pyc
+¦   ¦           
+¦   +---api
+¦   ¦   ¦   astrology_api_client.py
+¦   ¦   ¦   config.py
+¦   ¦   ¦   dependencies.py
+¦   ¦   ¦   main.py
+¦   ¦   ¦   orchestrator_helper.py
+¦   ¦   ¦   __init__.py
+¦   ¦   ¦   
+¦   ¦   +---middleware
+¦   ¦   ¦   ¦   auth.py
+¦   ¦   ¦   ¦   rate_limit.py
+¦   ¦   ¦   ¦   __init__.py
+¦   ¦   ¦   ¦   
+¦   ¦   ¦   +---__pycache__
+¦   ¦   ¦           auth.cpython-311.pyc
+¦   ¦   ¦           rate_limit.cpython-311.pyc
+¦   ¦   ¦           __init__.cpython-311.pyc
+¦   ¦   ¦           
+¦   ¦   +---routes
+¦   ¦   ¦   ¦   calculation.py
+¦   ¦   ¦   ¦   chat_stateless.py
+¦   ¦   ¦   ¦   health.py
+¦   ¦   ¦   ¦   user.py
+¦   ¦   ¦   ¦   __init__.py
+¦   ¦   ¦   ¦   
+¦   ¦   ¦   +---__pycache__
+¦   ¦   ¦           calculation.cpython-311.pyc
+¦   ¦   ¦           chat.cpython-311.pyc
+¦   ¦   ¦           chat_stateless.cpython-311.pyc
+¦   ¦   ¦           chat_stateless.cpython-313.pyc
+¦   ¦   ¦           health.cpython-311.pyc
+¦   ¦   ¦           user.cpython-311.pyc
+¦   ¦   ¦           __init__.cpython-311.pyc
+¦   ¦   ¦           
+¦   ¦   +---schemas
+¦   ¦   ¦   ¦   calculation.py
+¦   ¦   ¦   ¦   chat.py
+¦   ¦   ¦   ¦   common.py
+¦   ¦   ¦   ¦   user.py
+¦   ¦   ¦   ¦   __init__.py
+¦   ¦   ¦   ¦   
+¦   ¦   ¦   +---__pycache__
+¦   ¦   ¦           calculation.cpython-311.pyc
+¦   ¦   ¦           chat.cpython-311.pyc
+¦   ¦   ¦           common.cpython-311.pyc
+¦   ¦   ¦           user.cpython-311.pyc
+¦   ¦   ¦           __init__.cpython-311.pyc
+¦   ¦   ¦           
+¦   ¦   +---__pycache__
+¦   ¦           config.cpython-311.pyc
+¦   ¦           config.cpython-313.pyc
+¦   ¦           dependencies.cpython-311.pyc
+¦   ¦           dependencies.cpython-313.pyc
+¦   ¦           main.cpython-311.pyc
+¦   ¦           orchestrator_helper.cpython-311.pyc
+¦   ¦           orchestrator_helper.cpython-313.pyc
+¦   ¦           __init__.cpython-311.pyc
+¦   ¦           __init__.cpython-313.pyc
+¦   ¦           
+¦   +---db
+¦   ¦   ¦   __init__.py
+¦   ¦   ¦   
+¦   ¦   +---__pycache__
+¦   ¦           dummy_user_db.cpython-311.pyc
+¦   ¦           redis_client.cpython-311.pyc
+¦   ¦           __init__.cpython-311.pyc
+¦   ¦           
+¦   +---engines
+¦   ¦   ¦   __init__.py
+¦   ¦   ¦   
+¦   ¦   +---core
+¦   ¦   ¦   ¦   celestial_bodies.py
+¦   ¦   ¦   ¦   coordinates.py
+¦   ¦   ¦   ¦   datetime_utils.py
+¦   ¦   ¦   ¦   ephemeris.py
+¦   ¦   ¦   ¦   exceptions.py
+¦   ¦   ¦   ¦   __init__.py
+¦   ¦   ¦   ¦   
+¦   ¦   ¦   +---__pycache__
+¦   ¦   ¦           celestial_bodies.cpython-311.pyc
+¦   ¦   ¦           celestial_bodies.cpython-313.pyc
+¦   ¦   ¦           coordinates.cpython-311.pyc
+¦   ¦   ¦           coordinates.cpython-313.pyc
+¦   ¦   ¦           datetime_utils.cpython-311.pyc
+¦   ¦   ¦           datetime_utils.cpython-313.pyc
+¦   ¦   ¦           ephemeris.cpython-311.pyc
+¦   ¦   ¦           ephemeris.cpython-313.pyc
+¦   ¦   ¦           exceptions.cpython-311.pyc
+¦   ¦   ¦           exceptions.cpython-313.pyc
+¦   ¦   ¦           __init__.cpython-311.pyc
+¦   ¦   ¦           __init__.cpython-313.pyc
+¦   ¦   ¦           
+¦   ¦   +---vedic
+¦   ¦   ¦   ¦   aspects_yogas.py
+¦   ¦   ¦   ¦   dasha_systems.py
+¦   ¦   ¦   ¦   divisional_charts.py
+¦   ¦   ¦   ¦   graha_stats.py
+¦   ¦   ¦   ¦   rashi_nakshatra.py
+¦   ¦   ¦   ¦   vedic_constants.py
+¦   ¦   ¦   ¦   vedic_engine.py
+¦   ¦   ¦   ¦   __init__.py
+¦   ¦   ¦   ¦   
+¦   ¦   ¦   +---__pycache__
+¦   ¦   ¦           aspects_yogas.cpython-311.pyc
+¦   ¦   ¦           dasha_systems.cpython-311.pyc
+¦   ¦   ¦           divisional_charts.cpython-311.pyc
+¦   ¦   ¦           graha_stats.cpython-311.pyc
+¦   ¦   ¦           rashi_nakshatra.cpython-311.pyc
+¦   ¦   ¦           vedic_constants.cpython-311.pyc
+¦   ¦   ¦           vedic_engine.cpython-311.pyc
+¦   ¦   ¦           __init__.cpython-311.pyc
+¦   ¦   ¦           __init__.cpython-313.pyc
+¦   ¦   ¦           
+¦   ¦   +---western
+¦   ¦   ¦   ¦   western_aspects.py
+¦   ¦   ¦   ¦   western_constants.py
+¦   ¦   ¦   ¦   western_dignities.py
+¦   ¦   ¦   ¦   western_engine.py
+¦   ¦   ¦   ¦   western_houses.py
+¦   ¦   ¦   ¦   western_signs.py
+¦   ¦   ¦   ¦   __init__.py
+¦   ¦   ¦   ¦   
+¦   ¦   ¦   +---__pycache__
+¦   ¦   ¦           western_aspects.cpython-311.pyc
+¦   ¦   ¦           western_constants.cpython-311.pyc
+¦   ¦   ¦           western_dignities.cpython-311.pyc
+¦   ¦   ¦           western_engine.cpython-311.pyc
+¦   ¦   ¦           western_houses.cpython-311.pyc
+¦   ¦   ¦           western_signs.cpython-311.pyc
+¦   ¦   ¦           __init__.cpython-311.pyc
+¦   ¦   ¦           
+¦   ¦   +---__pycache__
+¦   ¦           __init__.cpython-311.pyc
+¦   ¦           __init__.cpython-313.pyc
+¦   ¦           
+¦   +---integrations
+¦   ¦   +---astrology_api
+¦   ¦           client.py
+¦   ¦           extended_client.py
+¦   ¦           README.md
+¦   ¦           __init__.py
+¦   ¦           
+¦   +---llm
+¦   ¦   ¦   factory.py
+¦   ¦   ¦   
+¦   ¦   +---prompts
+¦   ¦   ¦   ¦   personas.py
+¦   ¦   ¦   ¦   templates.py
+¦   ¦   ¦   ¦   __init__.py
+¦   ¦   ¦   ¦   
+¦   ¦   ¦   +---__pycache__
+¦   ¦   ¦           personas.cpython-311.pyc
+¦   ¦   ¦           templates.cpython-311.pyc
+¦   ¦   ¦           __init__.cpython-311.pyc
+¦   ¦   ¦           
+¦   ¦   +---__pycache__
+¦   ¦           factory.cpython-311.pyc
+¦   ¦           
+¦   +---locales
+¦   ¦   ¦   en.json
+¦   ¦   ¦   hi.json
+¦   ¦   ¦   language_detector.py
+¦   ¦   ¦   ml.json
+¦   ¦   ¦   mr.json
+¦   ¦   ¦   pa.json
+¦   ¦   ¦   ta.json
+¦   ¦   ¦   te.json
+¦   ¦   ¦   
+¦   ¦   +---__pycache__
+¦   ¦           language_detector.cpython-311.pyc
+¦   ¦           
+¦   +---orchestration
+¦   ¦   ¦   divisional_chart_helper.py
+¦   ¦   ¦   orchestrator.py
+¦   ¦   ¦   orchestrator_validation_helpers.py
+¦   ¦   ¦   __init__.py
+¦   ¦   ¦   
+¦   ¦   +---__pycache__
+¦   ¦           divisional_chart_helper.cpython-311.pyc
+¦   ¦           orchestrator.cpython-311.pyc
+¦   ¦           orchestrator.cpython-313.pyc
+¦   ¦           orchestrator_validation_helpers.cpython-311.pyc
+¦   ¦           __init__.cpython-311.pyc
+¦   ¦           
+¦   +---rag
+¦   ¦   ¦   ingest_local.py
+¦   ¦   ¦   memory_retriever.py
+¦   ¦   ¦   reranker.py
+¦   ¦   ¦   retriever.py
+¦   ¦   ¦   __init__.py
+¦   ¦   ¦   
+¦   ¦   +---extraction
+¦   ¦   ¦       extraction_prompts.py
+¦   ¦   ¦       extraction_schemas.py
+¦   ¦   ¦       README.md
+¦   ¦   ¦       vision_extractor.py
+¦   ¦   ¦       vision_pipeline.py
+¦   ¦   ¦       __init__.py
+¦   ¦   ¦       
+¦   ¦   +---preprocessing
+¦   ¦   ¦   ¦   book_profiler.py
+¦   ¦   ¦   ¦   chunk_enricher.py
+¦   ¦   ¦   ¦   embedder.py
+¦   ¦   ¦   ¦   page_analyzer.py
+¦   ¦   ¦   ¦   pipeline.py
+¦   ¦   ¦   ¦   schemas.py
+¦   ¦   ¦   ¦   semantic_segmenter.py
+¦   ¦   ¦   ¦   structural_cleaner.py
+¦   ¦   ¦   ¦   vector_db_builder.py
+¦   ¦   ¦   ¦   __init__.py
+¦   ¦   ¦   ¦   
+¦   ¦   ¦   +---__pycache__
+¦   ¦   ¦           embedder.cpython-311.pyc
+¦   ¦   ¦           schemas.cpython-311.pyc
+¦   ¦   ¦           __init__.cpython-311.pyc
+¦   ¦   ¦           
+¦   ¦   +---__pycache__
+¦   ¦           memory_retriever.cpython-311.pyc
+¦   ¦           rag_engine.cpython-311.pyc
+¦   ¦           reranker.cpython-311.pyc
+¦   ¦           retriever.cpython-311.pyc
+¦   ¦           __init__.cpython-311.pyc
+¦   ¦           
+¦   +---routing
+¦   ¦   ¦   semantic_router.py
+¦   ¦   ¦   __init__.py
+¦   ¦   ¦   
+¦   ¦   +---__pycache__
+¦   ¦           semantic_router.cpython-311.pyc
+¦   ¦           __init__.cpython-311.pyc
+¦   ¦           
+¦   +---safety
+¦   ¦   ¦   classifier.py
+¦   ¦   ¦   constitution.py
+¦   ¦   ¦   disclaimers.py
+¦   ¦   ¦   input_validator.py
+¦   ¦   ¦   models.py
+¦   ¦   ¦   README.md
+¦   ¦   ¦   templates.py
+¦   ¦   ¦   __init__.py
+¦   ¦   ¦   
+¦   ¦   +---__pycache__
+¦   ¦           classifier.cpython-311.pyc
+¦   ¦           constitution.cpython-311.pyc
+¦   ¦           input_validator.cpython-311.pyc
+¦   ¦           models.cpython-311.pyc
+¦   ¦           templates.cpython-311.pyc
+¦   ¦           __init__.cpython-311.pyc
+¦   ¦           
+¦   +---services
+¦   ¦       astrology_service.py
+¦   ¦       backend_data_adapter.py
+¦   ¦       cache_manager.py
+¦   ¦       __init__.py
+¦   ¦       
+¦   +---session
+¦   ¦   ¦   manager.py
+¦   ¦   ¦   
+¦   ¦   +---__pycache__
+¦   ¦           manager.cpython-311.pyc
+¦   ¦           manager.cpython-313.pyc
+¦   ¦           redis_session_manager.cpython-311.pyc
+¦   ¦           
+¦   +---tools
+¦   ¦   ¦   tools.py
+¦   ¦   ¦   __init__.py
+¦   ¦   ¦   
+¦   ¦   +---__pycache__
+¦   ¦           calculation_tools.cpython-311.pyc
+¦   ¦           tools.cpython-311.pyc
+¦   ¦           tools.cpython-313.pyc
+¦   ¦           __init__.cpython-311.pyc
+¦   ¦           __init__.cpython-313.pyc
+¦   ¦           
+¦   +---utils
+¦   ¦   ¦   config.py
+¦   ¦   ¦   cost_logger.py
+¦   ¦   ¦   cost_report.py
+¦   ¦   ¦   cost_tracking.py
+¦   ¦   ¦   formatters.py
+¦   ¦   ¦   localization.py
+¦   ¦   ¦   logger.py
+¦   ¦   ¦   schemas.py
+¦   ¦   ¦   serializers.py
+¦   ¦   ¦   test.db
+¦   ¦   ¦   validators.py
+¦   ¦   ¦   __init__.py
+¦   ¦   ¦   
+¦   ¦   +---logs
+¦   ¦   ¦       test_cost_tracker.db
+¦   ¦   ¦       
+¦   ¦   +---__pycache__
+¦   ¦           config.cpython-311.pyc
+¦   ¦           cost_logger.cpython-311.pyc
+¦   ¦           cost_tracking.cpython-311.pyc
+¦   ¦           formatters.cpython-311.pyc
+¦   ¦           localization.cpython-311.pyc
+¦   ¦           logger.cpython-311.pyc
+¦   ¦           schemas.cpython-311.pyc
+¦   ¦           serializers.cpython-311.pyc
+¦   ¦           serializers.cpython-313.pyc
+¦   ¦           validators.cpython-311.pyc
+¦   ¦           __init__.cpython-311.pyc
+¦   ¦           
+¦   +---validation
+¦   ¦   ¦   vedic_validation_engine_v2.py
+¦   ¦   ¦   __init__.py
+¦   ¦   ¦   
+¦   ¦   +---__pycache__
+¦   ¦           vedic_validation_engine_v2.cpython-311.pyc
+¦   ¦           __init__.cpython-311.pyc
+¦   ¦           
+¦   +---__pycache__
+¦           __init__.cpython-311.pyc
+¦           __init__.cpython-313.pyc
+¦           
++---tests
+¦   ¦   .gitkeep
+¦   ¦   README_MULTILINGUAL_TEST.md
+¦   ¦   test_api.py
+¦   ¦   test_backend_integration.py
+¦   ¦   test_conversation_context.py
+¦   ¦   test_cost_integration.py
+¦   ¦   test_cost_logger.py
+¦   ¦   test_dynamic_personas.py
+¦   ¦   test_hybrid_priority.py
+¦   ¦   test_indian_languages.py
+¦   ¦   test_language_detection.py
+¦   ¦   test_language_switching.py
+¦   ¦   test_marriage_prediction_fix.py
+¦   ¦   test_multilingual_rag.py
+¦   ¦   test_pdf_extraction.py
+¦   ¦   test_persistence_caching.py
+¦   ¦   test_preprocessing.py
+¦   ¦   test_safety.py
+¦   ¦   test_session_context.py
+¦   ¦   test_stateless_architecture.py
+¦   ¦   
+¦   +---__pycache__
+¦           test_api.cpython-311.pyc
+¦           test_dynamic_personas.cpython-311-pytest-7.4.4.pyc
+¦           test_hybrid_priority.cpython-311.pyc
+¦           test_hybrid_priority.cpython-313.pyc
+¦           test_indian_languages.cpython-311-pytest-7.4.4.pyc
+¦           test_language_detection.cpython-311-pytest-7.4.4.pyc
+¦           test_language_switching.cpython-311-pytest-7.4.4.pyc
+¦           test_stateless_architecture.cpython-311.pyc
+¦           test_stateless_architecture.cpython-313.pyc
+¦           
++---__pycache__
+        chatbot.cpython-313.pyc
+        vedic_validation_schema.cpython-311.pyc
+        
