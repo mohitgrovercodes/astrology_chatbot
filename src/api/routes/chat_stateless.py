@@ -388,8 +388,9 @@ Respond with ONLY the expanded query.
         
         CRITICAL: Must integrate previous summary with new messages!
         """
-        # Get recent messages
-        recent_messages = conversation_history[-6:] if len(conversation_history) > 6 else conversation_history
+        # Get recent messages (based on threshold)
+        threshold = settings.CONVERSATION_SUMMARY_THRESHOLD
+        recent_messages = conversation_history[-threshold:] if len(conversation_history) > threshold else conversation_history
         conv_text = self._format_conversation(recent_messages)
         
         # Build on previous summary if it exists
@@ -528,13 +529,13 @@ class EnhancedSessionManager:
                 "updated_at": datetime.utcnow().isoformat(),
                 "message_count": len(self.get_conversation_history(user_id))
             }
-            # TTL: 24 hours (same as conversation)
+            # Use settings for expiry
             key = f"session:{user_id}:summary"
-            self.redis.setex(
-                key,
-                86400,
-                json.dumps(summary_data)
-            )
+            val = json.dumps(summary_data)
+            if settings.SESSION_EXPIRY_HOURS > 0:
+                self.redis.setex(key, settings.SESSION_EXPIRY_HOURS * 3600, val)
+            else:
+                self.redis.set(key, val)
             print(f"[SUMMARY] Stored conversation summary at key: {key}")
         except Exception as e:
             print(f"[SUMMARY] Error storing summary: {e}")
@@ -600,8 +601,15 @@ class EnhancedSessionManager:
             return {"status": "error", "user_id": user_id, "message": "Redis not available"}
         
         try:
-            # Store user profile (24h)
-            self.redis.setex(f"session:{user_id}:user_profile", 86400, json.dumps(user_profile))
+            # Helper for session persistence
+            def _set_data(key, val):
+                if settings.SESSION_EXPIRY_HOURS > 0:
+                    self.redis.setex(key, settings.SESSION_EXPIRY_HOURS * 3600, json.dumps(val))
+                else:
+                    self.redis.set(key, json.dumps(val))
+
+            # Store user profile
+            _set_data(f"session:{user_id}:user_profile", user_profile)
             
             # Convert conversation history from external format to internal format
             internal_conversation = []
@@ -624,8 +632,8 @@ class EnhancedSessionManager:
                             }
                         })
             
-            # Store conversation (24h)
-            self.redis.setex(f"session:{user_id}:history", 86400, json.dumps(internal_conversation))
+            # Store conversation
+            _set_data(f"session:{user_id}:history", internal_conversation)
             
             # Initialize empty summary
             self.store_conversation_summary(user_id, "New conversation started.")
@@ -637,7 +645,7 @@ class EnhancedSessionManager:
                 "messages_imported": len(internal_conversation),
                 "last_summary_at": datetime.utcnow().isoformat()
             }
-            self.redis.setex(f"session:{user_id}:metadata", 86400, json.dumps(metadata))
+            _set_data(f"session:{user_id}:metadata", metadata)
             
             return {
                 "status": "success",
@@ -669,11 +677,17 @@ class EnhancedSessionManager:
             
             conversation.append(message)
             
-            # Keep last 20 messages
-            if len(conversation) > 20:
-                conversation = conversation[-20:]
+            # Keep last N messages (sliding window)
+            context_window = settings.CONVERSATION_CONTEXT_WINDOW
+            if len(conversation) > context_window:
+                conversation = conversation[-context_window:]
             
-            self.redis.setex(f"session:{session_id}:history", 86400, json.dumps(conversation))
+            key = f"session:{session_id}:history"
+            val = json.dumps(conversation)
+            if settings.SESSION_EXPIRY_HOURS > 0:
+                self.redis.setex(key, settings.SESSION_EXPIRY_HOURS * 3600, val)
+            else:
+                self.redis.set(key, val)
             return True
         except:
             return False
@@ -693,10 +707,10 @@ class EnhancedSessionManager:
         except:
             last_summary_count = 0
         
-        # Update every 6 messages (3 exchanges)
+        # Update based on configured threshold
         messages_since_summary = len(conversation) - last_summary_count
         
-        return messages_since_summary >= 6
+        return messages_since_summary >= settings.CONVERSATION_SUMMARY_THRESHOLD
     
     def store_chart_data(self, user_id: str, chart_data: dict):
         if not self.redis:
@@ -898,7 +912,7 @@ async def send_message(request: SendMessageRequest):
     Features:
     - LLM-based intent analysis (Continuation/New Topic/Clarification)
     - Contextual query resolution
-    - Conversation summarization every 6 messages
+    - Conversation summarization every 10 messages
     - Comprehensive logging
     """
     start_time = time.time()
@@ -1132,7 +1146,7 @@ async def send_message(request: SendMessageRequest):
         )
         
         # ====================================================================
-        # STEP 9: UPDATE CONVERSATION SUMMARY (Every 6 messages)
+        # STEP 9: UPDATE CONVERSATION SUMMARY (Every 10 messages)
         # ====================================================================
         if session_manager.should_update_summary(user_id):
             print(f"\n[STEP 5: UPDATING CONVERSATION SUMMARY]")

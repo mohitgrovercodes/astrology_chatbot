@@ -1,0 +1,37 @@
+{
+  "total_rules": 16526,
+  "indexed_dimensions": 6,
+  "composite_indices": 2652,
+  "index_coverage": {
+    "by_query_type": {
+      "unique_keys": 296,
+      "total_entries": 70563,
+      "avg_rules_per_key": 238.38851351351352
+    },
+    "by_stage": {
+      "unique_keys": 11,
+      "total_entries": 16576,
+      "avg_rules_per_key": 1506.909090909091
+    },
+    "by_category": {
+      "unique_keys": 23,
+      "total_entries": 16671,
+      "avg_rules_per_key": 724.8260869565217
+    },
+    "by_severity": {
+      "unique_keys": 5,
+      "total_entries": 16526,
+      "avg_rules_per_key": 3305.2
+    },
+    "composite": {
+      "unique_keys": 2652,
+      "total_entries": 107648,
+      "avg_rules_per_key": 40.59125188536953
+    },
+    "by_parameter_type": {
+      "unique_keys": 5,
+      "total_entries": 549,
+      "avg_rules_per_key": 109.8
+    }
+  }
+}

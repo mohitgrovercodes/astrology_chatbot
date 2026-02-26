@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     REDIS_HOST: str = Field(default="localhost", validation_alias="redis_host")
     REDIS_PORT: int = Field(default=6379, validation_alias="redis_port")
     REDIS_PASSWORD: Optional[str] = Field(default=None, validation_alias="redis_password")
-    SESSION_EXPIRY_HOURS: int = 24
+    SESSION_EXPIRY_HOURS: int = 0  # 0 or None means permanent storage in Redis
     
     # CORS
     ALLOWED_ORIGINS: List[str] = ["*"]  # Restrict in production
@@ -91,7 +91,7 @@ class Settings(BaseSettings):
         description="Number of recent messages to include in conversation history"
     )
     CONVERSATION_SUMMARY_THRESHOLD: int = Field(
-        default=6,
+        default=10,
         validation_alias="conversation_summary_threshold",
         description="Update conversation summary after this many messages"
     )

@@ -1,0 +1,7 @@
+{
+  "original_count": 19283,
+  "after_quality_filter": 19259,
+  "after_dedup": 19239,
+  "after_consolidation": 16526,
+  "consolidation_groups": 549
+}

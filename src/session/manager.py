@@ -14,6 +14,7 @@ import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 from dataclasses import dataclass, asdict
+from src.api.config import settings
 
 # Standardize key patterns
 # session:{user_id}:user_profile
@@ -101,25 +102,30 @@ class SessionManager:
             if metadata: message["metadata"] = metadata
             
             history.append(message)
-            # Keep last 20 messages to keep LLM context clean
-            if len(history) > 20:
-                history = history[-20:]
+            # Use configured context window limit
+            context_window = settings.CONVERSATION_CONTEXT_WINDOW
+            if len(history) > context_window:
+                history = history[-context_window:]
             
-            self.redis.setex(self._key(user_id, "history"), self.TTL_24H, json.dumps(history))
+            # Implementation of permanent storage check
+            key = self._key(user_id, "history")
+            value = json.dumps(history)
+            
+            if settings.SESSION_EXPIRY_HOURS > 0:
+                self.redis.setex(key, settings.SESSION_EXPIRY_HOURS * 3600, value)
+            else:
+                self.redis.set(key, value)
+                
             return True
         except Exception as e:
             logger.error(f"[SESSION] Add message error: {e}")
             return False
 
     # --- Initialization ---
-
     def initialize_session(self, user_id: str, user_profile: Dict, conversation_history: List = None):
         if not self.redis: return {"status": "error", "message": "Redis offline"}
         try:
-            # 1. Store Profile
-            self.redis.setex(self._key(user_id, "user_profile"), self.TTL_24H, json.dumps(user_profile))
-            
-            # 2. Process History (Handle external backend formats)
+            # 1. Process History (Handle external backend formats)
             internal_history = []
             if conversation_history:
                 for msg in conversation_history:
@@ -133,16 +139,26 @@ class SessionManager:
                         internal_history.append({"role": "assistant", "content": msg['answer'], "timestamp": msg.get('timestamp')})
                     elif msg.get('role') == 'assistant':
                         internal_history.append(msg)
+
+            # Helper for setting profile/metadata with TTL check
+            def _set_data(data_type, data):
+                key = self._key(user_id, data_type)
+                val = json.dumps(data)
+                if settings.SESSION_EXPIRY_HOURS > 0:
+                    self.redis.setex(key, settings.SESSION_EXPIRY_HOURS * 3600, val)
+                else:
+                    self.redis.set(key, val)
+
+            _set_data("user_profile", user_profile)
+            _set_data("history", internal_history)
             
-            self.redis.setex(self._key(user_id, "history"), self.TTL_24H, json.dumps(internal_history))
-            
-            # 3. Store Metadata
+            # 2. Store Metadata
             metadata = {
                 "user_id": user_id,
                 "created_at": datetime.utcnow().isoformat(),
                 "messages_imported": len(internal_history)
             }
-            self.redis.setex(self._key(user_id, "metadata"), self.TTL_24H, json.dumps(metadata))
+            _set_data("metadata", metadata)
             
             return {"status": "success", "user_id": user_id}
         except Exception as e:
@@ -167,17 +183,23 @@ class SessionManager:
             "updated_at": datetime.utcnow().isoformat(),
             "message_count": len(self.get_conversation_history(user_id))
         }
-        self.redis.setex(self._key(user_id, "summary"), self.TTL_24H, json.dumps(data))
+        
+        key = self._key(user_id, "summary")
+        val = json.dumps(data)
+        if settings.SESSION_EXPIRY_HOURS > 0:
+            self.redis.setex(key, settings.SESSION_EXPIRY_HOURS * 3600, val)
+        else:
+            self.redis.set(key, val)
 
     def should_update_summary(self, user_id: str) -> bool:
-        """Update every 6 messages (3 exchanges)."""
+        """Update based on configured summary threshold."""
         history = self.get_conversation_history(user_id)
         current_count = len(history)
         
         data = self.redis.get(self._key(user_id, "summary"))
         last_count = json.loads(data).get('message_count', 0) if data else 0
         
-        return (current_count - last_count) >= 6
+        return (current_count - last_count) >= settings.CONVERSATION_SUMMARY_THRESHOLD
 
     # --- Advanced Calculation Caching ---
 
