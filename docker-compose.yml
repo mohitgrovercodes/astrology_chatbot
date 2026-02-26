@@ -32,11 +32,6 @@ services:
       # Rate Limiting
       - RATE_LIMIT_PER_MINUTE=10
 
-      # LLM - Google Cloud (Option 1)
-      - GOOGLE_CREDENTIALS_PATH=/app/credentials/google-credentials.json
-      - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
-      - GOOGLE_LOCATION=${GOOGLE_LOCATION:-us-central1}
-
       # LLM - OpenAI (Option 2)
       - OPENAI_API_KEY=${OPENAI_API_KEY}
 
@@ -52,7 +47,6 @@ services:
       - MAX_CONVERSATION_HISTORY=${MAX_CONVERSATION_HISTORY:-10}
     volumes:
       - ./data:/app/data
-      - ./credentials:/app/credentials # Mount Google credentials directory
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
@@ -79,6 +73,7 @@ services:
 
 volumes:
   redis-data:
+
 
 networks:
   nakshatraai-network:
