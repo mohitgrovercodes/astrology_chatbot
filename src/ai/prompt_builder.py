@@ -189,6 +189,7 @@ VOICE — English names first, Sanskrit in parentheses. Example: "Mars (Mangal)"
             return (
                 f"{base} "
                 "Focus on the most relevant astrological factor for this specific question. "
+                "NO greetings (Namaste, Hello, etc.) — get straight to the analysis. "
                 "When timing is asked, give specific months or seasons — never just dasha names. "
                 "Emphasize that free will and effort shape outcomes. "
                 f"{lang_instr}"

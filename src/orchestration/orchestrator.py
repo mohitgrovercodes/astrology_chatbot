@@ -682,12 +682,27 @@ class EnhancedLangGraphOrchestrator:
 
             # 1. GREETING
             if match_type == "greeting":
-                greeting = get_contextual_greeting(
-                    user_name=user_name,
-                    conversation_length=len(conversation_history),
-                    language=lang
-                )
-                state['answer'] = greeting
+                if len(conversation_history) > 0:
+                    # Ongoing conversation: skip repetitive intro, give brief "How can I help you?"
+                    loc_manager = get_localization_manager()
+                    if lang == 'en':
+                        state['answer'] = "Yes, I'm here. How can I assist you further?"
+                    elif lang == 'hi-lat':
+                        state['answer'] = "Haan, main yahaan hoon. Aur kya jaanana chahenge?"
+                    else:
+                        state['answer'] = get_contextual_greeting(
+                            user_name=user_name,
+                            conversation_length=len(conversation_history),
+                            language=lang
+                        )
+                else:
+                    # First greeting
+                    greeting = get_contextual_greeting(
+                        user_name=user_name,
+                        conversation_length=len(conversation_history),
+                        language=lang
+                    )
+                    state['answer'] = greeting
                 return state
             
             # 2. IDENTITY QUESTIONS
@@ -800,7 +815,7 @@ class EnhancedLangGraphOrchestrator:
 
         INSTRUCTIONS:
         1. Provide a warm, empathetic, professional response.
-        2. If the user greets, greet back warmly.
+        2. If the user greets and it's the start of the conversation, greet back. If it's an ongoing conversation, SKIP greetings and get straight to the point.
         3. If the user asks about previous messages or personal context, ANSWER DIRECTLY based on CONVERSATION CONTEXT.
         4. If the question is entirely outside astrology and NOT in history, politely explain your scope.
         5. {script_instruction}
@@ -1614,7 +1629,8 @@ Provide a concise answer:"""
             # GROUNDING SAFEGUARD: If no sources, refuse to answer
             if prompt is None:
                 user_name = state['user_profile'].get('name', 'User')
-                state['answer'] = f"""Namaste, {user_name}.
+                prefix = f"Namaste, {user_name}." if not conversation_history else "I apologize,"
+                state['answer'] = f"""{prefix}
 
 I apologize, but I could not find relevant information in the classical astrology texts to answer your question about "{state['query']}".
 
@@ -2225,7 +2241,7 @@ Provide a concise answer:"""
             system_prompt += """
 
 ONGOING CONVERSATION - CONTEXT HANDLING:
-- No greetings (Namaste/Hello/Hari Om) - get straight to answer
+- NO greetings (Namaste/Hello/Hari Om) - get straight to answer
 - Review ALL previous messages before responding
 - When user says "it", "this", "that" -> check conversation history
 - Connect follow-up questions to earlier topics
