@@ -1,0 +1,101 @@
+{
+  "tier1": {
+    "count": 750,
+    "avg_importance_score": 275.65,
+    "by_severity": {
+      "critical": 750
+    },
+    "by_category": {
+      "table_based_rules": 396,
+      "divisional_confirmation": 113,
+      "planetary_state": 87,
+      "strength_assessment": 83,
+      "hierarchical_logic": 29
+    },
+    "by_stage": {
+      "promise": 739,
+      "timing": 11
+    },
+    "parameterized_count": 80
+  },
+  "tier2": {
+    "count": 1750,
+    "avg_importance_score": 255.04,
+    "by_severity": {
+      "critical": 1734,
+      "high": 16
+    },
+    "by_category": {
+      "table_based_rules": 1050,
+      "general": 442,
+      "planetary_state": 86,
+      "hierarchical_logic": 66,
+      "lunar_consideration": 35
+    },
+    "by_stage": {
+      "promise": 982,
+      "timing": 698,
+      "promise, timing, trigger": 1,
+      "strength_assessment": 1,
+      "all": 32,
+      "general": 33,
+      "pre-analysis": 1,
+      "trigger": 2
+    },
+    "parameterized_count": 49
+  },
+  "tier3": {
+    "count": 8000,
+    "avg_importance_score": 183.46,
+    "by_severity": {
+      "critical": 4598,
+      "high": 3380,
+      "medium": 21,
+      "low": 1
+    },
+    "by_category": {
+      "planetary_state": 2259,
+      "table_based_rules": 1823,
+      "strength_assessment": 1198,
+      "general": 1081,
+      "lagna_specific": 526
+    },
+    "by_stage": {
+      "promise": 7201,
+      "timing": 777,
+      "trigger": 4,
+      "all": 13,
+      "general": 3,
+      "promise, timing": 2
+    },
+    "parameterized_count": 257
+  },
+  "tier4": {
+    "count": 6026,
+    "avg_importance_score": 105.34,
+    "by_severity": {
+      "high": 3772,
+      "critical": 269,
+      "medium": 1897,
+      "low": 85,
+      "general": 3
+    },
+    "by_category": {
+      "table_based_rules": 1694,
+      "general": 1587,
+      "planetary_state": 856,
+      "strength_assessment": 782,
+      "lagna_specific": 278
+    },
+    "by_stage": {
+      "promise": 5262,
+      "timing": 676,
+      "trigger": 27,
+      "all": 34,
+      "general": 20,
+      "strength_assessment": 3,
+      "strength": 4
+    },
+    "parameterized_count": 163
+  }
+}

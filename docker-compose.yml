@@ -24,7 +24,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
-      - SESSION_EXPIRY_HOURS=${SESSION_EXPIRY_HOURS:-24}
+      - SESSION_EXPIRY_HOURS=${SESSION_EXPIRY_HOURS:-0}
 
       # CORS
       - ALLOWED_ORIGINS=["*"]
@@ -68,11 +68,17 @@ services:
   redis:
     image: redis:7-alpine
     container_name: nakshatraai-redis
+    command: redis-server --appendonly yes
     ports:
       - "6379:6379"
+    volumes:
+      - redis-data:/data
     restart: unless-stopped
     networks:
       - nakshatraai-network
+
+volumes:
+  redis-data:
 
 networks:
   nakshatraai-network:

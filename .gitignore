@@ -60,7 +60,7 @@ inspect_*.py
 # OS
 .DS_Store
 Thumbs.db
-
+*.db
 
 # Embeddings and extraction
 embeddings/
@@ -68,4 +68,8 @@ extraction_output/
 preprocessing_output/
 *.zip
 
-*.json
+# Others
+consolidated_final.json
+indexed_rules.json
+tiered_rules.json
+*.pdf
