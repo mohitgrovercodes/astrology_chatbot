@@ -115,6 +115,8 @@ class LanguageDetector:
             "dasha": 3, "antardasha": 3, "mahadasha": 3,
             "bhagya": 3, "karma": 3, "mangal": 3, "shani": 3,
             "guru": 3, "shukra": 3, "budh": 3, "ketu": 3, "rahu": 3,
+            "shaadi": 3, "shadi": 3, "vivah": 3, "naukri": 3, "paisa": 3,
+            "bachchi": 3, "bachcha": 3, "beta": 3, "beti": 3,
             # Weight-2 common Hindi
             "kaise": 2, "kyun": 2, "kahan": 2, "kaun": 2, "kab": 2,
             "mera": 2, "meri": 2, "mere": 2, "tera": 2, "teri": 2,
@@ -122,7 +124,7 @@ class LanguageDetector:
             "yeh": 2, "woh": 2, "yahan": 2, "wahan": 2,
             "acha": 2, "theek": 2, "phir": 2, "bas": 2,
             "hoga": 2, "hogi": 2, "kaisa": 2, "batao": 2, "bataye": 2,
-            "chahiye": 2, "milega": 2, "milegi": 2,
+            "chahiye": 2, "milega": 2, "milegi": 2, "karta": 2, "karti": 2,
             # Weight-1 (need cumulative ≥ 3)
             "kya": 1, "hai": 1, "hoon": 1, "hain": 1, "tha": 1, "thi": 1,
             "nahi": 1, "nahin": 1, "aur": 1, "par": 1, "se": 1,
@@ -397,6 +399,13 @@ class LanguageDetector:
 
             # Normalise to 2-char code (strip sub-region suffixes)
             base = remapped[:2] if len(remapped) > 2 and "-" not in remapped else remapped
+
+            # NEW: Script-aware validation
+            # If langdetect says 'hi' but text is 100% Latin, it MUST be 'hi-lat'
+            is_latin_only = not re.search(r'[^\x00-\x7F]', text) # Simplified ASCII/Latin check
+            
+            if base in ['hi', 'ta', 'te', 'ml', 'mr', 'pa'] and is_latin_only:
+                base = f"{base}-lat"
 
             if base in self.ALLOWED_CODES and confidence >= 0.4:
                 return (base, confidence)

@@ -756,9 +756,9 @@ class EnhancedLangGraphOrchestrator:
                 lang_name = loc_manager.get_language_name(lang)
                 
                 if '-lat' in lang:
-                    script_instruction = f"IMPORTANT: You must write in {lang_name} using ROMAN ALPHABET (English Script). Do NOT use native script."
+                    script_instruction = f"CRITICAL: You MUST respond in {lang_name} using ROMAN SCRIPT (English alphabet) only. Do NOT use any {lang_name.split(' (')[0]} characters or Devanagari script. Example: 'Main theek hoon' instead of 'मैं ठीक हूं'."
                 else:
-                    script_instruction = f"Respond entirely in {lang_name} (Native Script)."
+                    script_instruction = f"Respond entirely in {lang_name} (NATIVE SCRIPT ONLY)."
                 
                 # PHASE 6: Tiered History Support
                 history_context = ""
