@@ -70,16 +70,15 @@ class PageAnalyzer:
         self.is_vertex_ai = False
         self.embedding_model = None
         
-        # Initialize Sentence Transformer for semantic continuity (local & fast)
+        # Initialize OpenAI Embedder for semantic continuity
         try:
-            from sentence_transformers import SentenceTransformer
-            # Load a lightweight, efficient model for sentence similarity
-            self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-            print("[[DONE]] Sentence Transformer initialized (all-MiniLM-L6-v2)")
+            from src.rag.preprocessing.embedder import Embedder
+            self.embedding_model = Embedder()
+            print("[[DONE]] OpenAI Embedder initialized for semantic continuity")
         except ImportError:
-            print("[WARN] sentence-transformers not installed. Semantic checks will be skipped.")
+            print("[WARN] Embedder not found. Semantic checks will be skipped.")
         except Exception as e:
-            print(f"[WARN] Failed to load Sentence Transformer: {e}")
+            print(f"[WARN] Failed to load Embedder: {e}")
 
         if use_llm:
             try:
@@ -221,15 +220,25 @@ class PageAnalyzer:
             return 0.5 # Neutral if no model
             
         try:
-            from sentence_transformers import util
+            import numpy as np
             
             # Take last 300 chars of page 1 and first 300 of page 2
             t1_end = text1[-300:] if len(text1) > 300 else text1
             t2_start = text2[:300] if len(text2) > 300 else text2
             
-            embeddings = self.embedding_model.encode([t1_end, t2_start])
-            sim = util.pytorch_cos_sim(embeddings[0], embeddings[1])
-            return float(sim[0][0])
+            embeddings = self.embedding_model.embed_texts([t1_end, t2_start])
+            
+            emb1 = np.array(embeddings[0])
+            emb2 = np.array(embeddings[1])
+            
+            norm1 = np.linalg.norm(emb1)
+            norm2 = np.linalg.norm(emb2)
+            
+            if norm1 == 0 or norm2 == 0:
+                return 0.5
+                
+            sim = np.dot(emb1, emb2) / (norm1 * norm2)
+            return float(sim)
         except Exception as e:
             print(f"[WARN] Semantic check failed: {e}")
             return 0.5
