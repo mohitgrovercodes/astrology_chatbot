@@ -567,10 +567,11 @@ class EnhancedLangGraphOrchestrator:
         history = state.get('conversation_history', [])
         is_continuation = (
             any(phrase == q or q.startswith(phrase) for phrase in _CONTINUATION_PHRASES)
-            or (len(q.split()) <= 5 and q.split()[0] in _SHORT_QUESTION_STARTERS)
+            or (len(q.split()) <= 2 and q.split()[0] in _SHORT_QUESTION_STARTERS) # Refined to avoid intercepting full questions
         )
         if is_continuation and len(history) > 0:
             print(f"[INTENT] [CONTINUATION] CONTINUATION GUARD: routed to RAG_ONLY (history={len(history)} msgs)")
+
             state['intent'] = 'RAG_ONLY'
             state['confidence'] = 0.85
             state['intent_reasoning'] = 'Bare continuation query with active conversation'
@@ -584,11 +585,14 @@ class EnhancedLangGraphOrchestrator:
         if self.semantic_router.model:
             chitchat_match = self.semantic_router.route(state['query'], threshold=0.7)
             
-        if chitchat_match and chitchat_match.name == "chitchat":
-            print(f"[INTENT] Semantic Chitchat Match: '{state['query']}' ({chitchat_match.confidence:.2f})")
+        # List of routes that should be treated as chitchat
+        CHITCHAT_ROUTES = ['chitchat', 'greeting', 'identity', 'personal_profile_query', 'gratitude', 'wellbeing', 'farewell']
+        
+        if chitchat_match and chitchat_match.name in CHITCHAT_ROUTES:
+            print(f"[INTENT] Semantic Chitchat Match: '{state['query']}' -> {chitchat_match.name} ({chitchat_match.confidence:.2f})")
             state['intent'] = 'CHITCHAT'
             state['confidence'] = chitchat_match.confidence
-            state['intent_reasoning'] = "Semantic Chitchat Match"
+            state['intent_reasoning'] = f"Semantic Chitchat Match: {chitchat_match.name}"
             state['is_safe'] = True
             return state
 
@@ -675,10 +679,17 @@ class EnhancedLangGraphOrchestrator:
             # 0. PERSONAL PROFILE QUERIES — "Mera naam kya hai?", "What is my name?"
             #    Must be checked BEFORE identity to avoid misrouting.
             if match_type == "personal_profile_query":
+                print(f"[CHITCHAT] [PROFILE] Match found. Calling profile helper...")
                 state['answer'] = self._answer_personal_profile_query(
-                    query=query, user_profile=state['user_profile'], language=lang
+                    query=query, 
+                    user_profile=state['user_profile'], 
+                    language=lang,
+                    chart_data=state.get('chart_data')
                 )
+                print(f"[CHITCHAT] [PROFILE] Result length: {len(state['answer'])} characters")
                 return state
+
+
 
             # 1. GREETING
             if match_type == "greeting":
@@ -750,109 +761,137 @@ class EnhancedLangGraphOrchestrator:
                     state['answer'] = f"Goodbye, {user_name}! Take care!"
                 return state
 
-            # Multilingual/Complex path: Use fast LLM with persona
-            try:
-                from src.ai.personas import get_persona
-                persona_type = state['user_profile'].get('preferred_system', 'vedic')
-                persona = get_persona(persona_type)
-                
-                system_prompt = persona.get_system_prompt(
-                    user_name=user_name,
-                    language=lang,
-                    llm=self.fast_llm
-                )
+        # Multilingual/Complex path: Use fast LLM with persona (Fallback for no match or unhandled type)
+        print(f"[CHITCHAT] No specific semantic match or unhandled type. Using LLM fallback.")
+        try:
+            from src.ai.personas import get_persona
+            persona_type = state['user_profile'].get('preferred_system', 'vedic')
+            persona = get_persona(persona_type)
+            
+            system_prompt = persona.get_system_prompt(
+                user_name=user_name,
+                language=lang,
+                llm=self.fast_llm
+            )
 
-                # Add conversational tone guidelines
-                from src.safety.templates import CONVERSATIONAL_TONE_SYSTEM_PROMPT
-                system_prompt += f"\n\n{CONVERSATIONAL_TONE_SYSTEM_PROMPT}"
-                
-                # Map language code to descriptive name
-                loc_manager = get_localization_manager()
-                lang_name = loc_manager.get_language_name(lang)
-                
-                if '-lat' in lang:
-                    script_instruction = f"CRITICAL: You MUST respond in {lang_name} using ROMAN SCRIPT (English alphabet) only. Do NOT use any {lang_name.split(' (')[0]} characters or Devanagari script. Example: 'Main theek hoon' instead of 'मैं ठीक हूं'."
-                else:
-                    script_instruction = f"Respond entirely in {lang_name} (NATIVE SCRIPT ONLY)."
-                
-                # PHASE 6: Tiered History Support
-                history_context = ""
-                if state.get('conversation_history'):
-                    history_turns = state['conversation_history'][-3:]
-                    from src.ai.prompt_builder import PromptBuilder
-                    builder = PromptBuilder()
-                    formatted_history = builder._format_conversation(history_turns)
-                    history_context = f"\nCONVERSATION CONTEXT:\n{formatted_history}\n"
+            # Add conversational tone guidelines
+            from src.safety.templates import CONVERSATIONAL_TONE_SYSTEM_PROMPT
+            system_prompt += f"\n\n{CONVERSATIONAL_TONE_SYSTEM_PROMPT}"
+            
+            # Map language code to descriptive name
+            loc_manager = get_localization_manager()
+            lang_name = loc_manager.get_language_name(lang)
+            
+            if '-lat' in lang:
+                script_instruction = f"CRITICAL: You MUST respond in {lang_name} using ROMAN SCRIPT (English alphabet) only. Do NOT use any {lang_name.split(' (')[0]} characters or Devanagari script. Example: 'Main theek hoon' instead of 'मैं ठीक हूं'."
+            else:
+                script_instruction = f"Respond entirely in {lang_name} (NATIVE SCRIPT ONLY)."
+            
+            # PHASE 6: Tiered History Support
+            history_context = ""
+            if state.get('conversation_history'):
+                history_turns = state['conversation_history'][-3:]
+                from src.ai.prompt_builder import PromptBuilder
+                builder = PromptBuilder()
+                formatted_history = builder._format_conversation(history_turns)
+                history_context = f"\nCONVERSATION CONTEXT:\n{formatted_history}\n"
 
-                # Build user profile context for LLM (safety net for novel personal queries)
-                _up = state.get('user_profile', {})
-                _bd = _up.get('birth_details', {})
-                _loc = _bd.get('location', {})
-                _profile_lines = []
-                if _up.get('name'):
-                    _profile_lines.append(f"User name: {_up['name']}")
-                if _bd.get('date'):
-                    _profile_lines.append(f"Date of birth: {_bd['date']}")
-                if _bd.get('time'):
-                    _profile_lines.append(f"Time of birth: {_bd['time']}")
-                if _loc.get('city') or _loc.get('address'):
-                    _profile_lines.append(f"Birth place: {_loc.get('city') or _loc.get('address')}")
-                if _up.get('sun_sign'):
-                    _profile_lines.append(f"Sun sign: {_up['sun_sign']}")
-                if _up.get('moon_sign'):
-                    _profile_lines.append(f"Moon sign: {_up['moon_sign']}")
-                if _up.get('ascendant'):
-                    _profile_lines.append(f"Ascendant: {_up['ascendant']}")
-                user_profile_context = (
-                    "USER PROFILE (use this if the user asks about their own details):\n"
-                    + "\n".join(_profile_lines)
-                ) if _profile_lines else ""
+            # Build user profile context for LLM (safety net for novel personal queries)
+            _up = state.get('user_profile', {})
+            _bd = _up.get('birth_details', {})
+            _loc = _bd.get('location', {})
+            
+            # Support both nested and flat structures
+            uname = _up.get('name', '')
+            udob = _up.get('date_of_birth') or _bd.get('date', '')
+            utob = _up.get('time_of_birth') or _bd.get('time', '')
+            uloc = _up.get('place_of_birth') or _loc.get('city') or _loc.get('address', '')
+            
+            _profile_lines = []
+            if uname: _profile_lines.append(f"User name: {uname}")
+            if udob: _profile_lines.append(f"Date of birth: {udob}")
+            if utob: _profile_lines.append(f"Time of birth: {utob}")
+            if uloc: _profile_lines.append(f"Birth place: {uloc}")
+            
+            # Add signs if available (from profile or state)
+            us_sign = _up.get('sun_sign') or (state.get('chart_data', {}).get('planets', {}).get('SUN', {}).get('sign', '') if state.get('chart_data') else '')
+            um_sign = _up.get('moon_sign') or (state.get('chart_data', {}).get('planets', {}).get('MOON', {}).get('sign', '') if state.get('chart_data') else '')
+            uasc = _up.get('ascendant') or (state.get('chart_data', {}).get('lagna') if state.get('chart_data') else '')
+            
+            if us_sign: _profile_lines.append(f"Sun sign: {us_sign}")
+            if um_sign: _profile_lines.append(f"Moon sign: {um_sign}")
+            if uasc: _profile_lines.append(f"Ascendant (Lagna): {uasc}")
+            
+            user_profile_context = (
+                "USER PROFILE (use this if the user asks about their own details):\n"
+                + "\n".join(_profile_lines)
+            ) if _profile_lines else "User profile details are not available yet."
 
-                prompt = f"""{system_prompt}
-                
-        {history_context}
-        User: "{state['query']}"
+            prompt = f"""{system_prompt}
+            
+    {history_context}
+    User: "{state['query']}"
 
-        INSTRUCTIONS:
-        1. Provide a warm, empathetic, professional response.
-        2. If the user greets and it's the start of the conversation, greet back. If it's an ongoing conversation, SKIP greetings and get straight to the point.
-        3. If the user asks about previous messages or personal context, ANSWER DIRECTLY based on CONVERSATION CONTEXT.
-        4. If the question is entirely outside astrology and NOT in history, politely explain your scope.
-        5. {script_instruction}
-        6. Keep it brief (under 60 words).
+    INSTRUCTIONS:
+    1. Provide a warm, empathetic, professional response.
+    2. If the user greets and it's the start of the conversation, greet back. If it's an ongoing conversation, SKIP greetings and get straight to the point.
+    3. If the user asks about previous messages or personal context, ANSWER DIRECTLY based on CONVERSATION CONTEXT.
+    4. If the question is entirely outside astrology and NOT in history, politely explain your scope.
+    5. {script_instruction}
+    6. Keep it brief (under 60 words).
 
-        {user_profile_context}
+    {user_profile_context}
 
-        Response:"""
-                
-                llm_response = self.fast_llm.invoke(prompt)
-                state['answer'] = llm_response.content if hasattr(llm_response, 'content') else str(llm_response)
-                
-            except Exception as e:
-                print(f"[CHITCHAT] Error generating response: {e}")
-                state['answer'] = get_greeting(lang)
+    Response:"""
+            
+            llm_response = self.fast_llm.invoke(prompt)
+            state['answer'] = llm_response.content if hasattr(llm_response, 'content') else str(llm_response)
+            print(f"[CHITCHAT] [LLM] Result: {len(state['answer'])} chars")
+            
+        except Exception as e:
+            print(f"[CHITCHAT] Error generating response: {e}")
+            state['answer'] = get_greeting(lang)
 
-            return state
+        return state
+
 
     # ------------------------------------------------------------------
     # PERSONAL PROFILE QUERY HELPER
     # ------------------------------------------------------------------
     def _answer_personal_profile_query(
-        self, query: str, user_profile: dict, language: str
+        self, query: str, user_profile: dict, language: str, chart_data: Optional[Dict] = None
     ) -> str:
         """
         Answer questions about the USER's own details (name, DOB, location, sign)
         using the structured user_profile dict — no LLM guesswork.
         """
+        print(f"[PROFILE_DEBUG] Answering profile query: {query}")
         name = user_profile.get('name', '')
+
+
+        
+        # Support both nested 'birth_details' and flat structure from Redis
         bd = user_profile.get('birth_details', {})
-        dob = bd.get('date', '')
-        tob = bd.get('time', '')
+        dob = bd.get('date', '') or user_profile.get('date_of_birth', '')
+        tob = bd.get('time', '') or user_profile.get('time_of_birth', '')
+        
         location = bd.get('location', {})
-        city = location.get('city', '') or location.get('address', '')
+        city = location.get('city', '') or location.get('address', '') or user_profile.get('place_of_birth', '')
+        
+        # Signs from profile or chart_data fallback
         sun_sign = user_profile.get('sun_sign', '')
         moon_sign = user_profile.get('moon_sign', '')
         ascendant = user_profile.get('ascendant', '')
+        
+        if chart_data:
+            if not sun_sign:
+                sun_sign = chart_data.get('planets', {}).get('SUN', {}).get('sign', '')
+            if not moon_sign:
+                moon_sign = chart_data.get('planets', {}).get('MOON', {}).get('sign', '')
+            if not ascendant:
+                # Support both 'lagna' top level and 'ascendant' dict
+                ascendant = chart_data.get('lagna') or chart_data.get('ascendant', {}).get('sign', '')
+
 
         q = query.lower()
 
@@ -890,7 +929,9 @@ class EnhancedLangGraphOrchestrator:
         loc_triggers = [
             'kahan paida', 'birthplace', 'birth place', 'city am i from',
             'where was i born', 'birth city', 'main kahan se', 'janmsthan',
+            'place of birth', 'location of birth',
         ]
+
         if any(t in q for t in loc_triggers):
             if city:
                 if language in ('hi', 'hi-lat'):
