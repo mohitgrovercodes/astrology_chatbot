@@ -87,7 +87,16 @@ class LLMIntentClassifier:
         "how is my health": "RAG_WITH_CALCULATION",
         "how is my marriage": "RAG_WITH_CALCULATION",
         "predict my future": "RAG_WITH_CALCULATION",
+        
+        # Foreign Travel / Videsh Yatra (High confidence mappings)
+        "main foreign jaunga": "RAG_WITH_CALCULATION",
+        "videsh yatra": "RAG_WITH_CALCULATION",
+        "kab jaunga videsh": "RAG_WITH_CALCULATION",
+        "foreign yatra": "RAG_WITH_CALCULATION",
+        "abroad travel": "RAG_WITH_CALCULATION",
+        "when will i go abroad": "RAG_WITH_CALCULATION",
     }
+
     
     CLASSIFICATION_PROMPT = """You are an intelligent intent classifier for a Vedic astrology chatbot.
 
@@ -98,29 +107,10 @@ Classify the query into exactly ONE of these four categories based on what the u
 
 ---
 
-**CHITCHAT**
-The user is having casual conversation — greeting, thanking, asking about the bot, or saying goodbye.
-Core signal: No astrological intent. The user just wants to connect or wrap up.
-Examples: "Hi", "Thanks", "Who are you?", "Namaste", "Bye", "Shukriya"
-
-**CALCULATION_ONLY**
-The user wants to *see* raw astrological data from their birth chart — positions, placements, dashas, divisional charts.
-Core signal: They want data *displayed*, not interpreted. No prediction or meaning is being asked for.
-Examples: "Show my birth chart", "What is my lagna?", "Meri rashi kya hai?", "Mera lagna batao", "My planetary positions", "Current dasha period", "Display D9 chart"
-
-**RAG_WITH_CALCULATION**
-The user wants a *personalized* prediction, guidance, or interpretation specific to their own life situation.
-Core signal: The answer must be tailored to THIS person's chart. It could be about future events, life areas (career, marriage, health, finance, relationships), or timing — and it requires understanding who they are astrologically.
-This includes ANY language variant: "mere liye", "mujhe batao", "kab hoga", "meri kismat", "mera career", "for me", "in my chart", etc. (Note: Simple questions like "Meri rashi kya hai?" belong to CALCULATION_ONLY, NOT here).
-Also includes follow-up questions in an ongoing personal reading: "Why that time?", "What about my health?", "Is this good or bad?"
-When the intent feels personal — even slightly — prefer this category over RAG_ONLY.
-Examples: "When will I get married?", "Is 2025 good for my career?", "Mere liye kaisi job sahi rahegi?", "What does my Jupiter placement mean for me?", "Will I travel abroad?"
-
-**RAG_ONLY**
-The user is asking about astrology as a *subject* — concepts, theories, general interpretations.
-Core signal: The answer would be the same for ANY person. No personalization needed.
-This should only be chosen if the query is clearly educational or conceptual with no personal framing.
-Examples: "What is a Raj Yoga?", "Explain the 10th house in general", "What does Saturn return mean?", "What are the qualities of a Scorpio moon in Vedic astrology?"
+**AMBIGUOUS**
+The user mentions a core astrological concept (planet, house, sign) but it's unclear if they want a general theory explanation or a personalized chart analysis.
+Core signal: Single word or short phrase like "Jupiter" or "7th house" with no context tokens like "my", "me", "what is", "define", etc.
+Examples: "Jupiter", "7th house", "Mangal dosha", "Saturn return"
 
 ---
 
@@ -131,11 +121,13 @@ CONVERSATION CONTEXT (last few messages):
 
 Think step by step:
 1. What does the user fundamentally want — data, a personal answer, education, or just conversation?
-2. Is the query personal to their life situation (even implicitly)?
-3. If the query is ambiguous between RAG_ONLY and RAG_WITH_CALCULATION, always prefer RAG_WITH_CALCULATION.
+2. Is the query personal to their life situation (even implicitly)? Phrases like "jaunga", "kismat", "hoga" in Hindi imply personal future.
+3. If the query is ambiguous between RAG_ONLY and RAG_WITH_CALCULATION, prefer RAG_WITH_CALCULATION if "my", "me", or future tense is present.
+4. ONLY choose AMBIGUOUS if the query is a bare term with zero indication of whether the user wants to learn theory or check their own chart.
 
 Respond with ONLY a valid JSON object — no extra text:
 {{"intent": "CATEGORY_NAME", "confidence": 0.95, "reasoning": "One sentence explanation of why."}}
+
 """
 
     def __init__(self, llm=None, use_cache: bool = True, embeddings=None):
@@ -184,7 +176,13 @@ Respond with ONLY a valid JSON object — no extra text:
                 "when will i travel abroad",
                 "how will my marriage be",
                 "what is the impact of saturn in my chart",
-                "mere career ka kya hoga"
+                "mere career ka kya hoga",
+                "foreign travel in my chart",
+                "overseas opportunities",
+                "main foreign jaunga",
+                "videsh yatra kab hogi",
+                "foreign settle kab hounga"
+
             ],
             "RAG_ONLY": [
                 "what is a raj yoga",
@@ -313,7 +311,7 @@ Respond with ONLY a valid JSON object — no extra text:
                 theory_markers = [
                     'in general', 'generally', 'what is', 'what are', 'define',
                     'meaning of', 'significance of', 'in vedic astrology',
-                    'according to', 'classical', 'traditional'
+                    'according to', 'classical', 'traditional', 'meaning'
                 ]
                 if any(marker in query_lower for marker in theory_markers):
                     return False  # Not ambiguous, user wants theory
@@ -321,8 +319,10 @@ Respond with ONLY a valid JSON object — no extra text:
                 # Personalization markers (user wants their chart)
                 personal_markers = [
                     'for me', 'my', 'mine', 'in my chart', 'in my life',
-                    'will i', 'am i', 'do i', 'should i', 'when will i'
+                    'will i', 'am i', 'do i', 'should i', 'when will i',
+                    'main', 'mera', 'meri', 'mere', 'mujhe', 'jaunga', 'kab'
                 ]
+
                 if any(marker in query_lower for marker in personal_markers):
                     return False  # Not ambiguous, user wants personalization
                 

@@ -42,7 +42,7 @@ def run_test():
     print("\n--- 3. Testing /message (First) ---")
     payload = {
         "user_id": user_id,
-        "question": "What is my name and lagna?"
+        "question": "What is my name and lagna? Just tell me these two things."
     }
     start = time.time()
     resp = requests.post(f"{API_URL}/chat/message", json=payload)
