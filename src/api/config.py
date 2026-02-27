@@ -105,6 +105,10 @@ class Settings(BaseSettings):
     ASTRO_USERNAME: str = Field(default="", validation_alias="astro_username")
     ASTRO_PASSWORD: str = Field(default="", validation_alias="astro_password")
     
+    # Hugging Face Settings
+    HF_OFFLINE_MODE: bool = Field(default=False, validation_alias="hf_offline_mode")
+    HF_TIMEOUT: int = Field(default=10, validation_alias="hf_timeout")
+    
     # CRITICAL FIX: Use model_config instead of Config class
     model_config = SettingsConfigDict(
         env_file=".env",

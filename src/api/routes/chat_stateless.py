@@ -486,10 +486,14 @@ class EnhancedSessionManager:
             print(f"[SESSION] ❌ Redis connection failed: {e}")
             self.redis = None
     
-    def get_user_profile(self, user_id: str):
+    def require_redis(self):
         if not self.redis:
-            return None
+            raise Exception("Redis connection is unavailable. Cannot process session data.")
+
+    def get_user_profile(self, user_id: str):
+        self.require_redis()
         try:
+
             data = self.redis.get(f"session:{user_id}:user_profile")
             return json.loads(data) if data else None
         except:
@@ -597,8 +601,7 @@ class EnhancedSessionManager:
         return self.redis.exists(f"session:{user_id}:metadata") > 0
     
     def initialize_session(self, user_id: str, user_profile: dict, conversation_history: list = None):
-        if not self.redis:
-            return {"status": "error", "user_id": user_id, "message": "Redis not available"}
+        self.require_redis()
         
         try:
             # Helper for session persistence
@@ -867,7 +870,8 @@ async def initialize_session(request: InitializeSessionRequest):
         
         if session_manager.session_exists(user_id):
             session_manager.extend_session(user_id)
-            print(f"[SESSION] Extended existing session for {user_id}")
+            print(f"\n[REDIS] ✅ Extended existing session for {user_id}")
+
             return InitializeSessionResponse(
                 user_id=user_id,
                 status="success"
@@ -879,11 +883,13 @@ async def initialize_session(request: InitializeSessionRequest):
         
         result = session_manager.initialize_session(
             user_id=user_id,
-            user_profile=request.user_profile.dict(),
+            user_profile=request.user_profile.model_dump() if hasattr(request.user_profile, 'model_dump') else request.user_profile.dict(),
             conversation_history=conversation
         )
+
         
-        print(f"[SESSION] Initialized session for {user_id} - Status: {result['status']}")
+        print(f"\n[REDIS] 🚀 Initialized NEW session for {user_id} - Status: {result['status']}")
+
         
         return InitializeSessionResponse(
             user_id=result['user_id'],
@@ -893,11 +899,12 @@ async def initialize_session(request: InitializeSessionRequest):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"[SESSION] Error initializing session: {e}")
-        return InitializeSessionResponse(
-            user_id=request.user_id,
-            status="error"
+        print(f"[SESSION_ERROR] Error initializing session: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to initialize session: {str(e)}"
         )
+
 
 
 # ============================================================================
@@ -924,12 +931,21 @@ async def send_message(request: SendMessageRequest):
         question = request.question
         
         # Get user profile
-        user_profile = session_manager.get_user_profile(user_id)
+        try:
+            user_profile = session_manager.get_user_profile(user_id)
+        except Exception as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Backend session database (Redis) is unavailable: {str(e)}"
+            )
+        print("Testing XYZ") 
         if not user_profile:
+            print(f"[WARNING] /message blocked: Session not found in Redis for user: {user_id}")
             raise HTTPException(
                 status_code=404,
                 detail=f"Session not found for user: {user_id}. Please call /initialize first."
             )
+
         
         # ====================================================================
         # STEP 1: GET CONVERSATION CONTEXT
@@ -938,8 +954,9 @@ async def send_message(request: SendMessageRequest):
         conversation_summary = session_manager.get_conversation_summary(user_id)
         
         print(f"\n{'='*80}")
-        print(f"[CONVERSATION CONTEXT] User: {user_id}")
+        print(f"[REDIS CONVERSATION CONTEXT] Fetched from Redis for User: {user_id}")
         print(f"{'='*80}")
+
         print(f"Total messages in history: {len(full_history)}")
         print(f"Conversation summary available: {'Yes' if conversation_summary else 'No'}")
         if conversation_summary:
@@ -1061,10 +1078,11 @@ async def send_message(request: SendMessageRequest):
         cached_dasha = session_manager.get_dasha_data(user_id)
         cached_transit = session_manager.get_transit_data(user_id)
         
-        print(f"[CACHED DATA]")
-        print(f"  Chart: {'[OK] Cached' if cached_chart else '[MISSING] Not cached'}")
-        print(f"  Dasha: {'[OK] Cached' if cached_dasha else '[MISSING] Not cached'}")
-        print(f"  Transit: {'[OK] Cached' if cached_transit else '[MISSING] Not cached'}")
+        print(f"[REDIS CACHED DATA FETCH]")
+        print(f"  Chart: {'[OK] Fetched from Redis' if cached_chart else '[MISSING] Not in Redis'}")
+        print(f"  Dasha: {'[OK] Fetched from Redis' if cached_dasha else '[MISSING] Not in Redis'}")
+        print(f"  Transit: {'[OK] Fetched from Redis' if cached_transit else '[MISSING] Not in Redis'}")
+
         
         orchestrator_session_data = {
             "chart_data": cached_chart,
@@ -1112,23 +1130,25 @@ async def send_message(request: SendMessageRequest):
         # ====================================================================
         # Only store if not already cached
         if result.get('chart_data') and not cached_chart:
-            print(f"[CACHE] Storing NEW chart data...")
+            print(f"[REDIS CACHE] Storing NEW chart data to Redis...")
             session_manager.store_chart_data(user_id, result['chart_data'])
-            print(f"[CACHE] [OK] Chart stored")
+            print(f"[REDIS CACHE] [OK] Chart stored in Redis")
         
         if result.get('dasha_data') and not cached_dasha:
-            print(f"[CACHE] Storing NEW dasha data...")
+            print(f"[REDIS CACHE] Storing NEW dasha data to Redis...")
             session_manager.store_dasha_data(user_id, result['dasha_data'])
-            print(f"[CACHE] [OK] Dasha stored")
+            print(f"[REDIS CACHE] [OK] Dasha stored in Redis")
         
         if result.get('transit_data') and not cached_transit:
-            print(f"[CACHE] Storing NEW transit data...")
+            print(f"[REDIS CACHE] Storing NEW transit data to Redis...")
             session_manager.store_transit_data(user_id, result['transit_data'])
-            print(f"[CACHE] [OK] Transit stored")
+            print(f"[REDIS CACHE] [OK] Transit stored in Redis")
         
         # ====================================================================
         # STEP 8: UPDATE CONVERSATION HISTORY
         # ====================================================================
+        print(f"\n[REDIS] Saving latest user & assistant messages to Redis history...")
+
         session_manager.add_message(user_id, "user", question)  # Store original question
         session_manager.add_message(
             user_id,
