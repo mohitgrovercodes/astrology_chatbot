@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     CONVERSATION_SUMMARY_THRESHOLD: int = Field(
         default=10,
         validation_alias="conversation_summary_threshold",
-        description="Update conversation summary after this many messages"
+        description="Update conversation summary after this many messages (increased from 6 to preserve context)"
     )
     
     # Additional LLM Settings
