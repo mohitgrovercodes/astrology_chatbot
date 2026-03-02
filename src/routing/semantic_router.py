@@ -6,6 +6,7 @@ import logging
 from typing import Dict, List, Optional, Tuple, Any
 from pydantic import BaseModel
 from dataclasses import dataclass 
+from sklearn.metrics.pairwise import cosine_similarity
 
 try:
     from src.rag.preprocessing.embedder import Embedder
@@ -83,50 +84,73 @@ class SemanticRouter:
             "metadata": metadata or {}
         }
         self.route_embeddings[name] = np.array(embeddings)
-
+        
     def route(self, query: str, threshold: float = 0.7) -> Optional[RouteMatch]:
         """
         Route a query to the most similar route using semantic similarity.
-        Returns None if routing fails (allows graceful fallback).
         """
         if not self.model:
             print("[SEMANTIC_ROUTER] Model not loaded - skipping routing")
             return None
         
-        # ════════════════════════════════════════════════════════════════
-        # DEFENSIVE: Handle empty embedding response (rate limit/error)
-        # ════════════════════════════════════════════════════════════════
+        # Defensive: Handle empty embedding response
         try:
             embeddings = self.embedder.embed_texts([query])
             
-            # Check if embedder returned empty list
             if not embeddings or len(embeddings) == 0:
-                print(f"[SEMANTIC_ROUTER] WARNING: Empty embedding response for query: '{query[:50]}...'")
-                print(f"[SEMANTIC_ROUTER] Falling back to non-semantic classification")
-                return None  # Graceful fallback
+                print(f"[SEMANTIC_ROUTER] WARNING: Empty embedding response")
+                return None
             
             query_embedding = np.array(embeddings[0])
             
         except Exception as e:
             print(f"[SEMANTIC_ROUTER] ERROR: Failed to embed query: {e}")
-            import traceback
-            traceback.print_exc()
-            return None  # Graceful fallback
+            return None
         
         # Find most similar route
+        max_score = None
+        max_idx = None
+        best_route_name = None
+        
         try:
-            similarities = cosine_similarity([query_embedding], self.route_embeddings)[0]
+            # Build embedding matrix from route_embeddings dict
+            # self.route_embeddings is {route_name: np.array(embeddings), ...}
+            route_names = list(self.routes.keys())
+            
+            if not route_names:
+                print("[SEMANTIC_ROUTER] WARNING: No routes registered")
+                return None
+            
+            # Stack all route embeddings into a 2D array
+            # Each row is the mean embedding of all examples for that route
+            embedding_matrix = np.array([
+                np.mean(self.route_embeddings[name], axis=0) 
+                for name in route_names
+            ])
+            
+            # Compute similarities: [1 x route_count]
+            similarities = cosine_similarity([query_embedding], embedding_matrix)[0]
             max_idx = np.argmax(similarities)
-            max_score = similarities[max_idx]
+            max_score = float(similarities[max_idx])  # Convert to Python float immediately
+            best_route_name = route_names[max_idx]
+            
+            print(f"[SEMANTIC_ROUTER] Top match: {best_route_name} (confidence: {max_score:.3f})")
             
             if max_score >= threshold:
                 return RouteMatch(
-                    name=self.routes[max_idx].name,
-                    confidence=float(max_score)
+                    name=best_route_name,
+                    confidence=max_score
                 )
             
             return None
             
+        except TypeError as e:
+            print(f"[SEMANTIC_ROUTER] ERROR: Type conversion failed: {e}")
+            if max_score is not None:
+                print(f"[SEMANTIC_ROUTER] max_score type: {type(max_score)}, value: {max_score}")
+            return None
         except Exception as e:
             print(f"[SEMANTIC_ROUTER] ERROR: Similarity calculation failed: {e}")
+            import traceback
+            traceback.print_exc()
             return None
