@@ -5,6 +5,8 @@ import numpy as np
 import logging
 from typing import Dict, List, Optional, Tuple, Any
 from pydantic import BaseModel
+from dataclasses import dataclass 
+
 try:
     from src.rag.preprocessing.embedder import Embedder
 except ImportError:
@@ -12,6 +14,16 @@ except ImportError:
 
 # Configure logger
 logger = logging.getLogger(__name__)
+
+@dataclass
+class Route:
+    name: str
+    utterances: List[str]
+
+@dataclass
+class RouteMatch:  # ← THIS IS MISSING
+    name: str
+    confidence: float
 
 class RouteResult(BaseModel):
     name: str
@@ -72,44 +84,49 @@ class SemanticRouter:
         }
         self.route_embeddings[name] = np.array(embeddings)
 
-    def route(self, query: str, threshold: float = 0.60) -> Optional[RouteResult]:
+    def route(self, query: str, threshold: float = 0.7) -> Optional[RouteMatch]:
         """
-        Find the best matching route for a query using cosine similarity.
-        Returns RouteResult if confidence > threshold, else None.
+        Route a query to the most similar route using semantic similarity.
+        Returns None if routing fails (allows graceful fallback).
         """
-        if not self.model or getattr(self, 'embedder', None) is None or not self.route_embeddings:
+        if not self.model:
+            print("[SEMANTIC_ROUTER] Model not loaded - skipping routing")
             return None
-
-        # Encode query
-        query_embedding = np.array(self.embedder.embed_texts([query])[0])
         
-        best_route = None
-        best_score = -1.0
-        
-        # Check against all routes
-        for name, route_emb in self.route_embeddings.items():
-            scores = []
-            for emb in route_emb:
-                norm_q = np.linalg.norm(query_embedding)
-                norm_e = np.linalg.norm(emb)
-                if norm_q == 0 or norm_e == 0:
-                    sim = 0.0
-                else:
-                    sim = np.dot(query_embedding, emb) / (norm_q * norm_e)
-                scores.append(sim)
-                
-            max_score = float(max(scores)) if scores else -1.0
+        # ════════════════════════════════════════════════════════════════
+        # DEFENSIVE: Handle empty embedding response (rate limit/error)
+        # ════════════════════════════════════════════════════════════════
+        try:
+            embeddings = self.embedder.embed_texts([query])
             
-            if max_score > best_score:
-                best_score = max_score
-                best_route = name
-        
-        # Return result if above threshold
-        if best_score >= threshold and best_route:
-            return RouteResult(
-                name=best_route,
-                confidence=best_score,
-                metadata=self.routes[best_route]["metadata"]
-            )
+            # Check if embedder returned empty list
+            if not embeddings or len(embeddings) == 0:
+                print(f"[SEMANTIC_ROUTER] WARNING: Empty embedding response for query: '{query[:50]}...'")
+                print(f"[SEMANTIC_ROUTER] Falling back to non-semantic classification")
+                return None  # Graceful fallback
             
-        return None
+            query_embedding = np.array(embeddings[0])
+            
+        except Exception as e:
+            print(f"[SEMANTIC_ROUTER] ERROR: Failed to embed query: {e}")
+            import traceback
+            traceback.print_exc()
+            return None  # Graceful fallback
+        
+        # Find most similar route
+        try:
+            similarities = cosine_similarity([query_embedding], self.route_embeddings)[0]
+            max_idx = np.argmax(similarities)
+            max_score = similarities[max_idx]
+            
+            if max_score >= threshold:
+                return RouteMatch(
+                    name=self.routes[max_idx].name,
+                    confidence=float(max_score)
+                )
+            
+            return None
+            
+        except Exception as e:
+            print(f"[SEMANTIC_ROUTER] ERROR: Similarity calculation failed: {e}")
+            return None

@@ -110,20 +110,65 @@ Be accurate - analyze the semantic meaning, not just keywords. If a user asks ab
         
         try:
             response = self.fast_llm.invoke(analysis_prompt)
-            result = json.loads(response.content)
+            content = response.content.strip()
+            
+            # ════════════════════════════════════════════════════════════════
+            # ROBUST JSON PARSING - Handle LLM format variations
+            # ════════════════════════════════════════════════════════════════
+            if not content:
+                raise ValueError("Empty response from LLM")
+            
+            # Try to extract JSON if wrapped in markdown code blocks
+            if "```json" in content:
+                import re
+                json_match = re.search(r'```json\n(.*?)\n```', content, re.DOTALL)
+                if json_match:
+                    content = json_match.group(1)
+            elif "```" in content:
+                # Handle plain markdown code blocks
+                import re
+                json_match = re.search(r'```\n(.*?)\n```', content, re.DOTALL)
+                if json_match:
+                    content = json_match.group(1)
+            
+            # Remove any leading/trailing markdown artifacts
+            content = content.strip('`').strip()
+            
+            # Parse JSON
+            result = json.loads(content)
+            
+            # Validate required fields
+            if 'intent_type' not in result:
+                result['intent_type'] = 'NEW_TOPIC'
+            if 'confidence' not in result:
+                result['confidence'] = 0.5
             
             print(f"\n[CONTEXT ANALYSIS]")
             print(f"  Query: {current_query[:60]}...")
             print(f"  Intent: {result['intent_type']}")
-            print(f"  Confidence: {result['confidence']:.2f}")
-            print(f"  Reasoning: {result['reasoning']}")
+            print(f"  Confidence: {result.get('confidence', 0.5):.2f}")
+            print(f"  Reasoning: {result.get('reasoning', 'N/A')}")
             if result.get('referenced_topic'):
                 print(f"  Referenced Topic: {result['referenced_topic']}")
             
             return result
             
+        except json.JSONDecodeError as e:
+            print(f"[CONTEXT] JSON Parse Error: {e}")
+            print(f"[CONTEXT] LLM Response (first 200 chars): {response.content[:200]}...")
+            # Fallback to safe default
+            return {
+                "intent_type": "NEW_TOPIC",
+                "confidence": 0.5,
+                "reasoning": "JSON parse error - defaulting to NEW_TOPIC",
+                "referenced_topic": None,
+                "requires_context": False
+            }
+            
         except Exception as e:
             print(f"[CONTEXT] Error analyzing intent: {e}")
+            import traceback
+            traceback.print_exc()
             # Fallback to safe default
             return {
                 "intent_type": "NEW_TOPIC",
