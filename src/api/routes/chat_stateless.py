@@ -1120,10 +1120,69 @@ async def send_message(request: SendMessageRequest):
         intent = result.get('intent', 'UNKNOWN')
         confidence = result.get('confidence', 0.0)
         
+        # ════════════════════════════════════════════════════════════════════════
+        # POST-PROCESSING: Remove "Thank You" Patterns & Enforce Length
+        # ════════════════════════════════════════════════════════════════════════
+        import re
+        
+        # Remove "thank you for providing details" patterns
+        thank_you_patterns = [
+            r"thank you for (providing|sharing) your (birth )?details[,.]?\s*",
+            r"thanks for (providing|sharing) your (birth )?details[,.]?\s*",
+            r"dhanyavaad aapke (janam )?details dene ke liye[,.]?\s*",
+            r"shukriya aapke details[,.]?\s*",
+            r"based on (the )?information (you )?provided[,.]?\s*",
+            r"aapke diye gaye details[,.]?\s*",
+        ]
+        
+        original_answer = answer
+        for pattern in thank_you_patterns:
+            answer = re.sub(pattern, "", answer, flags=re.IGNORECASE)
+        
+        # Remove orphaned sentence starters after removal
+        answer = re.sub(r"^\s*(Now|Ab|So|Toh)[,.]?\s*", "", answer, flags=re.IGNORECASE)
+        
+        if answer != original_answer:
+            print(f"[POST_PROCESS] Removed 'thank you' pattern")
+        
+        # Enforce 150-word maximum for mobile
+        MAX_MOBILE_WORDS = 150
+        word_count = len(answer.split())
+        
+        if word_count > MAX_MOBILE_WORDS:
+            print(f"[MOBILE] Response too long ({word_count} words), truncating to {MAX_MOBILE_WORDS}...")
+            
+            # Split into sentences
+            sentences = re.split(r'(?<=[.!?])\s+', answer)
+            
+            # Keep sentences until we hit word limit
+            truncated_sentences = []
+            current_words = 0
+            
+            for sentence in sentences:
+                sentence_words = len(sentence.split())
+                if current_words + sentence_words <= MAX_MOBILE_WORDS:
+                    truncated_sentences.append(sentence)
+                    current_words += sentence_words
+                else:
+                    break
+            
+            answer = ' '.join(truncated_sentences)
+            
+            # Add continuation hint if content was cut
+            if len(truncated_sentences) < len(sentences):
+                detected_lang = state.get('detected_language', 'en')
+                if detected_lang in ['hi', 'hi-lat']:
+                    answer += " Aur detail ke liye 'batao' kahiye."
+                else:
+                    answer += " Ask 'tell me more' for details."
+            
+            print(f"[MOBILE] Truncated: {word_count} → {len(answer.split())} words")
+        
         print(f"\n[ORCHESTRATOR RESULT]")
         print(f"  Intent: {intent}")
         print(f"  Confidence: {confidence:.2f}")
-        print(f"  Answer length: {len(answer)} characters")
+        print(f"  Answer length: {len(answer)} characters ({len(answer.split())} words)")
         
         # ====================================================================
         # STEP 7: STORE NEW CALCULATIONS IN CACHE

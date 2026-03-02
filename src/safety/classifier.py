@@ -254,6 +254,7 @@ Your classification must be based on the user's UNDERLYING INTENT and potential 
 - `relationship_compatibility`: Marriage, partnership questions. Add RELATIONSHIP disclaimer.
 - `children_timing`: Fertility, children timing. Add CHILDREN disclaimer.
 - `career_change`: Career timing, job decisions. Add CAREER disclaimer.
+- `foreign_travel`: Queries about going abroad, videsh yatra, or immigration. Add GENERAL disclaimer.
 
 **REFRAME** — The question is answerable but framed as hard fortune-telling. Reframe it to empower the user with probabilistic guidance:
 - `poorly_framed`: "Will I get rich?" -> "What periods support wealth accumulation for me?"
@@ -273,6 +274,8 @@ Your classification must be based on the user's UNDERLYING INTENT and potential 
 3. Is the intent medical, predictive of death, gambling-related, or about a third party?
 4. Is the phrasing fatalistic ("will X happen") or empowering ("what energy supports X")?
 5. Choose the category that best protects the user while causing the least unnecessary restriction.
+
+**HINGLISH/HINDI BIAS:** Realize that "Main" (I), "Mera/Meri" (My), and "Mujhe" (Me/To me) are FIRST-PERSON pronouns. If a user says "Main foreign kab jaunga?", they are asking about THEMSELVES. This is ALWAYS SAFE and NEVER a privacy violation.
 
 **CONSERVATIVE BIAS:** When genuinely uncertain between SAFE and CONDITIONAL, choose CONDITIONAL. When uncertain between CONDITIONAL and SOFT_BLOCK, choose CONDITIONAL with a strong disclaimer. Only use HARD_BLOCK when the potential harm is concrete and serious.
 
@@ -338,7 +341,9 @@ class SafetyClassifier:
             'my birth time', 'my time of birth', 'my birth place', 
             'my place of birth', 'when was i born', 'where was i born',
             'what time was i born', 'my chart', 'my kundli', 'my horoscope',
-            'show me my', 'tell me my', 'what is my'
+            'show me my', 'tell me my', 'what is my',
+            # Hinglish/Hindi first-person markers
+            'main', 'mera', 'meri', 'mujhe', 'hum'
         ]
         
         if any(pattern in query_lower for pattern in own_data_patterns):
@@ -436,6 +441,10 @@ class SafetyClassifier:
             'my child be born',
             'have a child',
             'get a job', # just in case
+            'kab jaunga', # First-person future
+            'kab jayengi',
+            'videsh kab',
+            'foreign kab',
         ]
         
         for exc in exclusions:

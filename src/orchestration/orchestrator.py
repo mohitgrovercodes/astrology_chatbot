@@ -2277,17 +2277,40 @@ Provide a concise answer:"""
         constitution = get_constitution_injection()
         system_prompt = f"{system_prompt}\n\n{constitution}"
 
-      # CHANGE 6: Enhanced context handling instructions
-        if conversation_history and len(conversation_history) > 0:
+        # ════════════════════════════════════════════════════════════════════════
+        # GREETING CONTROL (Mobile App Context-Aware)
+        # ════════════════════════════════════════════════════════════════════════
+        # Check if app already sent initial greeting (first 2 messages from assistant)
+        app_greeting_present = False
+        if conversation_history and len(conversation_history) >= 2:
+            # Check if first 2 messages are from assistant (app-generated)
+            first_two = conversation_history[:2]
+            if all(msg.get('role') == 'assistant' for msg in first_two):
+                app_greeting_present = True
+                print(f"[GREETING] App-provided initial greeting detected")
+
+        if app_greeting_present or (conversation_history and len(conversation_history) >= 3):
             system_prompt += """
 
 ONGOING CONVERSATION - CONTEXT HANDLING:
-- NO greetings (Namaste/Hello/Hari Om) - get straight to answer
+- NO greetings (Namaste/Hello/Hari Om) - user already greeted
+- NO thanking for birth details - details already provided via app
+- Get STRAIGHT to answering the user's question
 - Review ALL previous messages before responding
 - When user says "it", "this", "that" -> check conversation history
 - Connect follow-up questions to earlier topics
 - Build upon previous insights, don't repeat
 - Maintain conversation flow with context awareness
+"""
+        else:
+            # First user message (conversation_history empty or has only 1-2 messages)
+            system_prompt += """
+
+EARLY CONVERSATION:
+- A brief greeting is appropriate (1 sentence max): "Namaste [Name]!"
+- Then get straight to the answer
+- NO thanking for details (details provided via app backend)
+- Example: "Namaste! Aapki 7th house lord Venus..."
 """
         
         # PHASE 12: Inject Validation Context (NEW)
@@ -2330,6 +2353,42 @@ ONGOING CONVERSATION - CONTEXT HANDLING:
             script_instruction=script_instruction,
             mode='prediction'
         )
+
+        # ════════════════════════════════════════════════════════════════════════
+        # MOBILE RESPONSE LENGTH CONTROL (150 words max)
+        # ════════════════════════════════════════════════════════════════════════
+        mobile_length_instruction = """
+
+MOBILE RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
+═══════════════════════════════════════════════════════════════════════
+1. MAXIMUM LENGTH: 4-5 sentences (120-150 words total)
+2. FIRST SENTENCE: Direct answer to the question
+3. STRUCTURE: Answer → Key Factor → Timing/Remedy → Follow-up offer
+4. TECHNICAL TERMS: Use naturally but briefly explain in parentheses
+   - Good: "7th house (shaadi ka ghar) ki lord Venus..."
+   - Bad: "The seventh house which represents marriage and partnerships..."
+5. NO META-COMMENTARY: Don't explain what you're doing
+   - Bad: "To analyze your marriage prospects, I will examine..."
+   - Good: "Your 7th house lord Venus is weak (4/10)..."
+6. NO THANKING: User details from backend, not provided by user
+   - Bad: "Thank you for providing your birth details..."
+   - Good: "Your birth chart shows..."
+
+EXAMPLE GOOD MOBILE RESPONSE (Marriage):
+"Aapki 7th house (shaadi ka ghar) ki lord Venus kamzor hai (strength 4/10). 
+Classical texts ke mutabik yeh typically 2-3 saal delay karta hai. Best window 
+June-August 2026 hai jab Venus-Jupiter dasha active hoga. Venus ko strong karne 
+ke remedies chahiye?"
+
+EXAMPLE BAD (TOO LONG - 200+ words):
+"To determine the timing of your marriage according to Vedic astrology, we would 
+analyze your birth chart, specifically the 7th house which represents marriage 
+and partnerships, as well as the placement of Venus, the planet of love and 
+relationships. In your case, based on your birth details: Your ascendant (Lagna) 
+and the condition of the 7th house will provide insights..."
+═══════════════════════════════════════════════════════════════════════
+"""
+        instructions += mobile_length_instruction
 
         # CHANGE 5: Add conversation summary section
         conversation_summary_section = ""
