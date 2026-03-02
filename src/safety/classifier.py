@@ -358,6 +358,37 @@ class SafetyClassifier:
             )
             return self._build_result(query, decision)
         
+        # ════════════════════════════════════════════════════════════════
+        # Gate -0.5: Meta-Question Detection (Conversation History Queries)
+        # ════════════════════════════════════════════════════════════════
+        # Questions ABOUT the conversation itself should NOT be blocked
+        meta_question_patterns = [
+            r'what (was|were|is) (my|i|our) (last|previous|earlier|first) (question|query|message|thing)',
+            r'what did i (ask|say|tell|mention)',
+            r'what (have we|did we) (discuss|talk|chat) about',
+            r'can you (repeat|tell me|remind me|recall)',
+            r'what (was|is) (our|my|the) (conversation|discussion|chat) about',
+            r'what (topic|subject) (did we|were we)',
+            r'remind me (what|of)',
+            r'go back to',
+            r'earlier you (said|mentioned|told)',
+        ]
+        
+        import re
+        is_meta_question = any(re.search(pattern, query_lower) for pattern in meta_question_patterns)
+        
+        if is_meta_question:
+            print(f"[SAFETY] Meta-question detected - allowing conversation history query")
+            decision = SafetyDecision(
+                category="SAFE",
+                reason="meta_question",
+                should_answer=True,
+                disclaimer_type=None,
+                confidence=0.90,
+                explanation="Query is about conversation history, not astrology content"
+            )
+            return self._build_result(query, decision)
+        
         # Gate 0: Third-Party Detection (pre-semantic routing)
         third_party_check = self._detect_third_party(query)
         if third_party_check:

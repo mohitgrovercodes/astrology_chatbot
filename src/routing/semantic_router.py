@@ -5,6 +5,9 @@ import numpy as np
 import logging
 from typing import Dict, List, Optional, Tuple, Any
 from pydantic import BaseModel
+from dataclasses import dataclass 
+from sklearn.metrics.pairwise import cosine_similarity
+
 try:
     from src.rag.preprocessing.embedder import Embedder
 except ImportError:
@@ -12,6 +15,16 @@ except ImportError:
 
 # Configure logger
 logger = logging.getLogger(__name__)
+
+@dataclass
+class Route:
+    name: str
+    utterances: List[str]
+
+@dataclass
+class RouteMatch:  # ← THIS IS MISSING
+    name: str
+    confidence: float
 
 class RouteResult(BaseModel):
     name: str
@@ -71,45 +84,73 @@ class SemanticRouter:
             "metadata": metadata or {}
         }
         self.route_embeddings[name] = np.array(embeddings)
-
-    def route(self, query: str, threshold: float = 0.60) -> Optional[RouteResult]:
+        
+    def route(self, query: str, threshold: float = 0.7) -> Optional[RouteMatch]:
         """
-        Find the best matching route for a query using cosine similarity.
-        Returns RouteResult if confidence > threshold, else None.
+        Route a query to the most similar route using semantic similarity.
         """
-        if not self.model or getattr(self, 'embedder', None) is None or not self.route_embeddings:
+        if not self.model:
+            print("[SEMANTIC_ROUTER] Model not loaded - skipping routing")
             return None
-
-        # Encode query
-        query_embedding = np.array(self.embedder.embed_texts([query])[0])
         
-        best_route = None
-        best_score = -1.0
-        
-        # Check against all routes
-        for name, route_emb in self.route_embeddings.items():
-            scores = []
-            for emb in route_emb:
-                norm_q = np.linalg.norm(query_embedding)
-                norm_e = np.linalg.norm(emb)
-                if norm_q == 0 or norm_e == 0:
-                    sim = 0.0
-                else:
-                    sim = np.dot(query_embedding, emb) / (norm_q * norm_e)
-                scores.append(sim)
-                
-            max_score = float(max(scores)) if scores else -1.0
+        # Defensive: Handle empty embedding response
+        try:
+            embeddings = self.embedder.embed_texts([query])
             
-            if max_score > best_score:
-                best_score = max_score
-                best_route = name
-        
-        # Return result if above threshold
-        if best_score >= threshold and best_route:
-            return RouteResult(
-                name=best_route,
-                confidence=best_score,
-                metadata=self.routes[best_route]["metadata"]
-            )
+            if not embeddings or len(embeddings) == 0:
+                print(f"[SEMANTIC_ROUTER] WARNING: Empty embedding response")
+                return None
             
-        return None
+            query_embedding = np.array(embeddings[0])
+            
+        except Exception as e:
+            print(f"[SEMANTIC_ROUTER] ERROR: Failed to embed query: {e}")
+            return None
+        
+        # Find most similar route
+        max_score = None
+        max_idx = None
+        best_route_name = None
+        
+        try:
+            # Build embedding matrix from route_embeddings dict
+            # self.route_embeddings is {route_name: np.array(embeddings), ...}
+            route_names = list(self.routes.keys())
+            
+            if not route_names:
+                print("[SEMANTIC_ROUTER] WARNING: No routes registered")
+                return None
+            
+            # Stack all route embeddings into a 2D array
+            # Each row is the mean embedding of all examples for that route
+            embedding_matrix = np.array([
+                np.mean(self.route_embeddings[name], axis=0) 
+                for name in route_names
+            ])
+            
+            # Compute similarities: [1 x route_count]
+            similarities = cosine_similarity([query_embedding], embedding_matrix)[0]
+            max_idx = np.argmax(similarities)
+            max_score = float(similarities[max_idx])  # Convert to Python float immediately
+            best_route_name = route_names[max_idx]
+            
+            print(f"[SEMANTIC_ROUTER] Top match: {best_route_name} (confidence: {max_score:.3f})")
+            
+            if max_score >= threshold:
+                return RouteMatch(
+                    name=best_route_name,
+                    confidence=max_score
+                )
+            
+            return None
+            
+        except TypeError as e:
+            print(f"[SEMANTIC_ROUTER] ERROR: Type conversion failed: {e}")
+            if max_score is not None:
+                print(f"[SEMANTIC_ROUTER] max_score type: {type(max_score)}, value: {max_score}")
+            return None
+        except Exception as e:
+            print(f"[SEMANTIC_ROUTER] ERROR: Similarity calculation failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return None

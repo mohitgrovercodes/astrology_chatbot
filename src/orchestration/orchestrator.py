@@ -2369,13 +2369,13 @@ MOBILE RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
    - Bad: "The seventh house which represents marriage and partnerships..."
 5. NO META-COMMENTARY: Don't explain what you're doing
    - Bad: "To analyze your marriage prospects, I will examine..."
-   - Good: "Your 7th house lord Venus is weak (4/10)..."
+   - Good: "Your 7th house lord Venus is weak..."
 6. NO THANKING: User details from backend, not provided by user
    - Bad: "Thank you for providing your birth details..."
    - Good: "Your birth chart shows..."
 
 EXAMPLE GOOD MOBILE RESPONSE (Marriage):
-"Aapki 7th house (shaadi ka ghar) ki lord Venus kamzor hai (strength 4/10). 
+"Aapki 7th house (shaadi ka ghar) ki lord Venus kamzor hai. 
 Classical texts ke mutabik yeh typically 2-3 saal delay karta hai. Best window 
 June-August 2026 hai jab Venus-Jupiter dasha active hoga. Venus ko strong karne 
 ke remedies chahiye?"
