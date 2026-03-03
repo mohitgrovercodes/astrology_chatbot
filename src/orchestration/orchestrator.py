@@ -1931,7 +1931,8 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             # PHASE 10.5: Disclaimer Injection
             disclaimer_type = state.get('disclaimer_type')
             if disclaimer_type:
-                disclaimer_text = get_disclaimer(disclaimer_type)
+                detected_lang = state.get('detected_language', 'en')
+                disclaimer_text = get_disclaimer(disclaimer_type, language=detected_lang, llm=self.fast_llm)
                 final_response = f"{final_response}\n\n{disclaimer_text}"
             
             # PHASE 12: Validation Disclaimer Injection
