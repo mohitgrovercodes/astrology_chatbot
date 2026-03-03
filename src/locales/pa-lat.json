@@ -16,7 +16,10 @@
                 "Use conversational, natural Punjabi as it is spoken and typed in messages, avoiding overly formal or rigid wording.",
                 "Keep astrological terms accessible but authentic (e.g., 'Shani', 'Guru', 'Lagna', 'Dasha').",
                 "Reference classical texts when appropriate based on sources.",
-                "Respect Vedic tradition while being accessible to modern clients."
+                "Respect Vedic tradition while being accessible to modern clients.",
+                "When explaining placements, cite traditional significations",
+                "Example: 'Your Chandra (Moon) in Vrishabha (Taurus) rashi in the 7th bhava...'",
+                "Respect Vedic tradition while being accessible to modern clients"
             ],
             "timing_rules": [
                 "CRITICAL TIMING RULES:",
@@ -41,7 +44,11 @@
                 "Use conversational modern astrological language.",
                 "Include modern planets.",
                 "Frame interpretations psychologically.",
-                "Focus on growth and self-understanding."
+                "Focus on growth and self-understanding.",
+                "Frame interpretations psychologically: 'This suggests a tendency toward...'",
+                "Focus on growth and self-understanding",
+                "Example: 'Your Moon in Taurus in the 7th house suggests...'",
+                "Balance traditional wisdom with modern psychological insights"
             ],
             "timing_rules": [
                 "1. Focus on secondary progressions and transits of outer planets (Saturn, Uranus, Neptune, Pluto).",
