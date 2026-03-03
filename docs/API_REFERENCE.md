@@ -137,47 +137,85 @@ Headers: X-API-Key: your-api-key
 Body: { UserUpdate }
 ```
 
-### Chat (Backend Integration)
-**Endpoint:** `POST /api/v1/chat`  
-**Authentication:** `X-Internal-Service` header (Internal shared secret)
+### Chat (Backend Integration) — Correct Protocol
 
-This endpoint is optimized for backend-to-backend integration with Redis-based session management.
+> ⚠️ **Important:** The chatbot uses a **2-step protocol**.  
+> You MUST call `/initialize` before `/message` for every session.
 
-**Request Body:**
+---
+
+#### Step 1 — Initialize Session
+
+**Endpoint:** `POST /api/v1/chat/initialize`
+
 ```json
 {
-  "message": "When will I get married?",
-  "session_id": "unique-session-id-123",
-  "user_context": {
-    "birth_date": "1990-05-15",
-    "birth_time": "14:30:00",
+  "user_id": "unique-user-or-session-id",
+  "user_profile": {
+    "user_id": "unique-user-or-session-id",
+    "name": "Arjun Sharma",
+    "date_of_birth": "1990-05-15",
+    "time_of_birth": "14:30:00",
+    "place_of_birth": "New Delhi, India",
     "latitude": 28.6139,
     "longitude": 77.2090,
     "timezone": "Asia/Kolkata",
-    "astrology_system": "vedic"
-  }
+    "preferred_system": "vedic"
+  },
+  "conversation_history": []
 }
 ```
 
-**Response Body:**
+> `conversation_history` is a list of `{ "question": "...", "answer": "...", "source": "external", "timestamp": "..." }` objects.  
+> Pass previous messages here if resuming a conversation; pass `[]` for new sessions.
+
+**Response:**
 ```json
 {
-  "answer": "Based on your birth chart...",
-  "sources": [
-    {
-      "content": "Reference text from classic...",
-      "metadata": { "source": "BPHS", "page": 123 }
-    }
-  ],
-  "session_id": "unique-session-id-123",
-  "metadata": {
-    "tokens_used": 450,
-    "model": "gpt-4o-mini",
-    "processing_time": 0.85,
-    "intent": "MARRIAGE_PREDICTION"
-  }
+  "user_id": "unique-user-or-session-id",
+  "status": "success"
 }
 ```
+
+---
+
+#### Step 2 — Send Message
+
+**Endpoint:** `POST /api/v1/chat/message`
+
+```json
+{
+  "user_id": "unique-user-or-session-id",
+  "question": "When will I get married?"
+}
+```
+
+> ❗ `user_id` here MUST be identical to the one used in `/initialize`.
+
+**Response:**
+```json
+{
+  "user_id": "unique-user-or-session-id",
+  "question": "When will I get married?",
+  "answer": "Based on your birth chart...",
+  "source": "openai"
+}
+```
+
+---
+
+#### Field Name Reference (CRITICAL — Do Not Mix Up)
+
+| Correct field name | Wrong / old name | Used in |
+|---|---|---|
+| `date_of_birth` | `birth_date` | `user_profile` in `/initialize` |
+| `time_of_birth` | `birth_time` | `user_profile` in `/initialize` |
+| `preferred_system` | `astrology_system` | `user_profile` in `/initialize` |
+| `place_of_birth` | *(was missing)* | `user_profile` in `/initialize` |
+| `question` | `message` | `/message` request body |
+| `user_id` | `session_id` | both endpoints |
+
+
 
 ### Chart Calculation
 ```bash
