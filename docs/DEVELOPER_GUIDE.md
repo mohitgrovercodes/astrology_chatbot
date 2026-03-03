@@ -1,267 +1,136 @@
-<!-- docs\DEVELOPER_GUIDE.md -->
-# 🛠️ Developer Guide
+# NakshatraAI — Developer & Integration Guide
 
-**Welcome to the Astrology AI Checkbot Project!**
-
-This guide covers the setup, development workflow, and testing procedures for the project.
+> **Last Updated:** February 2026
+> **For:** Backend Developers, AI Engineers, & Mobile App Integrators
 
 ---
 
-## 1. Environment Setup
+## 🚀 Quick Start (Local Setup)
 
-### Prerequisites
-- Python 3.10+
-- `pip`
-- Google Cloud Project (for Vertex AI) OR OpenAI API Key
+1. **Clone & Install**
+   ```bash
+   git clone <repo-url>
+   cd astro_chatbot
+   python -m venv venv
+   source venv/bin/activate  # Windows: venv\\Scripts\\activate
+   pip install -r requirements.txt
+   ```
 
-### Installation
+2. **Configure Environment**
+   Duplicate `.env.example` to `.env`. Required vars:
+   ```env
+   LLM_PROVIDER=openai
+   OPENAI_API_KEY=sk-...           # Required for embeddings & LLM
+   INTERNAL_SERVICE_SECRET=...     # Required for backend-to-backend auth
+   VALID_API_KEYS=key1,key2        # Required for public interactions
+   REDIS_HOST=localhost            # Required for memory caching
+   ```
 
-```bash
-# 1. Clone the repository
-git clone <repo-url>
-cd astro-chatbot
+3. **Initialize Storage**
+   ```bash
+   python scripts/init_db.py
+   python scripts/add_test_user.py
+   # Note: VectorDB chunks are managed via `python scripts/ingest_documents.py`
+   ```
 
-# 2. Create virtual environment
-python -m venv venv
-.\venv\Scripts\activate  # Windows
-# source venv/bin/activate # Mac/Linux
-
-# 3. Install dependencies
-pip install -r requirements.txt
-```
-
-### Configuration (.env)
-
-Copy `.env.example` to `.env` and configure your keys:
-
-```ini
-# LLM Provider (google or openai)
-DEFAULT_LLM_PROVIDER=google
-DEFAULT_LLM_MODEL=gemini-2.5-flash
-
-# Google Vertex AI Credentials
-GOOGLE_APPLICATION_CREDENTIALS=credentials/video-translate-key.json
-GOOGLE_CLOUD_PROJECT=nakshatraai-447814
-GOOGLE_LOCATION=us-central1
-
-# Or OpenAI
-OPENAI_API_KEY=sk-...
-
-# Vector DB
-CHROMA_PERSIST_DIRECTORY=./data/vectordb
-```
+4. **Launch Application**
+   ```bash
+   redis-server                      # Terminal 1
+   uvicorn src.api.main:app --reload # Terminal 2
+   ```
 
 ---
 
-## 2. Google Cloud Setup (If using Vertex AI)
+## 🔌 Integrating the Mobile App API
 
-1.  **Create Service Account**:
-    - Go to IAM & Admin > Service Accounts.
-    - Create new account with **Vertex AI User** role.
-    - Create JSON Key and save to `credentials/google-credentials.json`.
-2.  **Enable APIs**:
-    - Enable "Vertex AI API" in Cloud Console.
+The chatbot exposes two endpoints exclusively for the mobile app connection (`src/api/routes/chat_stateless.py`). Strict adherence to the 2-step protocol is required.
 
----
+### 1. The `/initialize` Endpoint (One-Time Only)
+Call this once when the user registers or enters the chat interface for the first time. 
+*Note: If a session already exists for the User ID, the server safely aborts modifications to avoid overwriting existing chat context.*
 
-## 3. Development Workflow
-
-### Project Structure
-- `src/` - Source code
-    - `engines/` - Deterministic calculation engines (Vedic/Western).
-    - `routing/` - Semantic Router (AI Intent).
-    - `orchestration/` - LangGraph workflow.
-    - `safety/` - Classifier & Constitution.
-- `docs/` - Documentation.
-- `data/` - Local datastores (VectorDB, Profiles).
-
-### Running Locally
-
-**Interactive CLI Mode**:
-```bash
-python chatbot_phase5_1.py
+`POST /api/v1/chat/initialize`
+```json
+{
+  "user_id": "unique-uuid",
+  "user_profile": {
+    "name": "Jane Doe",
+    "date_of_birth": "1990-05-15",
+    "time_of_birth": "14:30:00",
+    "place_of_birth": "London, UK",
+    "latitude": 51.5074,
+    "longitude": -0.1278,
+    "timezone": "Europe/London",
+    "preferred_system": "vedic"
+  },
+  "conversation_history": []
+}
 ```
 
-**Run Semantic Router Test**:
-```bash
-python test_semantic_routing.py
-# (Note: Requires sentence-transformers model download on first run)
+### 2. The `/message` Endpoint
+Submit actual user questions. State, context, transits, charts, and dashas are handled natively within Redis by the application state manager.
+
+`POST /api/v1/chat/message`
+```json
+{
+  "user_id": "unique-uuid",
+  "question": "When will my career improve?"
+}
 ```
 
 ---
 
-## 4. Testing
+## 🛠 Extending Prediction Logic (For AI Engineers)
 
-### Core Test Suite
-Run the comprehensive test suite to verify system integrity:
+Currently, the AI utilizes `src/orchestration/orchestrator.py` to aggregate Data (Chart, Transits, Dasha, RAG texts) and pass it directly to the LLM. 
 
-```bash
-# Test Routing Logic
-python test_routing.py
+### Mission Directive: 
+Future Prediction integrations should introduce structured deterministic reasoning instead of LLM black-box synthesis.
 
-# Test Calculation Engines
-python src/tools/tools.py
+**Example Structure to implement (`MarriagePredictionEngine`):**
+1. **Identify Factors**: Extract 7th lord, 7th house, D9 chart status from Vedic engine output.
+2. **Apply Classical Rules**: If 7th lord is debilitated, queue a delay indication.
+3. **Weight Conflicting rules**: Is the Dasha overriding the debilitation?
+4. **Synthesize**: Pass the weighted logic alongside the generated context to the LLM.
 
-# Test Safety Classifier
-# (integration via chatbot.py)
-```
-
-**Expected Results**:
-- Routing accuracy > 90%
-- Calculations must match Swiss Ephemeris ref values.
-
----
-
-## 5. Deployment
-
-### Docker Deployment (Recommended)
-
-**Quick Start:**
-```bash
-# 1. Build and start services
-docker-compose up -d
-
-# 2. Verify deployment
-docker-compose ps
-
-# 3. Check logs
-docker-compose logs -f api
-
-# 4. Test health endpoint
-curl http://localhost:8000/api/v1/health
-```
-
-**Service Architecture:**
-```yaml
-services:
-  api:          # FastAPI application (port 8000)
-  redis:        # Session storage (port 6379)
-```
-
-**Docker Commands:**
-```bash
-# Start services
-docker-compose up -d
-
-# Stop services
-docker-compose down
-
-# Restart specific service
-docker-compose restart api
-
-# View logs
-docker-compose logs -f api
-
-# Rebuild after code changes
-docker-compose build --no-cache
-docker-compose up -d
-```
-
-### Production Deployment
-
-**Pre-Deployment Checklist:**
-- [ ] Environment variables configured
-- [ ] Secrets generated and secured
-- [ ] Database connection tested
-- [ ] Redis connection tested
-- [ ] SSL certificates obtained (if applicable)
-- [ ] Firewall rules configured
-
-**Environment Variables (Production):**
-```env
-# API Configuration
-DEBUG=false
-HOST=0.0.0.0
-PORT=8000
-
-# Security
-INTERNAL_SERVICE_SECRET=<64-char-random-string>
-VALID_API_KEYS=<comma-separated-keys>
-
-# Redis
-REDIS_HOST=redis
-REDIS_PORT=6379
-REDIS_PASSWORD=<strong-password>
-
-# LLM
-OPENAI_API_KEY=sk-...
-LLM_PROVIDER=openai
-LLM_MODEL=gpt-4o-mini
-
-# CORS
-ALLOWED_ORIGINS=https://yourdomain.com
-
-# Rate Limiting
-RATE_LIMIT_PER_MINUTE=100
-```
-
-**Generate Secrets:**
-```bash
-# Generate strong secrets
-python -c "import secrets; print(secrets.token_urlsafe(48))"
+### Available Tools:
+Within the orchestrator, you can tap into calculations via:
+```python
+from src.tools.tools import get_calculation_tools
+tools = get_calculation_tools()
+chart_data = tools['vedic_birth_chart'].invoke({"date_of_birth": "1990-05-15", ...})
 ```
 
 ---
 
-## 6. Localization & Language Support
+## 📖 Managing & Expanding the RAG Books
 
-**Supported Languages (Fixed List):**
-- English (`en`), Hindi (`hi`), Marathi (`mr`), Punjabi (`pa`), Tamil (`ta`), Telugu (`te`), Malayalam (`ml`).
+NakshatraAI natively processes Astro-Books directly from PDFs to ChromaDB vectors.
 
-**Adding/Editing Content:**
-- Edit the **Base JSON** only (e.g., `src/locales/mr.json`).
-- **DO NOT** create `mr-lat.json`. The system automatically reuses `mr.json` for Roman script inputs.
-
----
-
-## 7. Troubleshooting
-
-**Issue**: `ImportError: cannot import name 'VedicEngine'`
-**Fix**: Ensure `PYTHONPATH` includes project root or run from root using `python -m src...`.
-
-**Issue**: `UnicodeEncodeError` on Windows Console
-**Fix**: `chcp 65001` to enable UTF-8 or use an IDE terminal like VS Code.
-
-**Issue**: Redis Connection Failed
-**Fix**:
+### Generating PDF Chunks
+We use a high-performance multithreaded Gemini Vision architecture to read tables and prose efficiently.
 ```bash
-# Check Redis status
-docker-compose ps redis
-
-# Test connection
-docker-compose exec redis redis-cli ping
-
-# Restart Redis
-docker-compose restart redis
+# Process PDFs (Ensure `data/books/` has PDFs attached)
+python src/rag/extraction/batch_extract.py
 ```
+> **Performance Tip**: Our `ExtractionConfig` prefers `gemini-2.5-flash-lite` due to its 2X speed advantage reducing costs by 60%. If a page fails quality validation, it auto-upgrades to `gemini-2.5-pro`.
 
-**Issue**: Port Already in Use
-**Fix**:
+---
+
+## 💰 Cost Tracking system
+
+NakshatraAI utilizes an auto-logging SQLite database to trace expenses for embeddings and tokens. 
+- Integrated transparently into LLM workflows (`CostTrackingWrapper`).
+- Generates automatic daily rollups.
+
+**Generate Cost Reports:**
 ```bash
-# Find process using port 8000
-netstat -ano | findstr :8000  # Windows
-lsof -i :8000  # Linux/Mac
+# Show today's costs
+python -m src.utils.cost_report --today
 
-# Kill process or change port in .env
-PORT=8001
+# Breakdown for specific model over a week
+python -m src.utils.cost_report --week --model gemini-2.5-flash
+
+# Export metrics
+python -m src.utils.cost_report --month --export january_costs.csv
 ```
-
----
-
-## 📚 Additional Resources
-
-**Documentation:**
-- [CURRENT_IMPLEMENTATION.md](CURRENT_IMPLEMENTATION.md) - Complete system state
-- [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) - Handoff guide for new developers
-- [API_REFERENCE.md](API_REFERENCE.md) - API documentation
-- [ARCHITECTURE.md](ARCHITECTURE.md) - System design
-
-**For Deployment:**
-- See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for detailed deployment instructions
-- Docker Compose configuration in `docker-compose.yml`
-- Environment template in `.env.example`
-
----
-
-**Developer Guide Version:** 2.0  
-**Last Updated:** February 11, 2026
