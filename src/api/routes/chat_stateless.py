@@ -710,6 +710,26 @@ class EnhancedSessionManager:
             # Store user profile
             _set_data(f"session:{user_id}:user_profile", user_profile)
             
+            # ════════════════════════════════════════════════════════════════
+            # VALIDATE DOB
+            # ════════════════════════════════════════════════════════════════
+            from src.validation.age_validator import AgeValidator
+
+            dob = user_profile.get('date_of_birth')
+            if dob:
+                validation = AgeValidator.validate_dob(dob)
+                
+                print(f"[DOB_VALIDATION] Checking DOB: {dob}")
+                if not validation['valid']:
+                    print(f"[DOB_VALIDATION] ⚠️  Invalid: {validation['issue']}")
+                    print(f"  - Message: {validation['message']}")
+                else:
+                    print(f"[DOB_VALIDATION] ✅ Valid - Age: {validation['age_years']} years, {validation['age_months']} months")
+                
+                # Store validation with profile
+                user_profile['_dob_validation'] = validation
+                _set_data(f"session:{user_id}:user_profile", user_profile)
+
             # Convert conversation history from external format to internal format
             internal_conversation = []
             if conversation_history:
