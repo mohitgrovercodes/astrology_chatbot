@@ -569,7 +569,7 @@ class EnhancedSessionManager:
             return None
     
     def store_conversation_summary(self, user_id: str, summary: str):
-        """Store conversation summary in Redis."""
+        """Store conversation summary in Redis permanently (no TTL)."""
         if not self.redis:
             return
         try:
@@ -578,14 +578,9 @@ class EnhancedSessionManager:
                 "updated_at": datetime.utcnow().isoformat(),
                 "message_count": len(self.get_conversation_history(user_id))
             }
-            # Use settings for expiry
             key = f"session:{user_id}:summary"
-            val = json.dumps(summary_data)
-            if settings.SESSION_EXPIRY_HOURS > 0:
-                self.redis.setex(key, settings.SESSION_EXPIRY_HOURS * 3600, val)
-            else:
-                self.redis.set(key, val)
-            print(f"[SUMMARY] Stored conversation summary at key: {key}")
+            self.redis.set(key, json.dumps(summary_data))
+            print(f"[SUMMARY] Stored conversation summary permanently at key: {key}")
         except Exception as e:
             print(f"[SUMMARY] Error storing summary: {e}")
     
@@ -607,35 +602,94 @@ class EnhancedSessionManager:
             return None
     
     def get_dasha_data(self, user_id: str):
+        """
+        Fetch Dasha data from Redis.
+        The active Mahadasha/Antardasha period shifts over months, so we perform
+        an application-level staleness check: if cached data is older than
+        DASHA_REFRESH_DAYS (default 30 days), we evict it and return None so
+        the orchestrator recomputes the current Dasha state.
+        """
         if not self.redis:
             return None
         try:
             key = f"session:{user_id}:dasha"
             print(f"[REDIS] GET key={key}")
-            data = self.redis.get(key)
-            if data:
-                print(f"[REDIS] Found dasha in Redis")
-                return json.loads(data)
-            else:
+            raw = self.redis.get(key)
+            if not raw:
                 print(f"[REDIS] No dasha found at key: {key}")
                 return None
+
+            envelope = json.loads(raw)
+
+            # ── Staleness check ───────────────────────────────────────────────
+            # Support both new envelope format and legacy flat format.
+            stored_at_str = envelope.get("stored_at") if isinstance(envelope, dict) else None
+
+            if stored_at_str:
+                stored_at = datetime.fromisoformat(stored_at_str)
+                age_days = (datetime.utcnow() - stored_at).total_seconds() / 86400
+                refresh_threshold = settings.DASHA_REFRESH_DAYS
+
+                if age_days >= refresh_threshold:
+                    print(f"[DASHA] STALE — cached {age_days:.1f} days ago (threshold: {refresh_threshold} days). Evicting and forcing recompute.")
+                    self.redis.delete(key)
+                    return None
+
+                print(f"[REDIS] Found dasha in Redis (age: {age_days:.1f} days, threshold: {refresh_threshold} days) — FRESH")
+                return envelope.get("data")
+            else:
+                # Legacy flat format — evict to migrate to new envelope
+                print(f"[DASHA] Legacy format detected for {user_id} — evicting and forcing recompute.")
+                self.redis.delete(key)
+                return None
+
         except Exception as e:
             print(f"[SESSION] ERROR: Failed to get dasha data for {user_id}: {e}")
             return None
     
     def get_transit_data(self, user_id: str):
+        """
+        Fetch transit data from Redis.
+        Transit positions change daily, so we perform an application-level
+        staleness check: if the cached data is older than TRANSIT_REFRESH_HOURS
+        (default 24h), we evict it and return None so the orchestrator recomputes
+        fresh planetary positions for this request.
+        """
         if not self.redis:
             return None
         try:
             key = f"session:{user_id}:transit"
             print(f"[REDIS] GET key={key}")
-            data = self.redis.get(key)
-            if data:
-                print(f"[REDIS] Found transit in Redis")
-                return json.loads(data)
-            else:
+            raw = self.redis.get(key)
+            if not raw:
                 print(f"[REDIS] No transit found at key: {key}")
                 return None
+
+            envelope = json.loads(raw)
+
+            # ── Staleness check ───────────────────────────────────────────────
+            # We support both the new envelope format {"data": ..., "stored_at": ...}
+            # and the legacy flat format (no stored_at key) for backward compat.
+            stored_at_str = envelope.get("stored_at") if isinstance(envelope, dict) else None
+
+            if stored_at_str:
+                stored_at = datetime.fromisoformat(stored_at_str)
+                age_hours = (datetime.utcnow() - stored_at).total_seconds() / 3600
+                refresh_threshold = settings.TRANSIT_REFRESH_HOURS
+
+                if age_hours >= refresh_threshold:
+                    print(f"[TRANSIT] STALE — cached {age_hours:.1f}h ago (threshold: {refresh_threshold}h). Evicting key and forcing recompute.")
+                    self.redis.delete(key)
+                    return None
+
+                print(f"[REDIS] Found transit in Redis (age: {age_hours:.1f}h, threshold: {refresh_threshold}h) — FRESH")
+                return envelope.get("data")
+            else:
+                # Legacy flat format — treat as stale to migrate to new envelope
+                print(f"[TRANSIT] Legacy format detected for {user_id} — evicting and forcing recompute.")
+                self.redis.delete(key)
+                return None
+
         except Exception as e:
             print(f"[SESSION] ERROR: Failed to get transit data for {user_id}: {e}")
             return None
@@ -649,12 +703,9 @@ class EnhancedSessionManager:
         self.require_redis()
         
         try:
-            # Helper for session persistence
+            # Helper for session persistence — always permanent (no TTL)
             def _set_data(key, val):
-                if settings.SESSION_EXPIRY_HOURS > 0:
-                    self.redis.setex(key, settings.SESSION_EXPIRY_HOURS * 3600, json.dumps(val))
-                else:
-                    self.redis.set(key, json.dumps(val))
+                self.redis.set(key, json.dumps(val))
 
             # Store user profile
             _set_data(f"session:{user_id}:user_profile", user_profile)
@@ -765,11 +816,8 @@ class EnhancedSessionManager:
                 conversation = conversation[-context_window:]
             
             key = f"session:{session_id}:history"
-            val = json.dumps(conversation)
-            if settings.SESSION_EXPIRY_HOURS > 0:
-                self.redis.setex(key, settings.SESSION_EXPIRY_HOURS * 3600, val)
-            else:
-                self.redis.set(key, val)
+            # Store permanently — no TTL
+            self.redis.set(key, json.dumps(conversation))
             return True
         except:
             return False
@@ -800,51 +848,105 @@ class EnhancedSessionManager:
         try:
             key = f"session:{user_id}:chart"
             print(f"[REDIS] STORE key={key}")
-            self.redis.setex(key, 604800, json.dumps(chart_data))
-            print(f"[CACHE] [OK] Chart stored (TTL: 7d)")
+            self.redis.set(key, json.dumps(chart_data))
+            print(f"[CACHE] [OK] Chart stored permanently (no TTL)")
         except Exception as e:
             print(f"[CACHE] Error storing chart: {e}")
             pass
     
     def store_dasha_data(self, user_id: str, dasha_data: dict):
+        """
+        Store Dasha data with a timestamp envelope for staleness detection.
+        Data is stored permanently in Redis (no TTL); freshness is controlled
+        in get_dasha_data() via DASHA_REFRESH_DAYS.
+        """
         if not self.redis:
             return
         try:
             key = f"session:{user_id}:dasha"
             print(f"[REDIS] STORE key={key}")
-            self.redis.setex(key, 604800, json.dumps(dasha_data))
-            print(f"[CACHE] [OK] Dasha stored (TTL: 7d)")
+            envelope = {
+                "data": dasha_data,
+                "stored_at": datetime.utcnow().isoformat()  # For staleness check on read
+            }
+            self.redis.set(key, json.dumps(envelope))
+            print(f"[CACHE] [OK] Dasha stored permanently with timestamp (refresh threshold: {settings.DASHA_REFRESH_DAYS} days)")
         except Exception as e:
             print(f"[CACHE] Error storing dasha: {e}")
             pass
     
     def store_transit_data(self, user_id: str, transit_data: dict):
+        """
+        Store transit data with a timestamp envelope for staleness detection.
+        Data is stored permanently in Redis (no TTL); freshness is controlled
+        in get_transit_data() via TRANSIT_REFRESH_HOURS.
+        """
         if not self.redis:
             return
         try:
             key = f"session:{user_id}:transit"
             print(f"[REDIS] STORE key={key}")
-            self.redis.setex(key, 7200, json.dumps(transit_data))
-            print(f"[CACHE] [OK] Transit stored (TTL: 2h)")
+            envelope = {
+                "data": transit_data,
+                "stored_at": datetime.utcnow().isoformat()  # For staleness check on read
+            }
+            self.redis.set(key, json.dumps(envelope))
+            print(f"[CACHE] [OK] Transit stored permanently with timestamp (refresh threshold: {settings.TRANSIT_REFRESH_HOURS}h)")
         except Exception as e:
             print(f"[CACHE] Error storing transit: {e}")
             pass
     
-    def extend_session(self, user_id: str):
+    def update_user_profile(self, user_id: str, user_profile: dict):
+        """Overwrite the user profile in Redis for an existing session (permanent, no TTL)."""
         if not self.redis:
             return
         try:
-            keys = [
-                f"session:{user_id}:user_profile",
-                f"session:{user_id}:history",
-                f"session:{user_id}:summary",
-                f"session:{user_id}:metadata"
-            ]
-            for key in keys:
-                if self.redis.exists(key):
-                    self.redis.expire(key, 86400)
-        except:
-            pass
+            key = f"session:{user_id}:user_profile"
+            self.redis.set(key, json.dumps(user_profile))
+            print(f"[REDIS] Profile updated permanently for {user_id}: DOB={user_profile.get('date_of_birth', 'N/A')}")
+        except Exception as e:
+            print(f"[SESSION] Error updating profile for {user_id}: {e}")
+
+    def overwrite_conversation_history(self, user_id: str, conversation_history: list):
+        """Convert external conversation history and overwrite existing Redis history (permanent, no TTL)."""
+        if not self.redis:
+            return
+        try:
+            internal_conversation = []
+            for idx, msg in enumerate(conversation_history):
+                timestamp = msg.get('timestamp')
+                if isinstance(timestamp, dict) and '$date' in timestamp:
+                    timestamp = timestamp['$date']
+                elif timestamp is None:
+                    timestamp = datetime.utcnow().isoformat()
+
+                question = msg.get('question', '').strip()
+                answer = msg.get('answer', '').strip()
+
+                if question:
+                    internal_conversation.append({
+                        "role": "user",
+                        "content": question,
+                        "timestamp": timestamp
+                    })
+                if answer:
+                    internal_conversation.append({
+                        "role": "assistant",
+                        "content": answer,
+                        "timestamp": timestamp,
+                        "metadata": {"source": msg.get('source', 'external')}
+                    })
+
+            key = f"session:{user_id}:history"
+            # Store permanently — no TTL
+            self.redis.set(key, json.dumps(internal_conversation))
+            print(f"[REDIS] History overwritten permanently for {user_id}: {len(internal_conversation)} messages")
+        except Exception as e:
+            print(f"[SESSION] Error overwriting history for {user_id}: {e}")
+
+    def extend_session(self, user_id: str):
+        """No-op: all session data is stored permanently in Redis (no TTL to extend)."""
+        pass
     
     def clear_session(self, session_id: str):
         if not self.redis:
@@ -946,35 +1048,34 @@ async def initialize_session(request: InitializeSessionRequest):
     try:
         session_manager = get_session_manager()
         user_id = request.user_id
-        
-        if session_manager.session_exists(user_id):
-            session_manager.extend_session(user_id)
-            print(f"\n[REDIS] ✅ Extended existing session for {user_id}")
 
-            return InitializeSessionResponse(
-                user_id=user_id,
-                status="success"
-            )
-        
         conversation = []
         if request.conversation_history:
             conversation = [item.dict() for item in request.conversation_history]
-        
+
+        if session_manager.session_exists(user_id):
+            # Session already exists — /initialize is a one-time operation per user.
+            # Do NOT overwrite any data. Return immediately so the caller knows
+            # the session is already live and the chatbot is ready to accept messages.
+            print(f"\n[REDIS] Session already exists for {user_id} — skipping re-initialization.")
+            return InitializeSessionResponse(
+                user_id=user_id,
+                status="already_initialized"
+            )
+
         result = session_manager.initialize_session(
             user_id=user_id,
             user_profile=request.user_profile.model_dump() if hasattr(request.user_profile, 'model_dump') else request.user_profile.dict(),
             conversation_history=conversation
         )
 
-        
-        print(f"\n[REDIS] 🚀 Initialized NEW session for {user_id} - Status: {result['status']}")
+        print(f"\n[REDIS] Initialized NEW session for {user_id} - Status: {result['status']}")
 
-        
         return InitializeSessionResponse(
             user_id=result['user_id'],
             status=result['status']
         )
-    
+
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -983,6 +1084,7 @@ async def initialize_session(request: InitializeSessionRequest):
             status_code=500,
             detail=f"Failed to initialize session: {str(e)}"
         )
+
 
 
 

@@ -93,19 +93,27 @@ class ChatResponse(BaseModel):
 # =============================================================================
 
 class UserContext(BaseModel):
-    """User birth details from backend."""
-    birth_date: str = Field(..., example="1990-05-15")
-    birth_time: str = Field(..., example="14:30:00")
+    """
+    User birth details — field names MUST match the internal UserProfile schema
+    used by /initialize and consumed by the orchestrator from Redis.
+    """
+    name: str = Field(default="User", description="User's name")
+    date_of_birth: str = Field(..., example="1990-05-15", description="Date in YYYY-MM-DD format")
+    time_of_birth: str = Field(..., example="14:30:00", description="Time in HH:MM:SS (24h) format")
+    place_of_birth: str = Field(default="", description="City / locality of birth")
     latitude: float = Field(..., example=28.6139)
     longitude: float = Field(..., example=77.2090)
     timezone: str = Field(default="Asia/Kolkata")
-    astrology_system: str = Field(default="vedic")
+    preferred_system: str = Field(default="vedic", description="'vedic' or 'western'")
 
 
 class IntegrationChatRequest(BaseModel):
-    """Chat request matching backend format."""
-    message: str = Field(..., description="User query")
-    session_id: str = Field(..., description="Unique session ID")
+    """
+    Chat request matching backend format.
+    Field names match the /message endpoint (question, user_id).
+    """
+    question: str = Field(..., description="User query")
+    user_id: str = Field(..., description="Unique session / user ID (must match /initialize call)")
     user_context: UserContext
 
 

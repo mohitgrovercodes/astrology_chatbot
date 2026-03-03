@@ -95,6 +95,23 @@ class Settings(BaseSettings):
         validation_alias="conversation_summary_threshold",
         description="Update conversation summary after this many messages (increased from 6 to preserve context)"
     )
+
+    # Transit Data Freshness
+    # Planetary transits change daily, so cached transit data is evicted and
+    # recomputed after this many hours. All other cached data (chart, dasha)
+    # is permanent since birth-chart positions never change.
+    TRANSIT_REFRESH_HOURS: int = Field(
+        default=24,
+        validation_alias="transit_refresh_hours",
+        description="Hours before cached transit data is considered stale and recomputed"
+    )
+
+    # Dasha periods (Antardasha) shift over months.  Recompute after this many days.
+    DASHA_REFRESH_DAYS: int = Field(
+        default=30,
+        validation_alias="dasha_refresh_days",
+        description="Days before cached Dasha data is considered stale and recomputed"
+    )
     
     # Additional LLM Settings
     OLLAMA_BASE_URL: str = Field(default="http://localhost:11434", validation_alias="ollama_base_url")
