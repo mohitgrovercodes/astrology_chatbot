@@ -2060,22 +2060,22 @@ Provide a detailed explanation:"""
         else:
             if mode == 'prediction':
                 return f"""INSTRUCTIONS (CONCISE MODE):
-1. Give a direct, astrological answer in 3-5 sentences.
-2. Mention up to TWO key chart factors (e.g., "Jupiter in your 7th house suggests...").
+1. Give a direct, astrological answer in 2-3 short sentences.
+2. Mention only ONE or TWO key chart factors.
 3. If timing is relevant, give one specific period (e.g., "mid-2026").
 4. Cite sources only if genuinely referenced.
 5. {script_instruction}{domain_text}
 
-Provide a concise, self-contained response:"""
+Provide a highly concise, self-contained response:"""
             else:
                 return f"""INSTRUCTIONS (CONCISE MODE):
-1. Answer in 2-3 focused sentences (100-150 words maximum).
+1. Answer in 1-2 focused sentences (50-80 words maximum).
 2. Base the answer only on retrieved texts above.
 3. Only cite books that appear in the sources above.
 4. {script_instruction}{domain_text}
 5. End with: "Sources: [book names if any]" — skip this line if no sources.
 
-Provide a concise answer:"""
+Provide a highly concise answer:"""
 
     def _format_conversation_for_llm(
         self, 
@@ -2362,31 +2362,19 @@ EARLY CONVERSATION:
 
 MOBILE RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
 ═══════════════════════════════════════════════════════════════════════
-1. MAXIMUM LENGTH: 4-5 sentences (120-150 words total)
-2. FIRST SENTENCE: Direct answer to the question
-3. STRUCTURE: Answer → Key Factor → Timing/Remedy → Follow-up offer
-4. TECHNICAL TERMS: Use naturally but briefly explain in parentheses
+1. MAXIMUM LENGTH: 2-3 sentences (50-80 words total). BE EXTREMELY CONCISE.
+2. FIRST SENTENCE: Direct, clear answer to the question.
+3. STRUCTURE: Direct Answer → One Key Factor → Timing/Remedy → Brief Follow-up offer.
+4. TECHNICAL TERMS: Use minimally. Briefly explain in parentheses if needed.
    - Good: "7th house (shaadi ka ghar) ki lord Venus..."
-   - Bad: "The seventh house which represents marriage and partnerships..."
-5. NO META-COMMENTARY: Don't explain what you're doing
-   - Bad: "To analyze your marriage prospects, I will examine..."
-   - Good: "Your 7th house lord Venus is weak..."
-6. NO THANKING: User details from backend, not provided by user
-   - Bad: "Thank you for providing your birth details..."
-   - Good: "Your birth chart shows..."
+5. NO META-COMMENTARY: Don't explain what you're doing or analyzing. 
+   - Bad: "Based on your chart, I can see..."
+   - Good: "Your 7th house lord Venus is..."
+6. NO THANKING: User details from backend.
+7. GET STRAIGHT TO THE POINT: Cut all filler words. Make every word count.
 
-EXAMPLE GOOD MOBILE RESPONSE (Marriage):
-"Aapki 7th house (shaadi ka ghar) ki lord Venus kamzor hai. 
-Classical texts ke mutabik yeh typically 2-3 saal delay karta hai. Best window 
-June-August 2026 hai jab Venus-Jupiter dasha active hoga. Venus ko strong karne 
-ke remedies chahiye?"
-
-EXAMPLE BAD (TOO LONG - 200+ words):
-"To determine the timing of your marriage according to Vedic astrology, we would 
-analyze your birth chart, specifically the 7th house which represents marriage 
-and partnerships, as well as the placement of Venus, the planet of love and 
-relationships. In your case, based on your birth details: Your ascendant (Lagna) 
-and the condition of the 7th house will provide insights..."
+EXAMPLE GOOD CONCISE MOBILE RESPONSE (Marriage):
+"Aapki 7th house ki lord Venus lagan mein weak hai, isliye delay hai. June-August 2026 mein Venus-Jupiter dasha mein marriage ka strong yog banega. Kya aap inko strong karne ki remedies janna chahenge?"
 ═══════════════════════════════════════════════════════════════════════
 """
         instructions += mobile_length_instruction
