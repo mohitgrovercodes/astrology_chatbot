@@ -140,7 +140,8 @@ Body: { UserUpdate }
 ### Chat (Backend Integration) — Correct Protocol
 
 > ⚠️ **Important:** The chatbot uses a **2-step protocol**.  
-> You MUST call `/initialize` before `/message` for every session.
+> You MUST call `/initialize` once before `/message` for every new user.
+> Subsequent calls to `/initialize` for the same user are safely ignored, as Redis session data is now persistent.
 
 ---
 
@@ -169,13 +170,22 @@ Body: { UserUpdate }
 > `conversation_history` is a list of `{ "question": "...", "answer": "...", "source": "external", "timestamp": "..." }` objects.  
 > Pass previous messages here if resuming a conversation; pass `[]` for new sessions.
 
-**Response:**
+**Response (Success):**
 ```json
 {
   "user_id": "unique-user-or-session-id",
   "status": "success"
 }
 ```
+
+**Response (Already Initialized):**
+```json
+{
+  "user_id": "unique-user-or-session-id",
+  "status": "already_initialized"
+}
+```
+*(Indicates the user's permanent session is active and no data was overwritten)*
 
 ---
 

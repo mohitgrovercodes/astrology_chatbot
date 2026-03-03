@@ -11,9 +11,10 @@
 
 ## 🚀 Quick Links
 
-- **[Project Status & Roadmap](docs/project_status_master.md)** - detailed progress report.
-- **[API Reference](docs/API_REFERENCE.md)** - detailed API documentation & integration guide.
-- **[Architecture](docs/ARCHITECTURE.md)** - system design overview.
+- **[Documentation Index](docs/INDEX.md)** - central hub for all docs.
+- **[Developer & Integration Guide](docs/DEVELOPER_GUIDE.md)** - setup, deployment, predictions, and RAG.
+- **[Architecture](docs/ARCHITECTURE.md)** - system design, engines, and security.
+- **[API Reference](docs/API_REFERENCE.md)** - backend endpoints and communication protocol.
 
 ---
 
@@ -22,7 +23,7 @@
 An expert-level **Astrology AI Chatbot** designed for integration into mobile applications. The system features:
 
 - **Backend Integration Ready**: Specialized `/chat` endpoint with Redis-based session management.
-- **24h Session Persistence**: Maintains conversation context for up to 20 messages.
+- **Permanent Session Persistence**: Maintains lifetime conversation context and summarizes history. Transits/Dashas use smart staleness checks.
 - **Internal Service Auth**: Secured via high-security shared secret headers.
 - **Semantic AI Routing**: Uses embeddings to understand intent (no fragile regex).
 - **Dual-Engine Calculations**: Vedic (Parasara) + Western (Tropical).
@@ -34,12 +35,11 @@ An expert-level **Astrology AI Chatbot** designed for integration into mobile ap
 
 ## 📂 Documentation
 
-All detailed documentation has been moved to the `docs/` folder:
+All detailed project documentation is centralized in the `docs/` folder:
 
-- `docs/PROJECT_STATUS_V3.md` (Legacy Status)
-- `docs/PLATFORM_HANDOFF.md`
-- `docs/QUICKSTART.md`
-- `docs/QUICK_REFERENCE.md`
+- [Developer Guide](docs/DEVELOPER_GUIDE.md) - For installation, setup, and integrating new code.
+- [Architecture Overview](docs/ARCHITECTURE.md) - For understanding the data pipeline and LangGraph orchestrator.
+- [API Reference](docs/API_REFERENCE.md) - For mobile app developers connecting to the chatbot.
 
 ---
 
@@ -61,6 +61,9 @@ cp .env.example .env
 ## 💡 Usage
 
 ```bash
-# Run the chatbot interface
-python chatbot_phase5_1.py
+# Start API Server
+uvicorn src.api.main:app --reload
+
+# Start CLI interface
+python chatbot.py
 ```

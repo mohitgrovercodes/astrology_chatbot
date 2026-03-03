@@ -90,7 +90,7 @@ SOFT_BLOCK_OUT_OF_SCOPE = """This question goes beyond the scope of astrological
 - Relationship dynamics
 - Career and life purpose insights
 
-For questions about {topic}, you would need to consult specialists in that field.
+For questions about topics other than the above, you would need to consult specialists in that field.
 
 I'm here to help with astrological questions about your chart, planetary periods, or how to understand astrological concepts. What would you like to explore?"""
 
@@ -129,6 +129,12 @@ SOFT_BLOCK_THIRD_PARTY_PREDICTION = """I appreciate your interest, but I can onl
 If they want a reading, they can create their own profile and consult me directly!
 
 Is there something about YOUR chart I can help you with instead?"""
+
+SOFT_BLOCK_SABOTAGE_CRITICISM = """I understand that astrology might not always resonate, or sometimes a prediction may feel misaligned with your current experience. Astrology provides a map of probabilities and energies, but life is complex, and your free will is the ultimate deciding factor.
+
+If you feel I've made an error in interpreting your chart, I appreciate your feedback! My goal is to help you explore your chart constructively. 
+
+We can always look at a different aspect of your chart, or if you prefer to end the session here, that is completely fine as well. How would you like to proceed?"""
 
 
 # ============================================================================
@@ -349,6 +355,22 @@ GREETING_TAMIL_RETURNING = [
     "Jolly ah kettunga {user_name}!",
 ]
 
+# Punjabi (Gurmukhi) - for pa
+GREETING_PUNJABI_RETURNING = [
+    "ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ {user_name}! ਮੈਂ ਤੁਹਾਡੀ ਕੀ ਮਦਦ ਕਰ ਸਕਦਾ ਹਾਂ?",
+    "ਹਾਂਜੀ {user_name}, ਦੱਸੋ ਕੀ ਪੁੱਛਣਾ ਚਾਹੁੰਦੇ ਹੋ?",
+    "ਜੀ {user_name}, ਦੱਸੋ!",
+    "ਤੁਹਾਡਾ ਕੀ ਸਵਾਲ ਹੈ?",
+]
+
+# Punjabi (Romanized) - for pa-lat
+GREETING_PUNJABI_LAT_RETURNING = [
+    "Sat Sri Akal {user_name}! Main tuhadi ki madad kar sakda haan?",
+    "Haanji {user_name}, dasso ki puchhanna chaunde ho?",
+    "Ji {user_name}, dasso!",
+    "Tuhada ki sawal hai?",
+]
+
 
 # ============================================================================
 # CONVERSATIONAL TONE GUIDELINES (For System Prompts)
@@ -514,18 +536,47 @@ def get_template(template_key: str, **kwargs) -> str:
         return template
 
 
-def get_disclaimer(disclaimer_type: str) -> str:
+def get_disclaimer(disclaimer_type: str, language: str = 'en', llm=None) -> str:
     """
-    Get disclaimer text by type.
+    Get disclaimer text by type and optionally translate it.
     
     Args:
         disclaimer_type: Type of disclaimer ('HEALTH', 'FINANCIAL', etc.)
+        language: ISO language code to translate into
+        llm: Optional Langchain LLM object for translation
     
     Returns:
         Disclaimer text string
     """
     key = f"DISCLAIMER_{disclaimer_type.upper()}"
-    return get_template(key)
+    text = get_template(key)
+
+    if language != 'en' and llm is not None:
+        try:
+            from src.utils.localization import get_localization_manager
+            lang_name = get_localization_manager().get_language_name(language)
+            
+            script_instruction = ""
+            if '-lat' in language:
+                script_instruction = f" Respond in {lang_name} using ROMAN ALPHABET only (no native script)."
+            else:
+                script_instruction = f" Respond entirely in {lang_name} (native script)."
+                
+            prompt = (
+                f"You are a professional Vedic astrologer translating a disclaimer. "
+                f"Translate the following disclaimer accurately.{script_instruction}\n\n"
+                f"Disclaimer:\n{text}\n\n"
+                f"Translation (ONLY output the exact translated message without quotes):"
+            )
+            resp = llm.invoke(prompt)
+            translated = (resp.content if hasattr(resp, 'content') else str(resp)).strip()
+            if translated and len(translated) > 10:
+                return translated
+        except Exception as e:
+            print(f"[DISCLAIMER_TRANSLATION_ERROR] {e}")
+            pass
+
+    return text
 
 
 def format_reframe_response(original_query: str, reframed_query: str) -> str:
@@ -661,6 +712,10 @@ def get_contextual_greeting(user_name: str, conversation_length: int, language: 
         pool = GREETING_HINGLISH_RETURNING
     elif language.startswith('ta'):
         pool = GREETING_TAMIL_RETURNING
+    elif language == 'pa':
+        pool = GREETING_PUNJABI_RETURNING
+    elif language in ('pa-lat', 'pa_lat'):
+        pool = GREETING_PUNJABI_LAT_RETURNING
     else:
         pool = GREETING_RETURNING
 

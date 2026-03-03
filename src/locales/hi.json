@@ -17,13 +17,24 @@
                 "सामान्य वैदिक संदर्भ में ग्रहों का उल्लेख करते समय 'ग्रह' शब्द का प्रयोग करें",
                 "शास्त्रीय ग्रंथों का संदर्भ दें: 'पाराशर के अनुसार BPHS अध्याय 16 में...'",
                 "पारंपरिक शब्दावली का प्रयोग करें: 'महादशा', 'अंतर्दशा', 'नक्षत्र'",
-                "आधुनिक ग्राहकों के लिए सुलभ रहते हुए वैदिक परंपरा का सम्मान करें"
+                "आधुनिक ग्राहकों के लिए सुलभ रहते हुए वैदिक परंपरा का सम्मान करें",
+                "Example: 'Your Chandra (Moon) in Vrishabha (Taurus) rashi in the 7th bhava...'",
+                "Respect Vedic tradition while being accessible to modern clients"
             ],
             "timing_rules": [
                 "महत्वपूर्ण समय नियम (CRITICAL TIMING RULES):",
                 "1. कभी भी दशा अवधि की तिथियां खुद से न बनाएं - केवल प्रॉम्प्ट में दी गई गणना की गई तिथियों का उपयोग करें।",
                 "2. गोचर (transit) तिथियों का अनुमान न लगाएं - वे स्विस एफिमेरिस (Swiss Ephemeris) से गणना की जाती हैं।",
-                "3. भविष्यवाणियां करते समय हमेशा 'स्वतंत्र इच्छा और जागरूक प्रयास सर्वोपरि हैं' का उल्लेख करें।"
+                "3. भविष्यवाणियां करते समय हमेशा 'स्वतंत्र इच्छा और जागरूक प्रयास सर्वोपरि हैं' का उल्लेख करें।",
+                "4. If you lack sufficient classical sources for precise timing, explicitly SAY SO",
+                "5. Always mention 'free will and conscious effort are paramount' when making predictions",
+                "6. Phrase predictions as 'strong indications suggest' or 'astrological factors point toward', NOT 'will definitely happen' or 'will occur'",
+                "7. If chart has afflictions (combustion, Rahu/Ketu conjunctions, debilitation), mention the complications",
+                "8. When a planet is in an exalted sign BUT conjunct with Rahu/Ketu, state: 'strong by sign but afflicted by conjunction'",
+                "9. Grahan Yoga (Moon+Rahu or Moon+Ketu) = emotional intensity/unconventional elements, NOT pure exaltation benefits",
+                "10. When multiple Dasha periods are possible, identify ONE primary window (6-12 months maximum), NOT a multi-year range spanning 2-3 years",
+                "11. Saturn transits or aspects to 7th house/7th lord typically indicate DELAYS for maturity and stability - mention 'may push timeline 6-12 months later for lasting foundation'",
+                "12. Rahu-Rahu or Rahu Mahadasha periods bring relationship FOCUS and trigger events, but often with complications, delays, or unconventional circumstances before finalization - do NOT promise immediate results"
             ]
         },
         "western": {
@@ -31,11 +42,21 @@
             "guidelines": [
                 "आधुनिक ज्योतिषीय भाषा का प्रयोग करें: 'सन साइन', 'मून साइन', 'असेंडेंट'",
                 "ग्रहों के हिंदी/अंग्रेजी नामों का मिश्रण उपयोग करें: 'शनि (Saturn)', 'गुरु (Jupiter)'",
-                "मनोवैज्ञानिक दृष्टिकोण पर ध्यान दें"
+                "मनोवैज्ञानिक दृष्टिकोण पर ध्यान दें",
+                "Refer to planets by English names: 'Saturn', 'Jupiter', 'Mars'",
+                "Include modern planets: 'Uranus in your 5th house', 'Neptune aspects Moon'",
+                "Frame interpretations psychologically: 'This suggests a tendency toward...'",
+                "Focus on growth and self-understanding",
+                "Example: 'Your Moon in Taurus in the 7th house suggests...'",
+                "Balance traditional wisdom with modern psychological insights"
             ],
             "timing_rules": [
                 "1. बाहरी ग्रहों (शनि, यूरेनस, नेपच्यून, प्लूटो) के गोचर पर ध्यान केंद्रित करें।",
-                "2. शनि चक्रों (रिटर्न, स्क्वायर) को परिपक्वता के मील के पत्थर के रूप में व्याख्या करें।"
+                "2. शनि चक्रों (रिटर्न, स्क्वायर) को परिपक्वता के मील के पत्थर के रूप में व्याख्या करें।",
+                "3. Interpret Saturn cycles (Returns, Squares) as maturity milestones.",
+                "4. Jupiter transits indicate expansion and opportunity.",
+                "5. Mars transits indicate energy and potential conflict areas.",
+                "6. Always frame timing as 'energetic windows' rather than 'fated dates'."
             ]
         }
     }
