@@ -549,6 +549,43 @@ class EnhancedLangGraphOrchestrator:
             state['is_safe'] = True
             print(f"[SAFETY] [OK] Safe to proceed")
             
+            # ════════════════════════════════════════════════════════════════
+            # AGE-APPROPRIATENESS CHECK
+            # ════════════════════════════════════════════════════════════════
+            from src.validation.age_validator import AgeValidator
+
+            user_profile = state.get('user_profile', {})  # Get from your state/context
+            dob_validation = user_profile.get('_dob_validation', {})
+
+            # Check if DOB is invalid
+            if dob_validation.get('valid') == False:
+                print(f"[AGE_CHECK] Invalid DOB: {dob_validation.get('issue')}")
+                state['intent'] = "DATA_VALIDATION_ERROR"
+                state['answer'] = dob_validation.get('message')
+                return state  # Or your return format
+
+            # Check age-appropriateness for query
+            age_years = dob_validation.get('age_years', 0)
+            query_type = AgeValidator.detect_query_type(state.get('query', ''))
+
+            if query_type:
+                print(f"[AGE_CHECK] Query type: {query_type}, User age: {age_years}")
+                
+                language = state.get('detected_language', 'en')
+                appropriateness = AgeValidator.is_query_appropriate(
+                    query_type=query_type,
+                    age_years=age_years,
+                    language=language
+                )
+                
+                if not appropriateness['appropriate']:
+                    print(f"[AGE_CHECK] ⚠️  Not appropriate: {appropriateness['reason']}")
+                    state['intent'] = "AGE_INAPPROPRIATE"
+                    state['answer'] = appropriateness['message']
+                    return state  # Or your return format
+
+                print(f"[AGE_CHECK] ✅ Age-appropriate query")
+
         except Exception as e:
             print(f"[SAFETY] [ERROR] Error in safety check: {e}")
             import traceback

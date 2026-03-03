@@ -710,6 +710,26 @@ class EnhancedSessionManager:
             # Store user profile
             _set_data(f"session:{user_id}:user_profile", user_profile)
             
+            # ════════════════════════════════════════════════════════════════
+            # VALIDATE DOB
+            # ════════════════════════════════════════════════════════════════
+            from src.validation.age_validator import AgeValidator
+
+            dob = user_profile.get('date_of_birth')
+            if dob:
+                validation = AgeValidator.validate_dob(dob)
+                
+                print(f"[DOB_VALIDATION] Checking DOB: {dob}")
+                if not validation['valid']:
+                    print(f"[DOB_VALIDATION] ⚠️  Invalid: {validation['issue']}")
+                    print(f"  - Message: {validation['message']}")
+                else:
+                    print(f"[DOB_VALIDATION] ✅ Valid - Age: {validation['age_years']} years, {validation['age_months']} months")
+                
+                # Store validation with profile
+                user_profile['_dob_validation'] = validation
+                _set_data(f"session:{user_id}:user_profile", user_profile)
+
             # Convert conversation history from external format to internal format
             internal_conversation = []
             if conversation_history:
@@ -1389,9 +1409,9 @@ async def send_message(request: SendMessageRequest):
             if len(truncated_sentences) < len(sentences):
                 detected_lang = result.get('detected_language', 'en')
                 if detected_lang in ['hi', 'hi-lat']:
-                    answer += " Aur detail ke liye 'batao' kahiye."
+                    answer += " Aur gehrai mein jaanna chahein toh poochh sakte hain."
                 else:
-                    answer += " Ask 'tell me more' for details."
+                    answer += " Feel free to ask if you'd like to explore this further."
             
             print(f"[MOBILE] Truncated: {word_count} → {len(answer.split())} words")
         

@@ -98,19 +98,38 @@ class LLMIntentClassifier:
     }
 
     
-    CLASSIFICATION_PROMPT = """You are an intelligent intent classifier for a Vedic astrology chatbot.
+    CLASSIFICATION_PROMPT = """You are an intent classifier for a Vedic astrology chatbot. Classify the query into EXACTLY ONE of four categories.
 
-The user ALWAYS has birth details on file, so personalized predictions are always possible.
-The query may be in ANY language — English, Hindi, Tamil, Hinglish, or mixed. Understand the semantic meaning regardless of language.
-
-Classify the query into exactly ONE of these four categories based on what the user is fundamentally trying to achieve:
+The user ALWAYS has birth details on file. The query may be in English, Hindi, Hinglish, or any mix.
 
 ---
 
+## CATEGORY DEFINITIONS
+
+**CALCULATION_ONLY**
+The user wants a raw astrological fact directly derivable from their birth chart — no interpretation, no prediction, no advice.
+Key signal: Asks "what is my X" or "show me my X" where X is a chart element (sign, ascendant, lagna, dasha, rashi, nakshatra, planetary position, kundali).
+Also: "when is my [planet] dasha/mahadasha/antardasha?" → this is a date lookup from the dasha timeline, NOT a prediction.
+Examples: "what is my sun sign", "what is my lagna", "what is my ascendant", "when is my jupiter dasha", "show my kundali", "what are my current dashas", "meri rashi kya hai", "mera lagna kya hai"
+NOTE: If the user is asking for a date or period (like "when is my X dasha"), that is CALCULATION_ONLY — not RAG_WITH_CALCULATION.
+
+**RAG_WITH_CALCULATION**
+The user wants a PREDICTION, INTERPRETATION, or ADVICE about their life situation based on their chart.
+Key signal: Asks about future events, outcomes, life areas (marriage, career, health, children, travel), OR asks what a placement MEANS/EFFECTS for them.
+Examples: "when will I get married", "how is my career", "will I get a promotion", "what does my Jupiter placement mean for me", "impact of Saturn on my 10th house", "will I go abroad"
+
+**RAG_ONLY**
+The user wants a general explanation of an astrological concept — NOT about their own chart.
+Key signal: No personal pronouns like "my", "me", "I" — asks to "explain", "define", or "what does X mean in general".
+Examples: "what is a raj yoga", "explain the 10th house", "what does mars in 7th house mean", "define mahadasha"
+
+**CHITCHAT**
+Greetings, thanks, conversational filler, or identity questions.
+Examples: "hi", "hello", "thanks", "who are you", "good morning"
+
 **AMBIGUOUS**
-The user mentions a core astrological concept (planet, house, sign) but it's unclear if they want a general theory explanation or a personalized chart analysis.
-Core signal: Single word or short phrase like "Jupiter" or "7th house" with no context tokens like "my", "me", "what is", "define", etc.
-Examples: "Jupiter", "7th house", "Mangal dosha", "Saturn return"
+Only use when the query is a BARE term (single planet or house number) with NO indication of whether the user wants theory or their personal chart.
+Examples: "Jupiter", "7th house" (alone, no context)
 
 ---
 
@@ -119,11 +138,12 @@ USER QUERY: "{query}"
 CONVERSATION CONTEXT (last few messages):
 {context}
 
-Think step by step:
-1. What does the user fundamentally want — data, a personal answer, education, or just conversation?
-2. Is the query personal to their life situation (even implicitly)? Phrases like "jaunga", "kismat", "hoga" in Hindi imply personal future.
-3. If the query is ambiguous between RAG_ONLY and RAG_WITH_CALCULATION, prefer RAG_WITH_CALCULATION if "my", "me", or future tense is present.
-4. ONLY choose AMBIGUOUS if the query is a bare term with zero indication of whether the user wants to learn theory or check their own chart.
+## DECISION RULES
+1. If the query asks "what is my [sign/lagna/rashi/ascendant/nakshatra]" → CALCULATION_ONLY (it is a fact lookup, not a prediction).
+2. If the query asks "when is/will my [planet] dasha/mahadasha" → CALCULATION_ONLY (dasha dates are computed, not interpreted).
+3. If the query asks about future life events or what something MEANS FOR the user → RAG_WITH_CALCULATION.
+4. If there is no "my" / "me" / "I" and the user is asking for explanation → RAG_ONLY.
+5. AMBIGUOUS only for bare single-word astrological terms with no context.
 
 Respond with ONLY a valid JSON object — no extra text:
 {{"intent": "CATEGORY_NAME", "confidence": 0.95, "reasoning": "One sentence explanation of why."}}
@@ -331,6 +351,47 @@ Respond with ONLY a valid JSON object — no extra text:
         
         return False
     
+    # -----------------------------------------------------------------------
+    # Level 1.5: Keyword Pre-Router (fires BEFORE semantic & LLM)
+    # Handles chart-lookup patterns deterministically — no probability needed.
+    # -----------------------------------------------------------------------
+    _CALC_ONLY_TRIGGERS = [
+        # English: "what is my <X>" where X is a chart element
+        r'\bwhat is my (sun sign|moon sign|lagna|ascendant|rashi|nakshatra|rising sign|birth chart|kundali|kundli|d1|d9|navamsha|atma karaka|amatyakaraka|darakaraka|arudha|chart|planetary position|planets)\b',
+        r'\bwhat\'s my (sun sign|moon sign|lagna|ascendant|rashi|nakshatra|rising sign|birth chart|kundali|kundli|d1|d9|navamsha|chart|planetary position|planets)\b',
+        # "when is/will my <planet> (maha)?dasha / antardasha"
+        r'\bwhen (is|will be) my .*(dasha|mahadasha|antardasha|bhukti)\b',
+        # "show/display/give me my chart/kundali/dashas"
+        r'\b(show|display|give me|dikhao|batao) my (chart|kundali|kundli|dashas|birth chart|navamsha|d9)\b',
+        # Hindi transliteration
+        r'\b(mera|meri|mere) (lagna|rashi|nakshatra|kundali|kundli|janam kundali|sun sign|moon sign|ascendant) (kya hai|dikhao|batao|hai)\b',
+        r'\b(mera|meri) lagna kya hai\b',
+        r'\b(mera|meri) rashi kya hai\b',
+        r'\bmeri? kundali? (dikhao|batao)\b',
+        r'\bcurrent dasha\b',
+        r'\bwhat are my (current )?dashas\b',
+        r'\bmy dasha (period|timeline|sequence)\b',
+    ]
+
+    def _keyword_pre_route(self, query: str) -> Optional[Dict]:
+        """
+        Level 1.5: Deterministic keyword pre-router for CALCULATION_ONLY.
+        Catches clear chart-lookup queries before spending an LLM call.
+        Returns a result dict if matched, None otherwise.
+        """
+        q_lower = query.lower()
+        for pattern in self._CALC_ONLY_TRIGGERS:
+            if re.search(pattern, q_lower):
+                print(f"[INTENT] [KEYWORD_PRE_ROUTER] -> CALCULATION_ONLY (pattern match)")
+                return {
+                    'intent': 'CALCULATION_ONLY',
+                    'confidence': 0.97,
+                    'reasoning': 'Keyword pre-router: deterministic chart-lookup pattern',
+                    'cached': False,
+                    'cache_type': 'keyword'
+                }
+        return None
+
     def _semantic_route(self, query: str, threshold: float = 0.85) -> Optional[Dict]:
         """
         Level 2 Semantic Routing.
@@ -433,6 +494,11 @@ Respond with ONLY a valid JSON object — no extra text:
             print(f"[INTENT] [PATTERN_CACHE] -> {intent} (instant)")
             return result
         
+        # Step 1.5: Keyword Pre-Router (CALCULATION_ONLY fast-path)
+        keyword_result = self._keyword_pre_route(query)
+        if keyword_result:
+            return keyword_result
+
         # Step 2: Semantic Routing (Level 2)
         semantic_result = self._semantic_route(query)
         if semantic_result:
