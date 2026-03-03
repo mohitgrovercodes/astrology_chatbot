@@ -1389,9 +1389,9 @@ async def send_message(request: SendMessageRequest):
             if len(truncated_sentences) < len(sentences):
                 detected_lang = result.get('detected_language', 'en')
                 if detected_lang in ['hi', 'hi-lat']:
-                    answer += " Aur detail ke liye 'batao' kahiye."
+                    answer += " Aur gehrai mein jaanna chahein toh poochh sakte hain."
                 else:
-                    answer += " Ask 'tell me more' for details."
+                    answer += " Feel free to ask if you'd like to explore this further."
             
             print(f"[MOBILE] Truncated: {word_count} → {len(answer.split())} words")
         
