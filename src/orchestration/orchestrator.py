@@ -263,6 +263,17 @@ class EnhancedLangGraphOrchestrator:
                 metadata={"type": "chitchat", "subtype": "wellbeing"}
             )
             
+            # Route 4.5: Closure
+            self.semantic_router.add_route(
+                name="closure",
+                examples=[
+                    "ok", "okay", "got it", "understood", "alright", "sure",
+                    "theek hai", "samajh gaya", "thik hai", "achha",
+                    "fine", "makes sense"
+                ],
+                metadata={"type": "chitchat", "subtype": "closure"}
+            )
+            
             # Route 5: Farewell
             self.semantic_router.add_route(
                 name="farewell",
@@ -504,7 +515,7 @@ class EnhancedLangGraphOrchestrator:
                 print(f"[SAFETY] BLOCKED: {safety_result.decision.reason}")
                 
                 # WORKAROUND: Don't block chitchat queries
-                CHITCHAT_REASONS = ['greeting', 'identity', 'gratitude', 'wellbeing', 'farewell']
+                CHITCHAT_REASONS = ['greeting', 'identity', 'gratitude', 'wellbeing', 'farewell', 'closure']
                 if safety_result.decision.reason in CHITCHAT_REASONS:
                     print(f"[SAFETY] Chitchat query - allowing through")
                     state['is_safe'] = True
@@ -586,7 +597,7 @@ class EnhancedLangGraphOrchestrator:
             chitchat_match = self.semantic_router.route(state['query'], threshold=0.7)
             
         # List of routes that should be treated as chitchat
-        CHITCHAT_ROUTES = ['chitchat', 'greeting', 'identity', 'personal_profile_query', 'gratitude', 'wellbeing', 'farewell']
+        CHITCHAT_ROUTES = ['chitchat', 'greeting', 'identity', 'personal_profile_query', 'gratitude', 'wellbeing', 'farewell', 'closure']
         
         if chitchat_match and chitchat_match.name in CHITCHAT_ROUTES:
             print(f"[INTENT] Semantic Chitchat Match: '{state['query']}' -> {chitchat_match.name} ({chitchat_match.confidence:.2f})")
@@ -759,6 +770,16 @@ class EnhancedLangGraphOrchestrator:
                     state['answer'] = f"Alvida, {user_name}! Jab bhi aapke chart ya jyotish ke baare mein sawal ho, wapas aa sakte hain. Tare aapka margdarshan karen!"
                 else:
                     state['answer'] = f"Goodbye, {user_name}! Take care!"
+                return state
+                
+            # 6. CLOSURE
+            elif match_type == "closure":
+                if lang == 'en':
+                    state['answer'] = f"Happy to help, {user_name}! Is there anything else you'd like to explore?"
+                elif lang == 'hi-lat':
+                    state['answer'] = f"Bahut badiya, {user_name}! Kya aap apni kundli ke baare mein aur kuch janna chahte hain?"
+                else:
+                    state['answer'] = f"Happy to help, {user_name}! Let me know if you have any other questions."
                 return state
 
         # Multilingual/Complex path: Use fast LLM with persona (Fallback for no match or unhandled type)
@@ -2045,7 +2066,7 @@ Retain the astrological data but remove the violating content (e.g., remove deat
 1. Provide a comprehensive, detailed prediction with full reasoning.
 2. Ground every claim in specific chart data (actual houses, signs, planets listed above).
 3. Include dasha periods AND approximate calendar timeframes for any timing claims.
-4. Cite classical texts only if they appear in the retrieved sources above.
+4. Do NOT cite classical texts or provide book names as sources unless the user explicitly demands it.
 5. {script_instruction}{domain_text}
 
 Provide a thorough, detailed prediction:"""
@@ -2053,7 +2074,7 @@ Provide a thorough, detailed prediction:"""
                 return f"""INSTRUCTIONS:
 1. Provide a comprehensive explanation covering the concept fully.
 2. Ground the answer in the retrieved classical texts above.
-3. Only cite books that appear in the sources above.
+3. Do NOT cite books or provide source names unless the user explicitly demands it.
 4. {script_instruction}{domain_text}
 
 Provide a detailed explanation:"""
@@ -2063,7 +2084,7 @@ Provide a detailed explanation:"""
 1. Give a direct, astrological answer in 2-3 short sentences.
 2. Mention only ONE or TWO key chart factors.
 3. If timing is relevant, give one specific period (e.g., "mid-2026").
-4. Cite sources only if genuinely referenced.
+4. Do NOT cite sources or provide book names unless the user explicitly demands it.
 5. {script_instruction}{domain_text}
 
 Provide a highly concise, self-contained response:"""
@@ -2071,9 +2092,8 @@ Provide a highly concise, self-contained response:"""
                 return f"""INSTRUCTIONS (CONCISE MODE):
 1. Answer in 1-2 focused sentences (50-80 words maximum).
 2. Base the answer only on retrieved texts above.
-3. Only cite books that appear in the sources above.
+3. Do NOT cite sources or provide book names unless the user explicitly demands it.
 4. {script_instruction}{domain_text}
-5. End with: "Sources: [book names if any]" — skip this line if no sources.
 
 Provide a highly concise answer:"""
 

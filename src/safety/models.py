@@ -198,6 +198,7 @@ class BlockReasons:
     OUT_OF_SCOPE = "out_of_scope"
     CONSPIRACY_THEORY = "conspiracy_theory"
     THIRD_PARTY_PREDICTION = "third_party_prediction"
+    SABOTAGE_CRITICISM = "sabotage_criticism"
     
     # Conditional Reasons
     HEALTH_TENDENCY = "health_tendency"

@@ -130,6 +130,12 @@ If they want a reading, they can create their own profile and consult me directl
 
 Is there something about YOUR chart I can help you with instead?"""
 
+SOFT_BLOCK_SABOTAGE_CRITICISM = """I understand that astrology might not always resonate, or sometimes a prediction may feel misaligned with your current experience. Astrology provides a map of probabilities and energies, but life is complex, and your free will is the ultimate deciding factor.
+
+If you feel I've made an error in interpreting your chart, I appreciate your feedback! My goal is to help you explore your chart constructively. 
+
+We can always look at a different aspect of your chart, or if you prefer to end the session here, that is completely fine as well. How would you like to proceed?"""
+
 
 # ============================================================================
 # CONDITIONAL DISCLAIMERS (Answer with Warning)

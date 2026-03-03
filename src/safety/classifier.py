@@ -54,6 +54,12 @@ SAFETY_ROUTES = {
         "my friend's horoscope", "when will he get married",
         "her birth chart", "his future", "my spouse prediction"
     ],
+    BlockReasons.SABOTAGE_CRITICISM: [
+        "your prediction is wrong", "you are fake", "this makes no sense",
+        "astrology is a scam", "you don't know anything", "why did you lie",
+        "this prediction failed", "you are useless", "shut up bot",
+        "you are wrong"
+    ],
     BlockReasons.HEALTH_TENDENCY: [
         "general health outlook", "health issues in chart", "weak body parts",
         "periods of sickness", "vitality analysis"
@@ -247,6 +253,7 @@ Your classification must be based on the user's UNDERLYING INTENT and potential 
 **SOFT_BLOCK** — The request is outside the ethical scope of astrology for this bot. Decline warmly:
 - `privacy_violation`: Questions asked about a third party (boss, neighbor, spouse, friend) without their consent — predictions, secrets, behavior analysis.
 - `out_of_scope`: Conspiracy theories, political predictions, stock tips, sports match outcomes.
+- `sabotage_criticism`: User claims the prediction is wrong, insults the bot, calls astrology fake, or is expressing deep frustration. Respond gracefully.
 
 **CONDITIONAL** — Answerable, but requires a protective disclaimer to prevent misuse:
 - `health_tendency`: General health tendencies from chart (not diagnosis). Add HEALTH disclaimer.
@@ -524,6 +531,7 @@ class SafetyClassifier:
             BlockReasons.HARMFUL_INTENT: "HARD_BLOCK",
             BlockReasons.PRIVACY_VIOLATION: "SOFT_BLOCK",
             "THIRD_PARTY_PREDICTION": "SOFT_BLOCK",
+            BlockReasons.SABOTAGE_CRITICISM: "SOFT_BLOCK",
             BlockReasons.HEALTH_TENDENCY: "CONDITIONAL",
             BlockReasons.FINANCIAL_TREND: "CONDITIONAL",
             
@@ -533,6 +541,7 @@ class SafetyClassifier:
             "gratitude": "SAFE",
             "wellbeing": "SAFE",
             "farewell": "SAFE",
+            "closure": "SAFE",
             "chitchat": "SAFE",
         }
         
