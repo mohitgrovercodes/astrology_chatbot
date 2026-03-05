@@ -1,3 +1,4 @@
+
 # src/api/config.py
 """
 API Configuration
@@ -86,7 +87,7 @@ class Settings(BaseSettings):
     
     # Conversation Context Management
     CONVERSATION_CONTEXT_WINDOW: int = Field(
-        default=10,
+        default=6,
         validation_alias="conversation_context_window",
         description="Number of recent messages to include in conversation history"
     )

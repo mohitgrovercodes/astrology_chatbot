@@ -370,17 +370,19 @@ Remember: Higher score = More confident = Bot answers immediately!
         if ambiguity_score > 0.6 and can_resolve:
             print(f"  -> Strategy: AUTO-EXPAND")
             
-            expansion_prompt = f"""Expand vague references in: "{current_query}"
-
-Context: {referenced_topic}
-Conversation: {conv_text}
+            expansion_prompt = f"""You are a query pre-processor for an astrology chatbot. Your only job is pronoun resolution.
 
 Rules:
-- ONLY replace it/this/that with specific nouns
-- Keep original phrasing
-- Don't add extra information
+- ONLY replace vague pronouns (it/this/that/these/those) with the specific noun from context
+- Keep the original phrasing exactly as-is otherwise
+- Do NOT add new topics, change the question's intent, or introduce any content not already in the query
+- Do NOT answer the question — only rewrite it
 
-Respond with ONLY the expanded query.
+Expand vague references in: "{current_query}"
+Context topic: {referenced_topic}
+Recent conversation: {conv_text}
+
+Respond with ONLY the rewritten query. If nothing needs changing, return the original query unchanged.
 """
             try:
                 response = self.fast_llm.invoke(expansion_prompt)
@@ -440,7 +442,9 @@ Respond with ONLY the expanded query.
         
         # Build on previous summary if it exists
         if current_summary:
-            summary_prompt = f"""You are updating a conversation summary.
+            summary_prompt = f"""You are updating a summary for an astrology chatbot conversation.
+
+SCOPE RULE: Only include astrological topics (charts, planets, dashas, transits, yogas, predictions). Omit anything outside this scope.
 
 PREVIOUS SUMMARY:
 {current_summary}
@@ -449,8 +453,8 @@ NEW MESSAGES SINCE LAST SUMMARY:
 {conv_text}
 
 Task: Create an updated summary that:
-1. Preserves key information from previous summary
-2. Adds new topics/insights from new messages
+1. Preserves key astrological information from previous summary
+2. Adds new astrological topics/insights from new messages
 3. Stays concise (2-3 sentences)
 4. Maintains continuity
 
@@ -458,7 +462,9 @@ Respond with ONLY the updated summary.
 """
         else:
             # First summary
-            summary_prompt = f"""Summarize this conversation in 2-3 sentences:
+            summary_prompt = f"""Summarize this astrology chatbot conversation in 2-3 sentences.
+
+SCOPE RULE: Only include astrological topics (charts, planets, dashas, transits, yogas, predictions). Omit anything outside this scope.
 
 {conv_text}
 
@@ -1214,7 +1220,14 @@ async def send_message(request: SendMessageRequest):
         # STEP 3: RESOLVE CONTEXTUAL QUERY (Confidence-Based)
         # ====================================================================
         print(f"\n[STEP 2: SEMANTIC INTERPRETATION]")
-        
+
+        # Only resolve contextual references when there is at least one real prior
+        # user message in history.  If the history contains only app-generated
+        # assistant messages (e.g. mobile-app welcome/disclaimer messages seeded
+        # at /initialize with empty question fields), treating the query as a
+        # CONTINUATION would incorrectly expand it against those bot messages.
+        real_user_messages_in_history = [m for m in full_history if m.get('role') == 'user']
+
         resolution_result = {
             "action": "NONE",
             "processed_query": question,
@@ -1222,8 +1235,8 @@ async def send_message(request: SendMessageRequest):
             "clarification_needed": False,
             "explanation": "New topic - no resolution needed"
         }
-        
-        if intent_analysis['intent_type'] in ['CONTINUATION', 'CLARIFICATION']:
+
+        if intent_analysis['intent_type'] in ['CONTINUATION', 'CLARIFICATION'] and real_user_messages_in_history:
             resolution_result = context_manager.resolve_contextual_query(
                 current_query=question,
                 conversation_history=full_history,

@@ -427,20 +427,20 @@ class EnhancedLangGraphOrchestrator:
             print(f"[AUTH] [PRIORITY] Merging session mapping for {state['user_id']}")
             if not state['user_profile']:
                 state['user_profile'] = {}
-            
-            # Merge session keys (overwrites DB fields if conflict)
-            state['user_profile'].update(session_data)
-            
+
             # Promoting internal state keys (Priority injection)
+            # NOTE: Do NOT do user_profile.update(session_data) — it pollutes user_profile
+            # with chart_data, dasha_data, transit_data, summary, intent_analysis etc.
             internal_keys = ['chart_data', 'dasha_data', 'transit_data', 'detected_language', 'persona_type']
             for key in internal_keys:
                 if key in session_data:
                     print(f"[AUTH] [PRIORITY] Using injected context: {key}")
                     state[key] = session_data[key]
-            
-            # If session data provides name, we consider user at least partially authenticated for context
-            if 'name' in session_data:
-                state['authenticated'] = True
+
+            # Put chart_data into user_profile so _build_theory_prompt can access it
+            # (RAG_ONLY path uses user_profile.get('chart_data') for Moon Sign / Lagna context)
+            if state.get('chart_data') is not None:
+                state['user_profile']['chart_data'] = state['chart_data']
 
         # TIERED HISTORY MANAGEMENT
         # Tier 1 (Priority): Use injected history
@@ -541,10 +541,22 @@ class EnhancedLangGraphOrchestrator:
                 state['is_safe'] = False
                 return state
             
+            # Store safety metadata so _classify_intent_node doesn't need to re-run the classifier
+            state['safety_result'] = safety_result.decision.model_dump()
+            state['disclaimer_type'] = safety_result.decision.disclaimer_type
+            state['is_reframed'] = False
+
+            # Handle REFRAME: transform query here so intent classifier sees the reframed version
+            if safety_result.decision.category == "REFRAME":
+                print(f"[SAFETY] [REFRAME] Reframing query: {state['query']} -> {safety_result.processed_query}")
+                state['original_query'] = state['query']
+                state['query'] = safety_result.processed_query
+                state['is_reframed'] = True
+
             # If conditional, flag for disclaimer
             if safety_result.needs_disclaimer:
                 state['needs_disclaimer'] = safety_result.decision.disclaimer_type
-            
+
             # Safe to proceed
             state['is_safe'] = True
             print(f"[SAFETY] [OK] Safe to proceed")
@@ -641,49 +653,19 @@ class EnhancedLangGraphOrchestrator:
             state['intent'] = 'CHITCHAT'
             state['confidence'] = chitchat_match.confidence
             state['intent_reasoning'] = f"Semantic Chitchat Match: {chitchat_match.name}"
-            state['is_safe'] = True
+            # is_safe was already set by the dedicated safety_check node; don't override it
             return state
 
-        # PHASE 10.5: Multi-Gate Safety Check
-        # Check before ANY LLM classification
-        if self.safety_classifier:
-            safety_result = self.safety_classifier.classify(
-                state['query'], 
-                state.get('conversation_history', [])
-            )
-            
-            # Store safety metadata
-            state['safety_result'] = safety_result.decision.model_dump()
-            state['disclaimer_type'] = safety_result.decision.disclaimer_type
-            state['is_reframed'] = False
-            
-            # 1. HARD / SOFT BLOCK: Refuse immediately
-            if safety_result.is_blocked:
-                # Double Check: If soft block is "out_of_scope", check if it's actually chitchat via LLM fallback
-                if safety_result.decision.category == "SOFT_BLOCK":
-                    print("[GUARD] Soft block detected. Checking if actually chitchat...")
-                    # Let it fall through to intent classifier which handles chitchat better
-                    pass 
-                else:
-                    print(f"[GUARD] [BLOCK] BLOCKING REQUEST: {safety_result.decision.category} ({safety_result.decision.reason})")
-                    state['intent'] = 'safety_block'
-                    state['answer'] = get_template(safety_result.get_template_key())
-                    state['is_safe'] = False
-                    state['confidence'] = safety_result.decision.confidence
-                    return state
-                
-            # 2. REFRAME: Transform query and proceed
-            if safety_result.decision.category == "REFRAME":
-                print(f"[GUARD] [REFRAME] REFRAMING QUERY: {state['query']} -> {safety_result.processed_query}")
-                state['original_query'] = state['query']
-                state['query'] = safety_result.processed_query
-                state['is_reframed'] = True
-                # Continue process with better query
-                
-            # 3. CONDITIONAL: Mark for disclaimer (handled in format_response)
-            if safety_result.decision.disclaimer_type:
-                print(f"[GUARD] [WARN] CONDITIONAL: Needs {safety_result.decision.disclaimer_type} disclaimer")
-                state['disclaimer_type'] = safety_result.decision.disclaimer_type
+        # Safety metadata (category, disclaimer, reframe flag) was already populated
+        # by the dedicated safety_check node that runs before this node.
+        # Log the stored result for traceability; do NOT re-run the classifier.
+        stored_safety = state.get('safety_result', {})
+        if stored_safety:
+            category = stored_safety.get('category', 'SAFE')
+            disclaimer = stored_safety.get('disclaimer_type')
+            print(f"[INTENT] Using safety result from safety_check node: {category}")
+            if disclaimer:
+                print(f"[INTENT] Disclaimer carried forward: {disclaimer}")
         
         result = self.intent_classifier.classify(
             query=state['query'],
@@ -835,6 +817,10 @@ class EnhancedLangGraphOrchestrator:
             # Add conversational tone guidelines
             from src.safety.templates import CONVERSATIONAL_TONE_SYSTEM_PROMPT
             system_prompt += f"\n\n{CONVERSATIONAL_TONE_SYSTEM_PROMPT}"
+
+            # Inject constitution — same rules apply in chitchat as in all other paths
+            constitution = get_constitution_injection()
+            system_prompt = f"{system_prompt}\n\n{constitution}"
             
             # Map language code to descriptive name
             loc_manager = get_localization_manager()
@@ -2135,29 +2121,50 @@ Provide a highly concise, self-contained response:"""
 Provide a highly concise answer:"""
 
     def _format_conversation_for_llm(
-        self, 
+        self,
         conversation_history: List[Dict]
     ) -> List[Dict[str, str]]:
         """
         Format conversation history for LLM.
-        
+
+        Skips any leading assistant-only messages (e.g. app-generated welcome/greeting
+        messages that have no corresponding user turn). These cause the LLM to see a
+        conversation that starts with the bot talking to itself, which produces
+        inconsistent and off-topic responses — especially visible in the mobile app
+        which seeds history with 1-2 app-generated messages at session init.
+
         Args:
             conversation_history: List of {role, content, timestamp} dicts
-            
+
         Returns:
-            List of {role, content} dicts ready for LLM
+            List of {role, content} dicts ready for LLM (always starts with user turn)
         """
         if not conversation_history:
             return []
-        
+
+        # Find the index of the first user message so we start the LLM context there.
+        # Any assistant messages before the first user turn are app-generated preamble
+        # and should not be injected into the LLM conversation.
+        first_user_idx = None
+        for i, msg in enumerate(conversation_history):
+            if msg.get("role") == "user":
+                first_user_idx = i
+                break
+
+        if first_user_idx is None:
+            # No user messages at all — history is entirely bot preamble; send nothing.
+            return []
+
+        if first_user_idx > 0:
+            print(f"[HISTORY] Skipping {first_user_idx} leading assistant-only message(s) from LLM context")
+
         formatted = []
-        for msg in conversation_history:
-            # Convert our format to LLM format
+        for msg in conversation_history[first_user_idx:]:
             formatted.append({
                 "role": msg.get("role"),
                 "content": msg.get("content")
             })
-        
+
         return formatted
 
     def _format_enhanced_analysis(
@@ -2338,16 +2345,19 @@ Provide a highly concise answer:"""
         # ════════════════════════════════════════════════════════════════════════
         # GREETING CONTROL (Mobile App Context-Aware)
         # ════════════════════════════════════════════════════════════════════════
-        # Check if app already sent initial greeting (first 2 messages from assistant)
-        app_greeting_present = False
-        if conversation_history and len(conversation_history) >= 2:
-            # Check if first 2 messages are from assistant (app-generated)
-            first_two = conversation_history[:2]
-            if all(msg.get('role') == 'assistant' for msg in first_two):
-                app_greeting_present = True
-                print(f"[GREETING] App-provided initial greeting detected")
+        # Determine whether there are real prior user-assistant exchanges.
+        # "Real" means: at least one user message exists in the history (not just
+        # app-generated bot preamble with no corresponding user turn).
+        user_msgs_in_history = [m for m in (conversation_history or []) if m.get('role') == 'user']
+        app_greeting_present = (
+            bool(conversation_history)
+            and len(conversation_history) >= 2
+            and not user_msgs_in_history  # All messages so far are from the app/assistant
+        )
+        if app_greeting_present:
+            print(f"[GREETING] App-provided initial greeting detected (no user turns yet)")
 
-        if app_greeting_present or (conversation_history and len(conversation_history) >= 3):
+        if app_greeting_present or (user_msgs_in_history and len(user_msgs_in_history) >= 1):
             system_prompt += """
 
 ONGOING CONVERSATION - CONTEXT HANDLING:
@@ -2594,7 +2604,13 @@ RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
             "validation_strength": None,
             "validation_can_proceed": True,
             "validation_query_type": None,
-            "validation_disclaimer": None
+            "validation_disclaimer": None,
+
+            # Context management fields (populated externally by chat_stateless.py but
+            # must be present in initial_state to satisfy TypedDict contract)
+            "conversation_summary": None,
+            "intent_analysis": None,
+            "resolution_result": None,
         }
 
         

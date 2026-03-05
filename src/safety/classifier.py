@@ -343,17 +343,23 @@ class SafetyClassifier:
         # These should NEVER be blocked - user asking about their own profile
         query_lower = query.lower().strip()
         
-        own_data_patterns = [
+        # Multi-word English phrases — safe to use substring match
+        own_data_phrases = [
             'my dob', 'my date of birth', 'my birth date', 'my birthday',
-            'my birth time', 'my time of birth', 'my birth place', 
+            'my birth time', 'my time of birth', 'my birth place',
             'my place of birth', 'when was i born', 'where was i born',
             'what time was i born', 'my chart', 'my kundli', 'my horoscope',
             'show me my', 'tell me my', 'what is my',
-            # Hinglish/Hindi first-person markers
-            'main', 'mera', 'meri', 'mujhe', 'hum'
         ]
-        
-        if any(pattern in query_lower for pattern in own_data_patterns):
+        # Short Hindi/Hinglish first-person markers — must use word-boundary match
+        # to avoid 'meri behen ki shaadi' matching 'meri' and bypassing safety
+        hindi_markers = ['main', 'mera', 'meri', 'mujhe', 'hum']
+
+        import re as _re
+        phrase_match = any(phrase in query_lower for phrase in own_data_phrases)
+        hindi_match = any(_re.search(r'\b' + marker + r'\b', query_lower) for marker in hindi_markers)
+
+        if phrase_match or hindi_match:
             # User asking about their OWN data - mark as SAFE
             decision = SafetyDecision(
                 category="SAFE",
@@ -423,11 +429,20 @@ class SafetyClassifier:
         
         # Gate 2: LLM Classification
         try:
-            # Format context
+            # Format context — history uses {'role': ..., 'content': ...} format
             context_str = "None"
             if conversation_history:
                 history_subset = conversation_history[-2:]
-                context_str = "\n".join([f"User: {turn.get('user', '')}\nBot: {turn.get('assistant', '')[:100]}..." for turn in history_subset])
+                context_lines = []
+                for turn in history_subset:
+                    role = turn.get('role', '')
+                    content = turn.get('content', '')[:100]
+                    if role == 'user':
+                        context_lines.append(f"User: {content}")
+                    elif role == 'assistant':
+                        context_lines.append(f"Bot: {content}...")
+                if context_lines:
+                    context_str = "\n".join(context_lines)
 
             decision_dict = self.chain.invoke({"query": query, "context": context_str})
             decision = SafetyDecision(**decision_dict)

@@ -505,7 +505,19 @@ Respond with ONLY a valid JSON object — no extra text:
             return semantic_result
             
         # Step 3: Check LLM result cache
-        cache_key = q
+        # Include a short hash of recent conversation so a query cached with no
+        # history doesn't get replayed when history now changes the intent.
+        import hashlib as _hashlib
+        if conversation_history:
+            recent = conversation_history[-4:]
+            ctx = "|".join(
+                f"{m.get('role', '')[:1]}:{m.get('content', '')[:50]}"
+                for m in recent
+            )
+            ctx_hash = _hashlib.md5(ctx.encode()).hexdigest()[:8]
+        else:
+            ctx_hash = "noctx"
+        cache_key = f"{q}::{ctx_hash}"
         if self.use_cache and cache_key in self.cache:
             result = self.cache[cache_key].copy()
             result['cached'] = True
