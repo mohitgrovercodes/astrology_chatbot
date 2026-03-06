@@ -159,9 +159,6 @@ class ChartAnalyzer:
         planets = chart_data.get('planets', {})
         
         for planet_name, planet_data in planets.items():
-            if planet_name in ['RAHU', 'KETU']:
-                continue  # Skip nodes for dignity (different rules)
-            
             sign = planet_data.get('sign') or planet_data.get('rashi')
             degrees = planet_data.get('degree') or planet_data.get('degrees', 0.0)
             
@@ -301,38 +298,42 @@ class ChartAnalyzer:
         planets = chart_data.get('planets', {})
         
         for planet_name, planet_data in planets.items():
-            if planet_name in ['RAHU', 'KETU']:
-                continue  # Nodes have different aspect rules
-            
             from_house = planet_data.get('house')
             if not from_house:
                 continue
-            
+
             aspected = []
             aspect_type = "full"
-            
+
             # All planets aspect 7th house from their position
             seventh_house = ((from_house + 6) % 12) or 12
             aspected.append(seventh_house)
-            
+
             # Special aspects
             if planet_name == 'MARS':
                 fourth_house = ((from_house + 3) % 12) or 12
                 eighth_house = ((from_house + 7) % 12) or 12
                 aspected.extend([fourth_house, eighth_house])
                 aspect_type = "special_mars"
-            
+
             elif planet_name == 'JUPITER':
                 fifth_house = ((from_house + 4) % 12) or 12
                 ninth_house = ((from_house + 8) % 12) or 12
                 aspected.extend([fifth_house, ninth_house])
                 aspect_type = "special_jupiter"
-            
+
             elif planet_name == 'SATURN':
                 third_house = ((from_house + 2) % 12) or 12
                 tenth_house = ((from_house + 9) % 12) or 12
                 aspected.extend([third_house, tenth_house])
                 aspect_type = "special_saturn"
+
+            elif planet_name in ('RAHU', 'KETU'):
+                # Rahu/Ketu aspect 5th, 7th, 9th houses (Jupiter-like aspects)
+                fifth_house = ((from_house + 4) % 12) or 12
+                ninth_house = ((from_house + 8) % 12) or 12
+                aspected.extend([fifth_house, ninth_house])
+                aspect_type = "special_nodes"
             
             aspects.append(PlanetaryAspect(
                 aspecting_planet=planet_name,
@@ -425,22 +426,80 @@ class ChartAnalyzer:
     # STRENGTH SCORING (SIMPLIFIED)
     # ──────────────────────────────────────────────────────────────────────
     
+    def _is_moon_benefic(self, chart_data: Dict) -> bool:
+        """
+        Moon is benefic when waxing (Shukla Paksha) — i.e. Moon is more than
+        180° ahead of the Sun in the zodiac. Simplified: check if the angular
+        distance Sun→Moon (going forward) is between 0° and 180°.
+        """
+        planets = chart_data.get('planets', {})
+        sun_data = planets.get('SUN', {})
+        moon_data = planets.get('MOON', {})
+
+        sun_long = sun_data.get('longitude')
+        moon_long = moon_data.get('longitude')
+
+        if sun_long is None:
+            sun_sign = sun_data.get('sign') or sun_data.get('rashi')
+            sun_deg = sun_data.get('degree') or sun_data.get('degrees', 0)
+            if sun_sign:
+                sun_long = self._sign_degree_to_longitude(normalize_sign_name(sun_sign), sun_deg)
+
+        if moon_long is None:
+            moon_sign = moon_data.get('sign') or moon_data.get('rashi')
+            moon_deg = moon_data.get('degree') or moon_data.get('degrees', 0)
+            if moon_sign:
+                moon_long = self._sign_degree_to_longitude(normalize_sign_name(moon_sign), moon_deg)
+
+        if sun_long is None or moon_long is None:
+            return True  # Default to benefic if data unavailable
+
+        # Waxing = Moon is 0-180° ahead of Sun
+        distance = (moon_long - sun_long) % 360
+        return distance <= 180
+
+    def _is_mercury_benefic(self, chart_data: Dict) -> bool:
+        """
+        Mercury is benefic when not conjunct malefics (Sun, Mars, Saturn, Rahu, Ketu).
+        Simplified: check if any malefic shares the same house as Mercury.
+        """
+        planets = chart_data.get('planets', {})
+        mercury_data = planets.get('MERCURY', {})
+        mercury_house = mercury_data.get('house')
+        if not mercury_house:
+            return True  # Default to benefic if data unavailable
+
+        malefics = ['SUN', 'MARS', 'SATURN', 'RAHU', 'KETU']
+        for mal in malefics:
+            mal_data = planets.get(mal, {})
+            if mal_data.get('house') == mercury_house:
+                return False
+        return True
+
     def calculate_simplified_strengths(self, chart_data: Dict) -> Dict[str, float]:
         """
         Simplified strength scoring (0-10 scale).
-        
+
         Based on:
         - Dignity (exalted=10, own=8, friend=6, neutral=5, enemy=3, debilitated=2)
         - Combustion (-3 if combust)
         - Retrograde (+1 for benefics, -1 for malefics)
+
+        Moon is benefic only when waxing (Shukla Paksha).
+        Mercury is benefic only when unafflicted by malefics.
         """
         strengths = {}
-        
+
         dignities = self.get_planetary_dignities(chart_data)
         combustion = self.check_combustion(chart_data)
         retrograde = self.get_retrograde_planets(chart_data)
-        
-        benefics = ['JUPITER', 'VENUS', 'MERCURY', 'MOON']
+
+        # Build conditional benefic list
+        benefics = ['JUPITER', 'VENUS']
+        if self._is_moon_benefic(chart_data):
+            benefics.append('MOON')
+        if self._is_mercury_benefic(chart_data):
+            benefics.append('MERCURY')
         
         for dignity in dignities:
             # Base strength from dignity
