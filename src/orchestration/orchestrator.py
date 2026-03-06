@@ -2370,9 +2370,6 @@ Provide a highly concise answer:"""
             lines.append(f"VARGOTTAMA (D1=D9 rashi): {', '.join(vargottama)} — highly potent, amplified results in their Dasha periods")
             lines.append("")
         
-        lines.append("─" * 60)
-        lines.append("")
-        
         return "\n".join(lines)
     
     def _build_prediction_prompt(
@@ -2690,7 +2687,6 @@ EARLY CONVERSATION:
         mobile_length_instruction = """
 
 MOBILE RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
-═══════════════════════════════════════════════════════════════════════
 1. MAXIMUM LENGTH: 3-4 sentences (100-150 words total). BE CONCISE.
 2. FIRST SENTENCE: Direct, clear answer to the question.
 3. STRUCTURE: Direct Answer → One Key Factor → Timing/Remedy → Brief Follow-up offer.
@@ -2721,7 +2717,6 @@ MOBILE RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
 
 EXAMPLE GOOD CONCISE MOBILE RESPONSE (Marriage):
 "Aapki 7th house (Marriage & Partnership) ki lord Venus lagan mein weak hai, isliye delay hai. June-August 2026 mein Venus-Jupiter dasha mein marriage ka strong yog banega. Kya aap inko strong karne ki remedies janna chahenge?"
-═══════════════════════════════════════════════════════════════════════
 """
         instructions += mobile_length_instruction
 
