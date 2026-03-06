@@ -25,29 +25,29 @@ def detect_query_type_patterns(query: str) -> tuple[str, float]:
     # Define keyword patterns with weights
     categories = {
         'marriage': {
-            'strong': ['marry', 'marriage', 'spouse', 'wedding', 'shaadi', 'vivah'],
-            'medium': ['partner', 'relationship', 'love life', 'wife', 'husband'],
-            'weak': ['matrimony', 'married life']
+            'strong': ['marry', 'marriage', 'spouse', 'wedding', 'shaadi', 'shadi', 'vivah', 'byah', 'biyah', 'nikah', 'mangni', 'sagai'],
+            'medium': ['partner', 'relationship', 'love life', 'wife', 'husband', 'life partner', 'dulha', 'dulhan', 'patni', 'pati'],
+            'weak': ['matrimony', 'married life', 'rishta', 'rishtey']
         },
         'career': {
-            'strong': ['job', 'career', 'profession', 'business', 'naukri'],
-            'medium': ['work', 'employment', 'service', 'occupation'],
-            'weak': ['promotion', 'vyapar']
+            'strong': ['job', 'career', 'profession', 'business', 'naukri', 'rozgaar', 'rozgar', 'kaam', 'vyavsay'],
+            'medium': ['work', 'employment', 'service', 'occupation', 'office', 'company'],
+            'weak': ['promotion', 'vyapar', 'dhandha', 'tarakki']
         },
         'finance': {
-            'strong': ['money', 'wealth', 'income', 'dhan', 'paisa'],
-            'medium': ['prosperity', 'financial', 'rich', 'fortune'],
-            'weak': ['property', 'assets', 'savings', 'investment']
+            'strong': ['money', 'wealth', 'income', 'dhan', 'paisa', 'paise', 'dhana', 'arthik'],
+            'medium': ['prosperity', 'financial', 'rich', 'fortune', 'ameer', 'samridhi'],
+            'weak': ['property', 'assets', 'savings', 'investment', 'sampatti']
         },
         'health': {
-            'strong': ['health', 'disease', 'illness', 'swasthya'],
-            'medium': ['medical', 'sickness', 'cure'],
-            'weak': ['treatment', 'ailment']
+            'strong': ['health', 'disease', 'illness', 'swasthya', 'bimari', 'sehat', 'rog'],
+            'medium': ['medical', 'sickness', 'cure', 'dawai', 'ilaaj'],
+            'weak': ['treatment', 'ailment', 'takleef']
         },
         'children': {
-            'strong': ['child', 'children', 'son', 'daughter', 'santan'],
-            'medium': ['pregnancy', 'putra', 'offspring'],
-            'weak': ['progeny', 'kids']
+            'strong': ['child', 'children', 'son', 'daughter', 'santan', 'baccha', 'bachche', 'beta', 'beti', 'ladka', 'ladki'],
+            'medium': ['pregnancy', 'putra', 'offspring', 'garbh', 'prasav'],
+            'weak': ['progeny', 'kids', 'aulad']
         }
     }
     

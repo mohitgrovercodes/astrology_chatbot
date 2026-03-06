@@ -811,11 +811,11 @@ class EnhancedLangGraphOrchestrator:
             # 6. CLOSURE
             elif match_type == "closure":
                 if lang == 'en':
-                    state['answer'] = f"Happy to help, {user_name}! Is there anything else you'd like to explore?"
+                    state['answer'] = f"Happy to help, {user_name}!"
                 elif lang == 'hi-lat':
-                    state['answer'] = f"Bahut badiya, {user_name}! Kya aap apni kundli ke baare mein aur kuch janna chahte hain?"
+                    state['answer'] = f"Bahut badiya, {user_name}!"
                 else:
-                    state['answer'] = f"Happy to help, {user_name}! Let me know if you have any other questions."
+                    state['answer'] = f"Happy to help, {user_name}!"
                 return state
 
         # Multilingual/Complex path: Use fast LLM with persona (Fallback for no match or unhandled type)
@@ -1541,7 +1541,7 @@ Provide a concise answer:"""
                             query_type_for_synthesis = detect_query_type(
                                 state['query'],
                                 llm=self.fast_llm if hasattr(self, 'fast_llm') else None,
-                                use_llm_confirmation=False
+                                use_llm_confirmation=True
                             )
                         except:
                             query_type_for_synthesis = 'general'
@@ -2951,10 +2951,10 @@ EARLY CONVERSATION:
         # ════════════════════════════════════════════════════════════════════════
         mobile_length_instruction = """
 
-MOBILE RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
-1. MAXIMUM LENGTH: 3-4 sentences (100-150 words total). BE CONCISE.
+RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
+1. MAXIMUM LENGTH: 150-200 words total. Be thorough but not padded.
 2. FIRST SENTENCE: Direct, clear answer to the question.
-3. STRUCTURE: Direct Answer → One Key Factor → Timing/Remedy → Brief Follow-up offer.
+3. STRUCTURE: Direct Answer → 2-3 Key Factors from the chart → Timing → Remedy (if applicable). DO NOT ask follow-up questions.
 4. HOUSE ANNOTATIONS (MANDATORY): Every time you mention a house by number, ALWAYS
    add its primary domain in parentheses immediately after. No exceptions.
    Use this exact mapping:
@@ -2979,9 +2979,10 @@ MOBILE RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
    - Good: "Your 7th house (Marriage & Partnership) lord Venus is..."
 6. NO THANKING: User details from backend.
 7. GET STRAIGHT TO THE POINT: Cut all filler words. Make every word count.
+8. NO FOLLOW-UP QUESTIONS: Never end with questions like "Do you want remedies?", "Shall I explain more?", "Would you like to know...?" Just give the complete answer directly.
 
-EXAMPLE GOOD CONCISE MOBILE RESPONSE (Marriage):
-"Aapki 7th house (Marriage & Partnership) ki lord Venus lagan mein weak hai, isliye delay hai. June-August 2026 mein Venus-Jupiter dasha mein marriage ka strong yog banega. Kya aap inko strong karne ki remedies janna chahenge?"
+EXAMPLE GOOD RESPONSE (Marriage):
+"Aapki 7th house (Marriage & Partnership) ki lord Venus lagan mein weak hai, isliye thodi delay hai. Dusra factor — Saturn ki 7th house (Marriage & Partnership) par drishti late marriage ka yog bana raha hai. Teesra — Moon/Rahu dasha mein emotional confusion bhi tha. June-August 2026 mein Venus-Jupiter conjunction se marriage ka strong yog banega. Venus ko strengthen karne ke liye shukravar ko white flowers offer karein."
 """
         instructions += mobile_length_instruction
 
