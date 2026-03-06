@@ -224,43 +224,40 @@ def compute_d7_saptamsa(longitude: float, d1_rashi: Rashi) -> Rashi:
 def compute_d9_navamsa(longitude: float, d1_rashi: Rashi) -> Rashi:
     """
     D9 (Navamsa) - THE MOST IMPORTANT divisional chart after D1.
-    
+
     Used for: Marriage, spouse, dharma, inner self, spiritual potential.
-    
-    Each sign is divided into 9 parts of 3Â°20' (= 13.33Â°/4 = one pada).
+
+    Each sign is divided into 9 parts of 3 degrees 20 min (= one nakshatra pada).
     The 108 navamsas correspond to the 108 nakshatra padas.
-    
+
     Rules from BPHS:
     - Fire signs (Aries, Leo, Sag): Start from Aries
     - Earth signs (Taurus, Virgo, Cap): Start from Capricorn
     - Air signs (Gemini, Libra, Aqua): Start from Libra
     - Water signs (Cancer, Scorp, Pisces): Start from Cancer
-    
-    This creates a continuous sequence where the navamsas cycle through
-    all 12 signs three times across the 27 nakshatras.
+
+    The 108 navamsas run CONTINUOUSLY across all 12 signs.
+    The formula (sign_index * 9 + division) % 12 is mathematically
+    equivalent to the BPHS element-group rules and correct for all signs:
+      Aries(0)*9=0   -> Aries(0)       Fire starts Aries
+      Taurus(1)*9=9  -> Capricorn(9)   Earth starts Capricorn
+      Gemini(2)*9=18 -> Libra(6)       Air starts Libra
+      Cancer(3)*9=27 -> Cancer(3)      Water starts Cancer
+      Leo(4)*9=36    -> Aries(0)       Fire group 2 starts Aries
+      Virgo(5)*9=45  -> Capricorn(9)   Earth group 2 starts Capricorn
+      Libra(6)*9=54  -> Libra(6)       Air group 2 starts Libra
+      Scorpio(7)*9=63 -> Cancer(3)     Water group 2 starts Cancer
+
+    BUG FIX: The previous formula used element_group_position * 9 which
+    was incorrect for Leo through Pisces (groups 1 and 2), producing wrong
+    navamsa signs for 8 of the 12 signs.
     """
     sign_longitude = longitude % 30
-    navamsa_division = int(sign_longitude / (30 / 9))
-    
-    # Determine starting sign based on element
-    # Element pattern: Fire(0), Earth(1), Air(2), Water(3)
-    element = d1_rashi.value % 4
-    
-    starting_signs = [
-        Rashi.MESHA,    # Fire signs start from Aries
-        Rashi.MAKARA,   # Earth signs start from Capricorn
-        Rashi.TULA,     # Air signs start from Libra
-        Rashi.KARKA,    # Water signs start from Cancer
-    ]
-    
-    # Calculate position within the element group (0, 1, or 2)
-    # Fire signs: Aries(0), Leo(4), Sag(8) â†’ positions 0, 1, 2
-    element_group_position = d1_rashi.value // 4
-    
-    # Total navamsa offset from the starting sign
-    total_offset = (element_group_position * 9) + navamsa_division
-    
-    return Rashi((starting_signs[element].value + total_offset) % 12)
+    navamsa_division = int(sign_longitude / (30.0 / 9))
+    navamsa_division = min(navamsa_division, 8)  # cap at 8
+
+    # Continuous navamsa sequence — satisfies all BPHS element-group rules
+    return Rashi((d1_rashi.value * 9 + navamsa_division) % 12)
 
 
 def compute_d10_dasamsa(longitude: float, d1_rashi: Rashi) -> Rashi:
