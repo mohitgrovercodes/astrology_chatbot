@@ -713,28 +713,30 @@ class EnhancedSessionManager:
             def _set_data(key, val):
                 self.redis.set(key, json.dumps(val))
 
-            # Store user profile
-            _set_data(f"session:{user_id}:user_profile", user_profile)
-            
             # ════════════════════════════════════════════════════════════════
-            # VALIDATE DOB
+            # VALIDATE DOB — must happen BEFORE the first Redis store so the
+            # profile is always written with _dob_validation in a single atomic
+            # operation.  Writing twice (once without, once with) left a window
+            # where a concurrent read returned a profile missing _dob_validation,
+            # causing age_years to default to 0 in the orchestrator.
             # ════════════════════════════════════════════════════════════════
             from src.validation.age_validator import AgeValidator
 
             dob = user_profile.get('date_of_birth')
             if dob:
                 validation = AgeValidator.validate_dob(dob)
-                
+
                 print(f"[DOB_VALIDATION] Checking DOB: {dob}")
                 if not validation['valid']:
                     print(f"[DOB_VALIDATION] ⚠️  Invalid: {validation['issue']}")
                     print(f"  - Message: {validation['message']}")
                 else:
                     print(f"[DOB_VALIDATION] ✅ Valid - Age: {validation['age_years']} years, {validation['age_months']} months")
-                
-                # Store validation with profile
+
                 user_profile['_dob_validation'] = validation
-                _set_data(f"session:{user_id}:user_profile", user_profile)
+
+            # Store user profile (single write, always includes _dob_validation)
+            _set_data(f"session:{user_id}:user_profile", user_profile)
 
             # Convert conversation history from external format to internal format
             internal_conversation = []

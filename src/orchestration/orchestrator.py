@@ -337,9 +337,15 @@ class EnhancedLangGraphOrchestrator:
         workflow.add_edge("detect_language", "safety_check")
         
         # Conditional edge from safety_check
+        def route_after_safety(state: NakshatraState) -> str:
+            intent = state.get('intent', '')
+            if intent in ('BLOCKED', 'DATA_VALIDATION_ERROR', 'AGE_INAPPROPRIATE'):
+                return "blocked"
+            return "safe"
+
         workflow.add_conditional_edges(
             "safety_check",
-            lambda state: "blocked" if state.get('intent') == 'BLOCKED' else "safe",
+            route_after_safety,
             {
                 "blocked": "format_response",
                 "safe": "intent_classification"
@@ -566,15 +572,24 @@ class EnhancedLangGraphOrchestrator:
             # ════════════════════════════════════════════════════════════════
             from src.validation.age_validator import AgeValidator
 
-            user_profile = state.get('user_profile', {})  # Get from your state/context
-            dob_validation = user_profile.get('_dob_validation', {})
+            user_profile = state.get('user_profile', {})
 
-            # Check if DOB is invalid
-            if dob_validation.get('valid') == False:
+            # Always recompute from DOB so stale cached values (from old buggy code)
+            # never produce misleading messages.  The validator is cheap (no I/O).
+            dob = user_profile.get('date_of_birth')
+            if dob:
+                dob_validation = AgeValidator.validate_dob(dob)
+                print(f"[AGE_CHECK] Validated DOB live: {dob} → {dob_validation.get('issue') or 'ok'} (age {dob_validation.get('age_years')}y)")
+            else:
+                dob_validation = {}
+
+            # Check if DOB is invalid — use `is False` not `== False` so that a
+            # missing/None 'valid' key (empty dict case) does not silently pass through.
+            if dob_validation.get('valid') is False:
                 print(f"[AGE_CHECK] Invalid DOB: {dob_validation.get('issue')}")
                 state['intent'] = "DATA_VALIDATION_ERROR"
                 state['answer'] = dob_validation.get('message')
-                return state  # Or your return format
+                return state
 
             # Check age-appropriateness for query
             age_years = dob_validation.get('age_years', 0)
@@ -1599,18 +1614,41 @@ Provide a concise answer:"""
                     synthesis=state.get('synthesis')  # NEW
                 )
             else:
+                # Chart calculation failed — do NOT hallucinate chart-specific details.
+                # Fall back to RAG_ONLY mode and tell the LLM explicitly that birth chart
+                # data is unavailable so it provides general guidance only.
+                print("[RAG_WITH_CALCULATION] [WARN] No chart data — falling back to RAG_ONLY prompt")
+                no_chart_notice = (
+                    "\n\nIMPORTANT: Birth chart data could not be calculated for this user (likely due to an "
+                    "invalid date of birth format). Do NOT invent, assume, or state any planetary positions, "
+                    "house lords, lagna, rashi, dashas, or nakshatra placements. "
+                    "Provide ONLY general Vedic astrology guidance based on the classical texts provided. "
+                    "If the user asks about their personal chart, politely inform them that their birth data "
+                    "needs to be corrected first."
+                    "\n\nMOBILE RESPONSE FORMAT: Maximum 3-4 sentences (100-150 words). "
+                    "Be direct and concise. No meta-commentary."
+                )
                 if self.prompt_builder:
                     prompt = self.prompt_builder.build_prompt(
                         query=state['query'],
-                        intent="RAG_WITH_CALCULATION",
+                        intent="RAG_ONLY",
                         user_profile=state['user_profile'],
                         knowledge_chunks=knowledge_chunks,
                         conversation_history=state.get('conversation_history', []),
                         language=state.get('detected_language', 'en')
                     )
+                    # Inject the no-chart notice into the system part (before the query marker)
+                    if "====USER_QUERY_MARKER====" in prompt:
+                        parts = prompt.split("====USER_QUERY_MARKER====")
+                        prompt = parts[0] + no_chart_notice + "\n\n====USER_QUERY_MARKER====" + parts[1]
+                    else:
+                        prompt = prompt + no_chart_notice
                 else:
                     print("[RAG_WITH_CALCULATION] [ERROR] No prompt_builder - using fallback template")
-                    prompt = f"Analyze the following query for user {user_profile.get('name', 'Client')}: {state['query']}"
+                    prompt = (
+                        f"You are a Vedic astrology assistant.{no_chart_notice}\n\n"
+                        f"====USER_QUERY_MARKER====\n\"{state['query']}\""
+                    )
             
             # ================================================================
             # STEP 4: Build Messages Array with Conversation History
@@ -2429,12 +2467,12 @@ EARLY CONVERSATION:
 
 MOBILE RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
 ═══════════════════════════════════════════════════════════════════════
-1. MAXIMUM LENGTH: 2-3 sentences (50-80 words total). BE EXTREMELY CONCISE.
+1. MAXIMUM LENGTH: 3-4 sentences (100-150 words total). BE CONCISE.
 2. FIRST SENTENCE: Direct, clear answer to the question.
 3. STRUCTURE: Direct Answer → One Key Factor → Timing/Remedy → Brief Follow-up offer.
 4. TECHNICAL TERMS: Use minimally. Briefly explain in parentheses if needed.
    - Good: "7th house (shaadi ka ghar) ki lord Venus..."
-5. NO META-COMMENTARY: Don't explain what you're doing or analyzing. 
+5. NO META-COMMENTARY: Don't explain what you're doing or analyzing.
    - Bad: "Based on your chart, I can see..."
    - Good: "Your 7th house lord Venus is..."
 6. NO THANKING: User details from backend.
