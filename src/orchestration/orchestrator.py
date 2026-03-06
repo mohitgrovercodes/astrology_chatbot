@@ -1877,6 +1877,27 @@ I prefer to say "I don't know" rather than provide information not grounded in c
         )
 
         _p = user_profile or {}
+        _cd = _p.get('chart_data') or {}
+        _planets = _cd.get('planets', {})
+
+        # Build planet list block when chart data is available — prevents LLM from
+        # inferring house lords or placements from its training knowledge.
+        planet_block = ""
+        if _cd and _planets:
+            planet_block = self._compute_house_lords_block(_cd)
+            _planet_lines = ["\nBIRTH CHART DATA (use ONLY these positions for any chart-specific reasoning):"]
+            _order = ['SUN', 'MOON', 'MARS', 'MERCURY', 'JUPITER', 'VENUS', 'SATURN', 'RAHU', 'KETU']
+            for _pl in _order:
+                _pd = _planets.get(_pl, {})
+                if _pd:
+                    _planet_lines.append(
+                        f"• {_pl:8}: {_pd.get('sign', 'N/A'):12} H{_pd.get('house', '?')}"
+                    )
+            if planet_block:
+                _planet_lines.append("")
+                _planet_lines.append(planet_block)
+            planet_block = "\n".join(_planet_lines)
+
         prompt = f"""You are an expert Vedic astrologer explaining astrological concepts.
 
 USER PROFILE:
@@ -1884,8 +1905,9 @@ USER PROFILE:
 • Date of Birth: {_p.get('date_of_birth', 'Unknown')}
 • Time of Birth: {_p.get('time_of_birth', 'Unknown')}
 • Place of Birth: {_p.get('place_of_birth', 'Unknown')}
-• Moon Sign: {((_p.get('chart_data') or {}).get('planets', {})).get('MOON', {}).get('sign', _p.get('moon_sign', 'Unknown'))}
-• Lagna (Ascendant): {((_p.get('chart_data') or {}).get('lagna', {})).get('sign', _p.get('lagna', 'Unknown'))}
+• Moon Sign: {_planets.get('MOON', {}).get('sign', _p.get('moon_sign', 'Unknown'))}
+• Lagna (Ascendant): {_cd.get('lagna', {}).get('sign', _p.get('lagna', 'Unknown'))}
+{planet_block}
 
 ====USER_QUERY_MARKER====
 "{query}"
@@ -1908,13 +1930,22 @@ RELEVANT KNOWLEDGE FROM CLASSICAL TEXTS:
         
         data_context = ""
         if chart_data:
-            # Format minimal chart data for checking
             planets = chart_data.get('planets', {})
-            formatted_planets = ", ".join([f"{p}: {d.get('current_sign', 'Unknown')}" for p, d in planets.items()])
-            data_context = f"\nCALCULATED CHART DATA (TRUTH): {formatted_planets}\n"
-        
+            # Use 'sign' key (primary) with 'current_sign' as fallback
+            formatted_planets = ", ".join([
+                f"{p}: H{d.get('house', '?')} {d.get('sign') or d.get('current_sign', 'Unknown')}"
+                for p, d in planets.items()
+            ])
+            # Compute house lords as ground-truth so verifier can catch wrong-lord claims
+            house_lords_truth = self._compute_house_lords_block(chart_data)
+            data_context = (
+                f"\nCALCULATED CHART DATA (GROUND TRUTH — verify response against these):\n"
+                f"PLANETS: {formatted_planets}\n"
+                f"{house_lords_truth}\n"
+            )
+
         prompt = f"""You are the Guardian of the Astrologer's Constitution.
-Your job is to specificially check if the following AI response violates any Immutable Rules.
+Your job is to specifically check if the following AI response violates any Immutable Rules.
 
 THE CONSTITUTION:
 {constitution}
@@ -1928,6 +1959,7 @@ TASK:
 3. Check for SYCOPHANCY (Agreeing with user against facts - Rule 3).
 4. Check for SCOPE violations (Medical/Financial advice - Rule 4).
 5. Check for HALLUCINATED PLACEMENTS. If Chart Data is provided above, ensure the response does NOT contradict it (e.g., saying Sun is in Aries when Data says Libra).
+6. Check for WRONG HOUSE LORDS. If House Lords are provided above, ensure the response does NOT name an incorrect lord for any house (e.g., claiming Venus is the 7th lord when the chart shows Jupiter rules H7).
 
 OUTPUT FORMAT:
 Return ONLY "SAFE" if no violations found.
@@ -2371,7 +2403,85 @@ Provide a highly concise answer:"""
             lines.append("")
         
         return "\n".join(lines)
-    
+
+    def _compute_house_lords_block(self, chart_data: Dict) -> str:
+        """
+        Compute all 12 house lords deterministically from chart_data.
+
+        This runs unconditionally — no dependency on ChartAnalyzer or
+        ENHANCED_ANALYSIS_AVAILABLE. Uses only the lagna sign and planetary
+        positions already present in chart_data.
+        """
+        _SIGNS = [
+            'Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo',
+            'Libra', 'Scorpio', 'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces'
+        ]
+        _SIGN_LORDS = {
+            'Aries': 'MARS', 'Taurus': 'VENUS', 'Gemini': 'MERCURY',
+            'Cancer': 'MOON', 'Leo': 'SUN', 'Virgo': 'MERCURY',
+            'Libra': 'VENUS', 'Scorpio': 'MARS', 'Sagittarius': 'JUPITER',
+            'Capricorn': 'SATURN', 'Aquarius': 'SATURN', 'Pisces': 'JUPITER'
+        }
+        _EXALT = {
+            'SUN': 'Aries', 'MOON': 'Taurus', 'MARS': 'Capricorn',
+            'MERCURY': 'Virgo', 'JUPITER': 'Cancer', 'VENUS': 'Pisces', 'SATURN': 'Libra'
+        }
+        _DEBIL = {
+            'SUN': 'Libra', 'MOON': 'Scorpio', 'MARS': 'Cancer',
+            'MERCURY': 'Pisces', 'JUPITER': 'Capricorn', 'VENUS': 'Virgo', 'SATURN': 'Aries'
+        }
+        _OWN = {
+            'SUN': ['Leo'], 'MOON': ['Cancer'], 'MARS': ['Aries', 'Scorpio'],
+            'MERCURY': ['Gemini', 'Virgo'], 'JUPITER': ['Sagittarius', 'Pisces'],
+            'VENUS': ['Taurus', 'Libra'], 'SATURN': ['Capricorn', 'Aquarius']
+        }
+        _SANSKRIT = {
+            'Mesha': 'Aries', 'Vrishabha': 'Taurus', 'Mithuna': 'Gemini',
+            'Karka': 'Cancer', 'Simha': 'Leo', 'Kanya': 'Virgo',
+            'Tula': 'Libra', 'Vrischika': 'Scorpio', 'Dhanu': 'Sagittarius',
+            'Makara': 'Capricorn', 'Kumbha': 'Aquarius', 'Meena': 'Pisces'
+        }
+
+        def _norm(s):
+            if not s:
+                return s
+            return _SANSKRIT.get(s, _SANSKRIT.get(s.title(), s))
+
+        def _dignity(planet, sign):
+            if _EXALT.get(planet) == sign:
+                return 'exalted'
+            if _DEBIL.get(planet) == sign:
+                return 'debilitated'
+            if sign in _OWN.get(planet, []):
+                return 'own sign'
+            return ''
+
+        lagna_data = chart_data.get('lagna') or chart_data.get('ascendant', {})
+        lagna_sign = _norm(lagna_data.get('sign') or lagna_data.get('rashi', ''))
+
+        if not lagna_sign or lagna_sign not in _SIGNS:
+            return ""
+
+        lagna_idx = _SIGNS.index(lagna_sign)
+        planets = chart_data.get('planets', {})
+
+        lines = [
+            "HOUSE LORDS (calculated from Lagna — use ONLY these values, never derive lords from your training knowledge):"
+        ]
+        for h in range(1, 13):
+            house_sign = _SIGNS[(lagna_idx + h - 1) % 12]
+            lord = _SIGN_LORDS.get(house_sign, '?')
+            lord_data = planets.get(lord, {})
+            lord_house = lord_data.get('house', '?')
+            lord_sign = _norm(lord_data.get('sign') or lord_data.get('rashi') or '?')
+            dgn = _dignity(lord, lord_sign)
+            dgn_str = f" [{dgn}]" if dgn else ""
+            lines.append(
+                f"  H{h:2d} ({house_sign:13}) lord = {lord:8} | placed H{lord_house} in {lord_sign}{dgn_str}"
+            )
+
+        return "\n".join(lines)
+
     def _build_prediction_prompt(
         self,
         query: str,
@@ -2739,6 +2849,9 @@ When user uses "it", "this", "that" or asks "why", "how" -> connect to conversat
                 enhanced_analysis, synthesis, query_type=validation_result.get('query_type', 'general') if validation_result else 'general'
             )
 
+        # Always compute house lords from lagna — no dependency on enhanced analysis pipeline
+        house_lords_block = self._compute_house_lords_block(chart_data)
+
         prompt = f"""{system_prompt}
 
 {validation_context}
@@ -2767,6 +2880,8 @@ BIRTH CHART DATA (Sidereal/Lahiri):
 • Saturn:  {chart_data.get('planets', {}).get('SATURN',  {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('SATURN',  {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('SATURN',  {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('SATURN',  {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('SATURN', {}).get('retrograde') else ''}
 • Rahu:    {chart_data.get('planets', {}).get('RAHU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('RAHU',    {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('RAHU',    {}).get('nakshatra', 'N/A')}  [always Retro]
 • Ketu:    {chart_data.get('planets', {}).get('KETU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('KETU',    {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('KETU',    {}).get('nakshatra', 'N/A')}  [always Retro]
+
+{house_lords_block}
 
 {divisional_context}
 

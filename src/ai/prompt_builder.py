@@ -68,8 +68,9 @@ class PromptBuilder:
         if knowledge_chunks:
             sections.append(f"\nKNOWLEDGE:\n{self._format_knowledge(knowledge_chunks)}")
         
-        # Guidance
-        guidance = self._get_guidance(intent, query)
+        # Guidance — pass has_dasha so timing instructions are only forced when
+        # actual dasha periods are available in the prompt.
+        guidance = self._get_guidance(intent, query, has_dasha=bool(dasha))
         if guidance:
             sections.append(f"\nGUIDANCE:\n{guidance}")
         
@@ -114,7 +115,7 @@ class PromptBuilder:
             texts.append(f"[{i}] {text}...")
         return "\n".join(texts)
     
-    def _get_guidance(self, intent: str, query: str) -> Optional[str]:
+    def _get_guidance(self, intent: str, query: str, has_dasha: bool = False) -> Optional[str]:
         """Generate contextual guidance based on WHAT the user is actually asking."""
         q = query.lower()
         parts = []
@@ -122,15 +123,22 @@ class PromptBuilder:
         if intent in ["PREDICTION", "RAG_WITH_CALCULATION"]:
             parts.append("Analyze the chart, dasha, and transits together. Be insightful but realistic — never guarantee outcomes.")
 
-            # Timing guidance — activated when user asks about timing semantically
+            # Timing guidance — only force specific calendar dates when dasha data was
+            # actually computed and injected into the prompt. Without real dasha periods
+            # the LLM has nothing to anchor to and will fabricate specific windows.
             if any(w in q for w in ['when', 'timing', 'what time', 'which year', 'kab', 'kab hoga',
                                      'which month', 'what period', 'kitne din', 'how long']):
-                parts.append("""
-TIMING — You MUST give specific timeframes:
-- Near-term: "February–March 2026"
-- Mid-term: "April–June 2026"
-- Longer: "Late 2026 to 2027"
-NEVER say just "during Saturn Mahadasha" — always include actual months or seasons.""")
+                if has_dasha:
+                    parts.append(
+                        "TIMING — Use ONLY the Dasha/Antardasha/Pratyantar periods provided in this prompt. "
+                        "Cite the specific Pratyantar window as the near-term trigger. "
+                        "NEVER invent or estimate dates not listed in the dasha data above."
+                    )
+                else:
+                    parts.append(
+                        "TIMING — Describe timing in terms of planetary periods (Mahadasha/Antardasha) "
+                        "and broad seasonal windows. Do NOT invent specific calendar dates."
+                    )
 
             # Compatibility guidance — marriage, relationships, partner
             if any(w in q for w in ['marriage', 'shaadi', 'vivah', 'partner', 'spouse', 'compatibility',
