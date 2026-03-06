@@ -131,9 +131,7 @@ def get_divisional_chart_context(
     if not divisional_simple:
         return ""
     
-    context = "\n\n" + "=" * 70 + "\n"
-    context += "DIVISIONAL CHART ANALYSIS\n"
-    context += "=" * 70 + "\n"
+    context = "\n\nDIVISIONAL CHART ANALYSIS:\n"
     
     # Primary divisional charts
     charts_to_include = mapping['primary']
@@ -148,8 +146,7 @@ def get_divisional_chart_context(
         if not chart_info.get('planets'):
             continue
         
-        context += f"\n{chart_name} Chart - {CHART_MEANINGS.get(chart_name, 'Unknown')}\n"
-        context += "-" * 70 + "\n"
+        context += f"\n[{chart_name}] {CHART_MEANINGS.get(chart_name, 'Unknown')}\n"
         
         if verbose:
             context += f"Focus: {mapping['analysis_focus']}\n"
@@ -177,11 +174,7 @@ def get_divisional_chart_context(
         context += "\n"
     
     if verbose:
-        context += "=" * 70 + "\n"
-        context += f"ANALYSIS GUIDANCE: Use the {charts_to_include[0]} chart as primary reference\n"
-        context += f"for {query_type} analysis. Consider planetary placements, aspects,\n"
-        context += f"and sign qualities in this divisional chart for accurate prediction.\n"
-        context += "=" * 70 + "\n"
+        context += f"Analysis guidance: Use {charts_to_include[0]} as primary reference for {query_type} analysis.\n"
     
     return context
 
@@ -201,9 +194,7 @@ def get_all_divisional_charts_summary(chart_data: Dict) -> str:
     if not divisional_simple:
         return "\n[No divisional charts available]\n"
     
-    context = "\n\n" + "=" * 70 + "\n"
-    context += "ALL DIVISIONAL CHARTS AVAILABLE\n"
-    context += "=" * 70 + "\n"
+    context = "\n\nDIVISIONAL CHARTS AVAILABLE:\n"
     
     available_charts = sorted(divisional_simple.keys())
     
@@ -212,8 +203,6 @@ def get_all_divisional_charts_summary(chart_data: Dict) -> str:
         if chart_info.get('planets'):
             planet_count = len(chart_info['planets'])
             context += f"  ✓ {chart_name:6} - {CHART_MEANINGS.get(chart_name, 'Unknown'):40} ({planet_count} planets)\n"
-    
-    context += "=" * 70 + "\n"
     
     return context
 

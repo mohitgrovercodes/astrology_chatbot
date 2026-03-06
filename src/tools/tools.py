@@ -182,6 +182,8 @@ def calculate_current_dasha(
         
         periods = chart.get_current_dasha(calc_dt)
         
+        from src.engines.vedic.dasha_systems import compute_pratyantardashas
+
         # Get upcoming antardashas for timeline context
         all_ads = chart.dasha.get_antardashas(periods["mahadasha"])
         upcoming_ads = []
@@ -192,7 +194,43 @@ def calculate_current_dasha(
                     "start": ad.start_date.strftime("%Y-%m-%d"),
                     "end": ad.end_date.strftime("%Y-%m-%d")
                 })
-        
+
+        # Upcoming pratyantardashas within the current Antardasha (precise week-level timing)
+        # Only include periods that END in the future — fully elapsed periods are excluded.
+        # A period currently in progress (started in past, ends in future) is included
+        # and flagged as "in_progress" so the LLM knows not to cite its start as future.
+        current_ad = periods["antardasha"]
+        all_pds = compute_pratyantardashas(current_ad)
+        upcoming_pds = []
+        for pd in all_pds:
+            if pd.end_date > calc_dt:
+                in_progress = pd.start_date <= calc_dt < pd.end_date
+                upcoming_pds.append({
+                    "planet": pd.lord.name,
+                    "start": pd.start_date.strftime("%Y-%m-%d"),
+                    "end": pd.end_date.strftime("%Y-%m-%d"),
+                    "duration_days": pd.duration_days,
+                    "status": "IN PROGRESS (started in past)" if in_progress else "upcoming"
+                })
+
+        # First pratyantardasha of each upcoming Antardasha (cross-level convergence timing)
+        next_ad_first_pd = []
+        for ad in upcoming_ads[:3]:  # Only next 3 Antardashas to keep output manageable
+            # Re-fetch the DashaPeriod object for this upcoming AD
+            for ad_obj in all_ads:
+                if ad_obj.lord.name == ad["planet"] and ad_obj.start_date.strftime("%Y-%m-%d") == ad["start"]:
+                    first_pds = compute_pratyantardashas(ad_obj)
+                    if first_pds:
+                        fp = first_pds[0]
+                        next_ad_first_pd.append({
+                            "antardasha_planet": ad["planet"],
+                            "antardasha_start": ad["start"],
+                            "first_pratyantar_planet": fp.lord.name,
+                            "first_pratyantar_start": fp.start_date.strftime("%Y-%m-%d"),
+                            "first_pratyantar_end": fp.end_date.strftime("%Y-%m-%d")
+                        })
+                    break
+
         # Format for LLM consumption
         result = {
             "mahadasha": {
@@ -210,7 +248,9 @@ def calculate_current_dasha(
                 "start": periods["pratyantardasha"].start_date.strftime("%Y-%m-%d"),
                 "end": periods["pratyantardasha"].end_date.strftime("%Y-%m-%d")
             },
+            "upcoming_pratyantardashas": upcoming_pds,
             "upcoming_antardashas": upcoming_ads,
+            "next_antardasha_first_pratyantar": next_ad_first_pd,
             "dasha_sequence": f"{periods['mahadasha'].lord.name}/{periods['antardasha'].lord.name}/{periods['pratyantardasha'].lord.name}",
             "calculation_details": {
                 "moon_longitude": round(chart.dasha.moon_longitude, 2),

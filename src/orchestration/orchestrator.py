@@ -613,6 +613,8 @@ class EnhancedLangGraphOrchestrator:
 
                 print(f"[AGE_CHECK] ✅ Age-appropriate query")
 
+                
+
         except Exception as e:
             print(f"[SAFETY] [ERROR] Error in safety check: {e}")
             import traceback
@@ -2098,26 +2100,94 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         q = query.lower()
         wants_detail = self._user_wants_detail(query)
 
-        # Domain-specific additions
+        # Domain-specific timing guidance — tells the LLM which Pratyantar windows
+        # and Gochara factors are relevant for THIS specific query type.
         domain_hints = []
 
-        if any(w in q for w in ['when', 'kab', 'timing', 'which year', 'how long', 'kitne din',
-                                  'which month', 'period', 'dasha', 'antardasha']):
-            domain_hints.append("For timing: give specific months/seasons (e.g., 'March-April 2026'), never just dasha names alone.")
+        # ── Generic timing hint (always add when timing is asked) ──────────────
+        if any(w in q for w in ['when', 'kab', 'timing', 'which year', 'how long',
+                                  'kitne din', 'which month', 'period', 'dasha', 'antardasha',
+                                  'kab hoga', 'kab milega', 'kab hogi']):
+            domain_hints.append(
+                "TIMING PRECISION: Use the Pratyantar Dasha windows (listed above under 'Upcoming Pratyantardashas') "
+                "combined with the Gochara factors to narrow timing to a specific 1-4 week window. "
+                "Do NOT just repeat the Antardasha range — that is a multi-month bracket, not a specific date. "
+                "State the specific Pratyantar that aligns with the relevant Gochara factor as the PEAK timing."
+            )
 
-        if any(w in q for w in ['career', 'job', 'business', 'naukri', 'profession',
-                                  'promotion', 'kaam', 'vyapar', 'work', 'income']):
-            domain_hints.append("Career: focus on 10th house, Saturn, Sun, and the active Dasha lord's work-related significations.")
+        # ── Marriage / relationship ─────────────────────────────────────────────
+        if any(w in q for w in ['marriage', 'shaadi', 'shadi', 'vivah', 'wedding', 'partner',
+                                  'love', 'spouse', 'husband', 'wife', 'rishta', 'relationship',
+                                  'bypass', 'saat phere']):
+            domain_hints.append(
+                "MARRIAGE TIMING — Use this priority order:\n"
+                "  1. Find the Venus or Jupiter Pratyantar in the upcoming Pratyantardasha list.\n"
+                "  2. Cross-check: Is Jupiter Gochar in H5, H7, or H9 from natal Moon? (shown in Gochara section) "
+                     "— that window is a strong marriage trigger.\n"
+                "  3. Is there a Sade Sati? If yes, marriage may be delayed or come with challenges.\n"
+                "  4. Check 7th house (Marriage & Partnership) lord's Pratyantar period.\n"
+                "  5. State the specific Pratyantar date range (weeks) as the peak window, NOT just the Antardasha."
+            )
 
-        if any(w in q for w in ['marriage', 'shaadi', 'vivah', 'partner', 'love',
-                                  'spouse', 'husband', 'wife', 'rishta', 'relationship']):
-            domain_hints.append("Relationships: analyze 7th house, Venus, Jupiter. Speak of tendencies, not certainties.")
+        # ── Career / job / business ────────────────────────────────────────────
+        if any(w in q for w in ['career', 'job', 'business', 'naukri', 'profession', 'promotion',
+                                  'kaam', 'vyapar', 'work', 'income', 'salary', 'office',
+                                  'interview', 'selection', 'appointment']):
+            domain_hints.append(
+                "CAREER TIMING — Use this priority order:\n"
+                "  1. Find the Saturn, Sun, or Mercury Pratyantar in the upcoming Pratyantardasha list — "
+                     "these govern career activations.\n"
+                "  2. Cross-check: Jupiter Gochar in H6, H10, or H11 from natal Moon supports career gains.\n"
+                "  3. Is Ashtama Shani active? If yes, job changes face obstacles; advise patience.\n"
+                "  4. Check 10th house (Career & Status) lord's Pratyantar period.\n"
+                "  5. State the specific Pratyantar start–end date as the peak career window."
+            )
 
-        if any(w in q for w in ['health', 'illness', 'sick', 'disease', 'bimari', 'sehat', 'swasth']):
-            domain_hints.append("Health: discuss constitutional tendencies from lagna and 6th house. Always note: consult a doctor for medical concerns.")
+        # ── Foreign travel / abroad ────────────────────────────────────────────
+        if any(w in q for w in ['foreign', 'abroad', 'videsh', 'travel', 'yatra', 'immigration',
+                                  'visa', 'overseas', 'bahar', 'country', 'settle abroad',
+                                  'job abroad', 'foreign land']):
+            domain_hints.append(
+                "FOREIGN TRAVEL TIMING — Use this priority order:\n"
+                "  1. Find the Rahu or Jupiter Pratyantar in the upcoming Pratyantardasha list — "
+                     "Rahu Pratyantar strongly activates foreign travel and unconventional journeys.\n"
+                "  2. Check: Is Rahu transiting H9 or H12 from Lagna? (shown in Gochara section) "
+                     "— peak window for foreign movement.\n"
+                "  3. Jupiter Gochar in H9 or H12 from Moon also triggers foreign opportunities.\n"
+                "  4. Check 9th house (Luck & Dharma) and 12th house (Losses & Moksha) lord Pratyantar.\n"
+                "  5. State the specific Pratyantar date range as the peak window for foreign travel."
+            )
 
-        if any(w in q for w in ['money', 'wealth', 'paisa', 'dhan', 'rich', 'invest', 'finance']):
-            domain_hints.append("Finance: focus on 2nd/11th house lords and Jupiter. Note that effort and timing matter equally.")
+        # ── Children ───────────────────────────────────────────────────────────
+        if any(w in q for w in ['child', 'children', 'baby', 'pregnancy', 'bachha', 'bacche',
+                                  'santan', 'offspring', 'conceive', 'delivery']):
+            domain_hints.append(
+                "CHILDREN TIMING — Use this priority order:\n"
+                "  1. Find the Jupiter or Moon Pratyantar in the upcoming Pratyantardasha list.\n"
+                "  2. Jupiter Gochar in H5 from natal Moon is the strongest trigger for children.\n"
+                "  3. Check 5th house (Children & Intellect) lord's Pratyantar period.\n"
+                "  4. State the specific Pratyantar date range as the peak window."
+            )
+
+        # ── Finance / wealth ───────────────────────────────────────────────────
+        if any(w in q for w in ['money', 'wealth', 'paisa', 'dhan', 'rich', 'invest', 'finance',
+                                  'property', 'loan', 'debt', 'savings', 'profit', 'loss']):
+            domain_hints.append(
+                "FINANCE TIMING — Use this priority order:\n"
+                "  1. Find the Jupiter or Venus Pratyantar in the upcoming Pratyantardasha list.\n"
+                "  2. Jupiter Gochar in H2, H5, or H11 from natal Moon supports financial gains.\n"
+                "  3. Check 2nd house (Wealth & Family) and 11th house (Gains & Desires) lord Pratyantar.\n"
+                "  4. Sade Sati or Ashtama Shani may restrict gains; advise caution if active."
+            )
+
+        # ── Health ─────────────────────────────────────────────────────────────
+        if any(w in q for w in ['health', 'illness', 'sick', 'disease', 'bimari', 'sehat', 'swasth',
+                                  'hospital', 'surgery', 'pain', 'accident', 'injury']):
+            domain_hints.append(
+                "HEALTH: Discuss constitutional tendencies from Lagna and 6th house (Health & Enemies). "
+                "Saturn or Mars Pratyantar can indicate health stress periods. "
+                "Always note: consult a qualified doctor for medical concerns — astrology shows tendencies only."
+            )
 
         domain_text = ("\n" + "\n".join(f"- {h}" for h in domain_hints)) if domain_hints else ""
 
@@ -2285,13 +2355,19 @@ Provide a highly concise answer:"""
         combustion = enhanced.get('combustion', {})
         combust_planets = [p for p, is_c in combustion.items() if is_c]
         if combust_planets:
-            lines.append(f"COMBUST PLANETS: {', '.join(combust_planets)}")
+            lines.append(f"COMBUST PLANETS: {', '.join(combust_planets)} — weakened, results partially blocked")
             lines.append("")
-        
+
         # Retrograde
         retrograde = enhanced.get('retrograde', [])
         if retrograde:
-            lines.append(f"RETROGRADE: {', '.join(retrograde)}")
+            lines.append(f"RETROGRADE: {', '.join(retrograde)} — introspective energy, karmic themes, delays then breakthroughs")
+            lines.append("")
+
+        # Vargottama (sourced from chart_data if available via synthesis)
+        vargottama = enhanced.get('vargottama', [])
+        if vargottama:
+            lines.append(f"VARGOTTAMA (D1=D9 rashi): {', '.join(vargottama)} — highly potent, amplified results in their Dasha periods")
             lines.append("")
         
         lines.append("─" * 60)
@@ -2357,12 +2433,145 @@ Provide a highly concise answer:"""
             upcoming_ads_str = "\nStep 3 - Upcoming Antardashas (for future timing):\n"
             for ad in upcoming_ads:
                 upcoming_ads_str += f"• {ad.get('planet', 'Unknown')} ({ad.get('start', 'Unknown')} to {ad.get('end', 'Unknown')})\n"
+
+        # Build upcoming pratyantardashas timeline (precise week/month level timing)
+        from datetime import date as _pd_date
+        _today_str = _pd_date.today().isoformat()
+        upcoming_pds = dasha_data.get('upcoming_pratyantardashas', [])
+        upcoming_pds_str = ""
+        if upcoming_pds:
+            upcoming_pds_str = f"\nStep 3.5 - Pratyantardashas within current Antardasha (TODAY = {_today_str}):\n"
+            upcoming_pds_str += "  ⚠ ONLY use windows listed here for timing. DO NOT compute sub-windows yourself.\n"
+            for pd in upcoming_pds:
+                status = pd.get('status', 'upcoming')
+                upcoming_pds_str += (
+                    f"• {pd.get('planet', 'Unknown'):10} "
+                    f"{pd.get('start', 'Unknown')} → {pd.get('end', 'Unknown')} "
+                    f"({pd.get('duration_days', '?')} days) [{status}]\n"
+                )
+        print(f"[DEBUG] upcoming_pratyantardashas: {len(upcoming_pds)} periods")
+        for _pd in upcoming_pds:
+            print(f"  Pratyantar: {_pd.get('planet'):10} {_pd.get('start')} → {_pd.get('end')} [{_pd.get('status')}]")
+
+        # First pratyantar of each upcoming Antardasha (cross-level convergence)
+        next_ad_fp = dasha_data.get('next_antardasha_first_pratyantar', [])
+        next_ad_fp_str = ""
+        if next_ad_fp:
+            next_ad_fp_str = "\nStep 3.6 - Opening Pratyantar of Next Antardashas (convergence windows):\n"
+            for entry in next_ad_fp:
+                next_ad_fp_str += (
+                    f"• When {entry.get('antardasha_planet')} AD starts ({entry.get('antardasha_start')}): "
+                    f"first Pratyantar = {entry.get('first_pratyantar_planet')} "
+                    f"({entry.get('first_pratyantar_start')} to {entry.get('first_pratyantar_end')})\n"
+                )
         
         # Extract transit info safely
-        jupiter_transit = transit_data.get('transits', {}).get('Jupiter', 'Unknown')
-        saturn_transit = transit_data.get('transits', {}).get('Saturn', 'Unknown')
-        mars_transit = transit_data.get('transits', {}).get('Mars', 'Unknown')
+        transit_planets_raw = transit_data.get('transits', {})
+        jupiter_transit = transit_planets_raw.get('JUPITER', transit_planets_raw.get('Jupiter', 'Unknown'))
+        saturn_transit  = transit_planets_raw.get('SATURN',  transit_planets_raw.get('Saturn',  'Unknown'))
+        mars_transit    = transit_planets_raw.get('MARS',    transit_planets_raw.get('Mars',    'Unknown'))
         transit_date = transit_data.get('date', 'current')
+        from datetime import date as _date
+        today_date = _date.today().isoformat()  # e.g. "2026-03-06"
+
+        # ── Gochara Analysis (transit relative to natal chart) ───────────────
+        gochara_str = ""
+        try:
+            # Rashi → 0-based index mapping (English + Sanskrit)
+            _R = {n: i for i, n in enumerate([
+                "Aries","Taurus","Gemini","Cancer","Leo","Virgo",
+                "Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"
+            ])}
+            _R.update({n: i for i, n in enumerate([
+                "Mesha","Vrishabha","Mithuna","Karka","Simha","Kanya",
+                "Tula","Vrischika","Dhanu","Makara","Kumbha","Meena"
+            ])})
+            # Also accept uppercase Rashi enum names (e.g. "MESHA")
+            _R.update({k.upper(): v for k, v in _R.items()})
+
+            moon_sign   = chart_data.get('planets', {}).get('MOON', {}).get('sign', '')
+            lagna_sign  = chart_data.get('lagna', {}).get('sign', '')
+            moon_idx    = _R.get(moon_sign, -1)
+            lagna_idx   = _R.get(lagna_sign, -1)
+
+            def _house_from(base_idx, transit_sign):
+                t_idx = _R.get(transit_sign, -1)
+                if base_idx < 0 or t_idx < 0:
+                    return None
+                return (t_idx - base_idx) % 12 + 1
+
+            retro = transit_data.get('retrograde_status', {})
+            gochara_lines = ["GOCHARA ANALYSIS (Transits relative to natal chart):"]
+
+            # ── Sade Sati / Ashtama Shani ────────────────────────────────────
+            sat_house_moon = _house_from(moon_idx, saturn_transit)
+            if sat_house_moon is not None:
+                if sat_house_moon in (12, 1, 2):
+                    phase_name = {12: "Rising phase (12th from Moon)",
+                                  1:  "Peak phase (on natal Moon)",
+                                  2:  "Setting phase (2nd from Moon)"}[sat_house_moon]
+                    gochara_lines.append(
+                        f"• ⚠ SADE SATI ACTIVE — Saturn in {saturn_transit} ({phase_name}). "
+                        f"Expect challenges/delays in major life decisions; also a period of deep inner transformation."
+                    )
+                elif sat_house_moon == 8:
+                    gochara_lines.append(
+                        f"• ⚠ ASHTAMA SHANI — Saturn in 8th from natal Moon ({saturn_transit}). "
+                        f"Obstacles, health concerns, hidden enemies possible."
+                    )
+                else:
+                    gochara_lines.append(
+                        f"• Shani Gochar: Saturn transiting H{sat_house_moon} from natal Moon ({saturn_transit}) — no Sade Sati."
+                    )
+
+            # ── Jupiter Gochar from Moon ──────────────────────────────────────
+            jup_house_moon = _house_from(moon_idx, jupiter_transit)
+            if jup_house_moon is not None:
+                FAVOURABLE_JUP = {1, 2, 5, 7, 9, 11}
+                fav = "✓ FAVOURABLE" if jup_house_moon in FAVOURABLE_JUP else "✗ UNFAVOURABLE"
+                retro_jup = " (Retrograde)" if retro.get('JUPITER') or retro.get('Jupiter') else ""
+                gochara_lines.append(
+                    f"• Guru Gochar: Jupiter transiting H{jup_house_moon} from natal Moon ({jupiter_transit}{retro_jup}) — {fav}. "
+                    + ("Supports marriage, children, wealth, and dharmic events." if jup_house_moon in FAVOURABLE_JUP
+                       else "Less supportive for major auspicious events; focus on inner growth.")
+                )
+
+            # ── Rahu-Ketu axis from Lagna ─────────────────────────────────────
+            rahu_sign = transit_planets_raw.get('RAHU', transit_planets_raw.get('Rahu', ''))
+            rahu_house_lagna = _house_from(lagna_idx, rahu_sign)
+            if rahu_house_lagna is not None:
+                ketu_house = (rahu_house_lagna - 1 + 6) % 12 + 1
+                gochara_lines.append(
+                    f"• Rahu-Ketu Axis: Rahu transiting H{rahu_house_lagna} / Ketu H{ketu_house} from Lagna ({rahu_sign}). "
+                    f"Areas of karmic focus and past-life themes."
+                )
+
+            # ── All transits mapped to natal houses ───────────────────────────
+            gochara_lines.append("• All transit planet positions (natal house from Lagna):")
+            planet_order = ['SUN','MOON','MARS','MERCURY','JUPITER','VENUS','SATURN','RAHU','KETU']
+            for p in planet_order:
+                t_sign = transit_planets_raw.get(p, transit_planets_raw.get(p.capitalize(), ''))
+                if not t_sign:
+                    continue
+                h = _house_from(lagna_idx, t_sign)
+                h_str = f"H{h}" if h else "?"
+                r_mark = " (R)" if retro.get(p) or retro.get(p.capitalize()) else ""
+                gochara_lines.append(f"    {p:9}: {t_sign:12} → natal {h_str}{r_mark}")
+
+            gochara_str = "\n".join(gochara_lines)
+        except Exception as _ge:
+            print(f"[GOCHARA] Computation error: {_ge}")
+            gochara_str = ""
+
+        # ── Vargottama ────────────────────────────────────────────────────────
+        vargottama_str = ""
+        vargottama = chart_data.get('vargottama', [])
+        if vargottama:
+            vargottama_str = (
+                f"\nVARGOTTAMA PLANETS (same rashi in D1 and D9 — extremely potent): "
+                f"{', '.join(vargottama)}\n"
+                "These planets give strongly amplified results in their Dasha/Antardasha periods."
+            )
         
         # Get persona based on language
         try:
@@ -2375,10 +2584,25 @@ Provide a highly concise answer:"""
             )
         except:
             system_prompt = "You are an expert Vedic astrologer explaining predictions."
-        
+
         # PHASE 10: Inject Constitution
         constitution = get_constitution_injection()
         system_prompt = f"{system_prompt}\n\n{constitution}"
+
+        # ── Hard timing rule injected into system prompt ──────────────────────
+        # Placed here (system prompt level) so the LLM reliably follows it
+        # regardless of where it appears in the user context.
+        from datetime import date as _sys_date
+        _ref_date = _sys_date.today().isoformat()
+        system_prompt += (
+            f"\n\nCRITICAL TIMING RULE: Today's date is {_ref_date}. "
+            "NEVER predict or cite any date range that ended before today. "
+            "If a Pratyantar or Antardasha period has already fully elapsed "
+            f"(its end date is before {_ref_date}), you MUST skip it and find the next future window. "
+            "For a period currently 'IN PROGRESS', cite only today → its end date, not its original start. "
+            "NEVER compute or invent sub-windows from your training knowledge — "
+            "use ONLY the Pratyantar dates explicitly listed in the prompt."
+        )
 
         # ════════════════════════════════════════════════════════════════════════
         # GREETING CONTROL (Mobile App Context-Aware)
@@ -2470,16 +2694,33 @@ MOBILE RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
 1. MAXIMUM LENGTH: 3-4 sentences (100-150 words total). BE CONCISE.
 2. FIRST SENTENCE: Direct, clear answer to the question.
 3. STRUCTURE: Direct Answer → One Key Factor → Timing/Remedy → Brief Follow-up offer.
-4. TECHNICAL TERMS: Use minimally. Briefly explain in parentheses if needed.
-   - Good: "7th house (shaadi ka ghar) ki lord Venus..."
+4. HOUSE ANNOTATIONS (MANDATORY): Every time you mention a house by number, ALWAYS
+   add its primary domain in parentheses immediately after. No exceptions.
+   Use this exact mapping:
+     1st house (Self & Personality)
+     2nd house (Wealth & Family)
+     3rd house (Courage & Siblings)
+     4th house (Home & Mother)
+     5th house (Children & Intellect)
+     6th house (Health & Enemies)
+     7th house (Marriage & Partnership)
+     8th house (Longevity & Transformation)
+     9th house (Luck & Dharma)
+     10th house (Career & Status)
+     11th house (Gains & Desires)
+     12th house (Losses & Moksha)
+   Examples:
+     ✅ "7th house (Marriage & Partnership) ki lord Venus..."
+     ✅ "10th house (Career & Status) mein Sun strong hai..."
+     ❌ "7th house ki lord Venus..." (missing annotation)
 5. NO META-COMMENTARY: Don't explain what you're doing or analyzing.
    - Bad: "Based on your chart, I can see..."
-   - Good: "Your 7th house lord Venus is..."
+   - Good: "Your 7th house (Marriage & Partnership) lord Venus is..."
 6. NO THANKING: User details from backend.
 7. GET STRAIGHT TO THE POINT: Cut all filler words. Make every word count.
 
 EXAMPLE GOOD CONCISE MOBILE RESPONSE (Marriage):
-"Aapki 7th house ki lord Venus lagan mein weak hai, isliye delay hai. June-August 2026 mein Venus-Jupiter dasha mein marriage ka strong yog banega. Kya aap inko strong karne ki remedies janna chahenge?"
+"Aapki 7th house (Marriage & Partnership) ki lord Venus lagan mein weak hai, isliye delay hai. June-August 2026 mein Venus-Jupiter dasha mein marriage ka strong yog banega. Kya aap inko strong karne ki remedies janna chahenge?"
 ═══════════════════════════════════════════════════════════════════════
 """
         instructions += mobile_length_instruction
@@ -2521,16 +2762,16 @@ USER PROFILE:
 "{query}"
 
 BIRTH CHART DATA (Sidereal/Lahiri):
-• Ascendant (Lagna): {chart_data.get('lagna', {}).get('sign', 'Not available')} ({chart_data.get('lagna', {}).get('degree', 0.0):.2f}°)
-• Sun: {chart_data.get('planets', {}).get('SUN', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('SUN', {}).get('house', '?')} ({chart_data.get('planets', {}).get('SUN', {}).get('nakshatra', 'Not available')})
-• Moon: {chart_data.get('planets', {}).get('MOON', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('MOON', {}).get('house', '?')} ({chart_data.get('planets', {}).get('MOON', {}).get('nakshatra', 'Not available')})
-• Mars: {chart_data.get('planets', {}).get('MARS', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('MARS', {}).get('house', '?')}
-• Mercury: {chart_data.get('planets', {}).get('MERCURY', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('MERCURY', {}).get('house', '?')}
-• Jupiter: {chart_data.get('planets', {}).get('JUPITER', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('JUPITER', {}).get('house', '?')}
-• Venus: {chart_data.get('planets', {}).get('VENUS', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('VENUS', {}).get('house', '?')}
-• Saturn: {chart_data.get('planets', {}).get('SATURN', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('SATURN', {}).get('house', '?')}
-• Rahu: {chart_data.get('planets', {}).get('RAHU', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('RAHU', {}).get('house', '?')}
-• Ketu: {chart_data.get('planets', {}).get('KETU', {}).get('sign', 'Not available')} in House {chart_data.get('planets', {}).get('KETU', {}).get('house', '?')}
+• Ascendant (Lagna): {chart_data.get('lagna', {}).get('sign', 'Not available')} {chart_data.get('lagna', {}).get('degree', 0.0):.2f}° | Nakshatra: {chart_data.get('lagna', {}).get('nakshatra', 'N/A')} (Lord: {chart_data.get('lagna', {}).get('nakshatra_lord', 'N/A')})
+• Sun:     {chart_data.get('planets', {}).get('SUN',     {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('SUN',     {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('SUN',     {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('SUN',     {}).get('dignity', {}).get('status', '')}
+• Moon:    {chart_data.get('planets', {}).get('MOON',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MOON',    {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('MOON',    {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('MOON',    {}).get('dignity', {}).get('status', '')}
+• Mars:    {chart_data.get('planets', {}).get('MARS',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MARS',    {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('MARS',    {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('MARS',    {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('MARS', {}).get('retrograde') else ''}
+• Mercury: {chart_data.get('planets', {}).get('MERCURY', {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MERCURY', {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('MERCURY', {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('MERCURY', {}).get('dignity', {}).get('status', '')}{'  [COMBUST]' if chart_data.get('planets', {}).get('MERCURY', {}).get('combust') else ''}
+• Jupiter: {chart_data.get('planets', {}).get('JUPITER', {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('JUPITER', {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('JUPITER', {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('JUPITER', {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('JUPITER', {}).get('retrograde') else ''}
+• Venus:   {chart_data.get('planets', {}).get('VENUS',   {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('VENUS',   {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('VENUS',   {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('VENUS',   {}).get('dignity', {}).get('status', '')}{'  [COMBUST]' if chart_data.get('planets', {}).get('VENUS', {}).get('combust') else ''}
+• Saturn:  {chart_data.get('planets', {}).get('SATURN',  {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('SATURN',  {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('SATURN',  {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('SATURN',  {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('SATURN', {}).get('retrograde') else ''}
+• Rahu:    {chart_data.get('planets', {}).get('RAHU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('RAHU',    {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('RAHU',    {}).get('nakshatra', 'N/A')}  [always Retro]
+• Ketu:    {chart_data.get('planets', {}).get('KETU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('KETU',    {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('KETU',    {}).get('nakshatra', 'N/A')}  [always Retro]
 
 {divisional_context}
 
@@ -2547,14 +2788,26 @@ Step 2 - Current Dasha Periods (Calculated from Moon Nakshatra):
 • Antardasha: {antar_planet} ({dasha_data.get('antardasha', {}).get('start', 'Unknown')} to {dasha_data.get('antardasha', {}).get('end', 'Unknown')})
 • Pratyantardasha: {dasha_data.get('pratyantardasha', {}).get('planet', 'Unknown')} ({dasha_data.get('pratyantardasha', {}).get('start', 'Unknown')} to {dasha_data.get('pratyantardasha', {}).get('end', 'Unknown')})
 • Dasha Sequence: {dasha_sequence}
-{upcoming_ads_str}
-CRITICAL: These dates are CALCULATED using Swiss Ephemeris, not estimated. The calculation follows classical Vimshottari Dasha rules: Moon's Nakshatra -> Nakshatra Lord -> Dasha sequence. Use ONLY these exact dates for timing predictions.
+{upcoming_pds_str}{next_ad_fp_str}{upcoming_ads_str}
+TODAY'S DATE: {today_date}
+
+⚠ PAST DATE RULE (MANDATORY): NEVER cite a date range as a prediction if it has already ended (end date < {today_date}).
+  - Periods marked "IN PROGRESS": cite only the remaining window (today → end date), NOT the original start.
+  - Only cite periods that are "IN PROGRESS" (remaining portion) or fully in the future.
+  - If all favorable Pratyantardashas in the current Antardasha have already passed, move to the NEXT Antardasha.
+
+TIMING GUIDANCE: Pratyantardasha gives month-level precision, Antardasha gives multi-month context, Mahadasha gives year-level context. When Pratyantar + Gochara alignment point to the same window, cite that specific Pratyantar date range as the peak timing.
+CRITICAL: These dates are CALCULATED using Swiss Ephemeris. Use ONLY these exact dates. Do not invent or estimate dates.
 
 
 CURRENT TRANSITS (as of {transit_date}):
 • Jupiter: {jupiter_transit}
 • Saturn: {saturn_transit}
 • Mars: {mars_transit}
+
+{gochara_str}
+
+{vargottama_str}
 
 RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
 {context}

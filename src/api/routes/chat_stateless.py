@@ -598,8 +598,15 @@ class EnhancedSessionManager:
             print(f"[REDIS] GET key={key}")
             data = self.redis.get(key)
             if data:
+                chart = json.loads(data)
+                # Schema version check: evict charts missing vargottama/divisional_charts_simple
+                # (computed in serializer v2) so they get recalculated with enriched data.
+                if 'divisional_charts_simple' not in chart or 'vargottama' not in chart:
+                    print(f"[CHART] Schema v1 detected for {user_id} (missing divisional/vargottama) — evicting to upgrade.")
+                    self.redis.delete(key)
+                    return None
                 print(f"[REDIS] Found chart in Redis")
-                return json.loads(data)
+                return chart
             else:
                 print(f"[REDIS] No chart found at key: {key}")
                 return None
@@ -641,8 +648,21 @@ class EnhancedSessionManager:
                     self.redis.delete(key)
                     return None
 
+                data = envelope.get("data", {})
+                # Schema version check: evict old formats missing enriched fields.
+                # v1: missing upcoming_pratyantardashas entirely
+                # v2: has upcoming_pratyantardashas but entries lack "status" field
+                if data and "upcoming_pratyantardashas" not in data:
+                    print(f"[DASHA] Schema v1 detected for {user_id} (missing pratyantar detail) — evicting to upgrade.")
+                    self.redis.delete(key)
+                    return None
+                pds = data.get("upcoming_pratyantardashas", [])
+                if pds and "status" not in pds[0]:
+                    print(f"[DASHA] Schema v2 detected for {user_id} (missing status field) — evicting to upgrade.")
+                    self.redis.delete(key)
+                    return None
                 print(f"[REDIS] Found dasha in Redis (age: {age_days:.1f} days, threshold: {refresh_threshold} days) — FRESH")
-                return envelope.get("data")
+                return data
             else:
                 # Legacy flat format — evict to migrate to new envelope
                 print(f"[DASHA] Legacy format detected for {user_id} — evicting and forcing recompute.")
@@ -1573,6 +1593,8 @@ async def clear_session(session_id: str):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
 
 
 @router.get("/stats")
