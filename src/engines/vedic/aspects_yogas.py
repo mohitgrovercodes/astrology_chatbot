@@ -173,8 +173,10 @@ def compute_aspected_houses(
     special = SPECIAL_ASPECTS.get(planet, DEFAULT_ASPECTS)
     
     for house_distance, strength in special.items():
-        # Calculate the aspected house (1-indexed)
-        aspected = ((planet_house - 1 + house_distance) % 12) + 1
+        # Calculate the aspected house (1-indexed).
+        # "Xth house from planet_house" means: planet_house + X - 1 (1-based counting).
+        # Formula: ((planet_house + house_distance - 2) % 12) + 1
+        aspected = ((planet_house + house_distance - 2) % 12) + 1
         aspects[aspected] = strength
     
     return aspects
@@ -207,7 +209,9 @@ def compute_aspect_grid(
         
         for house, strength in aspected_houses.items():
             planets_in_house = house_occupancy.get(house, [])
-            aspect_type = "full" if house == ((bhava.bhava - 1 + 7) % 12) + 1 else "special"
+            # 7th house from planet using corrected formula: ((bhava + 5) % 12) + 1
+            seventh = ((bhava.bhava + 5) % 12) + 1
+            aspect_type = "full" if house == seventh else "special"
             
             asp = Aspect(
                 aspecting_planet=planet,
@@ -223,17 +227,15 @@ def compute_aspect_grid(
             # Check for mutual aspects
             for aspected_planet in planets_in_house:
                 if aspected_planet != planet:
-                    # Check if that planet also aspects this one
                     other_aspects = compute_aspected_houses(
                         aspected_planet, 
                         bhava_placements[aspected_planet].bhava
                     )
                     if bhava.bhava in other_aspects:
                         pair = tuple(sorted([planet.value, aspected_planet.value]))
-                        mutual_aspect_set.add((
-                            CelestialBody(pair[0]) if pair[0] < pair[1] else CelestialBody(pair[1]),
-                            CelestialBody(pair[1]) if pair[0] < pair[1] else CelestialBody(pair[0])
-                        ))
+                        mutual_aspect_set.add(
+                            (CelestialBody(pair[0]), CelestialBody(pair[1]))
+                        )
     
     return AspectGrid(
         planet_to_houses=planet_to_houses,

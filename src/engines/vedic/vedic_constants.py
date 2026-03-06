@@ -432,7 +432,7 @@ VIMSHOTTARI_TOTAL_YEARS: float = 120.0
 # Special aspects are listed separately
 
 # Full aspects (100% strength)
-FULL_ASPECT_HOUSES: tuple[int, ...] = (7)  # All planets fully aspect 7th house
+FULL_ASPECT_HOUSES: tuple[int, ...] = (7,)  # All planets fully aspect 7th house
 
 # Special aspects (unique to certain planets)
 # Format: {planet: tuple of houses aspected with strength}

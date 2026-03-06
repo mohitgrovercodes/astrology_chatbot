@@ -1102,13 +1102,47 @@ async def initialize_session(request: InitializeSessionRequest):
             conversation = [item.dict() for item in request.conversation_history]
 
         if session_manager.session_exists(user_id):
-            # Session already exists — /initialize is a one-time operation per user.
-            # Do NOT overwrite any data. Return immediately so the caller knows
-            # the session is already live and the chatbot is ready to accept messages.
-            print(f"\n[REDIS] Session already exists for {user_id} — skipping re-initialization.")
+            # ── SELECTIVE REFRESH ─────────────────────────────────────────────
+            # Session exists.  We must NOT blindly skip re-initialization —
+            # the caller may be sending updated conversation_history (new Q&As
+            # from the old system) or the chart/dasha cache may be stale.
+            #
+            # Strategy:
+            #   1. Always overwrite conversation_history so new external messages
+            #      are imported (they will be filtered at LLM call time if "external").
+            #   2. Always overwrite user_profile so DOB / timezone changes take effect.
+            #   3. Evict chart + dasha + transit cache so they are recomputed with
+            #      the fixed engine on the next /message call.
+            #   4. Do NOT recreate metadata or summary (preserve session continuity).
+            print(f"\n[REDIS] Session already exists for {user_id} — performing selective refresh.")
+
+            # Refresh profile (DOB / timezone may have changed)
+            profile_dict = (
+                request.user_profile.model_dump()
+                if hasattr(request.user_profile, 'model_dump')
+                else request.user_profile.dict()
+            )
+            session_manager.update_user_profile(user_id, profile_dict)
+
+            # Overwrite history so freshly-imported external Q&As are stored
+            if request.conversation_history:
+                conversation = [item.dict() for item in request.conversation_history]
+                session_manager.overwrite_conversation_history(user_id, conversation)
+                print(f"[REDIS] History refreshed: {len(conversation)} external messages imported.")
+
+            # Evict stale calculated data — forces recompute on next /message
+            for stale_key in [
+                f"session:{user_id}:chart",
+                f"session:{user_id}:dasha",
+                f"session:{user_id}:transit",
+            ]:
+                if session_manager.redis:
+                    session_manager.redis.delete(stale_key)
+            print(f"[REDIS] Stale chart/dasha/transit cache evicted for {user_id}.")
+
             return InitializeSessionResponse(
                 user_id=user_id,
-                status="already_initialized"
+                status="refreshed"
             )
 
         result = session_manager.initialize_session(

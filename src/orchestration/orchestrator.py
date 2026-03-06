@@ -1813,6 +1813,87 @@ I prefer to say "I don't know" rather than provide information not grounded in c
         
         return state
     
+    def _build_chart_anchor_block(self, chart_data: Dict) -> str:
+        """
+        Build a hard-constraint anchor block injected at the TOP of every system
+        prompt that has chart data.
+
+        Purpose: prevent the LLM from substituting its training-knowledge Lagna
+        (e.g. treating the Sun sign as the Lagna) for the calculated one.
+        """
+        if not chart_data:
+            return ""
+
+        house_lords_block = self._compute_house_lords_block(chart_data)
+        if not house_lords_block:
+            return ""
+
+        lagna_data = chart_data.get("lagna") or chart_data.get("ascendant", {})
+        lagna_sign = lagna_data.get("sign") or lagna_data.get("rashi", "Unknown")
+        lagna_deg  = lagna_data.get("degree", 0.0)
+
+        sun_data  = chart_data.get("planets", {}).get("SUN", {})
+        sun_sign  = sun_data.get("sign", "Unknown")
+        moon_data = chart_data.get("planets", {}).get("MOON", {})
+        moon_sign = moon_data.get("sign", "Unknown")
+
+        _SIGNS = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo",
+                  "Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"]
+        _LORDS = {"Aries":"MARS","Taurus":"VENUS","Gemini":"MERCURY","Cancer":"MOON",
+                  "Leo":"SUN","Virgo":"MERCURY","Libra":"VENUS","Scorpio":"MARS",
+                  "Sagittarius":"JUPITER","Capricorn":"SATURN","Aquarius":"SATURN",
+                  "Pisces":"JUPITER"}
+        _SANSKRIT = {"Mesha":"Aries","Vrishabha":"Taurus","Mithuna":"Gemini",
+                     "Karka":"Cancer","Simha":"Leo","Kanya":"Virgo","Tula":"Libra",
+                     "Vrischika":"Scorpio","Dhanu":"Sagittarius","Makara":"Capricorn",
+                     "Kumbha":"Aquarius","Meena":"Pisces"}
+
+        lagna_norm = _SANSKRIT.get(lagna_sign, lagna_sign)
+        if lagna_norm not in _SIGNS:
+            return f"VERIFIED LAGNA: {lagna_sign}\n{house_lords_block}"
+
+        lagna_idx = _SIGNS.index(lagna_norm)
+
+        def house_lord(h):
+            sign = _SIGNS[(lagna_idx + h - 1) % 12]
+            return _LORDS.get(sign, "?"), sign
+
+        h7_lord,  h7_sign  = house_lord(7)
+        h10_lord, h10_sign = house_lord(10)
+
+        all_lords = ["SUN","MOON","MARS","MERCURY","JUPITER","VENUS","SATURN"]
+        forbidden_lines = []
+        for p in all_lords:
+            if p != h7_lord:
+                forbidden_lines.append(f"  X NEVER say {p} is the 7th lord  — 7th lord is {h7_lord} ({h7_sign})")
+        for p in all_lords:
+            if p != h10_lord:
+                forbidden_lines.append(f"  X NEVER say {p} is the 10th lord — 10th lord is {h10_lord} ({h10_sign})")
+        forbidden_text = "\n".join(forbidden_lines)
+
+        return f"""
+=======================================================================
+VERIFIED BIRTH CHART — OVERRIDE YOUR TRAINING KNOWLEDGE
+These values are from Swiss Ephemeris. They SUPERSEDE anything you
+believe about this birth date from your training data.
+=======================================================================
+
+LAGNA (ASCENDANT): {lagna_sign} {lagna_deg:.1f} degrees
+WARNING: Sun is in {sun_sign} — this is the SUN SIGN, NOT the Lagna.
+Do NOT treat the Sun sign as the Lagna. They are different.
+Moon sign: {moon_sign}. Lagna sign: {lagna_sign}. Three different values.
+
+{house_lords_block}
+
+FORBIDDEN CLAIMS — NEVER state any of the following:
+{forbidden_text}
+
+LAGNA ANCHOR RULE: Every house-lord claim must match the table above.
+If you are about to say a planet is the Nth lord and it does not match
+this table, STOP and use the correct lord from the table above.
+=======================================================================
+"""
+
     def _build_theory_prompt(self, query: str, knowledge_chunks: list, user_profile: dict, language: str = "en") -> str:
         """Build prompt for general astrology theory explanations."""
         
@@ -1835,7 +1916,15 @@ I prefer to say "I don't know" rather than provide information not grounded in c
         # PHASE 10: Inject Constitution
         constitution = get_constitution_injection()
         system_prompt = f"{system_prompt}\n\n{constitution}"
-        
+
+        # ── CHART ANCHOR: inject at top so house lords are grounded ───────────
+        _cd_for_anchor = (_p.get("chart_data") or {}) if "_p" not in dir() else {}
+        # _p is defined later in this method; use user_profile directly here
+        _up_cd = user_profile.get("chart_data") or {}
+        chart_anchor_theory = self._build_chart_anchor_block(_up_cd)
+        if chart_anchor_theory:
+            system_prompt = chart_anchor_theory + "\n\n" + system_prompt
+
         # Format knowledge context WITH SOURCE ATTRIBUTION
         context_parts = []
         for i, chunk in enumerate(knowledge_chunks[:4], 1):
@@ -1971,7 +2060,8 @@ Return "UNSAFE: <reason>" if violations found.
             if not llm_to_use:
                 return True, "No LLM for validation"
                 
-            response = llm_to_use.invoke(prompt).content.strip() if hasattr(llm_to_use.invoke(prompt), 'content') else str(llm_to_use.invoke(prompt).content)
+            _raw = llm_to_use.invoke(prompt)
+            response = _raw.content.strip() if hasattr(_raw, 'content') else str(_raw)
             
             if response.startswith("SAFE"):
                 return True, ""
@@ -2299,11 +2389,29 @@ Provide a highly concise answer:"""
             print(f"[HISTORY] Skipping {first_user_idx} leading assistant-only message(s) from LLM context")
 
         formatted = []
+        skipped_external = 0
         for msg in conversation_history[first_user_idx:]:
+            # ── EXTERNAL SOURCE FILTER ────────────────────────────────────────
+            # Messages imported from the old system (source: "external" or
+            # source: "openai") contain answers generated WITHOUT a real chart
+            # calculation — they are hallucinated by the old chatbot.
+            # Injecting them as LLM context causes the new LLM to treat those
+            # wrong house lords and wrong dignities as established facts and
+            # repeat them.  Strip assistant messages from external sources;
+            # keep user messages so conversation flow is preserved.
+            if msg.get("role") == "assistant":
+                src = msg.get("metadata", {}).get("source", "")
+                if src in ("external", "openai"):
+                    skipped_external += 1
+                    continue  # Drop this message from LLM context
+
             formatted.append({
                 "role": msg.get("role"),
                 "content": msg.get("content")
             })
+
+        if skipped_external:
+            print(f"[HISTORY] Filtered {skipped_external} external/openai assistant message(s) from LLM context (stale data)")
 
         return formatted
 
@@ -2521,6 +2629,20 @@ Provide a highly concise answer:"""
         transit_data = transit_data or {}
         chart_data = chart_data or {}
         
+        # ── DATE ANCHOR — single definition used by all filters below ──────────
+        from datetime import date as _date_anchor
+        _today_str = _date_anchor.today().isoformat()   # e.g. "2026-03-06"
+
+        # ── STALE MAHADASHA CHECK ─────────────────────────────────────────────
+        # If the cached Mahadasha end date is in the past, the entire dasha_data
+        # is from the wrong MD period. Clear it so the orchestrator recalculates.
+        _md_end = (dasha_data or {}).get('mahadasha', {}).get('end', '9999')
+        if dasha_data and _md_end < _today_str:
+            print(f"[DASHA STALE] Mahadasha end ({_md_end}) is in the past — "
+                  f"cache is from wrong MD period. Clearing dasha_data for recalc.")
+            dasha_data = {}
+            state['dasha_data'] = {}
+
         # Extract dasha info safely
         maha_planet = dasha_data.get('mahadasha', {}).get('planet', 'Unknown')
         antar_planet = dasha_data.get('antardasha', {}).get('planet', 'Unknown')
@@ -2535,29 +2657,54 @@ Provide a highly concise answer:"""
         
         # Build upcoming antardashas timeline
         upcoming_ads = dasha_data.get('upcoming_antardashas', [])
+        # Filter past antardashas too (same stale-cache issue)
+        upcoming_ads_filtered = [ad for ad in upcoming_ads
+                                  if ad.get('end', '9999') >= _today_str]
+        skipped_past_ads = len(upcoming_ads) - len(upcoming_ads_filtered)
+        if skipped_past_ads > 0:
+            print(f"[DASHA FILTER] Removed {skipped_past_ads} past antardasha(s) from prompt.")
+
         upcoming_ads_str = ""
-        if upcoming_ads:
+        if upcoming_ads_filtered:
             upcoming_ads_str = "\nStep 3 - Upcoming Antardashas (for future timing):\n"
-            for ad in upcoming_ads:
+            for ad in upcoming_ads_filtered:
                 upcoming_ads_str += f"• {ad.get('planet', 'Unknown')} ({ad.get('start', 'Unknown')} to {ad.get('end', 'Unknown')})\n"
 
         # Build upcoming pratyantardashas timeline (precise week/month level timing)
-        from datetime import date as _pd_date
-        _today_str = _pd_date.today().isoformat()
         upcoming_pds = dasha_data.get('upcoming_pratyantardashas', [])
+        # ── CODE-LEVEL PAST-DATE FILTER ───────────────────────────────────────
+        # Strip pratyantar periods whose end date has already passed.
+        # No nested functions — inline comparison avoids all closure issues.
+        upcoming_pds_filtered = [
+            pd for pd in upcoming_pds
+            if (pd.get('end') or '9999') >= _today_str
+        ]
+        skipped_past_pds = len(upcoming_pds) - len(upcoming_pds_filtered)
+        if skipped_past_pds > 0:
+            print(f"[DASHA FILTER] Removed {skipped_past_pds} past pratyantar(s) from prompt "
+                  f"(end date < {_today_str}). Only {len(upcoming_pds_filtered)} period(s) remain.")
+
         upcoming_pds_str = ""
-        if upcoming_pds:
+        if upcoming_pds_filtered:
             upcoming_pds_str = f"\nStep 3.5 - Pratyantardashas within current Antardasha (TODAY = {_today_str}):\n"
             upcoming_pds_str += "  ⚠ ONLY use windows listed here for timing. DO NOT compute sub-windows yourself.\n"
-            for pd in upcoming_pds:
+            for pd in upcoming_pds_filtered:
                 status = pd.get('status', 'upcoming')
                 upcoming_pds_str += (
                     f"• {pd.get('planet', 'Unknown'):10} "
                     f"{pd.get('start', 'Unknown')} → {pd.get('end', 'Unknown')} "
                     f"({pd.get('duration_days', '?')} days) [{status}]\n"
                 )
-        print(f"[DEBUG] upcoming_pratyantardashas: {len(upcoming_pds)} periods")
-        for _pd in upcoming_pds:
+        elif upcoming_pds:
+            # All pratyantardashas in current AD have passed — tell LLM explicitly
+            upcoming_pds_str = (
+                f"\nStep 3.5 - Pratyantardashas (TODAY = {_today_str}):\n"
+                "  ⚠ ALL pratyantardashas in the current Antardasha have already passed.\n"
+                "  Use the NEXT Antardasha's opening Pratyantar for timing (see Step 3.6 below).\n"
+            )
+        print(f"[DEBUG] upcoming_pratyantardashas: {len(upcoming_pds)} total, "
+              f"{len(upcoming_pds_filtered)} after past-date filter")
+        for _pd in upcoming_pds_filtered:
             print(f"  Pratyantar: {_pd.get('planet'):10} {_pd.get('start')} → {_pd.get('end')} [{_pd.get('status')}]")
 
         # First pratyantar of each upcoming Antardasha (cross-level convergence)
@@ -2578,8 +2725,7 @@ Provide a highly concise answer:"""
         saturn_transit  = transit_planets_raw.get('SATURN',  transit_planets_raw.get('Saturn',  'Unknown'))
         mars_transit    = transit_planets_raw.get('MARS',    transit_planets_raw.get('Mars',    'Unknown'))
         transit_date = transit_data.get('date', 'current')
-        from datetime import date as _date
-        today_date = _date.today().isoformat()  # e.g. "2026-03-06"
+        today_date = _today_str  # reuse _today_str already defined above
 
         # ── Gochara Analysis (transit relative to natal chart) ───────────────
         gochara_str = ""
@@ -2601,8 +2747,10 @@ Provide a highly concise answer:"""
             moon_idx    = _R.get(moon_sign, -1)
             lagna_idx   = _R.get(lagna_sign, -1)
 
-            def _house_from(base_idx, transit_sign):
-                t_idx = _R.get(transit_sign, -1)
+            def _house_from(base_idx, transit_sign, _r=None):
+                # default arg pins _R at definition time — no free-variable closure
+                _r = _r if _r is not None else _R
+                t_idx = _r.get(transit_sign, -1)
                 if base_idx < 0 or t_idx < 0:
                     return None
                 return (t_idx - base_idx) % 12 + 1
@@ -2696,11 +2844,18 @@ Provide a highly concise answer:"""
         constitution = get_constitution_injection()
         system_prompt = f"{system_prompt}\n\n{constitution}"
 
+        # ── CHART ANCHOR: inject at the very top of system_prompt ─────────────
+        # Must come AFTER persona/constitution are built so we prepend to the
+        # final combined string.  Placing it first means the LLM reads the
+        # verified Lagna and forbidden-claims list before any other instruction.
+        chart_anchor = self._build_chart_anchor_block(chart_data)
+        if chart_anchor:
+            system_prompt = chart_anchor + "\n\n" + system_prompt
+
         # ── Hard timing rule injected into system prompt ──────────────────────
         # Placed here (system prompt level) so the LLM reliably follows it
         # regardless of where it appears in the user context.
-        from datetime import date as _sys_date
-        _ref_date = _sys_date.today().isoformat()
+        _ref_date = _today_str  # reuse _today_str already defined above
         system_prompt += (
             f"\n\nCRITICAL TIMING RULE: Today's date is {_ref_date}. "
             "NEVER predict or cite any date range that ended before today. "
@@ -2984,7 +3139,6 @@ RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
             "error": None,
             "processing_time": 0.0,
             "messages": [],
-            "messages": [],
             # PHASE 9 Fix: Use explicit user preference or default to 'vedic'. Do NOT detect from query.
             "persona_type": "vedic", 
             
@@ -3059,7 +3213,6 @@ RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
             "answer": "",
             "error": None,
             "processing_time": 0.0,
-            "messages": [],
             "messages": [],
             # PHASE 9 Fix: Use explicit user preference or default to 'vedic'. Do NOT detect from query.
             "persona_type": "vedic",

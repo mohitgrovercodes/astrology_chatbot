@@ -87,16 +87,22 @@ NATURAL_FRIENDS = {
     'JUPITER': ['SUN', 'MOON', 'MARS'],
     'VENUS': ['MERCURY', 'SATURN'],
     'SATURN': ['MERCURY', 'VENUS'],
+    # Rahu behaves like Saturn; Ketu behaves like Mars (per BPHS)
+    'RAHU': ['MERCURY', 'VENUS', 'SATURN'],
+    'KETU': ['SUN', 'MOON', 'JUPITER'],
 }
 
 NATURAL_ENEMIES = {
     'SUN': ['VENUS', 'SATURN'],
-    'MOON': ['NONE'],
+    'MOON': [],   # Moon has no enemies
     'MARS': ['MERCURY'],
     'MERCURY': ['MOON'],
     'JUPITER': ['MERCURY', 'VENUS'],
     'VENUS': ['SUN', 'MOON'],
     'SATURN': ['SUN', 'MOON', 'MARS'],
+    # Rahu enemies same as Saturn; Ketu enemies same as Mars
+    'RAHU': ['SUN', 'MOON', 'MARS'],
+    'KETU': ['MERCURY'],
 }
 
 # Sign lordships (which planet rules which sign)
@@ -356,10 +362,18 @@ class ChartAnalyzer:
         
         planets = chart_data.get('planets', {})
         sun_data = planets.get('SUN', {})
-        sun_long = sun_data.get('longitude') or self._sign_degree_to_longitude(
-            sun_data.get('sign') or sun_data.get('rashi'),
-            sun_data.get('degree') or sun_data.get('degrees', 0)
-        )
+
+        # Guard: if Sun data is absent we cannot compute combustion
+        if not sun_data:
+            return {p: False for p in combustion_limits}
+
+        sun_long = sun_data.get('longitude')
+        if sun_long is None:
+            sun_sign = sun_data.get('sign') or sun_data.get('rashi')
+            sun_deg  = sun_data.get('degree') or sun_data.get('degrees', 0)
+            if not sun_sign:
+                return {p: False for p in combustion_limits}
+            sun_long = self._sign_degree_to_longitude(sun_sign, sun_deg)
         
         combustion_status = {}
         
@@ -368,17 +382,21 @@ class ChartAnalyzer:
                 continue
             
             planet_data = planets[planet_name]
-            planet_long = planet_data.get('longitude') or self._sign_degree_to_longitude(
-                planet_data.get('sign') or planet_data.get('rashi'),
-                planet_data.get('degree') or planet_data.get('degrees', 0)
-            )
+            planet_long = planet_data.get('longitude')
+            if planet_long is None:
+                p_sign = planet_data.get('sign') or planet_data.get('rashi')
+                p_deg  = planet_data.get('degree') or planet_data.get('degrees', 0)
+                if not p_sign:
+                    combustion_status[planet_name] = False
+                    continue
+                planet_long = self._sign_degree_to_longitude(p_sign, p_deg)
             
             # Calculate angular distance
             diff = abs(planet_long - sun_long)
             if diff > 180:
                 diff = 360 - diff
             
-            # Adjust for retrograde
+            # Adjust threshold for retrograde planets
             is_retro = planet_data.get('is_retrograde', False)
             if planet_name == 'MERCURY' and is_retro:
                 limit = 12
