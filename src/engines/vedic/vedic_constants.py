@@ -286,7 +286,7 @@ DEBILITATION_SIGNS: dict[CelestialBody, int] = {
 # Format: {planet: (sign_index, start_degree, end_degree)}
 MOOLTRIKONA: dict[CelestialBody, tuple[int, float, float]] = {
     CelestialBody.SUN: (Rashi.SIMHA, 0.0, 20.0),           # Sun: Leo 0-20Â°
-    CelestialBody.MOON: (Rashi.VRISHABHA, 3.0, 30.0),      # Moon: Taurus 3-30Â°
+    CelestialBody.MOON: (Rashi.VRISHABHA, 4.0, 20.0),      # Moon: Taurus 4-20Â°
     CelestialBody.MARS: (Rashi.MESHA, 0.0, 12.0),          # Mars: Aries 0-12Â°
     CelestialBody.MERCURY: (Rashi.KANYA, 15.0, 20.0),      # Mercury: Virgo 15-20Â°
     CelestialBody.JUPITER: (Rashi.DHANU, 0.0, 10.0),       # Jupiter: Sagittarius 0-10Â°

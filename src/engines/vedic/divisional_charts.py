@@ -416,11 +416,13 @@ def compute_d30_trimsamsa(longitude: float, d1_rashi: Rashi) -> Rashi:
     else:
         boundaries = [5, 12, 20, 25, 30]
         rulers = [Rashi.TULA, Rashi.MITHUNA, Rashi.DHANU, Rashi.KUMBHA, Rashi.MESHA]
-    
+
+    # Use '<' for all boundaries: 0 <= degree < 5 is first division,
+    # 5 <= degree < 10 is second, etc. At exactly 30° wraps to 0° of next sign.
     for i, boundary in enumerate(boundaries):
         if sign_longitude < boundary:
             return rulers[i]
-    
+
     return rulers[-1]
 
 
@@ -636,61 +638,123 @@ def find_vargottama_planets(
             if positions.is_vargottama]
 
 
+def _varga_dignity_score(body: CelestialBody, varga_rashi: Rashi) -> float:
+    """
+    Score a planet's dignity in a varga sign per classical rules.
+
+    Returns:
+        Score on a 0-4 scale:
+        4 = Exalted (in the varga sign matching exaltation sign)
+        3 = Mooltrikona (in the mooltrikona sign)
+        2 = Own sign (swakshetra)
+        1 = Friendly sign
+        0.5 = Neutral sign
+        0 = Enemy / debilitated sign
+    """
+    from src.engines.vedic.vedic_constants import (
+        EXALTATION_DEGREES, DEBILITATION_SIGNS, OWN_SIGNS,
+        MOOLTRIKONA, NATURAL_RELATIONSHIPS,
+    )
+
+    rashi_idx = varga_rashi.value
+
+    # Exalted
+    exalt = EXALTATION_DEGREES.get(body)
+    if exalt and exalt[0] == rashi_idx:
+        return 4.0
+
+    # Debilitated
+    if DEBILITATION_SIGNS.get(body) == rashi_idx:
+        return 0.0
+
+    # Mooltrikona (just check sign, ignore degree range in vargas)
+    mool = MOOLTRIKONA.get(body)
+    if mool and mool[0] == rashi_idx:
+        return 3.0
+
+    # Own sign
+    if rashi_idx in OWN_SIGNS.get(body, ()):
+        return 2.0
+
+    # Friend / enemy / neutral based on sign lord relationship
+    sign_lord = RASHI_LORDS[rashi_idx]
+    if body == sign_lord:
+        return 2.0  # own sign (shouldn't reach here, but guard)
+
+    rel_data = NATURAL_RELATIONSHIPS.get(body)
+    if rel_data:
+        if sign_lord in rel_data.get("friends", ()):
+            return 1.0
+        if sign_lord in rel_data.get("enemies", ()):
+            return 0.0
+
+    return 0.5  # neutral
+
+
+# Vimshopaka weight tables per scheme (from BPHS)
+_SHADVARGA_WEIGHTS: Dict[VargaChart, float] = {
+    VargaChart.D1: 6, VargaChart.D2: 2, VargaChart.D3: 4,
+    VargaChart.D9: 5, VargaChart.D12: 2, VargaChart.D30: 1,
+}
+
+_SAPTAVARGA_WEIGHTS: Dict[VargaChart, float] = {
+    VargaChart.D1: 5, VargaChart.D2: 2, VargaChart.D3: 3,
+    VargaChart.D7: 2.5, VargaChart.D9: 4.5, VargaChart.D12: 2,
+    VargaChart.D30: 1,
+}
+
+_DASHAVARGA_WEIGHTS: Dict[VargaChart, float] = {
+    VargaChart.D1: 3, VargaChart.D2: 1.5, VargaChart.D3: 1.5,
+    VargaChart.D7: 1.5, VargaChart.D9: 3, VargaChart.D10: 3,
+    VargaChart.D12: 1.5, VargaChart.D16: 2, VargaChart.D30: 1,
+    VargaChart.D60: 3,
+}
+
+
 def get_varga_vimshopaka(
     all_vargas: Dict[CelestialBody, AllVargaPositions],
     scheme: str = "shadvarga"
 ) -> Dict[CelestialBody, float]:
     """
     Calculate Vimshopaka Bala (twenty-point strength) from vargas.
-    
-    This is a strength calculation based on the dignity of planets
-    across multiple divisional charts. Different schemes use different
-    sets of vargas.
-    
+
+    Each varga contributes a weighted score based on the planet's dignity
+    in that varga chart. The weights differ by scheme and are derived
+    from BPHS.
+
     Schemes:
-    - shadvarga: D1, D2, D3, D9, D12, D30 (6 vargas)
-    - saptavarga: Above + D7 (7 vargas)
-    - dashavarga: Above + D16, D20, D24, D40 (10 vargas)
-    - shodashavarga: All 16 vargas
-    
+    - shadvarga: D1, D2, D3, D9, D12, D30 (6 vargas, total weight=20)
+    - saptavarga: Above + D7 (7 vargas, total weight=20)
+    - dashavarga: Above + D10, D16, D60 (10 vargas, total weight=20)
+
     Args:
         all_vargas: Dictionary of all varga positions
         scheme: Which scheme to use
-        
+
     Returns:
         Dictionary mapping planets to their Vimshopaka score (0-20)
-    
-    Note: This is a simplified calculation. Full Vimshopaka also considers
-    planetary dignity in each varga, not just sign placement.
     """
-    schemes = {
-        "shadvarga": (VargaChart.D1, VargaChart.D2, VargaChart.D3, 
-                      VargaChart.D9, VargaChart.D12, VargaChart.D30),
-        "saptavarga": (VargaChart.D1, VargaChart.D2, VargaChart.D3,
-                       VargaChart.D7, VargaChart.D9, VargaChart.D12, 
-                       VargaChart.D30),
-        "dashavarga": (VargaChart.D1, VargaChart.D2, VargaChart.D3,
-                       VargaChart.D7, VargaChart.D9, VargaChart.D10,
-                       VargaChart.D12, VargaChart.D16, VargaChart.D30,
-                       VargaChart.D60),
+    weight_tables = {
+        "shadvarga": _SHADVARGA_WEIGHTS,
+        "saptavarga": _SAPTAVARGA_WEIGHTS,
+        "dashavarga": _DASHAVARGA_WEIGHTS,
     }
-    
-    vargas_to_use = schemes.get(scheme, schemes["shadvarga"])
-    max_score = len(vargas_to_use) * 20 / len(vargas_to_use)  # Normalize to 20
-    
-    scores = {}
+
+    weights = weight_tables.get(scheme, _SHADVARGA_WEIGHTS)
+    total_weight = sum(weights.values())
+
+    scores: Dict[CelestialBody, float] = {}
     for body, positions in all_vargas.items():
-        # Count favorable placements (simplified: own sign or exaltation)
-        # Full implementation would check dignity in each varga
-        score = 0
-        for varga in vargas_to_use:
+        raw_score = 0.0
+        for varga, weight in weights.items():
             pos = positions.get_position(varga)
             if pos:
-                # Simple scoring: 1 point per varga (placeholder)
-                # Real implementation checks dignity
-                score += 1
-        
-        # Normalize to 20
-        scores[body] = (score / len(vargas_to_use)) * 20
-    
+                # dignity_score is 0-4; multiply by weight, then normalize
+                dignity = _varga_dignity_score(body, pos.rashi)
+                raw_score += (dignity / 4.0) * weight
+
+        # Normalize: if every varga had max dignity (4), raw_score == total_weight
+        # Scale to 0-20
+        scores[body] = (raw_score / total_weight) * 20 if total_weight > 0 else 0.0
+
     return scores

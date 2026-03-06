@@ -326,13 +326,14 @@ def _reconstruct_vedic_chart(data: Dict[str, Any]) -> VedicChart:
     dasha_raw = data['dasha']
     mahadashas = []
     for m_raw in dasha_raw['mahadashas']:
+        parent_lord_raw = m_raw.get('parent_lord')
         mahadashas.append(DashaPeriod(
             lord=CelestialBody(m_raw['lord']['value']),
             start_date=_d(m_raw['start_date']),
             end_date=_d(m_raw['end_date']),
             duration_years=m_raw['duration_years'],
             level=m_raw['level'],
-            parent=None
+            parent_lord=_d(parent_lord_raw) if parent_lord_raw else None
         ))
     
     dasha = VimshottariDasha(
@@ -519,9 +520,9 @@ class VedicEngine:
         
         # Layer 1: Get planetary positions (sidereal)
         positions = get_all_sidereal_positions(jd, VEDIC_GRAHAS, ayanamsa)
-        
-        # Layer 2: Compute graha statistics
-        graha_stats = compute_all_graha_stats(jd, VEDIC_GRAHAS, ayanamsa)
+
+        # Layer 2: Compute graha statistics (reuse positions to avoid duplicate ephemeris calls)
+        graha_stats = compute_all_graha_stats(jd, VEDIC_GRAHAS, ayanamsa, precomputed_positions=positions)
         
         # Layer 3: Vedic mapping
         vedic_mapping = compute_vedic_mapping(

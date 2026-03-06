@@ -45,21 +45,23 @@ from src.engines.vedic.vedic_constants import (
 class DashaPeriod:
     """
     Represents a single Dasha period (Maha, Antar, or Pratyanta).
-    
+
     Attributes:
         lord: The planet ruling this period
         start_date: When this period begins
         end_date: When this period ends
         duration_years: Length of period in years
         level: "mahadasha", "antardasha", or "pratyantardasha"
-        parent: The parent period (None for Mahadasha)
+        parent_lord: The lord of the parent period (None for Mahadasha).
+            Stored as a lightweight CelestialBody rather than a full
+            DashaPeriod reference to avoid circular serialization issues.
     """
     lord: CelestialBody
     start_date: datetime
     end_date: datetime
     duration_years: float
     level: str
-    parent: Optional['DashaPeriod'] = None
+    parent_lord: Optional[CelestialBody] = None
     
     @property
     def duration_days(self) -> float:
@@ -239,7 +241,7 @@ def compute_mahadashas(
             end_date=end_date,
             duration_years=years,
             level="mahadasha",
-            parent=None
+            parent_lord=None
         ))
         
         current_date = end_date
@@ -290,7 +292,7 @@ def compute_antardashas(mahadasha: DashaPeriod) -> List[DashaPeriod]:
             end_date=end_date,
             duration_years=actual_years,
             level="antardasha",
-            parent=mahadasha
+            parent_lord=mahadasha.lord
         ))
         
         current_date = end_date
@@ -335,7 +337,7 @@ def compute_pratyantardashas(antardasha: DashaPeriod) -> List[DashaPeriod]:
             end_date=end_date,
             duration_years=actual_years,
             level="pratyantardasha",
-            parent=antardasha
+            parent_lord=antardasha.lord
         ))
         
         current_date = end_date

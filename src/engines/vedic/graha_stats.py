@@ -34,10 +34,9 @@ from datetime import datetime
 
 from src.engines.core.celestial_bodies import CelestialBody, VEDIC_GRAHAS
 from src.engines.core.ephemeris import (
-    PlanetPosition, 
+    PlanetPosition,
     get_all_sidereal_positions,
     get_sidereal_position,
-    Ayanamsa
 )
 from src.engines.vedic.vedic_constants import (
     Ayanamsa,
@@ -351,37 +350,27 @@ def compute_planetary_wars(
 def compute_all_graha_stats(
     julian_day: float,
     bodies: Tuple[CelestialBody, ...] = VEDIC_GRAHAS,
-    ayanamsa: Ayanamsa = Ayanamsa.LAHIRI
+    ayanamsa: Ayanamsa = Ayanamsa.LAHIRI,
+    precomputed_positions: Optional[Dict[CelestialBody, PlanetPosition]] = None
 ) -> AllGrahaStats:
     """
     Compute complete astronomical statistics for all planets.
-    
+
     This is the main entry point for Layer 1. It computes positions,
     motion status, combustion, and planetary wars for all specified bodies.
-    
+
     Args:
         julian_day: Julian Day number for the calculation
         bodies: Tuple of planets to calculate (default: 9 Vedic grahas)
         ayanamsa: Ayanamsa to use for sidereal positions
-        
+        precomputed_positions: Optional pre-computed positions to avoid
+            duplicate Swiss Ephemeris calls. If None, positions are computed.
+
     Returns:
         AllGrahaStats containing all computed data
-        
-    Example:
-        >>> from datetime import datetime
-        >>> from engine.core import datetime_to_julian_day, create_position
-        >>> 
-        >>> birth_dt = datetime(1990, 3, 15, 15, 30)
-        >>> jaipur = create_position(26.9124, 75.7873)
-        >>> jd = datetime_to_julian_day(birth_dt, latitude=jaipur.latitude, 
-        ...                              longitude=jaipur.longitude)
-        >>> 
-        >>> stats = compute_all_graha_stats(jd)
-        >>> print(f"Sun longitude: {stats.get_position(CelestialBody.SUN).longitude:.2f}Â°")
-        >>> print(f"Mars retrograde: {stats.is_retrograde(CelestialBody.MARS)}")
     """
-    # Get all sidereal positions
-    positions = get_all_sidereal_positions(julian_day, bodies, ayanamsa)
+    # Use pre-computed positions if provided, otherwise compute them
+    positions = precomputed_positions or get_all_sidereal_positions(julian_day, bodies, ayanamsa)
     
     # Get ayanamsa value for reference
     from src.engines.core.ephemeris import get_ayanamsa_value

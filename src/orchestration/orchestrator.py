@@ -1858,17 +1858,30 @@ I prefer to say "I don't know" rather than provide information not grounded in c
             sign = _SIGNS[(lagna_idx + h - 1) % 12]
             return _LORDS.get(sign, "?"), sign
 
-        h7_lord,  h7_sign  = house_lord(7)
-        h10_lord, h10_sign = house_lord(10)
-
         all_lords = ["SUN","MOON","MARS","MERCURY","JUPITER","VENUS","SATURN"]
+
+        # Compact all-12-house quick-reference table
+        quick_ref_lines = []
+        for h in range(1, 13):
+            hl, hs = house_lord(h)
+            quick_ref_lines.append(f"  H{h:2d} ({hs:13}): {hl}")
+        quick_ref_text = "\n".join(quick_ref_lines)
+
+        # Focused forbidden claims for the 6 most commonly discussed houses
+        # (1=self, 5=children/intellect, 7=marriage, 9=fortune, 10=career, 11=gains)
+        _ORDINALS = {1:"1st",2:"2nd",3:"3rd",5:"5th",7:"7th",9:"9th",10:"10th",11:"11th"}
+        _DOMAINS  = {1:"self/lagna",5:"children",7:"marriage",9:"fortune",10:"career",11:"gains"}
+        focus_houses = [1, 5, 7, 9, 10, 11]
         forbidden_lines = []
-        for p in all_lords:
-            if p != h7_lord:
-                forbidden_lines.append(f"  X NEVER say {p} is the 7th lord  — 7th lord is {h7_lord} ({h7_sign})")
-        for p in all_lords:
-            if p != h10_lord:
-                forbidden_lines.append(f"  X NEVER say {p} is the 10th lord — 10th lord is {h10_lord} ({h10_sign})")
+        for h_num in focus_houses:
+            hl, hs = house_lord(h_num)
+            ord_str = _ORDINALS.get(h_num, f"{h_num}th")
+            dom_str = _DOMAINS.get(h_num, "")
+            for p in all_lords:
+                if p != hl:
+                    forbidden_lines.append(
+                        f"  X NEVER say {p:8} is the {ord_str} lord ({dom_str}) — correct: {hl} ({hs})"
+                    )
         forbidden_text = "\n".join(forbidden_lines)
 
         return f"""
@@ -1879,16 +1892,26 @@ believe about this birth date from your training data.
 =======================================================================
 
 LAGNA (ASCENDANT): {lagna_sign} {lagna_deg:.1f} degrees
-WARNING: Sun is in {sun_sign} — this is the SUN SIGN, NOT the Lagna.
-Do NOT treat the Sun sign as the Lagna. They are different.
-Moon sign: {moon_sign}. Lagna sign: {lagna_sign}. Three different values.
+WARNING: Sun is in {sun_sign} — SUN SIGN ≠ LAGNA. Do NOT use Sun sign as Lagna.
+Three distinct values — Moon sign: {moon_sign} | Lagna: {lagna_sign} | Sun: {sun_sign}
 
 {house_lords_block}
+
+QUICK-REFERENCE ALL-12 HOUSE LORDS (from Lagna — single source of truth):
+{quick_ref_text}
+
+CROSS-REFERENCE MANDATE:
+Before stating ANY house-lord, dignity, or timing claim, verify it against
+the tables above. Format every lord reference as:
+  "Nth house (domain) lord [PLANET]"
+  e.g. "7th house (Marriage & Partnership) lord VENUS"
+If the computed data does not contain evidence for a claim, write
+"data not available" — never substitute training-knowledge defaults.
 
 FORBIDDEN CLAIMS — NEVER state any of the following:
 {forbidden_text}
 
-LAGNA ANCHOR RULE: Every house-lord claim must match the table above.
+LAGNA ANCHOR RULE: Every house-lord claim must match the HOUSE LORDS table.
 If you are about to say a planet is the Nth lord and it does not match
 this table, STOP and use the correct lord from the table above.
 =======================================================================
@@ -3008,6 +3031,43 @@ When user uses "it", "this", "that" or asks "why", "how" -> connect to conversat
         # Always compute house lords from lagna — no dependency on enhanced analysis pipeline
         house_lords_block = self._compute_house_lords_block(chart_data)
 
+        # ── LAGNESH NOTE: prevent LLM from conflating lagna-lordship with exaltation ──
+        # Common LLM error: "Virgo Lagna → Mercury lagnesh → Mercury is exalted"
+        # Reality: exaltation requires the planet to be in its specific exaltation SIGN.
+        _LORDS_FOR_LAGNESH = {
+            'Aries': 'MARS', 'Taurus': 'VENUS', 'Gemini': 'MERCURY',
+            'Cancer': 'MOON', 'Leo': 'SUN', 'Virgo': 'MERCURY',
+            'Libra': 'VENUS', 'Scorpio': 'MARS', 'Sagittarius': 'JUPITER',
+            'Capricorn': 'SATURN', 'Aquarius': 'SATURN', 'Pisces': 'JUPITER',
+            # Sanskrit aliases
+            'Mesha': 'MARS', 'Vrishabha': 'VENUS', 'Mithuna': 'MERCURY',
+            'Karka': 'MOON', 'Simha': 'SUN', 'Kanya': 'MERCURY',
+            'Tula': 'VENUS', 'Vrischika': 'MARS', 'Dhanu': 'JUPITER',
+            'Makara': 'SATURN', 'Kumbha': 'SATURN', 'Meena': 'JUPITER',
+        }
+        _lagna_sign_raw = chart_data.get('lagna', {}).get('sign', '')
+        _lagnesh = _LORDS_FOR_LAGNESH.get(_lagna_sign_raw, '')
+        lagnesh_note = ""
+        if _lagnesh:
+            _ld = chart_data.get('planets', {}).get(_lagnesh, {})
+            _ld_dignity = _ld.get('dignity', {}).get('status', 'unknown')
+            _ld_sign    = _ld.get('sign', 'unknown')
+            _ld_house   = _ld.get('house', '?')
+            lagnesh_note = (
+                f"\n⚠ LAGNESH CLARIFICATION: {_lagnesh} is the lord of {_lagna_sign_raw} Lagna (lagnesh). "
+                f"Actual placement: {_ld_sign}, H{_ld_house}, dignity = {_ld_dignity}. "
+                f"Being lagnesh does NOT make {_lagnesh} exalted — use the dignity column above, not Lagna ownership."
+            )
+
+        # ════════════════════════════════════════════════════════════════════════
+        # PROMPT STRUCTURE (order matters for LLM compliance):
+        #   1. System prompt (persona + constitution + chart anchor + timing rule)
+        #   2. ALL computed chart data (birth chart, house lords, dasha, transits)
+        #   3. Classical text knowledge (RAG)
+        #   4. Response instructions
+        #   5. User query LAST — so LLM reads all ground truth before the question
+        # ════════════════════════════════════════════════════════════════════════
+
         prompt = f"""{system_prompt}
 
 {validation_context}
@@ -3022,10 +3082,12 @@ USER PROFILE:
 • Time of Birth: {user_profile.get('time_of_birth')}
 • Place of Birth: {user_profile.get('place_of_birth')}
 
-====USER_QUERY_MARKER====
-"{query}"
+════════════════════════════════════════════════════════════════════════
+COMPUTED CHART DATA — Swiss Ephemeris (Sidereal/Lahiri)
+All values below are CALCULATED, not inferred. Use ONLY these values.
+════════════════════════════════════════════════════════════════════════
 
-BIRTH CHART DATA (Sidereal/Lahiri):
+BIRTH CHART PLANETARY POSITIONS:
 • Ascendant (Lagna): {chart_data.get('lagna', {}).get('sign', 'Not available')} {chart_data.get('lagna', {}).get('degree', 0.0):.2f}° | Nakshatra: {chart_data.get('lagna', {}).get('nakshatra', 'N/A')} (Lord: {chart_data.get('lagna', {}).get('nakshatra_lord', 'N/A')})
 • Sun:     {chart_data.get('planets', {}).get('SUN',     {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('SUN',     {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('SUN',     {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('SUN',     {}).get('dignity', {}).get('status', '')}
 • Moon:    {chart_data.get('planets', {}).get('MOON',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MOON',    {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('MOON',    {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('MOON',    {}).get('dignity', {}).get('status', '')}
@@ -3036,6 +3098,7 @@ BIRTH CHART DATA (Sidereal/Lahiri):
 • Saturn:  {chart_data.get('planets', {}).get('SATURN',  {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('SATURN',  {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('SATURN',  {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('SATURN',  {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('SATURN', {}).get('retrograde') else ''}
 • Rahu:    {chart_data.get('planets', {}).get('RAHU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('RAHU',    {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('RAHU',    {}).get('nakshatra', 'N/A')}  [always Retro]
 • Ketu:    {chart_data.get('planets', {}).get('KETU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('KETU',    {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('KETU',    {}).get('nakshatra', 'N/A')}  [always Retro]
+{lagnesh_note}
 
 {house_lords_block}
 
@@ -3065,7 +3128,6 @@ TODAY'S DATE: {today_date}
 TIMING GUIDANCE: Pratyantardasha gives month-level precision, Antardasha gives multi-month context, Mahadasha gives year-level context. When Pratyantar + Gochara alignment point to the same window, cite that specific Pratyantar date range as the peak timing.
 CRITICAL: These dates are CALCULATED using Swiss Ephemeris. Use ONLY these exact dates. Do not invent or estimate dates.
 
-
 CURRENT TRANSITS (as of {transit_date}):
 • Jupiter: {jupiter_transit}
 • Saturn: {saturn_transit}
@@ -3075,10 +3137,59 @@ CURRENT TRANSITS (as of {transit_date}):
 
 {vargottama_str}
 
+════════════════════════════════════════════════════════════════════════
+END OF COMPUTED DATA
+════════════════════════════════════════════════════════════════════════
+
 RELEVANT ASTROLOGICAL KNOWLEDGE FROM CLASSICAL TEXTS:
 {context}
 
-{instructions}"""
+DATA-GROUNDING RULE (MANDATORY — ZERO EXCEPTIONS):
+Every factual claim MUST trace to a specific data point in the COMPUTED CHART DATA block above.
+Before stating any fact, perform this internal audit:
+
+  CLAIM TYPE                    │ MUST TRACE TO
+  ─────────────────────────────────────────────────────────────────────────────
+  Planet dignity (strong/weak/  │ Dignity column in BIRTH CHART PLANETARY POSITIONS
+  exalted/debilitated)          │ NOT general planet reputation from training knowledge
+  House lord                    │ HOUSE LORDS table — cite both planet AND house sign
+                                │ Format: "Nth house (domain) lord [PLANET]"
+  Dasha/timing dates            │ Step 2/3/3.5/3.6 dasha tables — exact dates only
+  Transit effect on native      │ CURRENT TRANSITS + GOCHARA ANALYSIS block
+  Planet sign/house/nakshatra   │ BIRTH CHART PLANETARY POSITIONS rows
+  Vargottama claim              │ VARGOTTAMA PLANETS line — only if planet listed there
+  ─────────────────────────────────────────────────────────────────────────────
+
+PROHIBITED INFERENCES (NEVER do these):
+  X Claiming a planet is strong/weak without citing its computed dignity status
+  X Deriving house lords from birth date or Sun sign using training knowledge
+  X Citing transit positions or effects not shown in CURRENT TRANSITS section
+  X Computing or inventing sub-period dates not listed in Step 3.5/3.6
+  X Using Sun sign as Lagna, or Moon sign as Lagna — they are listed separately
+  X Stating yoga effects (Raj Yoga, Gajakesari, etc.) unless the yoga is present
+    in the enhanced_context above or directly calculable from the listed positions
+  X Claiming a planet is EXALTED because it is the Lagna lord (lagnesh).
+    Lagna lordship ≠ exaltation. Exaltation requires the planet to physically be
+    in its specific exaltation sign. Check the LAGNESH CLARIFICATION line above.
+  X Stating a planet's transit-house from Lagna or Moon unless it matches the
+    GOCHARA ANALYSIS block exactly. Never self-compute "Jupiter is in H10 from Lagna"
+    — only use the house numbers shown in the GOCHARA ANALYSIS block.
+
+CROSS-REFERENCING FORMAT (MANDATORY in every response):
+  • House lords  → "Nth house (domain) lord [PLANET]"
+                   e.g. "7th house (Marriage & Partnership) lord Venus is in H3"
+  • Timing       → "During [PLANET] Pratyantar ([START] to [END])..."
+  • Dignity      → "[PLANET] is [dignity] in [sign]" — match the table exactly
+  • Transit      → "[PLANET] transiting H[N] from Moon/Lagna ([sign])"
+
+If computed data is absent for a claim, write "data not available" rather than
+substituting a training-knowledge default.
+
+{instructions}
+
+====USER_QUERY_MARKER====
+"{query}"
+"""
         
         return prompt
     
