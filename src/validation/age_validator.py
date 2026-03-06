@@ -47,7 +47,7 @@ class AgeValidator:
             
         except Exception as e:
             print(f"[AGE_VALIDATOR] Error calculating age: {e}")
-            return (0, 0, 0)
+            return (-2, 0, 0)  # Sentinel: parse failure (distinct from future date -1 and genuine newborn)
     
     @staticmethod
     def validate_dob(date_of_birth: str) -> Dict:
@@ -64,7 +64,18 @@ class AgeValidator:
             }
         """
         years, months, days = AgeValidator.calculate_age(date_of_birth)
-        
+
+        # Parse failure (invalid format)
+        if years == -2:
+            return {
+                "valid": False,
+                "issue": "invalid_format",
+                "message": "Your date of birth could not be read. Please ensure it is in YYYY-MM-DD format (e.g., 1990-07-15) and re-initialize your session.",
+                "age_years": 0,
+                "age_months": 0,
+                "age_days": 0
+            }
+
         # Future date
         if years < 0:
             return {
