@@ -9,14 +9,26 @@ Passes None for components that will auto-initialize or are optional.
 from src.orchestration.orchestrator import EnhancedLangGraphOrchestrator
 from src.rag.retriever import AstrologyRetriever
 
-# In get_orchestrator():
-retriever = AstrologyRetriever(
-    collection_name="vedic_astrology_books_knowledge",
-    db_path="data/vectordb"
-)
-
 # Global orchestrator instance (singleton per worker)
 _orchestrator_instance = None
+_retriever_instance = None
+
+
+def _get_retriever():
+    """Lazy-init retriever so import never fails if vectordb is missing."""
+    global _retriever_instance
+    if _retriever_instance is None:
+        print("[RETRIEVER] Initializing AstrologyRetriever...")
+        try:
+            _retriever_instance = AstrologyRetriever(
+                collection_name="vedic_astrology_books_knowledge",
+                db_path="data/vectordb"
+            )
+            print("[RETRIEVER] Initialized successfully.")
+        except Exception as e:
+            print(f"[RETRIEVER] WARNING: Could not initialize retriever: {e}")
+            _retriever_instance = None
+    return _retriever_instance
 
 
 class SimpleIntentClassifier:
@@ -128,11 +140,11 @@ def get_orchestrator():
         # hybrid_retriever, prompt_builder, calculation_tools, llm all auto-load if None
         _orchestrator_instance = EnhancedLangGraphOrchestrator(
             intent_classifier=intent_classifier,
-            hybrid_retriever=retriever,
-            prompt_builder=None,     # Auto-loads
-            calculation_tools=None,  # Auto-loads
-            llm=None,                # Auto-loads
-            fast_llm=None            # Auto-loads
+            hybrid_retriever=_get_retriever(),  # Lazy init — safe if vectordb missing
+            prompt_builder=None,
+            calculation_tools=None,
+            llm=None,
+            fast_llm=None
         )
         
         print("[ORCHESTRATOR] Initialized successfully")
