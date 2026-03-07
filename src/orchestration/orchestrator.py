@@ -2228,6 +2228,74 @@ Retain the astrological data but remove the violating content (e.g., remove deat
 
         return any(sig in q for sig in expansion_signals)
 
+    def _get_domain_pratyantar_spotlight(self, query: str) -> str:
+        """Returns a domain-specific block telling the LLM which Pratyantar planets
+        to prioritize from the upcoming_pratyantardashas list for this query type.
+        Each domain has a distinct priority list to prevent all queries from
+        converging on the same Jupiter Pratyantar window."""
+        q = query.lower()
+
+        if any(w in q for w in ['marriage', 'shaadi', 'shadi', 'vivah', 'wedding', 'partner',
+                                  'love', 'spouse', 'husband', 'wife', 'rishta', 'relationship']):
+            return (
+                "\n⭐ PRATYANTAR PRIORITY FOR THIS QUERY (Marriage):\n"
+                "   1st: VENUS Pratyantar — primary karaka for marriage\n"
+                "   2nd: 7th house lord's Pratyantar (see HOUSE LORDS table above)\n"
+                "   3rd: Jupiter only as secondary confirmation\n"
+                "   ❌ Do NOT use Jupiter as the primary timing window for marriage.\n"
+            )
+
+        if any(w in q for w in ['foreign', 'abroad', 'videsh', 'travel', 'yatra', 'immigration',
+                                  'visa', 'overseas', 'bahar', 'foreign land', 'settle abroad', 'job abroad']):
+            return (
+                "\n⭐ PRATYANTAR PRIORITY FOR THIS QUERY (Foreign Travel/Abroad):\n"
+                "   1st: RAHU Pratyantar — primary karaka for foreign connection\n"
+                "   2nd: 9th house lord's Pratyantar (check HOUSE LORDS table — NOT always Jupiter)\n"
+                "   3rd: 12th house lord's Pratyantar (check HOUSE LORDS table)\n"
+                "   ❌ Use Jupiter ONLY if HOUSE LORDS table lists Jupiter as 9th or 12th lord.\n"
+                "   ❌ Do NOT default to Jupiter generically for foreign travel.\n"
+            )
+
+        if any(w in q for w in ['career', 'job', 'business', 'naukri', 'profession', 'promotion',
+                                  'kaam', 'vyapar', 'work', 'salary', 'office', 'interview', 'appointment']):
+            return (
+                "\n⭐ PRATYANTAR PRIORITY FOR THIS QUERY (Career/Job):\n"
+                "   1st: SATURN Pratyantar — karaka for sustained career and work\n"
+                "   2nd: SUN Pratyantar — karaka for authority and status\n"
+                "   3rd: 10th house lord's Pratyantar (see HOUSE LORDS table)\n"
+                "   ❌ Do NOT use Venus or Jupiter as the primary timing window for career.\n"
+            )
+
+        if any(w in q for w in ['child', 'children', 'baby', 'pregnancy', 'bachha', 'bacche',
+                                  'santan', 'offspring', 'conceive', 'delivery']):
+            return (
+                "\n⭐ PRATYANTAR PRIORITY FOR THIS QUERY (Children/Progeny):\n"
+                "   1st: JUPITER Pratyantar — primary karaka for children\n"
+                "   2nd: MOON Pratyantar — karaka for nurturing and motherhood\n"
+                "   3rd: 5th house lord's Pratyantar (see HOUSE LORDS table)\n"
+            )
+
+        if any(w in q for w in ['money', 'wealth', 'paisa', 'dhan', 'rich', 'invest', 'finance',
+                                  'property', 'loan', 'debt', 'savings', 'profit', 'loss']):
+            return (
+                "\n⭐ PRATYANTAR PRIORITY FOR THIS QUERY (Wealth/Finance):\n"
+                "   1st: VENUS Pratyantar — karaka for wealth and luxury\n"
+                "   2nd: 2nd house lord's Pratyantar (see HOUSE LORDS table)\n"
+                "   3rd: 11th house lord's Pratyantar (see HOUSE LORDS table)\n"
+                "   ❌ Jupiter is a secondary trigger only — not the primary wealth window.\n"
+            )
+
+        if any(w in q for w in ['health', 'illness', 'sick', 'disease', 'bimari', 'sehat', 'swasth',
+                                  'hospital', 'surgery', 'pain', 'accident', 'injury']):
+            return (
+                "\n⭐ PRATYANTAR PRIORITY FOR THIS QUERY (Health):\n"
+                "   Watch: SATURN, MARS, RAHU, KETU Pratyantar — stress and health challenge indicators\n"
+                "   Check 6th house lord and 8th house lord Pratyantar periods.\n"
+                "   ❌ Do NOT cite Jupiter or Venus as primary health timing windows.\n"
+            )
+
+        return ""
+
     def _build_response_instructions(
         self,
         query: str,
@@ -2273,11 +2341,12 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                 "  • Venus (natural karaka of marriage): its sign, house, dignity\n"
                 "  • Jupiter (karaka for husband in female chart): its sign, house, dignity\n"
                 "  TIMING (use this priority order):\n"
-                "  1. Find the Venus or Jupiter Pratyantar in the upcoming Pratyantardasha list.\n"
-                "  2. Cross-check: Is Jupiter Gochar in H5, H7, or H9 from natal Moon? (Gochara section)\n"
-                "  3. Is there a Sade Sati? If yes, marriage may be delayed or come with challenges.\n"
-                "  4. Check 7th house lord's Pratyantar period.\n"
-                "  5. State the specific Pratyantar date range as the peak window, NOT just the Antardasha.\n"
+                "  1. Find VENUS Pratyantar first — Venus is the primary marriage karaka.\n"
+                "  2. If no Venus Pratyantar in current AD, check 7th house lord's Pratyantar (see HOUSE LORDS table).\n"
+                "  3. Cross-check: Is Jupiter Gochar in H5, H7, or H9 from natal Moon? (Gochara section)\n"
+                "  4. Is there a Sade Sati? If yes, marriage may be delayed or come with challenges.\n"
+                "  5. Use Jupiter Pratyantar ONLY as a secondary confirmatory trigger — NEVER as the primary marriage window.\n"
+                "  6. State the specific Pratyantar date range as the peak window, NOT the full Antardasha range.\n"
                 "  ⚠ You MUST discuss at least H7, H2, and H5 lords from the computed table — not just H7 alone."
             )
 
@@ -2320,11 +2389,12 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                 "  • Rahu: sign and house from Lagna — strong karaka for foreign connections\n"
                 "  • Jupiter: sign and house — opportunity and protection in foreign lands\n"
                 "  TIMING (use this priority order):\n"
-                "  1. Find the Rahu or Jupiter Pratyantar in the upcoming Pratyantardasha list.\n"
-                "  2. Check: Is Rahu transiting H9 or H12 from Lagna? (Gochara section)\n"
-                "  3. Jupiter Gochar in H9 or H12 from Moon also triggers foreign opportunities.\n"
-                "  4. Check 9th and 12th house lord Pratyantar periods.\n"
-                "  5. State the specific Pratyantar date range as the peak window for foreign travel.\n"
+                "  1. Find RAHU Pratyantar first — Rahu is the primary karaka for foreign/overseas connection.\n"
+                "  2. Find 9th house lord's Pratyantar (check HOUSE LORDS table — 9th lord is NOT always Jupiter).\n"
+                "  3. Find 12th house lord's Pratyantar (check HOUSE LORDS table).\n"
+                "  4. Use Jupiter Pratyantar ONLY if HOUSE LORDS table shows Jupiter as 9th or 12th lord for this Lagna.\n"
+                "  5. Check: Is Rahu transiting H9 or H12 from Lagna? (Gochara section)\n"
+                "  6. State the specific Pratyantar date range as the peak window. DO NOT cite the full Antardasha range.\n"
                 "  ⚠ You MUST discuss H9 and H12 lords from the computed table. NEVER substitute Jupiter as 9th lord "
                 "unless the HOUSE LORDS table explicitly shows Jupiter as the 9th lord for this Lagna."
             )
@@ -2362,10 +2432,12 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                 "  • Jupiter (natural karaka of wealth): its sign, house, dignity\n"
                 "  • Venus (karaka of luxury and comforts): its sign, house, dignity\n"
                 "  TIMING (use this priority order):\n"
-                "  1. Find the Jupiter or Venus Pratyantar in the upcoming Pratyantardasha list.\n"
-                "  2. Jupiter Gochar in H2, H5, or H11 from natal Moon supports financial gains.\n"
-                "  3. Check 2nd and 11th house lord Pratyantar periods.\n"
-                "  4. Sade Sati or Ashtama Shani may restrict gains; advise caution if active.\n"
+                "  1. Find VENUS Pratyantar first — karaka for wealth, luxury, and material gains.\n"
+                "  2. Find 2nd house lord's Pratyantar (from HOUSE LORDS table) — direct wealth accumulation.\n"
+                "  3. Find 11th house lord's Pratyantar (from HOUSE LORDS table) — income and gains.\n"
+                "  4. Use Jupiter Pratyantar as a secondary confirmatory trigger only, not the primary window.\n"
+                "  5. Jupiter Gochar in H2, H5, or H11 from natal Moon supports financial gains.\n"
+                "  6. Sade Sati or Ashtama Shani may restrict gains; advise caution if active.\n"
                 "  ⚠ You MUST discuss both H2 and H11 lords from the computed table."
             )
 
@@ -3019,6 +3091,10 @@ EARLY CONVERSATION:
             mode='prediction'
         )
 
+        # Domain-specific Pratyantar spotlight — injected into the dasha block so the LLM
+        # knows which planet's Pratyantar window to prioritize for this exact query type.
+        domain_spotlight = self._get_domain_pratyantar_spotlight(query)
+
         # ════════════════════════════════════════════════════════════════════════
         # MOBILE RESPONSE LENGTH CONTROL (150 words max)
         # ════════════════════════════════════════════════════════════════════════
@@ -3055,13 +3131,13 @@ RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
 8. NO FOLLOW-UP QUESTIONS: Never end with questions like "Do you want remedies?", "Shall I explain more?", "Would you like to know...?" Just give the complete answer directly.
 
 EXAMPLE GOOD RESPONSE (Marriage — shows multi-house analysis):
-"Aapki 7th house (Marriage & Partnership) ki lord Venus H2 mein hai — marital stability ke liye accha, lekin H5 (Children & Intellect) ki lord Saturn ki 7th par drishti thodi delay de raha hai. 2nd house (Wealth & Family) ka lord Jupiter strong hai jo family support dikhata hai. Timing: Venus Pratyantar Feb-Apr 2026 aur Jupiter gochar H7 se — yeh peak marriage window hai."
+"Aapki 7th house (Marriage & Partnership) ki lord Venus H2 mein hai — marital stability ke liye accha, lekin H5 (Children & Intellect) ki lord Saturn ki 7th par drishti thodi delay de raha hai. 2nd house (Wealth & Family) ka lord Jupiter strong hai jo family support dikhata hai. Timing: Venus Pratyantar [cite exact start→end from Pratyantar table above] — yeh peak marriage window hai."
 
 EXAMPLE GOOD RESPONSE (Career — shows multi-house analysis):
-"10th house (Career & Status) ki lord Mercury H2 mein hai — communication-based income. 6th house (Health & Enemies) ka lord Saturn H10 mein hai — service sector mein stability. 11th house (Gains & Desires) ka lord Moon strong hai — gains ka yog. Sun Pratyantar Mar 2026 mein Saturn gochar H10 se align kar raha hai — promotion ya new role ka peak time."
+"10th house (Career & Status) ki lord Mercury H2 mein hai — communication-based income. 6th house (Health & Enemies) ka lord Saturn H10 mein hai — service sector mein stability. 11th house (Gains & Desires) ka lord Moon strong hai — gains ka yog. Saturn Pratyantar [cite exact start→end from Pratyantar table above] mein Saturn gochar H10 se align kar raha hai — promotion ya new role ka peak time."
 
 EXAMPLE GOOD RESPONSE (Foreign Travel — shows multi-house analysis):
-"9th house (Luck & Dharma) ki lord Venus H12 mein hai — yahi foreign settlement ka strong yog hai. 12th house (Losses & Moksha) ka lord Mars active hai. Rahu H9 se transit kar raha hai — foreign connection trigger. Rahu Pratyantar Apr-Jun 2026 — foreign opportunity ki peak window."
+"9th house (Luck & Dharma) ki lord Venus H12 mein hai — yahi foreign settlement ka strong yog hai. 12th house (Losses & Moksha) ka lord Mars active hai. Rahu H9 se transit kar raha hai — foreign connection trigger. Rahu Pratyantar [cite exact start→end from Pratyantar table above] — foreign opportunity ki peak window."
 """
         instructions += mobile_length_instruction
 
@@ -3173,7 +3249,7 @@ Step 2 - Current Dasha Periods (Calculated from Moon Nakshatra):
 • Antardasha: {antar_planet} ({dasha_data.get('antardasha', {}).get('start', 'Unknown')} to {dasha_data.get('antardasha', {}).get('end', 'Unknown')})
 • Pratyantardasha: {dasha_data.get('pratyantardasha', {}).get('planet', 'Unknown')} ({dasha_data.get('pratyantardasha', {}).get('start', 'Unknown')} to {dasha_data.get('pratyantardasha', {}).get('end', 'Unknown')})
 • Dasha Sequence: {dasha_sequence}
-{upcoming_pds_str}{next_ad_fp_str}{upcoming_ads_str}
+{upcoming_pds_str}{next_ad_fp_str}{upcoming_ads_str}{domain_spotlight}
 TODAY'S DATE: {today_date}
 
 ⚠ PAST DATE RULE (MANDATORY): NEVER cite a date range as a prediction if it has already ended (end date < {today_date}).
