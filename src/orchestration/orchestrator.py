@@ -2281,13 +2281,16 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         q = query.lower()
 
         if any(w in q for w in ['marriage', 'shaadi', 'shadi', 'vivah', 'wedding', 'partner',
-                                  'love', 'spouse', 'husband', 'wife', 'rishta', 'relationship']):
+                                  'love', 'spouse', 'husband', 'wife', 'rishta', 'relationship',
+                                  'pyaar', 'prem', 'milega', 'milegi', 'life partner',
+                                  'kesi hogi', 'kaisi hogi', 'kesa hoga', 'kaisa hoga']):
             return (
-                "\n⭐ PRATYANTAR PRIORITY FOR THIS QUERY (Marriage):\n"
+                "\n⭐ PRATYANTAR PRIORITY FOR THIS QUERY (Marriage/Partner):\n"
                 "   1st: VENUS Pratyantar — primary karaka for marriage\n"
                 "   2nd: 7th house lord's Pratyantar (see HOUSE LORDS table above)\n"
                 "   3rd: Jupiter only as secondary confirmation\n"
                 "   ❌ Do NOT use Jupiter as the primary timing window for marriage.\n"
+                "   ⚠ Also describe the partner's nature from 7th house sign and planets in H7.\n"
             )
 
         if any(w in q for w in ['foreign', 'abroad', 'videsh', 'travel', 'yatra', 'immigration',
@@ -2374,24 +2377,29 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         # ── Marriage / relationship ─────────────────────────────────────────────
         if any(w in q for w in ['marriage', 'shaadi', 'shadi', 'vivah', 'wedding', 'partner',
                                   'love', 'spouse', 'husband', 'wife', 'rishta', 'relationship',
-                                  'bypass', 'saat phere']):
+                                  'bypass', 'saat phere', 'pyaar', 'prem', 'milega', 'milegi',
+                                  'life partner', 'kesi hogi', 'kaisi hogi', 'kesa hoga', 'kaisa hoga']):
             domain_hints.append(
-                "MARRIAGE ANALYSIS — Cross-reference ALL of the following from the HOUSE LORDS table:\n"
-                "  CHART FACTORS (check each from birth chart positions above):\n"
-                "  • 7th house (Marriage & Partnership): its lord, sign, planets placed there\n"
+                "MARRIAGE & PARTNER ANALYSIS — Answer ALL parts of the user's question:\n"
+                "  PART A — PARTNER QUALITIES (always include, regardless of exact question wording):\n"
+                "  • 7th house SIGN: directly describes the partner's personality and nature\n"
+                "  • Planets IN 7th house: each planet modifies the partner's traits\n"
+                "  • 7th lord sign and house: adds nuance to partner's character and circumstances of meeting\n"
+                "  • Venus sign (for male chart) / Jupiter sign (for female chart): partner's personal qualities\n"
+                "  ⚠ ALWAYS describe what the partner will be like from these placements — do NOT skip this.\n"
+                "  PART B — CHART FACTORS FOR TIMING:\n"
                 "  • 7th lord: which house is it placed in? Its dignity? Is it afflicted by Saturn/Rahu/Ketu?\n"
                 "  • 2nd house (Wealth & Family): its lord, condition — supports marital stability\n"
                 "  • 5th house (Children & Intellect): its lord — romance, love, attraction\n"
                 "  • 11th house (Gains & Desires): its lord — fulfillment of marital desire\n"
-                "  • Venus (natural karaka of marriage): its sign, house, dignity\n"
-                "  • Jupiter (karaka for husband in female chart): its sign, house, dignity\n"
-                "  TIMING (use this priority order):\n"
+                "  PART C — TIMING (use this priority order):\n"
                 "  1. Find VENUS Pratyantar first — Venus is the primary marriage karaka.\n"
                 "  2. If no Venus Pratyantar in current AD, check 7th house lord's Pratyantar (see HOUSE LORDS table).\n"
                 "  3. Cross-check: Is Jupiter Gochar in H5, H7, or H9 from natal Moon? (Gochara section)\n"
                 "  4. Is there a Sade Sati? If yes, marriage may be delayed or come with challenges.\n"
                 "  5. Use Jupiter Pratyantar ONLY as a secondary confirmatory trigger — NEVER as the primary marriage window.\n"
                 "  6. State the specific Pratyantar date range as the peak window, NOT the full Antardasha range.\n"
+                "  ⚠ You MUST cover Part A (partner description) AND Part C (timing) in every relationship response.\n"
                 "  ⚠ You MUST discuss at least H7, H2, and H5 lords from the computed table — not just H7 alone."
             )
 
