@@ -2557,6 +2557,26 @@ Retain the astrological data but remove the violating content (e.g., remove deat
 
         domain_text = ("\n" + "\n".join(f"- {h}" for h in domain_hints)) if domain_hints else ""
 
+        # ── MANDATORY NEXT FAVORABLE WINDOW (all prediction responses) ─────────
+        # Injected regardless of whether the user explicitly asked for timing.
+        # The data is already in the prompt (upcoming_pds_str, next_ad_fp_str,
+        # upcoming_ads_str) so no extra calculation is needed.
+        next_window_block = """
+
+MANDATORY — NEXT FAVORABLE WINDOW (include in EVERY prediction response):
+After your main answer, always add a brief "Next Favorable Window" section that:
+  1. Identifies the single most relevant upcoming Pratyantar from Step 3.5/3.6 above
+     for the topic of this query (e.g. Venus Pratyantar for marriage/finance, Saturn
+     Pratyantar for career, Moon/Mars Pratyantar for home, Rahu Pratyantar for travel).
+  2. States the exact start→end dates from the Pratyantar table (do NOT invent dates).
+  3. Mentions one supporting Gochara factor from the transit block that confirms this
+     window (e.g. "Jupiter transiting H7 from Moon" for marriage).
+  4. Keeps it to 1-2 sentences — concise and actionable.
+  Format: "Next Favorable Window: [Planet] Pratyantar [start → end] — [one-line reason]."
+  If NO suitable upcoming Pratyantar exists in Step 3.5 data, use Step 3.6
+  (opening Pratyantar of next Antardasha) and note that clearly.
+  NEVER skip this section. NEVER fabricate dates not listed in the dasha tables."""
+
         if wants_detail:
             if mode == 'prediction':
                 return f"""INSTRUCTIONS:
@@ -2564,7 +2584,7 @@ Retain the astrological data but remove the violating content (e.g., remove deat
 2. Ground every claim in specific chart data (actual houses, signs, planets listed above).
 3. Include dasha periods AND approximate calendar timeframes for any timing claims.
 4. Do NOT cite classical texts or provide book names as sources unless the user explicitly demands it.
-5. {script_instruction}{domain_text}
+5. {script_instruction}{domain_text}{next_window_block}
 
 Provide a thorough, detailed prediction:"""
             else:
@@ -2577,22 +2597,22 @@ Provide a thorough, detailed prediction:"""
 Provide a detailed explanation:"""
         else:
             if mode == 'prediction':
-                return f"""INSTRUCTIONS (CONCISE MODE):
-1. Give a direct, astrological answer in 2-3 short sentences.
-2. Mention only ONE or TWO key chart factors.
-3. If timing is relevant, give one specific period (e.g., "mid-2026").
+                return f"""INSTRUCTIONS:
+1. Give a warm, human, narrative answer — 3-5 sentences flowing naturally (100-150 words).
+2. Cover 2-3 key chart factors with their real-world meaning, not just technical data.
+3. Include one specific timing window with a brief reason it's favorable.
 4. Do NOT cite sources or provide book names unless the user explicitly demands it.
-5. {script_instruction}{domain_text}
+5. {script_instruction}{domain_text}{next_window_block}
 
-Provide a highly concise, self-contained response:"""
+Provide a warm, self-contained response:"""
             else:
                 return f"""INSTRUCTIONS (CONCISE MODE):
-1. Answer in 1-2 focused sentences (50-80 words maximum).
+1. Answer in 2-3 focused sentences (80-120 words).
 2. Base the answer only on retrieved texts above.
 3. Do NOT cite sources or provide book names unless the user explicitly demands it.
 4. {script_instruction}{domain_text}
 
-Provide a highly concise answer:"""
+Provide a concise, clear answer:"""
 
     def _format_conversation_for_llm(
         self,
@@ -3195,48 +3215,39 @@ EARLY CONVERSATION:
         domain_spotlight = self._get_domain_pratyantar_spotlight(query)
 
         # ════════════════════════════════════════════════════════════════════════
-        # MOBILE RESPONSE LENGTH CONTROL (150 words max)
+        # MOBILE RESPONSE LENGTH CONTROL (250 words max)
         # ════════════════════════════════════════════════════════════════════════
         mobile_length_instruction = """
 
 RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
-1. MAXIMUM LENGTH: 150-200 words total. Be thorough but not padded.
-2. FIRST SENTENCE: Direct, clear answer to the question.
-3. STRUCTURE: Direct Answer → 2-3 Key Factors from the chart → Timing → Remedy (if applicable). DO NOT ask follow-up questions.
+1. MAXIMUM LENGTH: 200-250 words total. Use the space — a fuller answer is better than a clipped one.
+2. TONE: Write like a warm, knowledgeable astrologer speaking directly to the person — not a data sheet.
+   Use natural sentence flow. Weave chart factors into a coherent narrative, not a bullet list.
+   Show genuine care: acknowledge the importance of the question before diving into analysis.
+3. STRUCTURE (narrative, not mechanical):
+   - Opening: 1 sentence acknowledging the topic warmly and giving the headline answer.
+   - Body: 3-4 sentences covering the key chart factors with their real-world meaning explained, not just stated.
+   - Timing: 1-2 sentences giving the specific Pratyantar window with a reason it's favorable.
+   - Next Favorable Window: as instructed above.
+   DO NOT use bullet lists. DO NOT ask follow-up questions.
 4. HOUSE ANNOTATIONS (MANDATORY): Every time you mention a house by number, ALWAYS
    add its primary domain in parentheses immediately after. No exceptions.
    Use this exact mapping:
-     1st house (Self & Personality)
-     2nd house (Wealth & Family)
-     3rd house (Courage & Siblings)
-     4th house (Home & Mother)
-     5th house (Children & Intellect)
-     6th house (Health & Enemies)
-     7th house (Marriage & Partnership)
-     8th house (Longevity & Transformation)
-     9th house (Luck & Dharma)
-     10th house (Career & Status)
-     11th house (Gains & Desires)
-     12th house (Losses & Moksha)
-   Examples:
-     ✅ "7th house (Marriage & Partnership) ki lord Venus..."
-     ✅ "10th house (Career & Status) mein Sun strong hai..."
-     ❌ "7th house ki lord Venus..." (missing annotation)
-5. NO META-COMMENTARY: Don't explain what you're doing or analyzing.
-   - Bad: "Based on your chart, I can see..."
-   - Good: "Your 7th house (Marriage & Partnership) lord Venus is..."
-6. NO THANKING: User details from backend.
-7. GET STRAIGHT TO THE POINT: Cut all filler words. Make every word count.
-8. NO FOLLOW-UP QUESTIONS: Never end with questions like "Do you want remedies?", "Shall I explain more?", "Would you like to know...?" Just give the complete answer directly.
+     1st house (Self & Personality) | 2nd house (Wealth & Family) | 3rd house (Courage & Siblings)
+     4th house (Home & Mother) | 5th house (Children & Intellect) | 6th house (Health & Service)
+     7th house (Marriage & Partnership) | 8th house (Longevity & Transformation) | 9th house (Luck & Dharma)
+     10th house (Career & Status) | 11th house (Gains & Desires) | 12th house (Foreign & Moksha)
+5. NO META-COMMENTARY: Never say "Based on your chart I can see..." or "Looking at your horoscope...".
+   Start directly with the insight. The user knows you're reading their chart.
+6. NO THANKING: User details come from the backend — never thank them for providing details.
+7. NO FOLLOW-UP QUESTIONS: Never end with "Do you want remedies?", "Shall I explain more?" etc.
+   Give the complete, self-contained answer.
 
-EXAMPLE GOOD RESPONSE (Marriage — shows multi-house analysis):
-"Aapki 7th house (Marriage & Partnership) ki lord Venus H2 mein hai — marital stability ke liye accha, lekin H5 (Children & Intellect) ki lord Saturn ki 7th par drishti thodi delay de raha hai. 2nd house (Wealth & Family) ka lord Jupiter strong hai jo family support dikhata hai. Timing: Venus Pratyantar [cite exact start→end from Pratyantar table above] — yeh peak marriage window hai."
+EXAMPLE GOOD RESPONSE (Marriage — warm, human, narrative):
+"Shadi ke liye aapki kundli mein kuch strong indications hain. 7th house (Marriage & Partnership) ki lord Venus H2 (Wealth & Family) mein hai — iska matlab hai partner family-loving aur financially grounded hoga. Lekin Saturn ki 7th par drishti thodi patience maangti hai — yeh delay nahi, balki ek solid foundation ke liye time hai. 2nd house (Wealth & Family) ka lord Jupiter strong position mein hai jo family ka full support dikhata hai. Timing ki baat karein toh Venus Pratyantar [cite exact dates from table above] mein bahut promising window ban rahi hai — Jupiter uswaqt H7 (Marriage & Partnership) se guzar raha hai jo ek double confirmation hai. Next Favorable Window: Venus Pratyantar [start → end] — Jupiter transit H7 se align kar raha hai, yeh peak time hai."
 
-EXAMPLE GOOD RESPONSE (Career — shows multi-house analysis):
-"10th house (Career & Status) ki lord Mercury H2 mein hai — communication-based income. 6th house (Health & Enemies) ka lord Saturn H10 mein hai — service sector mein stability. 11th house (Gains & Desires) ka lord Moon strong hai — gains ka yog. Saturn Pratyantar [cite exact start→end from Pratyantar table above] mein Saturn gochar H10 se align kar raha hai — promotion ya new role ka peak time."
-
-EXAMPLE GOOD RESPONSE (Foreign Travel — shows multi-house analysis):
-"9th house (Luck & Dharma) ki lord Venus H12 mein hai — yahi foreign settlement ka strong yog hai. 12th house (Losses & Moksha) ka lord Mars active hai. Rahu H9 se transit kar raha hai — foreign connection trigger. Rahu Pratyantar [cite exact start→end from Pratyantar table above] — foreign opportunity ki peak window."
+EXAMPLE GOOD RESPONSE (Career — warm, human, narrative):
+"Career mein aapka chart ek solid professional journey dikhata hai. 10th house (Career & Status) ki lord Mercury H2 (Wealth & Family) mein hai — communication, writing, ya finance-related fields mein aap naturally strong hain. 6th house (Health & Service) ka lord Saturn 10th mein hai jo service sector ya government work mein long-term stability ka yog banata hai — Saturn jo deta hai, tikau deta hai. Income ke liye 11th house (Gains & Desires) ka lord Moon bhi favorable position mein hai. Saturn Pratyantar [cite exact dates] mein Saturn gochar H10 se align kar raha hai — yeh promotion ya naye role ke liye sabse strong window hai. Next Favorable Window: Saturn Pratyantar [start → end] — career breakthrough ka ideal time."
 """
         instructions += mobile_length_instruction
 

@@ -1450,10 +1450,10 @@ async def send_message(request: SendMessageRequest):
         if answer != original_answer:
             print(f"[POST_PROCESS] Removed 'thank you' pattern")
         
-        # Enforce 150-word maximum for mobile
-        MAX_MOBILE_WORDS = 150
+        # Enforce 250-word maximum for mobile
+        MAX_MOBILE_WORDS = 250
         word_count = len(answer.split())
-        
+
         if word_count > MAX_MOBILE_WORDS:
             print(f"[MOBILE] Response too long ({word_count} words), truncating to {MAX_MOBILE_WORDS}...")
             
