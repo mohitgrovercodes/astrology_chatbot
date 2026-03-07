@@ -2045,8 +2045,14 @@ this table, STOP and use the correct lord from the table above.
             for _pl in _order:
                 _pd = _planets.get(_pl, {})
                 if _pd:
+                    _retro = '  [RETRO]' if _pd.get('retrograde') else ''
+                    _combust = '  [COMBUST]' if _pd.get('combust') else ''
+                    _pada = _pd.get('nakshatra_pada', '?')
+                    _nksh = _pd.get('nakshatra', 'N/A')
+                    _deg = _pd.get('degree', 0.0)
+                    _dignity = _pd.get('dignity', {}).get('status', '') if isinstance(_pd.get('dignity'), dict) else ''
                     _planet_lines.append(
-                        f"• {_pl:8}: {_pd.get('sign', 'N/A'):12} H{_pd.get('house', '?')}"
+                        f"• {_pl:8}: {_pd.get('sign', 'N/A'):12} H{_pd.get('house', '?')} {_deg:.1f}° | {_nksh} P{_pada} | {_dignity}{_retro}{_combust}"
                     )
             if planet_block:
                 _planet_lines.append("")
@@ -2551,6 +2557,26 @@ Retain the astrological data but remove the violating content (e.g., remove deat
 
         domain_text = ("\n" + "\n".join(f"- {h}" for h in domain_hints)) if domain_hints else ""
 
+        # ── MANDATORY NEXT FAVORABLE WINDOW (all prediction responses) ─────────
+        # Injected regardless of whether the user explicitly asked for timing.
+        # The data is already in the prompt (upcoming_pds_str, next_ad_fp_str,
+        # upcoming_ads_str) so no extra calculation is needed.
+        next_window_block = """
+
+MANDATORY — NEXT FAVORABLE WINDOW (include in EVERY prediction response):
+After your main answer, always add a brief "Next Favorable Window" section that:
+  1. Identifies the single most relevant upcoming Pratyantar from Step 3.5/3.6 above
+     for the topic of this query (e.g. Venus Pratyantar for marriage/finance, Saturn
+     Pratyantar for career, Moon/Mars Pratyantar for home, Rahu Pratyantar for travel).
+  2. States the exact start→end dates from the Pratyantar table (do NOT invent dates).
+  3. Mentions one supporting Gochara factor from the transit block that confirms this
+     window (e.g. "Jupiter transiting H7 from Moon" for marriage).
+  4. Keeps it to 1-2 sentences — concise and actionable.
+  Format: "Next Favorable Window: [Planet] Pratyantar [start → end] — [one-line reason]."
+  If NO suitable upcoming Pratyantar exists in Step 3.5 data, use Step 3.6
+  (opening Pratyantar of next Antardasha) and note that clearly.
+  NEVER skip this section. NEVER fabricate dates not listed in the dasha tables."""
+
         if wants_detail:
             if mode == 'prediction':
                 return f"""INSTRUCTIONS:
@@ -2558,7 +2584,7 @@ Retain the astrological data but remove the violating content (e.g., remove deat
 2. Ground every claim in specific chart data (actual houses, signs, planets listed above).
 3. Include dasha periods AND approximate calendar timeframes for any timing claims.
 4. Do NOT cite classical texts or provide book names as sources unless the user explicitly demands it.
-5. {script_instruction}{domain_text}
+5. {script_instruction}{domain_text}{next_window_block}
 
 Provide a thorough, detailed prediction:"""
             else:
@@ -2571,22 +2597,22 @@ Provide a thorough, detailed prediction:"""
 Provide a detailed explanation:"""
         else:
             if mode == 'prediction':
-                return f"""INSTRUCTIONS (CONCISE MODE):
-1. Give a direct, astrological answer in 2-3 short sentences.
-2. Mention only ONE or TWO key chart factors.
-3. If timing is relevant, give one specific period (e.g., "mid-2026").
+                return f"""INSTRUCTIONS:
+1. Give a warm, human, narrative answer — 3-5 sentences flowing naturally (100-150 words).
+2. Cover 2-3 key chart factors with their real-world meaning, not just technical data.
+3. Include one specific timing window with a brief reason it's favorable.
 4. Do NOT cite sources or provide book names unless the user explicitly demands it.
-5. {script_instruction}{domain_text}
+5. {script_instruction}{domain_text}{next_window_block}
 
-Provide a highly concise, self-contained response:"""
+Provide a warm, self-contained response:"""
             else:
                 return f"""INSTRUCTIONS (CONCISE MODE):
-1. Answer in 1-2 focused sentences (50-80 words maximum).
+1. Answer in 2-3 focused sentences (80-120 words).
 2. Base the answer only on retrieved texts above.
 3. Do NOT cite sources or provide book names unless the user explicitly demands it.
 4. {script_instruction}{domain_text}
 
-Provide a highly concise answer:"""
+Provide a concise, clear answer:"""
 
     def _format_conversation_for_llm(
         self,
@@ -3189,48 +3215,39 @@ EARLY CONVERSATION:
         domain_spotlight = self._get_domain_pratyantar_spotlight(query)
 
         # ════════════════════════════════════════════════════════════════════════
-        # MOBILE RESPONSE LENGTH CONTROL (150 words max)
+        # MOBILE RESPONSE LENGTH CONTROL (250 words max)
         # ════════════════════════════════════════════════════════════════════════
         mobile_length_instruction = """
 
 RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
-1. MAXIMUM LENGTH: 150-200 words total. Be thorough but not padded.
-2. FIRST SENTENCE: Direct, clear answer to the question.
-3. STRUCTURE: Direct Answer → 2-3 Key Factors from the chart → Timing → Remedy (if applicable). DO NOT ask follow-up questions.
+1. MAXIMUM LENGTH: 200-250 words total. Use the space — a fuller answer is better than a clipped one.
+2. TONE: Write like a warm, knowledgeable astrologer speaking directly to the person — not a data sheet.
+   Use natural sentence flow. Weave chart factors into a coherent narrative, not a bullet list.
+   Show genuine care: acknowledge the importance of the question before diving into analysis.
+3. STRUCTURE (narrative, not mechanical):
+   - Opening: 1 sentence acknowledging the topic warmly and giving the headline answer.
+   - Body: 3-4 sentences covering the key chart factors with their real-world meaning explained, not just stated.
+   - Timing: 1-2 sentences giving the specific Pratyantar window with a reason it's favorable.
+   - Next Favorable Window: as instructed above.
+   DO NOT use bullet lists. DO NOT ask follow-up questions.
 4. HOUSE ANNOTATIONS (MANDATORY): Every time you mention a house by number, ALWAYS
    add its primary domain in parentheses immediately after. No exceptions.
    Use this exact mapping:
-     1st house (Self & Personality)
-     2nd house (Wealth & Family)
-     3rd house (Courage & Siblings)
-     4th house (Home & Mother)
-     5th house (Children & Intellect)
-     6th house (Health & Enemies)
-     7th house (Marriage & Partnership)
-     8th house (Longevity & Transformation)
-     9th house (Luck & Dharma)
-     10th house (Career & Status)
-     11th house (Gains & Desires)
-     12th house (Losses & Moksha)
-   Examples:
-     ✅ "7th house (Marriage & Partnership) ki lord Venus..."
-     ✅ "10th house (Career & Status) mein Sun strong hai..."
-     ❌ "7th house ki lord Venus..." (missing annotation)
-5. NO META-COMMENTARY: Don't explain what you're doing or analyzing.
-   - Bad: "Based on your chart, I can see..."
-   - Good: "Your 7th house (Marriage & Partnership) lord Venus is..."
-6. NO THANKING: User details from backend.
-7. GET STRAIGHT TO THE POINT: Cut all filler words. Make every word count.
-8. NO FOLLOW-UP QUESTIONS: Never end with questions like "Do you want remedies?", "Shall I explain more?", "Would you like to know...?" Just give the complete answer directly.
+     1st house (Self & Personality) | 2nd house (Wealth & Family) | 3rd house (Courage & Siblings)
+     4th house (Home & Mother) | 5th house (Children & Intellect) | 6th house (Health & Service)
+     7th house (Marriage & Partnership) | 8th house (Longevity & Transformation) | 9th house (Luck & Dharma)
+     10th house (Career & Status) | 11th house (Gains & Desires) | 12th house (Foreign & Moksha)
+5. NO META-COMMENTARY: Never say "Based on your chart I can see..." or "Looking at your horoscope...".
+   Start directly with the insight. The user knows you're reading their chart.
+6. NO THANKING: User details come from the backend — never thank them for providing details.
+7. NO FOLLOW-UP QUESTIONS: Never end with "Do you want remedies?", "Shall I explain more?" etc.
+   Give the complete, self-contained answer.
 
-EXAMPLE GOOD RESPONSE (Marriage — shows multi-house analysis):
-"Aapki 7th house (Marriage & Partnership) ki lord Venus H2 mein hai — marital stability ke liye accha, lekin H5 (Children & Intellect) ki lord Saturn ki 7th par drishti thodi delay de raha hai. 2nd house (Wealth & Family) ka lord Jupiter strong hai jo family support dikhata hai. Timing: Venus Pratyantar [cite exact start→end from Pratyantar table above] — yeh peak marriage window hai."
+EXAMPLE GOOD RESPONSE (Marriage — warm, human, narrative):
+"Shadi ke liye aapki kundli mein kuch strong indications hain. 7th house (Marriage & Partnership) ki lord Venus H2 (Wealth & Family) mein hai — iska matlab hai partner family-loving aur financially grounded hoga. Lekin Saturn ki 7th par drishti thodi patience maangti hai — yeh delay nahi, balki ek solid foundation ke liye time hai. 2nd house (Wealth & Family) ka lord Jupiter strong position mein hai jo family ka full support dikhata hai. Timing ki baat karein toh Venus Pratyantar [cite exact dates from table above] mein bahut promising window ban rahi hai — Jupiter uswaqt H7 (Marriage & Partnership) se guzar raha hai jo ek double confirmation hai. Next Favorable Window: Venus Pratyantar [start → end] — Jupiter transit H7 se align kar raha hai, yeh peak time hai."
 
-EXAMPLE GOOD RESPONSE (Career — shows multi-house analysis):
-"10th house (Career & Status) ki lord Mercury H2 mein hai — communication-based income. 6th house (Health & Enemies) ka lord Saturn H10 mein hai — service sector mein stability. 11th house (Gains & Desires) ka lord Moon strong hai — gains ka yog. Saturn Pratyantar [cite exact start→end from Pratyantar table above] mein Saturn gochar H10 se align kar raha hai — promotion ya new role ka peak time."
-
-EXAMPLE GOOD RESPONSE (Foreign Travel — shows multi-house analysis):
-"9th house (Luck & Dharma) ki lord Venus H12 mein hai — yahi foreign settlement ka strong yog hai. 12th house (Losses & Moksha) ka lord Mars active hai. Rahu H9 se transit kar raha hai — foreign connection trigger. Rahu Pratyantar [cite exact start→end from Pratyantar table above] — foreign opportunity ki peak window."
+EXAMPLE GOOD RESPONSE (Career — warm, human, narrative):
+"Career mein aapka chart ek solid professional journey dikhata hai. 10th house (Career & Status) ki lord Mercury H2 (Wealth & Family) mein hai — communication, writing, ya finance-related fields mein aap naturally strong hain. 6th house (Health & Service) ka lord Saturn 10th mein hai jo service sector ya government work mein long-term stability ka yog banata hai — Saturn jo deta hai, tikau deta hai. Income ke liye 11th house (Gains & Desires) ka lord Moon bhi favorable position mein hai. Saturn Pratyantar [cite exact dates] mein Saturn gochar H10 se align kar raha hai — yeh promotion ya naye role ke liye sabse strong window hai. Next Favorable Window: Saturn Pratyantar [start → end] — career breakthrough ka ideal time."
 """
         instructions += mobile_length_instruction
 
@@ -3313,16 +3330,25 @@ All values below are CALCULATED, not inferred. Use ONLY these values.
 ════════════════════════════════════════════════════════════════════════
 
 BIRTH CHART PLANETARY POSITIONS:
+  Format: Sign | House | Degree | Nakshatra Pada | Dignity | [RETRO] [COMBUST]
+  INTERPRETATION PRIORITY (apply in this order — each layer modifies the one before):
+  1. Dignity     — sets the base strength (Exalted > Own/Moolatrikona > Friend > Neutral > Enemy > Debilitated)
+  2. [RETRO]     — retrograde planet turns results inward; expression is delayed then intensified; treat as strengthened but internalized
+  3. [COMBUST]   — within Sun's orb; planet's significations are weakened/suppressed; reduce strength assessment
+  4. Nakshatra   — colours the planet's expression (Ketu-ruled nakshatras = karmic; Rahu = material ambition, etc.)
+  5. Pada        — navamsa quarter; odd pada = more outward, even = more inward expression; P1/P3 often stronger for material results
+  6. Degree      — note degrees 0–1 (very new energy, unsteady) and 29° (critical, culminating); gandanta at water-fire sign junctions
+  NOTE: A [RETRO][COMBUST] planet has competing modifiers — retrograde strengthens, combustion weakens; net effect is partial and erratic.
 • Ascendant (Lagna): {chart_data.get('lagna', {}).get('sign', 'Not available')} {chart_data.get('lagna', {}).get('degree', 0.0):.2f}° | Nakshatra: {chart_data.get('lagna', {}).get('nakshatra', 'N/A')} (Lord: {chart_data.get('lagna', {}).get('nakshatra_lord', 'N/A')})
-• Sun:     {chart_data.get('planets', {}).get('SUN',     {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('SUN',     {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('SUN',     {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('SUN',     {}).get('dignity', {}).get('status', '')}
-• Moon:    {chart_data.get('planets', {}).get('MOON',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MOON',    {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('MOON',    {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('MOON',    {}).get('dignity', {}).get('status', '')}
-• Mars:    {chart_data.get('planets', {}).get('MARS',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MARS',    {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('MARS',    {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('MARS',    {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('MARS', {}).get('retrograde') else ''}
-• Mercury: {chart_data.get('planets', {}).get('MERCURY', {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MERCURY', {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('MERCURY', {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('MERCURY', {}).get('dignity', {}).get('status', '')}{'  [COMBUST]' if chart_data.get('planets', {}).get('MERCURY', {}).get('combust') else ''}
-• Jupiter: {chart_data.get('planets', {}).get('JUPITER', {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('JUPITER', {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('JUPITER', {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('JUPITER', {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('JUPITER', {}).get('retrograde') else ''}
-• Venus:   {chart_data.get('planets', {}).get('VENUS',   {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('VENUS',   {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('VENUS',   {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('VENUS',   {}).get('dignity', {}).get('status', '')}{'  [COMBUST]' if chart_data.get('planets', {}).get('VENUS', {}).get('combust') else ''}
-• Saturn:  {chart_data.get('planets', {}).get('SATURN',  {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('SATURN',  {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('SATURN',  {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('SATURN',  {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('SATURN', {}).get('retrograde') else ''}
-• Rahu:    {chart_data.get('planets', {}).get('RAHU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('RAHU',    {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('RAHU',    {}).get('nakshatra', 'N/A')}  [always Retro]
-• Ketu:    {chart_data.get('planets', {}).get('KETU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('KETU',    {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('KETU',    {}).get('nakshatra', 'N/A')}  [always Retro]
+• Sun:     {chart_data.get('planets', {}).get('SUN',     {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('SUN',     {}).get('house', '?')} {chart_data.get('planets', {}).get('SUN',     {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('SUN',     {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('SUN',     {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('SUN',     {}).get('dignity', {}).get('status', '')}
+• Moon:    {chart_data.get('planets', {}).get('MOON',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MOON',    {}).get('house', '?')} {chart_data.get('planets', {}).get('MOON',    {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('MOON',    {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('MOON',    {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('MOON',    {}).get('dignity', {}).get('status', '')}{'  [COMBUST]' if chart_data.get('planets', {}).get('MOON', {}).get('combust') else ''}
+• Mars:    {chart_data.get('planets', {}).get('MARS',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MARS',    {}).get('house', '?')} {chart_data.get('planets', {}).get('MARS',    {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('MARS',    {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('MARS',    {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('MARS',    {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('MARS', {}).get('retrograde') else ''}{'  [COMBUST]' if chart_data.get('planets', {}).get('MARS', {}).get('combust') else ''}
+• Mercury: {chart_data.get('planets', {}).get('MERCURY', {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MERCURY', {}).get('house', '?')} {chart_data.get('planets', {}).get('MERCURY', {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('MERCURY', {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('MERCURY', {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('MERCURY', {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('MERCURY', {}).get('retrograde') else ''}{'  [COMBUST]' if chart_data.get('planets', {}).get('MERCURY', {}).get('combust') else ''}
+• Jupiter: {chart_data.get('planets', {}).get('JUPITER', {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('JUPITER', {}).get('house', '?')} {chart_data.get('planets', {}).get('JUPITER', {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('JUPITER', {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('JUPITER', {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('JUPITER', {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('JUPITER', {}).get('retrograde') else ''}{'  [COMBUST]' if chart_data.get('planets', {}).get('JUPITER', {}).get('combust') else ''}
+• Venus:   {chart_data.get('planets', {}).get('VENUS',   {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('VENUS',   {}).get('house', '?')} {chart_data.get('planets', {}).get('VENUS',   {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('VENUS',   {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('VENUS',   {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('VENUS',   {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('VENUS', {}).get('retrograde') else ''}{'  [COMBUST]' if chart_data.get('planets', {}).get('VENUS', {}).get('combust') else ''}
+• Saturn:  {chart_data.get('planets', {}).get('SATURN',  {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('SATURN',  {}).get('house', '?')} {chart_data.get('planets', {}).get('SATURN',  {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('SATURN',  {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('SATURN',  {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('SATURN',  {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('SATURN', {}).get('retrograde') else ''}{'  [COMBUST]' if chart_data.get('planets', {}).get('SATURN', {}).get('combust') else ''}
+• Rahu:    {chart_data.get('planets', {}).get('RAHU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('RAHU',    {}).get('house', '?')} {chart_data.get('planets', {}).get('RAHU',    {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('RAHU',    {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('RAHU',    {}).get('nakshatra_pada', '?')} [always Retro]
+• Ketu:    {chart_data.get('planets', {}).get('KETU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('KETU',    {}).get('house', '?')} {chart_data.get('planets', {}).get('KETU',    {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('KETU',    {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('KETU',    {}).get('nakshatra_pada', '?')} [always Retro]
 {lagnesh_note}
 
 {house_lords_block}
@@ -3377,16 +3403,25 @@ Before stating any fact, perform this internal audit:
   ─────────────────────────────────────────────────────────────────────────────
   Planet dignity (strong/weak/  │ Dignity column in BIRTH CHART PLANETARY POSITIONS
   exalted/debilitated)          │ NOT general planet reputation from training knowledge
+  Retrograde effect             │ [RETRO] flag on that planet's row — ONLY if flag present
+                                │ If absent, planet is DIRECT — do not assume retrograde
+  Combustion effect             │ [COMBUST] flag on that planet's row — ONLY if flag present
+                                │ If absent, planet is NOT combust — do not assume it
   House lord                    │ HOUSE LORDS table — cite both planet AND house sign
                                 │ Format: "Nth house (domain) lord [PLANET]"
   Dasha/timing dates            │ Step 2/3/3.5/3.6 dasha tables — exact dates only
   Transit effect on native      │ CURRENT TRANSITS + GOCHARA ANALYSIS block
   Planet sign/house/nakshatra   │ BIRTH CHART PLANETARY POSITIONS rows
+  Nakshatra pada                │ Pada column (P1–P4) in BIRTH CHART PLANETARY POSITIONS
   Vargottama claim              │ VARGOTTAMA PLANETS line — only if planet listed there
   ─────────────────────────────────────────────────────────────────────────────
 
 PROHIBITED INFERENCES (NEVER do these):
   X Claiming a planet is strong/weak without citing its computed dignity status
+  X Stating a planet is retrograde unless [RETRO] appears on its row in the table
+  X Stating a planet is combust unless [COMBUST] appears on its row in the table
+  X Reducing a planet's strength due to combustion when [COMBUST] is not flagged
+  X Amplifying a planet's results as retrograde when [RETRO] is not flagged
   X Deriving house lords from birth date or Sun sign using training knowledge
   X Citing transit positions or effects not shown in CURRENT TRANSITS section
   X Computing or inventing sub-period dates not listed in Step 3.5/3.6
