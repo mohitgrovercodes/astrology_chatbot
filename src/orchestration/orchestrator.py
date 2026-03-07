@@ -1941,8 +1941,6 @@ this table, STOP and use the correct lord from the table above.
         system_prompt = f"{system_prompt}\n\n{constitution}"
 
         # ── CHART ANCHOR: inject at top so house lords are grounded ───────────
-        _cd_for_anchor = (_p.get("chart_data") or {}) if "_p" not in dir() else {}
-        # _p is defined later in this method; use user_profile directly here
         _up_cd = user_profile.get("chart_data") or {}
         chart_anchor_theory = self._build_chart_anchor_block(_up_cd)
         if chart_anchor_theory:
