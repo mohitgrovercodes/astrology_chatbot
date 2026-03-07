@@ -656,6 +656,47 @@ class EnhancedLangGraphOrchestrator:
             return state
         # ─────────────────────────────────────────────────────────────────────
 
+        # Keyword pre-check for all chitchat routes.
+        # Short single-word / common phrases (especially multilingual ones) often fall
+        # below the 0.7 embedding threshold because the mean route vector is diluted
+        # across many diverse examples. Exact keyword matching bypasses this reliably.
+        _CHITCHAT_KEYWORD_ROUTES = {
+            # greeting
+            'hi': 'greeting', 'hello': 'greeting', 'hey': 'greeting',
+            'namaste': 'greeting', 'namaskaram': 'greeting', 'vanakkam': 'greeting',
+            'hola': 'greeting', 'howdy': 'greeting', 'wassup': 'greeting',
+            'sup': 'greeting', 'yo': 'greeting', 'greetings': 'greeting',
+            'salaam': 'greeting', 'bonjour': 'greeting',
+            'good morning': 'greeting', 'good evening': 'greeting', 'good afternoon': 'greeting',
+            # gratitude
+            'thanks': 'gratitude', 'thank you': 'gratitude', 'thankyou': 'gratitude',
+            'appreciate it': 'gratitude', 'grateful': 'gratitude',
+            'dhanyavad': 'gratitude', 'shukriya': 'gratitude',
+            'dhanyawad': 'gratitude', 'shukriya-ji': 'gratitude',
+            # wellbeing
+            'how are you': 'wellbeing', "how's it going": 'wellbeing',
+            "what's up": 'wellbeing', 'how do you do': 'wellbeing',
+            'kaise ho': 'wellbeing', 'kya haal hai': 'wellbeing', 'all good': 'wellbeing',
+            # farewell
+            'bye': 'farewell', 'goodbye': 'farewell', 'see you': 'farewell',
+            'talk later': 'farewell', 'take care': 'farewell',
+            'alvida': 'farewell', 'khuda hafiz': 'farewell', 'catch you later': 'farewell',
+            # closure
+            'ok': 'closure', 'okay': 'closure', 'got it': 'closure',
+            'understood': 'closure', 'alright': 'closure', 'sure': 'closure',
+            'theek hai': 'closure', 'samajh gaya': 'closure', 'thik hai': 'closure',
+            'achha': 'closure', 'fine': 'closure', 'makes sense': 'closure',
+        }
+        q_normalized = state['query'].lower().strip().rstrip('!.')
+        _kw_route = _CHITCHAT_KEYWORD_ROUTES.get(q_normalized)
+        if _kw_route:
+            print(f"[INTENT] Keyword chitchat match: '{state['query']}' -> {_kw_route}")
+            state['intent'] = 'CHITCHAT'
+            state['confidence'] = 1.0
+            state['intent_reasoning'] = f'Keyword chitchat match: {_kw_route}'
+            state['chitchat_subtype'] = _kw_route
+            return state
+
         # PHASE 11: Semantic Chitchat Router
         # Check for simple greetings semantically
         chitchat_match = None
@@ -713,10 +754,14 @@ class EnhancedLangGraphOrchestrator:
         from src.ai.personas import get_contextual_greeting, get_greeting
         
         # SEMANTIC ROUTING: Detect chitchat type using semantic similarity
+        # First, check if the intent node already determined the subtype via keyword match.
         chitchat_match = None
-        if self.semantic_router.model:
+        _predetected_subtype = state.get('chitchat_subtype')
+        if _predetected_subtype:
+            chitchat_match = type('_FakeMatch', (), {'name': _predetected_subtype, 'confidence': 1.0})()
+        elif self.semantic_router.model:
             chitchat_match = self.semantic_router.route(query, threshold=0.70)
-        
+
         # Handle based on semantic match
         if chitchat_match:
             match_type = chitchat_match.name
