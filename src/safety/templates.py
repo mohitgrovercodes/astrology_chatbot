@@ -54,6 +54,10 @@ Questions involving children's futures, marriages, or major life decisions requi
 
 If you're a parent seeking general guidance about supporting your child's development, I can discuss that in educational terms. Otherwise, I'm here to help with questions about your own chart."""
 
+HARD_BLOCK_VULGAR = """I'm here to provide professional Vedic astrology guidance and I'm not able to respond to messages that contain vulgar, explicit, or sexually inappropriate content.
+
+Please keep our conversation respectful so I can continue helping you with meaningful astrological insights about your chart, life patterns, and timing."""
+
 
 # ============================================================================
 # SOFT BLOCK TEMPLATES (Decline Politely)
@@ -459,6 +463,8 @@ RESPONSE_TEMPLATES: Dict[str, str] = {
     "HARD_BLOCK_HARM": HARD_BLOCK_HARM,
     "HARD_BLOCK_HARMFUL_INTENT": HARD_BLOCK_HARM,
     "HARD_BLOCK_UNDERAGE": HARD_BLOCK_UNDERAGE,
+    "HARD_BLOCK_VULGAR_CONTENT": HARD_BLOCK_VULGAR,
+    "HARD_BLOCK_VULGAR": HARD_BLOCK_VULGAR,
     
     # Soft Blocks
     "SOFT_BLOCK_FORTUNE": SOFT_BLOCK_FORTUNE,

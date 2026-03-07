@@ -2045,8 +2045,14 @@ this table, STOP and use the correct lord from the table above.
             for _pl in _order:
                 _pd = _planets.get(_pl, {})
                 if _pd:
+                    _retro = '  [RETRO]' if _pd.get('retrograde') else ''
+                    _combust = '  [COMBUST]' if _pd.get('combust') else ''
+                    _pada = _pd.get('nakshatra_pada', '?')
+                    _nksh = _pd.get('nakshatra', 'N/A')
+                    _deg = _pd.get('degree', 0.0)
+                    _dignity = _pd.get('dignity', {}).get('status', '') if isinstance(_pd.get('dignity'), dict) else ''
                     _planet_lines.append(
-                        f"• {_pl:8}: {_pd.get('sign', 'N/A'):12} H{_pd.get('house', '?')}"
+                        f"• {_pl:8}: {_pd.get('sign', 'N/A'):12} H{_pd.get('house', '?')} {_deg:.1f}° | {_nksh} P{_pada} | {_dignity}{_retro}{_combust}"
                     )
             if planet_block:
                 _planet_lines.append("")
@@ -3313,16 +3319,25 @@ All values below are CALCULATED, not inferred. Use ONLY these values.
 ════════════════════════════════════════════════════════════════════════
 
 BIRTH CHART PLANETARY POSITIONS:
+  Format: Sign | House | Degree | Nakshatra Pada | Dignity | [RETRO] [COMBUST]
+  INTERPRETATION PRIORITY (apply in this order — each layer modifies the one before):
+  1. Dignity     — sets the base strength (Exalted > Own/Moolatrikona > Friend > Neutral > Enemy > Debilitated)
+  2. [RETRO]     — retrograde planet turns results inward; expression is delayed then intensified; treat as strengthened but internalized
+  3. [COMBUST]   — within Sun's orb; planet's significations are weakened/suppressed; reduce strength assessment
+  4. Nakshatra   — colours the planet's expression (Ketu-ruled nakshatras = karmic; Rahu = material ambition, etc.)
+  5. Pada        — navamsa quarter; odd pada = more outward, even = more inward expression; P1/P3 often stronger for material results
+  6. Degree      — note degrees 0–1 (very new energy, unsteady) and 29° (critical, culminating); gandanta at water-fire sign junctions
+  NOTE: A [RETRO][COMBUST] planet has competing modifiers — retrograde strengthens, combustion weakens; net effect is partial and erratic.
 • Ascendant (Lagna): {chart_data.get('lagna', {}).get('sign', 'Not available')} {chart_data.get('lagna', {}).get('degree', 0.0):.2f}° | Nakshatra: {chart_data.get('lagna', {}).get('nakshatra', 'N/A')} (Lord: {chart_data.get('lagna', {}).get('nakshatra_lord', 'N/A')})
-• Sun:     {chart_data.get('planets', {}).get('SUN',     {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('SUN',     {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('SUN',     {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('SUN',     {}).get('dignity', {}).get('status', '')}
-• Moon:    {chart_data.get('planets', {}).get('MOON',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MOON',    {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('MOON',    {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('MOON',    {}).get('dignity', {}).get('status', '')}
-• Mars:    {chart_data.get('planets', {}).get('MARS',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MARS',    {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('MARS',    {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('MARS',    {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('MARS', {}).get('retrograde') else ''}
-• Mercury: {chart_data.get('planets', {}).get('MERCURY', {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MERCURY', {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('MERCURY', {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('MERCURY', {}).get('dignity', {}).get('status', '')}{'  [COMBUST]' if chart_data.get('planets', {}).get('MERCURY', {}).get('combust') else ''}
-• Jupiter: {chart_data.get('planets', {}).get('JUPITER', {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('JUPITER', {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('JUPITER', {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('JUPITER', {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('JUPITER', {}).get('retrograde') else ''}
-• Venus:   {chart_data.get('planets', {}).get('VENUS',   {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('VENUS',   {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('VENUS',   {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('VENUS',   {}).get('dignity', {}).get('status', '')}{'  [COMBUST]' if chart_data.get('planets', {}).get('VENUS', {}).get('combust') else ''}
-• Saturn:  {chart_data.get('planets', {}).get('SATURN',  {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('SATURN',  {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('SATURN',  {}).get('nakshatra', 'N/A')} | {chart_data.get('planets', {}).get('SATURN',  {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('SATURN', {}).get('retrograde') else ''}
-• Rahu:    {chart_data.get('planets', {}).get('RAHU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('RAHU',    {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('RAHU',    {}).get('nakshatra', 'N/A')}  [always Retro]
-• Ketu:    {chart_data.get('planets', {}).get('KETU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('KETU',    {}).get('house', '?')} | Nakshatra: {chart_data.get('planets', {}).get('KETU',    {}).get('nakshatra', 'N/A')}  [always Retro]
+• Sun:     {chart_data.get('planets', {}).get('SUN',     {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('SUN',     {}).get('house', '?')} {chart_data.get('planets', {}).get('SUN',     {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('SUN',     {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('SUN',     {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('SUN',     {}).get('dignity', {}).get('status', '')}
+• Moon:    {chart_data.get('planets', {}).get('MOON',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MOON',    {}).get('house', '?')} {chart_data.get('planets', {}).get('MOON',    {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('MOON',    {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('MOON',    {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('MOON',    {}).get('dignity', {}).get('status', '')}{'  [COMBUST]' if chart_data.get('planets', {}).get('MOON', {}).get('combust') else ''}
+• Mars:    {chart_data.get('planets', {}).get('MARS',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MARS',    {}).get('house', '?')} {chart_data.get('planets', {}).get('MARS',    {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('MARS',    {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('MARS',    {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('MARS',    {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('MARS', {}).get('retrograde') else ''}{'  [COMBUST]' if chart_data.get('planets', {}).get('MARS', {}).get('combust') else ''}
+• Mercury: {chart_data.get('planets', {}).get('MERCURY', {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MERCURY', {}).get('house', '?')} {chart_data.get('planets', {}).get('MERCURY', {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('MERCURY', {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('MERCURY', {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('MERCURY', {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('MERCURY', {}).get('retrograde') else ''}{'  [COMBUST]' if chart_data.get('planets', {}).get('MERCURY', {}).get('combust') else ''}
+• Jupiter: {chart_data.get('planets', {}).get('JUPITER', {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('JUPITER', {}).get('house', '?')} {chart_data.get('planets', {}).get('JUPITER', {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('JUPITER', {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('JUPITER', {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('JUPITER', {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('JUPITER', {}).get('retrograde') else ''}{'  [COMBUST]' if chart_data.get('planets', {}).get('JUPITER', {}).get('combust') else ''}
+• Venus:   {chart_data.get('planets', {}).get('VENUS',   {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('VENUS',   {}).get('house', '?')} {chart_data.get('planets', {}).get('VENUS',   {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('VENUS',   {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('VENUS',   {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('VENUS',   {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('VENUS', {}).get('retrograde') else ''}{'  [COMBUST]' if chart_data.get('planets', {}).get('VENUS', {}).get('combust') else ''}
+• Saturn:  {chart_data.get('planets', {}).get('SATURN',  {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('SATURN',  {}).get('house', '?')} {chart_data.get('planets', {}).get('SATURN',  {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('SATURN',  {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('SATURN',  {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('SATURN',  {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('SATURN', {}).get('retrograde') else ''}{'  [COMBUST]' if chart_data.get('planets', {}).get('SATURN', {}).get('combust') else ''}
+• Rahu:    {chart_data.get('planets', {}).get('RAHU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('RAHU',    {}).get('house', '?')} {chart_data.get('planets', {}).get('RAHU',    {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('RAHU',    {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('RAHU',    {}).get('nakshatra_pada', '?')} [always Retro]
+• Ketu:    {chart_data.get('planets', {}).get('KETU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('KETU',    {}).get('house', '?')} {chart_data.get('planets', {}).get('KETU',    {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('KETU',    {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('KETU',    {}).get('nakshatra_pada', '?')} [always Retro]
 {lagnesh_note}
 
 {house_lords_block}
@@ -3377,16 +3392,25 @@ Before stating any fact, perform this internal audit:
   ─────────────────────────────────────────────────────────────────────────────
   Planet dignity (strong/weak/  │ Dignity column in BIRTH CHART PLANETARY POSITIONS
   exalted/debilitated)          │ NOT general planet reputation from training knowledge
+  Retrograde effect             │ [RETRO] flag on that planet's row — ONLY if flag present
+                                │ If absent, planet is DIRECT — do not assume retrograde
+  Combustion effect             │ [COMBUST] flag on that planet's row — ONLY if flag present
+                                │ If absent, planet is NOT combust — do not assume it
   House lord                    │ HOUSE LORDS table — cite both planet AND house sign
                                 │ Format: "Nth house (domain) lord [PLANET]"
   Dasha/timing dates            │ Step 2/3/3.5/3.6 dasha tables — exact dates only
   Transit effect on native      │ CURRENT TRANSITS + GOCHARA ANALYSIS block
   Planet sign/house/nakshatra   │ BIRTH CHART PLANETARY POSITIONS rows
+  Nakshatra pada                │ Pada column (P1–P4) in BIRTH CHART PLANETARY POSITIONS
   Vargottama claim              │ VARGOTTAMA PLANETS line — only if planet listed there
   ─────────────────────────────────────────────────────────────────────────────
 
 PROHIBITED INFERENCES (NEVER do these):
   X Claiming a planet is strong/weak without citing its computed dignity status
+  X Stating a planet is retrograde unless [RETRO] appears on its row in the table
+  X Stating a planet is combust unless [COMBUST] appears on its row in the table
+  X Reducing a planet's strength due to combustion when [COMBUST] is not flagged
+  X Amplifying a planet's results as retrograde when [RETRO] is not flagged
   X Deriving house lords from birth date or Sun sign using training knowledge
   X Citing transit positions or effects not shown in CURRENT TRANSITS section
   X Computing or inventing sub-period dates not listed in Step 3.5/3.6

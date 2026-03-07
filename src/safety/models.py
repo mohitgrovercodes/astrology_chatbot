@@ -191,6 +191,7 @@ class BlockReasons:
     GAMBLING_SPECIFIC = "gambling_specific"
     LEGAL_ADVICE = "legal_advice"
     HARMFUL_INTENT = "harmful_intent"
+    VULGAR_CONTENT = "vulgar_content"
     
     # Soft Block Reasons
     FORTUNE_TELLING = "fortune_telling"

@@ -41,8 +41,14 @@ SAFETY_ROUTES = {
         "which horse will win", "casino lucky numbers", "will I win the lottery"
     ],
     BlockReasons.HARMFUL_INTENT: [
-        "how to kill someone", "suicide timing", "harm myself", 
+        "how to kill someone", "suicide timing", "harm myself",
         "end my life", "murder plan"
+    ],
+    BlockReasons.VULGAR_CONTENT: [
+        "sex position astrology", "which sign is best in bed", "sexual compatibility",
+        "how to seduce", "nude", "porn", "masturbation", "bitch", "fuck you",
+        "chutiya", "madarchod", "bhosdike", "randi", "harami",
+        "gaandu", "lund", "chut", "bhenchod"
     ],
     BlockReasons.PRIVACY_VIOLATION: [
         "is my boss cheating", "will my neighbor divorce", "is she sleeping with him",
@@ -249,6 +255,7 @@ Your classification must be based on the user's UNDERLYING INTENT and potential 
 - `medical_diagnosis`: Requests that treat astrology as medical diagnosis or that ask whether a person has a disease, or whether they should change/stop medication.
 - `gambling_specific`: Requests for specific winning numbers, which bet to place, or outcomes in games of chance.
 - `harmful_intent`: Any query where the user intends harm to self or others, even if framed astrologically ("which day is auspicious to hurt someone").
+- `vulgar_content`: Messages containing profanity, sexual explicitness, vulgar abuse, or sexually inappropriate requests — in any language including Hindi/Hinglish. Examples: sexually explicit questions, abusive slurs, profane insults directed at the bot.
 
 **SOFT_BLOCK** — The request is outside the ethical scope of astrology for this bot. Decline warmly:
 - `privacy_violation`: Questions asked about a third party (boss, neighbor, spouse, friend) without their consent — predictions, secrets, behavior analysis.
@@ -339,6 +346,31 @@ class SafetyClassifier:
         """
         Classify query safety using multi-gate approach.
         """
+        # Gate -2: Vulgar / explicit content — keyword hard-block (fastest path, no LLM call)
+        # Catches common English and Hindi/Hinglish profanity before anything else runs.
+        _VULGAR_KEYWORDS = {
+            # English profanity / explicit
+            'fuck', 'shit', 'bitch', 'asshole', 'bastard', 'motherfucker',
+            'dick', 'pussy', 'cock', 'cunt', 'whore', 'slut', 'nude', 'porn',
+            'pornography', 'masturbat', 'sex position', 'sexual position',
+            # Hindi/Hinglish profanity (transliterated)
+            'chutiya', 'madarchod', 'bhosdike', 'bhosdika', 'randi', 'harami',
+            'gaandu', 'gandu', 'lund', 'chut', 'bhenchod', 'behenchod',
+            'maderchod', 'saala', 'kamina', 'kutte', 'kamine',
+        }
+        query_lower_vg = query.lower()
+        if any(kw in query_lower_vg for kw in _VULGAR_KEYWORDS):
+            print(f"[SAFETY] Vulgar keyword detected — hard blocking")
+            decision = SafetyDecision(
+                category="HARD_BLOCK",
+                reason=BlockReasons.VULGAR_CONTENT,
+                should_answer=False,
+                disclaimer_type=None,
+                confidence=0.99,
+                explanation="Vulgar or explicit content detected via keyword pre-check"
+            )
+            return self._build_result(query, decision)
+
         # Gate -1: User's Own Data Queries (PRIORITY - check first!)
         # These should NEVER be blocked - user asking about their own profile
         query_lower = query.lower().strip()
@@ -544,6 +576,7 @@ class SafetyClassifier:
             BlockReasons.MEDICAL_DIAGNOSIS: "HARD_BLOCK",
             BlockReasons.GAMBLING_SPECIFIC: "HARD_BLOCK",
             BlockReasons.HARMFUL_INTENT: "HARD_BLOCK",
+            BlockReasons.VULGAR_CONTENT: "HARD_BLOCK",
             BlockReasons.PRIVACY_VIOLATION: "SOFT_BLOCK",
             "THIRD_PARTY_PREDICTION": "SOFT_BLOCK",
             BlockReasons.SABOTAGE_CRITICISM: "SOFT_BLOCK",
