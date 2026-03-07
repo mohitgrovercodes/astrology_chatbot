@@ -2265,13 +2265,22 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                                   'love', 'spouse', 'husband', 'wife', 'rishta', 'relationship',
                                   'bypass', 'saat phere']):
             domain_hints.append(
-                "MARRIAGE TIMING — Use this priority order:\n"
+                "MARRIAGE ANALYSIS — Cross-reference ALL of the following from the HOUSE LORDS table:\n"
+                "  CHART FACTORS (check each from birth chart positions above):\n"
+                "  • 7th house (Marriage & Partnership): its lord, sign, planets placed there\n"
+                "  • 7th lord: which house is it placed in? Its dignity? Is it afflicted by Saturn/Rahu/Ketu?\n"
+                "  • 2nd house (Wealth & Family): its lord, condition — supports marital stability\n"
+                "  • 5th house (Children & Intellect): its lord — romance, love, attraction\n"
+                "  • 11th house (Gains & Desires): its lord — fulfillment of marital desire\n"
+                "  • Venus (natural karaka of marriage): its sign, house, dignity\n"
+                "  • Jupiter (karaka for husband in female chart): its sign, house, dignity\n"
+                "  TIMING (use this priority order):\n"
                 "  1. Find the Venus or Jupiter Pratyantar in the upcoming Pratyantardasha list.\n"
-                "  2. Cross-check: Is Jupiter Gochar in H5, H7, or H9 from natal Moon? (shown in Gochara section) "
-                     "— that window is a strong marriage trigger.\n"
+                "  2. Cross-check: Is Jupiter Gochar in H5, H7, or H9 from natal Moon? (Gochara section)\n"
                 "  3. Is there a Sade Sati? If yes, marriage may be delayed or come with challenges.\n"
-                "  4. Check 7th house (Marriage & Partnership) lord's Pratyantar period.\n"
-                "  5. State the specific Pratyantar date range (weeks) as the peak window, NOT just the Antardasha."
+                "  4. Check 7th house lord's Pratyantar period.\n"
+                "  5. State the specific Pratyantar date range as the peak window, NOT just the Antardasha.\n"
+                "  ⚠ You MUST discuss at least H7, H2, and H5 lords from the computed table — not just H7 alone."
             )
 
         # ── Career / job / business ────────────────────────────────────────────
@@ -2279,13 +2288,23 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                                   'kaam', 'vyapar', 'work', 'income', 'salary', 'office',
                                   'interview', 'selection', 'appointment']):
             domain_hints.append(
-                "CAREER TIMING — Use this priority order:\n"
-                "  1. Find the Saturn, Sun, or Mercury Pratyantar in the upcoming Pratyantardasha list — "
-                     "these govern career activations.\n"
+                "CAREER ANALYSIS — Cross-reference ALL of the following from the HOUSE LORDS table:\n"
+                "  CHART FACTORS (check each from birth chart positions above):\n"
+                "  • 10th house (Career & Status): its lord, sign, planets placed there\n"
+                "  • 10th lord: which house is it placed in? Its dignity? Retrograde? Combust?\n"
+                "  • 6th house (Health & Enemies): its lord — governs service, job, daily work\n"
+                "  • 2nd house (Wealth & Family): its lord — income, accumulated wealth\n"
+                "  • 11th house (Gains & Desires): its lord — income gains, career fulfilment\n"
+                "  • 1st house (Self & Personality): lagnesh — personal initiative and effort\n"
+                "  • Sun (natural karaka of career/status): its sign, house, dignity\n"
+                "  • Saturn (karaka of profession and hard work): its sign, house, dignity\n"
+                "  TIMING (use this priority order):\n"
+                "  1. Find the Saturn, Sun, or Mercury Pratyantar in the upcoming Pratyantardasha list.\n"
                 "  2. Cross-check: Jupiter Gochar in H6, H10, or H11 from natal Moon supports career gains.\n"
                 "  3. Is Ashtama Shani active? If yes, job changes face obstacles; advise patience.\n"
-                "  4. Check 10th house (Career & Status) lord's Pratyantar period.\n"
-                "  5. State the specific Pratyantar start–end date as the peak career window."
+                "  4. Check 10th house lord's Pratyantar period.\n"
+                "  5. State the specific Pratyantar start–end date as the peak career window.\n"
+                "  ⚠ You MUST discuss at least H10, H6, and H2 lords from the computed table — not just H10 alone."
             )
 
         # ── Foreign travel / abroad ────────────────────────────────────────────
@@ -2293,45 +2312,78 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                                   'visa', 'overseas', 'bahar', 'country', 'settle abroad',
                                   'job abroad', 'foreign land']):
             domain_hints.append(
-                "FOREIGN TRAVEL TIMING — Use this priority order:\n"
-                "  1. Find the Rahu or Jupiter Pratyantar in the upcoming Pratyantardasha list — "
-                     "Rahu Pratyantar strongly activates foreign travel and unconventional journeys.\n"
-                "  2. Check: Is Rahu transiting H9 or H12 from Lagna? (shown in Gochara section) "
-                     "— peak window for foreign movement.\n"
+                "FOREIGN TRAVEL ANALYSIS — Cross-reference ALL of the following from the HOUSE LORDS table:\n"
+                "  CHART FACTORS (check each from birth chart positions above):\n"
+                "  • 9th house (Luck & Dharma): its lord, sign, planets — long journeys, fortune abroad\n"
+                "  • 9th lord: which house is it placed in? Its dignity? (9th lord ≠ Jupiter by default — check table)\n"
+                "  • 12th house (Losses & Moksha): its lord, sign — foreign lands, settlements abroad\n"
+                "  • 12th lord: which house is it placed in? Planets in H12?\n"
+                "  • 3rd house (Courage & Siblings): short journeys, initiative for travel\n"
+                "  • Rahu: sign and house from Lagna — strong karaka for foreign connections\n"
+                "  • Jupiter: sign and house — opportunity and protection in foreign lands\n"
+                "  TIMING (use this priority order):\n"
+                "  1. Find the Rahu or Jupiter Pratyantar in the upcoming Pratyantardasha list.\n"
+                "  2. Check: Is Rahu transiting H9 or H12 from Lagna? (Gochara section)\n"
                 "  3. Jupiter Gochar in H9 or H12 from Moon also triggers foreign opportunities.\n"
-                "  4. Check 9th house (Luck & Dharma) and 12th house (Losses & Moksha) lord Pratyantar.\n"
-                "  5. State the specific Pratyantar date range as the peak window for foreign travel."
+                "  4. Check 9th and 12th house lord Pratyantar periods.\n"
+                "  5. State the specific Pratyantar date range as the peak window for foreign travel.\n"
+                "  ⚠ You MUST discuss H9 and H12 lords from the computed table. NEVER substitute Jupiter as 9th lord "
+                "unless the HOUSE LORDS table explicitly shows Jupiter as the 9th lord for this Lagna."
             )
 
         # ── Children ───────────────────────────────────────────────────────────
         if any(w in q for w in ['child', 'children', 'baby', 'pregnancy', 'bachha', 'bacche',
                                   'santan', 'offspring', 'conceive', 'delivery']):
             domain_hints.append(
-                "CHILDREN TIMING — Use this priority order:\n"
+                "CHILDREN ANALYSIS — Cross-reference ALL of the following from the HOUSE LORDS table:\n"
+                "  CHART FACTORS (check each from birth chart positions above):\n"
+                "  • 5th house (Children & Intellect): its lord, sign, planets placed there\n"
+                "  • 5th lord: which house is it placed in? Its dignity? Afflicted?\n"
+                "  • 9th house (Luck & Dharma): its lord — bhagya for children, dharma\n"
+                "  • Jupiter (natural karaka of children): its sign, house, dignity\n"
+                "  • Moon: its condition — emotional readiness, nurturing\n"
+                "  TIMING (use this priority order):\n"
                 "  1. Find the Jupiter or Moon Pratyantar in the upcoming Pratyantardasha list.\n"
                 "  2. Jupiter Gochar in H5 from natal Moon is the strongest trigger for children.\n"
-                "  3. Check 5th house (Children & Intellect) lord's Pratyantar period.\n"
-                "  4. State the specific Pratyantar date range as the peak window."
+                "  3. Check 5th house lord's Pratyantar period.\n"
+                "  4. State the specific Pratyantar date range as the peak window.\n"
+                "  ⚠ You MUST discuss H5 and H9 lords from the computed table — not just Jupiter generically."
             )
 
         # ── Finance / wealth ───────────────────────────────────────────────────
         if any(w in q for w in ['money', 'wealth', 'paisa', 'dhan', 'rich', 'invest', 'finance',
                                   'property', 'loan', 'debt', 'savings', 'profit', 'loss']):
             domain_hints.append(
-                "FINANCE TIMING — Use this priority order:\n"
+                "FINANCE ANALYSIS — Cross-reference ALL of the following from the HOUSE LORDS table:\n"
+                "  CHART FACTORS (check each from birth chart positions above):\n"
+                "  • 2nd house (Wealth & Family): its lord, sign, planets — accumulated wealth\n"
+                "  • 11th house (Gains & Desires): its lord, sign, planets — income and gains\n"
+                "  • 5th house (Children & Intellect): its lord — speculation, investments\n"
+                "  • 9th house (Luck & Dharma): its lord — fortune and windfalls\n"
+                "  • 10th house (Career & Status): its lord — earned income from career\n"
+                "  • Jupiter (natural karaka of wealth): its sign, house, dignity\n"
+                "  • Venus (karaka of luxury and comforts): its sign, house, dignity\n"
+                "  TIMING (use this priority order):\n"
                 "  1. Find the Jupiter or Venus Pratyantar in the upcoming Pratyantardasha list.\n"
                 "  2. Jupiter Gochar in H2, H5, or H11 from natal Moon supports financial gains.\n"
-                "  3. Check 2nd house (Wealth & Family) and 11th house (Gains & Desires) lord Pratyantar.\n"
-                "  4. Sade Sati or Ashtama Shani may restrict gains; advise caution if active."
+                "  3. Check 2nd and 11th house lord Pratyantar periods.\n"
+                "  4. Sade Sati or Ashtama Shani may restrict gains; advise caution if active.\n"
+                "  ⚠ You MUST discuss both H2 and H11 lords from the computed table."
             )
 
         # ── Health ─────────────────────────────────────────────────────────────
         if any(w in q for w in ['health', 'illness', 'sick', 'disease', 'bimari', 'sehat', 'swasth',
                                   'hospital', 'surgery', 'pain', 'accident', 'injury']):
             domain_hints.append(
-                "HEALTH: Discuss constitutional tendencies from Lagna and 6th house (Health & Enemies). "
-                "Saturn or Mars Pratyantar can indicate health stress periods. "
-                "Always note: consult a qualified doctor for medical concerns — astrology shows tendencies only."
+                "HEALTH ANALYSIS — Cross-reference ALL of the following from the HOUSE LORDS table:\n"
+                "  CHART FACTORS:\n"
+                "  • 1st house (Self & Personality): lagnesh — constitution, vitality\n"
+                "  • 6th house (Health & Enemies): its lord — disease, health struggles\n"
+                "  • 8th house (Longevity & Transformation): its lord — chronic illness, longevity\n"
+                "  • Saturn and Mars: their placement and dignity — indicators of physical stress\n"
+                "  TIMING: Saturn or Mars Pratyantar can indicate health stress periods.\n"
+                "  ⚠ Always note: consult a qualified doctor for medical concerns — astrology shows tendencies only.\n"
+                "  ⚠ You MUST discuss H1, H6, and H8 lords from the computed table — not just one house."
             )
 
         domain_text = ("\n" + "\n".join(f"- {h}" for h in domain_hints)) if domain_hints else ""
@@ -3004,8 +3056,14 @@ RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
 7. GET STRAIGHT TO THE POINT: Cut all filler words. Make every word count.
 8. NO FOLLOW-UP QUESTIONS: Never end with questions like "Do you want remedies?", "Shall I explain more?", "Would you like to know...?" Just give the complete answer directly.
 
-EXAMPLE GOOD RESPONSE (Marriage):
-"Aapki 7th house (Marriage & Partnership) ki lord Venus lagan mein weak hai, isliye thodi delay hai. Dusra factor — Saturn ki 7th house (Marriage & Partnership) par drishti late marriage ka yog bana raha hai. Teesra — Moon/Rahu dasha mein emotional confusion bhi tha. June-August 2026 mein Venus-Jupiter conjunction se marriage ka strong yog banega. Venus ko strengthen karne ke liye shukravar ko white flowers offer karein."
+EXAMPLE GOOD RESPONSE (Marriage — shows multi-house analysis):
+"Aapki 7th house (Marriage & Partnership) ki lord Venus H2 mein hai — marital stability ke liye accha, lekin H5 (Children & Intellect) ki lord Saturn ki 7th par drishti thodi delay de raha hai. 2nd house (Wealth & Family) ka lord Jupiter strong hai jo family support dikhata hai. Timing: Venus Pratyantar Feb-Apr 2026 aur Jupiter gochar H7 se — yeh peak marriage window hai."
+
+EXAMPLE GOOD RESPONSE (Career — shows multi-house analysis):
+"10th house (Career & Status) ki lord Mercury H2 mein hai — communication-based income. 6th house (Health & Enemies) ka lord Saturn H10 mein hai — service sector mein stability. 11th house (Gains & Desires) ka lord Moon strong hai — gains ka yog. Sun Pratyantar Mar 2026 mein Saturn gochar H10 se align kar raha hai — promotion ya new role ka peak time."
+
+EXAMPLE GOOD RESPONSE (Foreign Travel — shows multi-house analysis):
+"9th house (Luck & Dharma) ki lord Venus H12 mein hai — yahi foreign settlement ka strong yog hai. 12th house (Losses & Moksha) ka lord Mars active hai. Rahu H9 se transit kar raha hai — foreign connection trigger. Rahu Pratyantar Apr-Jun 2026 — foreign opportunity ki peak window."
 """
         instructions += mobile_length_instruction
 
