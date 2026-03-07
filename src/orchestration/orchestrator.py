@@ -2280,10 +2280,11 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         converging on the same Jupiter Pratyantar window."""
         q = query.lower()
 
-        if any(w in q for w in ['marriage', 'shaadi', 'shadi', 'vivah', 'wedding', 'partner',
-                                  'love', 'spouse', 'husband', 'wife', 'rishta', 'relationship',
+        if any(w in q for w in ['marriage', 'marry', 'married', 'shaadi', 'shadi', 'vivah', 'wedding',
+                                  'partner', 'love', 'spouse', 'husband', 'wife', 'rishta', 'relationship',
                                   'pyaar', 'prem', 'milega', 'milegi', 'life partner',
-                                  'kesi hogi', 'kaisi hogi', 'kesa hoga', 'kaisa hoga']):
+                                  'kesi hogi', 'kaisi hogi', 'kesa hoga', 'kaisa hoga',
+                                  'groom', 'bride', 'dulha', 'dulhan', 'shaadi kab', 'vivah kab']):
             return (
                 "\n⭐ PRATYANTAR PRIORITY FOR THIS QUERY (Marriage/Partner):\n"
                 "   1st: VENUS Pratyantar — primary karaka for marriage\n"
@@ -2291,6 +2292,19 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                 "   3rd: Jupiter only as secondary confirmation\n"
                 "   ❌ Do NOT use Jupiter as the primary timing window for marriage.\n"
                 "   ⚠ Also describe the partner's nature from 7th house sign and planets in H7.\n"
+            )
+
+        if any(w in q for w in ['ghar', 'makaan', 'makan', 'home', 'house', 'flat', 'plot',
+                                  'real estate', 'zameen', 'naya ghar', 'new home', 'ghar lena',
+                                  'ghar kharidna', 'buy house', 'buy home', 'bhumi', 'land',
+                                  'renovation', 'construction']):
+            return (
+                "\n⭐ PRATYANTAR PRIORITY FOR THIS QUERY (Home/Property):\n"
+                "   1st: MOON Pratyantar — primary karaka for home and domestic life\n"
+                "   2nd: MARS Pratyantar — karaka for land and property\n"
+                "   3rd: 4th house lord's Pratyantar (see HOUSE LORDS table above)\n"
+                "   ❌ Do NOT reuse the Jupiter/Venus Pratyantar cited for marriage or career.\n"
+                "   ❌ Jupiter is only relevant here if it is the 4th house lord.\n"
             )
 
         if any(w in q for w in ['foreign', 'abroad', 'videsh', 'travel', 'yatra', 'immigration',
@@ -2324,7 +2338,7 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             )
 
         if any(w in q for w in ['money', 'wealth', 'paisa', 'dhan', 'rich', 'invest', 'finance',
-                                  'property', 'loan', 'debt', 'savings', 'profit', 'loss']):
+                                  'loan', 'debt', 'savings', 'profit', 'loss']):
             return (
                 "\n⭐ PRATYANTAR PRIORITY FOR THIS QUERY (Wealth/Finance):\n"
                 "   1st: VENUS Pratyantar — karaka for wealth and luxury\n"
@@ -2375,10 +2389,11 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             )
 
         # ── Marriage / relationship ─────────────────────────────────────────────
-        if any(w in q for w in ['marriage', 'shaadi', 'shadi', 'vivah', 'wedding', 'partner',
-                                  'love', 'spouse', 'husband', 'wife', 'rishta', 'relationship',
+        if any(w in q for w in ['marriage', 'marry', 'married', 'shaadi', 'shadi', 'vivah', 'wedding',
+                                  'partner', 'love', 'spouse', 'husband', 'wife', 'rishta', 'relationship',
                                   'bypass', 'saat phere', 'pyaar', 'prem', 'milega', 'milegi',
-                                  'life partner', 'kesi hogi', 'kaisi hogi', 'kesa hoga', 'kaisa hoga']):
+                                  'life partner', 'kesi hogi', 'kaisi hogi', 'kesa hoga', 'kaisa hoga',
+                                  'groom', 'bride', 'dulha', 'dulhan', 'shaadi kab', 'vivah kab']):
             domain_hints.append(
                 "MARRIAGE & PARTNER ANALYSIS — Answer ALL parts of the user's question:\n"
                 "  PART A — PARTNER QUALITIES (always include, regardless of exact question wording):\n"
@@ -2471,9 +2486,34 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                 "  ⚠ You MUST discuss H5 and H9 lords from the computed table — not just Jupiter generically."
             )
 
+        # ── Home / property / real estate ──────────────────────────────────────
+        if any(w in q for w in ['ghar', 'makaan', 'makan', 'home', 'house', 'flat', 'plot', 'property',
+                                  'real estate', 'zameen', 'naya ghar', 'new home', 'ghar lena',
+                                  'ghar kharidna', 'buy house', 'buy home', 'property buy',
+                                  'renovation', 'construction', 'bhumi', 'land']):
+            domain_hints.append(
+                "HOME & PROPERTY ANALYSIS — Cross-reference ALL of the following from the HOUSE LORDS table:\n"
+                "  CHART FACTORS (check each from birth chart positions above):\n"
+                "  • 4th house (Home & Mother): its lord, sign, planets placed there — PRIMARY house for home/property\n"
+                "  • 4th lord: which house is it placed in? Its dignity? Retrograde?\n"
+                "  • 2nd house (Wealth & Family): its lord — fixed assets, family wealth\n"
+                "  • 11th house (Gains & Desires): its lord — fulfillment of desire for property\n"
+                "  • Moon (natural karaka of home and mother): its sign, house, dignity\n"
+                "  • Mars (natural karaka of land and property): its sign, house, dignity\n"
+                "  • Saturn: long-term fixed assets, construction timelines\n"
+                "  TIMING (use this priority order):\n"
+                "  1. Find MOON Pratyantar first — Moon is the primary karaka for home and domestic life.\n"
+                "  2. Find MARS Pratyantar — karaka for land, property, and construction.\n"
+                "  3. Find 4th house lord's Pratyantar (see HOUSE LORDS table).\n"
+                "  4. Jupiter Gochar in H4 from natal Moon strongly supports home purchase.\n"
+                "  5. State the specific Pratyantar date range as the peak window — NOT the full Antardasha range.\n"
+                "  ⚠ You MUST discuss H4 and H2 lords from the computed table.\n"
+                "  ⚠ Do NOT use the same Jupiter/Venus Pratyantar cited for marriage or career — this query is about HOME."
+            )
+
         # ── Finance / wealth ───────────────────────────────────────────────────
         if any(w in q for w in ['money', 'wealth', 'paisa', 'dhan', 'rich', 'invest', 'finance',
-                                  'property', 'loan', 'debt', 'savings', 'profit', 'loss']):
+                                  'loan', 'debt', 'savings', 'profit', 'loss']):
             domain_hints.append(
                 "FINANCE ANALYSIS — Cross-reference ALL of the following from the HOUSE LORDS table:\n"
                 "  CHART FACTORS (check each from birth chart positions above):\n"
