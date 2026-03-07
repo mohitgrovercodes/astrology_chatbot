@@ -1201,7 +1201,7 @@ async def send_message(request: SendMessageRequest):
                 status_code=503,
                 detail=f"Backend session database (Redis) is unavailable: {str(e)}"
             )
-        print("Testing XYZ") 
+        print("Testing XYZ")
         if not user_profile:
             print(f"[WARNING] /message blocked: Session not found in Redis for user: {user_id}")
             raise HTTPException(
@@ -1209,7 +1209,85 @@ async def send_message(request: SendMessageRequest):
                 detail=f"Session not found for user: {user_id}. Please call /initialize first."
             )
 
-        
+        # ====================================================================
+        # PRE-STEP: VULGARITY GATE — runs before ANY LLM call or context analysis.
+        # This must be here because chat_stateless.py can return early (clarification
+        # path) before the orchestrator's safety_check node ever runs, so classifier.py
+        # Gate -2 would never execute for those messages.
+        # ====================================================================
+        _VULGAR_KW = {
+            'fuck', 'shit', 'bitch', 'asshole', 'bastard', 'motherfucker',
+            'dick', 'pussy', 'cock', 'cunt', 'whore', 'slut', 'nude', 'porn',
+            'pornography', 'masturbat', 'sex position', 'sexual position',
+            'chutiya', 'madarchod', 'bhosdike', 'bhosdika', 'randi', 'harami',
+            'gaandu', 'gandu', 'lund', 'chut', 'bhenchod', 'behenchod',
+            'maderchod', 'haramzada', 'haramkhor', 'madarjaat', 'lavde', 'lavda',
+            'punda', 'pundai', 'sunni', 'thevidiya', 'ootha', 'koothi', 'oombu',
+            'dengey', 'dengudi', 'pukku', 'modda', 'lanja', 'pooku',
+            'zavnya', 'zavad', 'bhadva', 'zadya',
+            'bhen di', 'teri maa', 'phudu', 'phuddu', 'maa di',
+            'theetta', 'myre', 'kunna', 'pooru', 'poori', 'ammaye',
+            'haraamzada', 'gaand', 'khanki', 'madar', 'sala kutta',
+            'चुतिया', 'मादरचोद', 'भड़वा', 'रंडी', 'हरामी', 'लंड', 'भोसड़ी',
+            'புண்டை', 'சுன்னி', 'తేవిడియా',
+            'పుక్కు', 'మొద్ద', 'లంజ',
+            'झवाड', 'भडवा', 'लवडा',
+            'ਭੈਣ ਦੀ', 'ਫੁੱਡੂ',
+            'കുണ്ണ', 'പൂറ്',
+        }
+        _ASTRO_SAFE = frozenset([
+            'kundli', 'kundali', 'horoscope', 'rashi', 'lagna', 'nakshatra', 'dasha',
+            'antardasha', 'mahadasha', 'graha', 'planet', 'saturn', 'jupiter', 'venus',
+            'mars', 'mercury', 'moon', 'sun', 'rahu', 'ketu', 'shani', 'mangal',
+            'budh', 'brihaspati', 'shukra', 'surya', 'chandra', 'transit', 'gochar',
+            'chart', 'vedic', 'jyotish', 'yoga', 'bhava', 'house',
+            'marriage', 'shaadi', 'career', 'naukri', 'health', 'money', 'dhan',
+            'foreign', 'videsh', 'child', 'bachha', 'santan', 'property', 'ghar',
+        ])
+
+        def _is_vulgar(text: str) -> bool:
+            """Keyword check + LLM fallback for vulgarity not in the keyword list."""
+            t = text.lower()
+            # 1. Fast keyword check
+            if any(kw in t for kw in _VULGAR_KW):
+                return True
+            # 2. Skip LLM check if the query is clearly astrological (saves latency)
+            if set(t.split()) & _ASTRO_SAFE:
+                return False
+            # 3. LLM fallback — catches abbreviations, creative spellings, euphemisms,
+            #    code-switching, and languages not covered by the keyword list.
+            try:
+                llm_prompt = (
+                    "You are a content moderator for a professional astrology chatbot. "
+                    "Does the following message contain profanity, sexual explicitness, "
+                    "verbal abuse, sexual harassment, or vulgar insults in ANY language "
+                    "(including abbreviations like 'bc', 'mc', 'lc', creative spellings, "
+                    "or mixed-language abuse)?\n\n"
+                    f'Message: "{text}"\n\n'
+                    "Reply with exactly one word: YES or NO."
+                )
+                resp = context_manager.fast_llm.invoke(llm_prompt)
+                result_text = resp.content.strip().upper()
+                if result_text.startswith("YES"):
+                    print(f"[PRE-SAFETY] LLM vulgarity fallback triggered — blocking")
+                    return True
+            except Exception as _e:
+                print(f"[PRE-SAFETY] LLM vulgarity check error (fail-open): {_e}")
+            return False
+
+        if _is_vulgar(question):
+            print(f"[PRE-SAFETY] Vulgar content detected — returning hard block")
+            from src.safety.templates import HARD_BLOCK_VULGAR
+            session_manager.add_message(user_id, "user", question)
+            session_manager.add_message(user_id, "assistant", HARD_BLOCK_VULGAR,
+                                        metadata={"intent": "HARD_BLOCK", "source": "safety"})
+            return SendMessageResponse(
+                user_id=user_id,
+                question=question,
+                answer=HARD_BLOCK_VULGAR,
+                source="openai"
+            )
+
         # ====================================================================
         # STEP 1: GET CONVERSATION CONTEXT
         # ====================================================================

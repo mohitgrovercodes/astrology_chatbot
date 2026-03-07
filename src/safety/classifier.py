@@ -342,21 +342,80 @@ class SafetyClassifier:
             | JsonOutputParser(pydantic_object=SafetyDecision)
         )
     
+    # ── Astrological safe-words: queries containing these skip the LLM vulgarity gate ──
+    _ASTRO_SAFE_WORDS = frozenset([
+        'kundli', 'kundali', 'horoscope', 'rashi', 'lagna', 'nakshatra', 'dasha',
+        'antardasha', 'mahadasha', 'graha', 'planet', 'saturn', 'jupiter', 'venus',
+        'mars', 'mercury', 'moon', 'sun', 'rahu', 'ketu', 'shani', 'mangal',
+        'budh', 'brihaspati', 'shukra', 'surya', 'chandra', 'transit', 'gochar',
+        'chart', 'birth chart', 'vedic', 'jyotish', 'yoga', 'bhava', 'house',
+        'marriage', 'shaadi', 'career', 'naukri', 'health', 'money', 'dhan',
+        'foreign', 'videsh', 'child', 'bachha', 'santan', 'property', 'ghar',
+    ])
+
+    def _llm_vulgarity_check(self, query: str) -> bool:
+        """
+        Lightweight LLM gate for vulgarity/explicit content not caught by keywords.
+        Returns True if the query is vulgar/abusive/explicit, False otherwise.
+        Fails OPEN (returns False) on any error so legitimate queries are never blocked.
+        Only called for queries that are not clearly astrological or chitchat.
+        """
+        try:
+            prompt = (
+                "You are a content moderator for a professional astrology chatbot. "
+                "Decide ONLY whether the user message below contains: profanity, sexual explicitness, "
+                "verbal abuse, sexual harassment, or vulgar insults — in ANY language "
+                "(English, Hindi, Tamil, Telugu, Marathi, Punjabi, Malayalam, Urdu, Hinglish, or any mix).\n\n"
+                f'User message: "{query}"\n\n'
+                "Reply with exactly one word: YES (if vulgar/abusive/explicit) or NO (if not)."
+            )
+            response = self.llm.invoke(prompt)
+            answer = response.content.strip().upper()
+            is_vulgar = answer.startswith("YES")
+            if is_vulgar:
+                print(f"[SAFETY] LLM vulgarity check: VULGAR — '{query[:60]}'")
+            return is_vulgar
+        except Exception as e:
+            print(f"[SAFETY] LLM vulgarity check error (fail-open): {e}")
+            return False  # fail open — do not block on errors
+
     def classify(self, query: str, conversation_history: list = None) -> SafetyCheckResult:
         """
         Classify query safety using multi-gate approach.
         """
-        # Gate -2: Vulgar / explicit content — keyword hard-block (fastest path, no LLM call)
-        # Catches common English and Hindi/Hinglish profanity before anything else runs.
+        # Gate -2: Keyword hard-block — covers all major Indian + English profanity.
+        # No LLM call. Runs first for zero latency on obvious cases.
         _VULGAR_KEYWORDS = {
-            # English profanity / explicit
+            # ── English ──────────────────────────────────────────────────────
             'fuck', 'shit', 'bitch', 'asshole', 'bastard', 'motherfucker',
             'dick', 'pussy', 'cock', 'cunt', 'whore', 'slut', 'nude', 'porn',
             'pornography', 'masturbat', 'sex position', 'sexual position',
-            # Hindi/Hinglish profanity (transliterated)
+            # ── Hindi / Hinglish (transliterated) ────────────────────────────
             'chutiya', 'madarchod', 'bhosdike', 'bhosdika', 'randi', 'harami',
             'gaandu', 'gandu', 'lund', 'chut', 'bhenchod', 'behenchod',
-            'maderchod', 'saala', 'kamina', 'kutte', 'kamine',
+            'maderchod', 'saala', 'kamina', 'kutte', 'kamine', 'haramzada',
+            'haramkhor', 'madarjaat', 'lavde', 'lavda',
+            # ── Tamil (transliterated) ────────────────────────────────────────
+            'punda', 'pundai', 'sunni', 'thevidiya', 'ootha', 'koothi',
+            'baadu', 'paiyan', 'oombu',
+            # ── Telugu (transliterated) ───────────────────────────────────────
+            'dengey', 'dengudi', 'pukku', 'modda', 'lanja', 'lanjakodaka',
+            'pooku', 'gudda',
+            # ── Marathi (transliterated) ──────────────────────────────────────
+            'zavnya', 'zavad', 'bhadva', 'aai zavadya', 'ghanta', 'zadya',
+            # ── Punjabi (transliterated) ──────────────────────────────────────
+            'bhen di', 'teri maa', 'phudu', 'phuddu', 'maa di',
+            # ── Malayalam (transliterated) ────────────────────────────────────
+            'theetta', 'myre', 'kunna', 'pooru', 'poori', 'ammaye',
+            # ── Urdu (transliterated) ─────────────────────────────────────────
+            'haraamzada', 'gaand', 'khanki', 'madar', 'sala kutta',
+            # ── Native Unicode script (common high-frequency slurs) ───────────
+            'चुतिया', 'मादरचोद', 'भड़वा', 'रंडी', 'हरामी', 'लंड', 'भोसड़ी',
+            'புண்டை', 'சுன்னி', 'தேவிடியா',
+            'పుక్కు', 'మొద్ద', 'లంజ',
+            'झवाड', 'भडवा', 'लवडा',
+            'ਭੈਣ ਦੀ', 'ਫੁੱਡੂ',
+            'കുണ്ണ', 'പൂറ്',
         }
         query_lower_vg = query.lower()
         if any(kw in query_lower_vg for kw in _VULGAR_KEYWORDS):
@@ -368,6 +427,23 @@ class SafetyClassifier:
                 disclaimer_type=None,
                 confidence=0.99,
                 explanation="Vulgar or explicit content detected via keyword pre-check"
+            )
+            return self._build_result(query, decision)
+
+        # Gate -1.5: LLM vulgarity fallback — catches multilingual profanity,
+        # euphemisms, and mixed-language abuse missed by keywords.
+        # Skipped for clearly astrological queries (no latency overhead on the
+        # majority of real traffic).
+        query_words = set(query_lower_vg.split())
+        is_clearly_astro = bool(query_words & self._ASTRO_SAFE_WORDS)
+        if not is_clearly_astro and self._llm_vulgarity_check(query):
+            decision = SafetyDecision(
+                category="HARD_BLOCK",
+                reason=BlockReasons.VULGAR_CONTENT,
+                should_answer=False,
+                disclaimer_type=None,
+                confidence=0.95,
+                explanation="Vulgar or explicit content detected via LLM vulgarity check"
             )
             return self._build_result(query, decision)
 
@@ -383,13 +459,32 @@ class SafetyClassifier:
             'what time was i born', 'my chart', 'my kundli', 'my horoscope',
             'show me my', 'tell me my', 'what is my',
         ]
-        # Short Hindi/Hinglish first-person markers — must use word-boundary match
-        # to avoid 'meri behen ki shaadi' matching 'meri' and bypassing safety
+        # Short Hindi/Hinglish first-person markers — word-boundary matched to avoid
+        # 'meri behen ki shaadi' triggering 'meri' and short-circuiting Gate 0.
         hindi_markers = ['main', 'mera', 'meri', 'mujhe', 'hum']
+
+        # Third-party relationship words: if ANY of these appear alongside a Hindi
+        # first-person marker, the query is about someone ELSE — do NOT bypass safety.
+        _THIRD_PARTY_HINDI_WORDS = {
+            'behen', 'behan', 'behna', 'bhai', 'bhaiya', 'didi',
+            'maa', 'mata', 'papa', 'pita', 'pitaji', 'baap',
+            'dost', 'yaar', 'saheli', 'frnd',
+            'boss', 'manager', 'colleague', 'sahab',
+            'pati', 'patni', 'husband', 'wife', 'biwi',
+            'beta', 'beti', 'bachha', 'ladka', 'ladki',
+            'chacha', 'chachi', 'mama', 'mami', 'nana', 'nani',
+            'dada', 'dadi', 'naana', 'naani', 'fufa', 'bua',
+        }
 
         import re as _re
         phrase_match = any(phrase in query_lower for phrase in own_data_phrases)
         hindi_match = any(_re.search(r'\b' + marker + r'\b', query_lower) for marker in hindi_markers)
+
+        # Cancel the hindi bypass if the query also contains a third-party relationship word
+        if hindi_match:
+            query_words_set = set(query_lower.split())
+            if query_words_set & _THIRD_PARTY_HINDI_WORDS:
+                hindi_match = False  # This is about someone else — don't bypass Gate 0
 
         if phrase_match or hindi_match:
             # User asking about their OWN data - mark as SAFE
@@ -499,17 +594,56 @@ class SafetyClassifier:
         
         return self._build_result(query, decision)
     
+    def _llm_third_party_check(self, query: str) -> Optional[tuple[bool, str]]:
+        """
+        LLM fallback for third-party detection — catches multilingual and
+        creatively phrased requests that keyword patterns miss.
+        Returns (True, 'someone else') if the query asks for another person's
+        chart/prediction, None otherwise. Fails open on errors.
+        """
+        try:
+            prompt = (
+                "You are a safety classifier for an astrology chatbot. "
+                "Determine whether the following message is asking for astrological "
+                "predictions or chart analysis for someone OTHER than the person writing "
+                "the message — in any language (English, Hindi, Hinglish, Tamil, Telugu, "
+                "Marathi, Punjabi, Malayalam, Urdu, or any mix).\n\n"
+                f'Message: "{query}"\n\n'
+                "Reply with exactly one word: YES (asking about someone else) or NO (asking about themselves)."
+            )
+            response = self.llm.invoke(prompt)
+            answer = response.content.strip().upper()
+            if answer.startswith("YES"):
+                print(f"[SAFETY] LLM third-party check: third-party query detected — '{query[:60]}'")
+                return True, "someone else"
+            return None
+        except Exception as e:
+            print(f"[SAFETY] LLM third-party check error (fail-open): {e}")
+            return None  # fail open
+
     def _detect_third_party(self, query: str) -> Optional[tuple[bool, str]]:
         """
         Detect if query is about someone else's prediction.
-        
+        Layer 1: English keyword patterns.
+        Layer 2: Hindi/multilingual keyword patterns.
+        Layer 3: LLM fallback for everything else (skipped for clearly self-referential queries).
+
         Returns:
             (is_third_party, person_name) or None
         """
         query_lower = query.lower()
-        
-        # High-risk Third-party indicators (asking for someone else's reading)
-        patterns = [
+
+        # Exclusions: Valid questions about the user's *own* life events involving others.
+        exclusions = [
+            'my child be born', 'have a child', 'get a job',
+            'kab jaunga', 'kab jayengi', 'videsh kab', 'foreign kab',
+        ]
+        for exc in exclusions:
+            if exc in query_lower:
+                return None
+
+        # ── Layer 1: English keyword patterns ────────────────────────────────
+        en_patterns = [
             'my friend', 'my sister', 'my brother', 'my mother', 'my father',
             'my husband', 'my wife', 'my son', 'my daughter',
             'my boss', 'my colleague', 'my neighbor',
@@ -517,48 +651,69 @@ class SafetyClassifier:
             'her horoscope', 'his horoscope',
             'when will he', 'when will she', 'when will they',
             'will he', 'will she', 'will they',
-            'does he', 'does she', 'do they'
+            'does he', 'does she', 'do they',
         ]
-        
-        # Exclusions: Valid questions about the user's *own* life events involving others
-        # Example: "when will my child be born" is a valid 5th house question for the user
-        exclusions = [
-            'my child be born',
-            'have a child',
-            'get a job', # just in case
-            'kab jaunga', # First-person future
-            'kab jayengi',
-            'videsh kab',
-            'foreign kab',
-        ]
-        
-        for exc in exclusions:
-            if exc in query_lower:
-                return None
-                
-        # Also, check "my child" separately to allow general children questions for the user's chart
+
+        # Child-chart exception: "my child's chart" is third-party, but
+        # "when will I have a child" is the user's own query.
         if 'my child' in query_lower and not any(exc in query_lower for exc in exclusions):
-             # Only block if it looks like they want a reading *for* the child (e.g. "my child's chart")
-             if "chart" in query_lower or "horoscope" in query_lower or "kundli" in query_lower:
-                 return True, "your child"
-        
-        for pattern in patterns:
+            if 'chart' in query_lower or 'horoscope' in query_lower or 'kundli' in query_lower:
+                return True, "your child"
+
+        for pattern in en_patterns:
             if pattern in query_lower:
-                # Try to extract person name
-                # Look for capitalized words after the pattern
                 words_after = query.split(pattern)[-1] if pattern in query.lower() else ""
                 names = re.findall(r'\b[A-Z][a-z]+\b', words_after[:50])
-                
                 person = names[0] if names else "someone else"
-                
-                # Check for "name is X" pattern
                 if 'name is' in query_lower:
                     name_match = re.search(r'name is ([A-Z][a-z]+)', query, re.IGNORECASE)
                     if name_match:
                         person = name_match.group(1)
-                
                 return True, person
-        
+
+        # ── Layer 2: Hindi / multilingual keyword patterns ────────────────────
+        hi_patterns = [
+            # Hindi/Hinglish relationship + possessive combos
+            'mere dost', 'meri dost', 'mera dost',
+            'meri behen', 'meri behan', 'meri didi',
+            'mere bhai', 'mera bhai', 'mere bhaiya',
+            'meri maa', 'mere papa', 'mere pitaji', 'mere pita',
+            'meri wife', 'mere pati', 'meri patni',
+            'mera beta', 'meri beti',
+            'mere boss', 'mere sahab', 'mere colleague',
+            'meri saheli', 'mere yaar',
+            # Third-person future/prediction markers
+            'uski shaadi', 'uska career', 'unki kundali', 'unka chart',
+            'iski kundali', 'iska chart', 'uski kundali', 'uska bhavishya',
+            # Tamil (transliterated)
+            'en nanban', 'en akka', 'en thambi', 'en amma', 'en appa',
+            'en husband', 'en wife', 'en boss',
+            # Telugu (transliterated)
+            'na friend', 'na sister', 'na brother', 'na husband', 'na wife',
+        ]
+
+        for pattern in hi_patterns:
+            if pattern in query_lower:
+                return True, "someone else"
+
+        # ── Layer 3: LLM fallback ─────────────────────────────────────────────
+        # Only call LLM if the query doesn't look entirely self-referential.
+        # Skip if clearly first-person astrological (avoids latency on ~90% of traffic).
+        _SELF_REFERENTIAL = {
+            'mera', 'meri', 'mujhe', 'main', 'hum', 'my', 'i ', "i'm",
+            'mere liye', 'apna', 'apni',
+        }
+        _ASTRO_TERMS = {
+            'kundli', 'kundali', 'chart', 'rashi', 'lagna', 'dasha',
+            'nakshatra', 'horoscope', 'jyotish',
+        }
+        has_self_ref = any(w in query_lower for w in _SELF_REFERENTIAL)
+        has_astro = any(w in query_lower for w in _ASTRO_TERMS)
+
+        # Only skip LLM if both clearly self-referential AND astrological
+        if not (has_self_ref and has_astro):
+            return self._llm_third_party_check(query)
+
         return None
     
     def _create_semantic_decision(
