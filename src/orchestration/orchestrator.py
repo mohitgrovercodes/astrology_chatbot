@@ -2555,27 +2555,85 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                 "  ⚠ You MUST discuss H1, H6, and H8 lords from the computed table — not just one house."
             )
 
+        # ── Generic fallback hint for uncategorized prediction queries ────────────
+        # Fires only when NO domain-specific hint was matched above (domain_hints is empty)
+        # AND the query looks like a chart-reading / outcome question, not a pure
+        # conceptual explanation.
+        _CONCEPTUAL_MARKERS = {
+            'what is', 'what does', 'what are', 'explain', 'tell me about',
+            'kya hai', 'kya hota', 'kya matlab', 'samjhao', 'batao kya',
+            'define', 'meaning of', 'means', 'which planet', 'which house',
+        }
+        _OUTCOME_MARKERS = {
+            'when', 'kab', 'will i', 'hoga', 'hogi', 'milega', 'milegi',
+            'how long', 'kitne', 'period', 'future', 'upcoming', 'prediction',
+            'my life', 'mera jeevan', 'meri zindagi', 'sade sati', 'bad phase',
+            'bura samay', 'achha samay', 'good time', 'bad time', 'relief',
+        }
+        _is_conceptual = any(m in q for m in _CONCEPTUAL_MARKERS)
+        _is_outcome = any(m in q for m in _OUTCOME_MARKERS)
+
+        if not domain_hints:
+            if _is_outcome or (not _is_conceptual):
+                # Genuine prediction query that doesn't fit a named domain —
+                # e.g. "Sade Sati kab khatam hogi?", "When will my bad phase end?",
+                # "What does my 8th house predict for me?", "My Rahu period effects"
+                domain_hints.append(
+                    "GENERAL PREDICTION — this query doesn't match a named life domain (marriage/career/etc.) "
+                    "but is still a chart-reading question. Follow these steps:\n"
+                    "  1. Identify which house(s) and planet(s) are most relevant to the query topic.\n"
+                    "  2. Check those planets' dignity, retrograde, and combustion flags from the chart table.\n"
+                    "  3. For timing: find the Pratyantar of the most relevant planet in Step 3.5 above.\n"
+                    "  4. For Sade Sati or Saturn-related phases: check Saturn's current transit house "
+                    "     from Moon (Gochara block) — Sade Sati ends when Saturn leaves the sign just after "
+                    "     natal Moon sign. Cite the actual transit dates.\n"
+                    "  5. Provide a specific time window from the Pratyantar table, not a vague range."
+                )
+
         domain_text = ("\n" + "\n".join(f"- {h}" for h in domain_hints)) if domain_hints else ""
 
-        # ── MANDATORY NEXT FAVORABLE WINDOW (all prediction responses) ─────────
-        # Injected regardless of whether the user explicitly asked for timing.
+        # ── NEXT FAVORABLE WINDOW — only for outcome/timing queries ───────────
+        # NOT injected for pure conceptual/explanatory queries like
+        # "What does debilitated Venus mean?" or "Explain my 8th house."
         # The data is already in the prompt (upcoming_pds_str, next_ad_fp_str,
-        # upcoming_ads_str) so no extra calculation is needed.
+        # upcoming_ads_str) so no extra calculation is needed when it is relevant.
+        _needs_timing_window = _is_outcome or any(domain_hints) and not _is_conceptual
         next_window_block = """
 
 MANDATORY — NEXT FAVORABLE WINDOW (include in EVERY prediction response):
-After your main answer, always add a brief "Next Favorable Window" section that:
-  1. Identifies the single most relevant upcoming Pratyantar from Step 3.5/3.6 above
-     for the topic of this query (e.g. Venus Pratyantar for marriage/finance, Saturn
-     Pratyantar for career, Moon/Mars Pratyantar for home, Rahu Pratyantar for travel).
-  2. States the exact start→end dates from the Pratyantar table (do NOT invent dates).
-  3. Mentions one supporting Gochara factor from the transit block that confirms this
-     window (e.g. "Jupiter transiting H7 from Moon" for marriage).
-  4. Keeps it to 1-2 sentences — concise and actionable.
-  Format: "Next Favorable Window: [Planet] Pratyantar [start → end] — [one-line reason]."
-  If NO suitable upcoming Pratyantar exists in Step 3.5 data, use Step 3.6
-  (opening Pratyantar of next Antardasha) and note that clearly.
-  NEVER skip this section. NEVER fabricate dates not listed in the dasha tables."""
+After your main answer, always add a brief "Next Favorable Window" section.
+
+CRITICAL — HOW TO PICK THIS WINDOW (read carefully):
+  Pratyantar periods are consecutive — every period starts the day the previous one
+  ends. DO NOT simply pick the chronologically next Pratyantar. Citing the Sun
+  Pratyantar that starts the moment Venus Pratyantar ends is meaningless — it is
+  just the next slot in an unbroken sequence, not a "next favorable window."
+
+  Instead, scan Step 3.5 for the next occurrence of a TOPIC-RELEVANT planet
+  that appears meaningfully later in the list (typically 4–8+ weeks after the
+  window already cited). Skip over unrelated planets between them.
+
+  Topic → Relevant planets to scan for (priority order):
+  • Marriage / relationship → Venus, then Jupiter, then 7th house lord
+  • Career / job           → Saturn, then Sun, then Mercury, then 10th house lord
+  • Home / property        → Moon, then Mars, then 4th house lord
+  • Foreign travel         → Rahu, then 9th house lord, then 12th house lord
+  • Finance / wealth       → Venus, then Jupiter, then 2nd house lord, then 11th house lord
+  • Children               → Jupiter, then Moon, then 5th house lord
+  • Health                 → Sun, then Saturn
+
+  Example (marriage): If Venus Pratyantar [Feb 26–Mar 25] is cited in the main
+  answer, scan past Sun/Moon/Mars Pratyantars and find the NEXT Jupiter or 7th
+  lord Pratyantar (e.g. Jupiter Pratyantar [Jul 8–Aug 16]) — that is the true
+  "Next Favorable Window."
+
+  If NO second topic-relevant Pratyantar exists in Step 3.5, use Step 3.6
+  (opening Pratyantar of the next Antardasha) and note that clearly.
+
+Format: "Next Favorable Window: [Planet] Pratyantar [start → end] — [one-line reason why this planet is relevant for this topic]."
+NEVER fabricate dates. NEVER cite the same Pratyantar already mentioned above."""
+
+        _timing_section = next_window_block if _needs_timing_window else ""
 
         if wants_detail:
             if mode == 'prediction':
@@ -2584,7 +2642,7 @@ After your main answer, always add a brief "Next Favorable Window" section that:
 2. Ground every claim in specific chart data (actual houses, signs, planets listed above).
 3. Include dasha periods AND approximate calendar timeframes for any timing claims.
 4. Do NOT cite classical texts or provide book names as sources unless the user explicitly demands it.
-5. {script_instruction}{domain_text}{next_window_block}
+5. {script_instruction}{domain_text}{_timing_section}
 
 Provide a thorough, detailed prediction:"""
             else:
@@ -2602,7 +2660,7 @@ Provide a detailed explanation:"""
 2. Cover 2-3 key chart factors with their real-world meaning, not just technical data.
 3. Include one specific timing window with a brief reason it's favorable.
 4. Do NOT cite sources or provide book names unless the user explicitly demands it.
-5. {script_instruction}{domain_text}{next_window_block}
+5. {script_instruction}{domain_text}{_timing_section}
 
 Provide a warm, self-contained response:"""
             else:
@@ -3230,24 +3288,29 @@ RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
    - Timing: 1-2 sentences giving the specific Pratyantar window with a reason it's favorable.
    - Next Favorable Window: as instructed above.
    DO NOT use bullet lists. DO NOT ask follow-up questions.
-4. HOUSE ANNOTATIONS (MANDATORY): Every time you mention a house by number, ALWAYS
+4. HOUSE NUMBER FORMAT (MANDATORY): NEVER write "H1", "H2", "H10" etc. in your response.
+   The H-notation is for internal data only. In your response always use ordinal format:
+   1st house, 2nd house, 3rd house … 10th house, 11th house, 12th house.
+   Bad:  "Jupiter H3 mein hai"       → Good: "Jupiter 3rd house mein hai"
+   Bad:  "Venus H1 mein debilitated" → Good: "Venus 1st house mein debilitated"
+5. HOUSE ANNOTATIONS (MANDATORY): Every time you mention a house by number, ALWAYS
    add its primary domain in parentheses immediately after. No exceptions.
    Use this exact mapping:
      1st house (Self & Personality) | 2nd house (Wealth & Family) | 3rd house (Courage & Siblings)
      4th house (Home & Mother) | 5th house (Children & Intellect) | 6th house (Health & Service)
      7th house (Marriage & Partnership) | 8th house (Longevity & Transformation) | 9th house (Luck & Dharma)
      10th house (Career & Status) | 11th house (Gains & Desires) | 12th house (Foreign & Moksha)
-5. NO META-COMMENTARY: Never say "Based on your chart I can see..." or "Looking at your horoscope...".
+6. NO META-COMMENTARY: Never say "Based on your chart I can see..." or "Looking at your horoscope...".
    Start directly with the insight. The user knows you're reading their chart.
-6. NO THANKING: User details come from the backend — never thank them for providing details.
-7. NO FOLLOW-UP QUESTIONS: Never end with "Do you want remedies?", "Shall I explain more?" etc.
+7. NO THANKING: User details come from the backend — never thank them for providing details.
+8. NO FOLLOW-UP QUESTIONS: Never end with "Do you want remedies?", "Shall I explain more?" etc.
    Give the complete, self-contained answer.
 
 EXAMPLE GOOD RESPONSE (Marriage — warm, human, narrative):
-"Shadi ke liye aapki kundli mein kuch strong indications hain. 7th house (Marriage & Partnership) ki lord Venus H2 (Wealth & Family) mein hai — iska matlab hai partner family-loving aur financially grounded hoga. Lekin Saturn ki 7th par drishti thodi patience maangti hai — yeh delay nahi, balki ek solid foundation ke liye time hai. 2nd house (Wealth & Family) ka lord Jupiter strong position mein hai jo family ka full support dikhata hai. Timing ki baat karein toh Venus Pratyantar [cite exact dates from table above] mein bahut promising window ban rahi hai — Jupiter uswaqt H7 (Marriage & Partnership) se guzar raha hai jo ek double confirmation hai. Next Favorable Window: Venus Pratyantar [start → end] — Jupiter transit H7 se align kar raha hai, yeh peak time hai."
+"Shadi ke liye aapki kundli mein kuch strong indications hain. 7th house (Marriage & Partnership) ki lord Venus 2nd house (Wealth & Family) mein hai — iska matlab hai partner family-loving aur financially grounded hoga. Lekin Saturn ki 7th house par drishti thodi patience maangti hai — yeh delay nahi, balki ek solid foundation ke liye time hai. 2nd house (Wealth & Family) ka lord Jupiter strong position mein hai jo family ka full support dikhata hai. Timing ki baat karein toh Venus Pratyantar [cite exact dates from table above] mein bahut promising window ban rahi hai — Jupiter uswaqt 7th house (Marriage & Partnership) se guzar raha hai jo ek double confirmation hai. Next Favorable Window: Jupiter Pratyantar [next different dates from table] — yeh agla strong window hai."
 
 EXAMPLE GOOD RESPONSE (Career — warm, human, narrative):
-"Career mein aapka chart ek solid professional journey dikhata hai. 10th house (Career & Status) ki lord Mercury H2 (Wealth & Family) mein hai — communication, writing, ya finance-related fields mein aap naturally strong hain. 6th house (Health & Service) ka lord Saturn 10th mein hai jo service sector ya government work mein long-term stability ka yog banata hai — Saturn jo deta hai, tikau deta hai. Income ke liye 11th house (Gains & Desires) ka lord Moon bhi favorable position mein hai. Saturn Pratyantar [cite exact dates] mein Saturn gochar H10 se align kar raha hai — yeh promotion ya naye role ke liye sabse strong window hai. Next Favorable Window: Saturn Pratyantar [start → end] — career breakthrough ka ideal time."
+"Career mein aapka chart ek solid professional journey dikhata hai. 10th house (Career & Status) ki lord Mercury 2nd house (Wealth & Family) mein hai — communication, writing, ya finance-related fields mein aap naturally strong hain. 6th house (Health & Service) ka lord Saturn 10th house mein hai jo service sector ya government work mein long-term stability ka yog banata hai — Saturn jo deta hai, tikau deta hai. Income ke liye 11th house (Gains & Desires) ka lord Moon bhi favorable position mein hai. Saturn Pratyantar [cite exact dates] mein Saturn gochar 10th house se align kar raha hai — yeh promotion ya naye role ke liye sabse strong window hai. Next Favorable Window: Sun Pratyantar [next different dates] — career authority aur recognition ka agla peak window."
 """
         instructions += mobile_length_instruction
 
