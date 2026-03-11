@@ -2033,7 +2033,7 @@ Provide a concise answer:"""
                 phase_instruction = f"""
 PROGRESSIVE DISCLOSURE -- DETAILED RESPONSE MODE (OVERRIDES word-limit instructions above):
 The user asked for more details. Give a comprehensive, insightful answer now.
-LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence -- including the closing question -- must be in {_lang_for_phase}. Do NOT mix languages.
+LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lang_for_phase}. Do NOT mix languages.
 1. WORD LIMIT: 300-350 words maximum. Be thorough but do not exceed 400 words.
 2. Cover 3-5 key astrological factors (house lords, dasha timing, transit effects, dignities).
 3. Include specific Pratyantar timing windows from the data above.
@@ -2042,9 +2042,7 @@ LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence -- including the
 6. NEVER use H1, H2, H3 etc. -- always write 1st house, 2nd house, 3rd house.
    Use house annotations: e.g., 7th house (Marriage and Partnership).
 7. DO NOT repeat the brief answer already given -- build deeper upon it.
-8. MANDATORY -- at the very END of your response, ask this follow-up question in {_lang_for_phase}:
-   "{_suggested_followup}"
-   Ask it as a direct, intriguing question -- NOT as "Would you like to know X?".
+8. END your response naturally after covering the key factors. Do NOT append any follow-up question or teaser line.
 """
                 new_phase_data = {
                     "phase": PHASE_FOLLOWUP_LOOP,
