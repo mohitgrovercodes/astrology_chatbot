@@ -1602,16 +1602,16 @@ def send_message(request: SendMessageRequest):
         # Use the RESULT phase (what the orchestrator decided) not the INPUT phase
         result_phase = (result.get('conversation_phase') or {}).get('phase', conv_phase_data.get('phase', 'INITIAL'))
         if result_phase == 'FOLLOWUP_LOOP' and conv_phase_data.get('phase') == 'AWAITING_DETAIL':
-            # User agreed to details → allow up to 350 words
-            MAX_MOBILE_WORDS = 350
+            # User agreed to details → detailed response capped at 300 words
+            MAX_MOBILE_WORDS = 300
         elif result_phase == 'FOLLOWUP_LOOP':
-            # Follow-up responses capped at 250 words
-            MAX_MOBILE_WORDS = 250
+            # Follow-up loop responses capped at 200 words
+            MAX_MOBILE_WORDS = 200
         elif result_phase == 'AWAITING_DETAIL':
-            # Initial short response (phase transitions to AWAITING_DETAIL) → cap at 150
-            MAX_MOBILE_WORDS = 150
+            # Initial short response → hard cap at 100 words
+            MAX_MOBILE_WORDS = 100
         else:
-            MAX_MOBILE_WORDS = 300  # Default fallback
+            MAX_MOBILE_WORDS = 100  # Default fallback (also initial)
         word_count = len(answer.split())
 
         if word_count > MAX_MOBILE_WORDS:
