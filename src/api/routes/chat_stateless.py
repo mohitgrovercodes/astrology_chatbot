@@ -1024,6 +1024,25 @@ class EnhancedSessionManager:
     def extend_session(self, user_id: str):
         """No-op: all session data is stored permanently in Redis (no TTL to extend)."""
         pass
+
+    def store_detected_language(self, user_id: str, lang_code: str) -> None:
+        """Persist the detected language for this session turn."""
+        if not self.redis or not lang_code:
+            return
+        try:
+            self.redis.set(f"session:{user_id}:lang", lang_code)
+        except Exception as e:
+            print(f"[LANG] Error storing detected language: {e}")
+
+    def get_detected_language(self, user_id: str) -> str:
+        """Retrieve the previously detected language for this session (default 'en')."""
+        if not self.redis:
+            return "en"
+        try:
+            val = self.redis.get(f"session:{user_id}:lang")
+            return val.decode() if isinstance(val, bytes) else (val or "en")
+        except Exception:
+            return "en"
     
     def clear_session(self, session_id: str):
         if not self.redis:
@@ -1542,7 +1561,10 @@ def send_message(request: SendMessageRequest):
             "summary": conversation_summary,
             "intent_analysis": intent_analysis,
             "conversation_phase": conv_phase_data,
-            "original_user_question": question  # True original before semantic expansion
+            "original_user_question": question,  # True original before semantic expansion
+            # Pass the previously detected language so _detect_language_node can
+            # use it as a fallback for short ambiguous queries (e.g. "Haan batao")
+            "detected_language": session_manager.get_detected_language(user_id)
         }
         
         # Log what cached data is being passed to orchestrator
@@ -1602,11 +1624,11 @@ def send_message(request: SendMessageRequest):
         # Use the RESULT phase (what the orchestrator decided) not the INPUT phase
         result_phase = (result.get('conversation_phase') or {}).get('phase', conv_phase_data.get('phase', 'INITIAL'))
         if result_phase == 'FOLLOWUP_LOOP' and conv_phase_data.get('phase') == 'AWAITING_DETAIL':
-            # User agreed to details → detailed response capped at 300 words
-            MAX_MOBILE_WORDS = 300
+            # User agreed to details → detailed response capped at 400 words
+            MAX_MOBILE_WORDS = 400
         elif result_phase == 'FOLLOWUP_LOOP':
             # Follow-up loop responses capped at 200 words
-            MAX_MOBILE_WORDS = 200
+            MAX_MOBILE_WORDS = 300
         elif result_phase == 'AWAITING_DETAIL':
             # Initial short response → hard cap at 100 words
             MAX_MOBILE_WORDS = 100
@@ -1702,6 +1724,12 @@ def send_message(request: SendMessageRequest):
                 followup_count=new_phase.get('followup_count', 0)
             )
             print(f"[PHASE] Updated to: {new_phase.get('phase')} | topic: {new_phase.get('topic')}")
+
+        # Persist the detected language for the next turn's session-prior fallback
+        _new_detected_lang = result.get('detected_language', 'en')
+        if _new_detected_lang and _new_detected_lang != 'en':
+            session_manager.store_detected_language(user_id, _new_detected_lang)
+            print(f"[LANG] Session language persisted: {_new_detected_lang}")
 
         # ====================================================================
         # STEP 9: UPDATE CONVERSATION SUMMARY (Every 10 messages)

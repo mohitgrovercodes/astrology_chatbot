@@ -125,9 +125,11 @@ class LanguageDetector:
             "acha": 2, "theek": 2, "phir": 2, "bas": 2,
             "hoga": 2, "hogi": 2, "kaisa": 2, "batao": 2, "bataye": 2,
             "chahiye": 2, "milega": 2, "milegi": 2, "karta": 2, "karti": 2,
+            # Common Hinglish affirmatives (also used in Punjabi but dominant in Hinglish)
+            "haan": 2, "nahi": 2, "accha": 2, "bilkul": 2, "zaroor": 2,
             # Weight-1 (need cumulative ≥ 3)
             "kya": 1, "hai": 1, "hoon": 1, "hain": 1, "tha": 1, "thi": 1,
-            "nahi": 1, "nahin": 1, "aur": 1, "par": 1, "se": 1,
+            "nahin": 1, "aur": 1, "par": 1, "se": 1,
             "ko": 1, "ka": 1, "ki": 1, "ke": 1, "mein": 1,
         },
         "ta": {
@@ -311,8 +313,12 @@ class LanguageDetector:
     def _stage2_romanized(self, text: str) -> Optional[Tuple[str, float]]:
         """
         Stage 2: Romanized marker scoring.
-        Uses weighted word lists. Threshold: cumulative score ≥ 3.
+        Uses weighted word lists. Threshold: cumulative score ≥ 3 (≥ 2 for very short queries).
         Returns (-lat) code for the winning language if threshold met.
+
+        Special rule: Hinglish freely borrows from Punjabi. If both 'hi' and 'pa'
+        each score ≥ 2 (with no stronger single-language winner), treat the result
+        as 'hi-lat'. This handles short phrases like "Haan batao" (pa:2 + hi:2).
         """
         # Only applies to Latin-script text
         if not re.search(r"[a-zA-Z]", text):
@@ -337,7 +343,20 @@ class LanguageDetector:
 
         best_lang, best_score = max(lang_scores.items(), key=lambda x: x[1])
 
-        if best_score >= 3:
+        # ── Short-query threshold (≤ 3 words → accept score ≥ 2) ─────────────
+        word_count = len(text.strip().split())
+        threshold = 2 if word_count <= 3 else 3
+
+        # ── Hinglish cross-language rule ──────────────────────────────────────
+        # "Haan batao": pa=2 (haan), hi=2 (batao) → combined 4 → hi-lat
+        hi_score = lang_scores.get('hi', 0)
+        pa_score = lang_scores.get('pa', 0)
+        if hi_score >= 2 and pa_score >= 2 and best_lang in ('hi', 'pa'):
+            combined_score = hi_score + pa_score
+            confidence = min(0.97, 0.70 + combined_score * 0.025)
+            return ('hi-lat', confidence)
+
+        if best_score >= threshold:
             lat_code = f"{best_lang}-lat"
             # Normalise confidence: score 3->0.75, score 6->0.9, score 10->0.95
             confidence = min(0.97, 0.70 + best_score * 0.025)

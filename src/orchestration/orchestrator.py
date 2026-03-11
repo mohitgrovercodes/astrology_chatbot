@@ -468,29 +468,64 @@ class EnhancedLangGraphOrchestrator:
     def _detect_language_node(self, state: NakshatraState) -> NakshatraState:
         """Node 1.5: Detect query language using library-based detection with LLM fallback."""
         from src.locales.language_detector import get_language_detector
-        
+
         query = state['query']
         print(f"[LANG] Detecting language for: '{query[:30]}...'")
-        
+
+        # ── Session language prior ──────────────────────────────────────────────
+        # If the session already stored a non-English detected_language from a
+        # previous turn (injected via session_data), use it as a fallback for short,
+        # low-confidence responses (e.g. "Haan batao", "Theek hai", "OK").
+        # This prevents langdetect from flipping to English on short Hinglish phrases.
+        _session_lang = state.get('detected_language')  # injected by authenticate_node
+        _session_lang_is_indian = (
+            _session_lang and _session_lang != 'en' and _session_lang in {
+                'hi', 'hi-lat', 'ta', 'ta-lat', 'te', 'te-lat',
+                'ml', 'ml-lat', 'mr', 'mr-lat', 'pa', 'pa-lat'
+            }
+        )
+        _query_word_count = len(query.strip().split())
+        # ───────────────────────────────────────────────────────────────────────
+
         # Use new LanguageDetector with LLM fallback
         detector = get_language_detector(llm=self.fast_llm)
-        
+
         try:
             # Get language with confidence
             detected_lang, confidence = detector.detect_with_confidence(query)
-            
+
+            # ── Session-prior fallback ──────────────────────────────────────────
+            # If the freshly detected language is English BUT:
+            #   (a) the session was previously non-English, AND
+            #   (b) the query is short (≤ 4 words), AND
+            #   (c) confidence is not high (≤ 0.75)
+            # → trust the session language (the user didn't switch languages).
+            if (
+                detected_lang == 'en'
+                and _session_lang_is_indian
+                and _query_word_count <= 4
+                and confidence <= 0.75
+            ):
+                print(
+                    f"[LANG] Low-confidence English ({confidence:.2f}) on short query "
+                    f"({_query_word_count}w) — keeping session language: {_session_lang}"
+                )
+                detected_lang = _session_lang
+                confidence = 0.80  # synthetic confidence for the inherited value
+            # ───────────────────────────────────────────────────────────────────
+
             state['detected_language'] = detected_lang
             state['original_query'] = query
-            
+
             # Log detection method
             method = "library" if confidence > 0.7 else "LLM fallback"
             print(f"[LANG] Detected: {detected_lang} ({method}, confidence: {confidence:.2f})")
-            
+
         except Exception as e:
             print(f"[LANG] Detection error: {e}, defaulting to 'en'")
-            state['detected_language'] = 'en'
+            state['detected_language'] = _session_lang if _session_lang_is_indian else 'en'
             state['original_query'] = query
-            
+
         return state
     
     def _handle_safety_check_node(self, state: NakshatraState) -> NakshatraState:
@@ -1992,14 +2027,14 @@ Provide a concise answer:"""
                 return state  # Skip LLM call — direct response
 
             elif current_phase == PHASE_AWAITING_DETAIL and user_response_type == 'AFFIRMATIVE':
-                # ── User wants details → Generate comprehensive ~300 word response ──
+                # ── User wants details → Generate comprehensive ~400 word response ──
                 print(f"[PHASE] AWAITING_DETAIL + AFFIRMATIVE → detailed response")
                 _lang_for_phase = state.get('detected_language', 'en')
                 phase_instruction = f"""
 PROGRESSIVE DISCLOSURE -- DETAILED RESPONSE MODE (OVERRIDES word-limit instructions above):
 The user asked for more details. Give a comprehensive, insightful answer now.
 LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence -- including the closing question -- must be in {_lang_for_phase}. Do NOT mix languages.
-1. WORD LIMIT: 250-300 words maximum. Be thorough but do not exceed 300 words.
+1. WORD LIMIT: 300-350 words maximum. Be thorough but do not exceed 400 words.
 2. Cover 3-5 key astrological factors (house lords, dasha timing, transit effects, dignities).
 3. Include specific Pratyantar timing windows from the data above.
 4. Include the Next Favorable Window section.
@@ -2019,11 +2054,8 @@ LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence -- including the
                 }
 
             elif current_phase == PHASE_FOLLOWUP_LOOP and user_response_type == 'AFFIRMATIVE':
-                # ── User agreed to a follow-up question → Answer it ──
-                print(f"[PHASE] FOLLOWUP_LOOP + AFFIRMATIVE → answering follow-up")
-                # _suggested_followup already contains the LLM-generated (or static fallback)
-                # question for AFTER this response — use it as the next follow-up.
-                _next_followup = _suggested_followup
+                # ── User agreed to a follow-up question → Answer it, then STOP asking ──
+                print(f"[PHASE] FOLLOWUP_LOOP + AFFIRMATIVE → answering follow-up (no further questions)")
                 # Extract the exact question the bot asked in its last message so we
                 # can inject it explicitly — the LLM often ignores "look at last message"
                 _hist = state.get('conversation_history') or []
@@ -2045,7 +2077,7 @@ LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence -- including the
                 phase_instruction = f"""
 PROGRESSIVE DISCLOSURE -- FOLLOW-UP ANSWER MODE (THIS OVERRIDES ALL OTHER INSTRUCTIONS):
 
-LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence -- including the closing question -- must be in {_lang_for_phase}. Do NOT mix languages.
+LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lang_for_phase}. Do NOT mix languages.
 
 YOU MUST ANSWER THIS SPECIFIC QUESTION (extracted from your previous message):
   {_answer_topic}
@@ -2059,20 +2091,18 @@ RULES:
 3. Be personalized and specific -- NOT a summary of what was already said.
 4. NEVER use H1, H2, H3 etc. -- always write 1st house, 2nd house, 3rd house.
 5. NEVER include Next Favorable Window -- this is a follow-up, not a timing response.
-6. MANDATORY -- end with this NEW follow-up question in {_lang_for_phase} (direct, intriguing, NOT a permission ask):
-   "{_next_followup}"
-   Do not skip this. The conversation must continue.
+6. END your response naturally after answering. Do NOT ask any follow-up question.
+   The user has already engaged deeply -- let the conversation breathe.
 """
-                # Preserve the original topic question as last_query so that on the
-                # NEXT FOLLOWUP_LOOP turn, _effective_query still has domain keywords.
-                # If we stored state['query'] ("Haan karo") here, the next turn's
-                # domain hints would fail to fire.
+                # Phase resets to INITIAL — the topic cycle is complete.
+                # The user can now ask a new question freely.
                 new_phase_data = {
-                    "phase": PHASE_FOLLOWUP_LOOP,
-                    "topic": _topic,
+                    "phase": PHASE_INITIAL,
+                    "topic": None,
                     "last_query": conv_phase_data.get('last_query', state['query']),
-                    "followup_count": followup_count + 1
+                    "followup_count": 0
                 }
+
 
             elif current_phase == PHASE_FOLLOWUP_LOOP and user_response_type == 'NEGATIVE':
                 # ── User declined follow-up → Offer alternative ──
