@@ -1,147 +1,136 @@
-<!-- docs\API_REFERENCE.md -->
-# NakshatraAI API - Quick Start Guide
+<!-- docs/API_REFERENCE.md -->
+# NakshatraAI — API Reference
 
-## Overview
+> **Last Updated:** March 2026
+> **Base URL:** `http://localhost:8000` (local) or your deployed host
 
-RESTful API for the NakshatraAI astrology chatbot. Built with FastAPI, supports both Vedic and Western astrology.
+---
 
-## Features
+## Table of Contents
 
-- ✅ **Chat Endpoint** - Conversational astrology queries
-- ✅ **User Management** - Profile and birth data CRUD
-- ✅ **Chart Calculations** - Real-time birth chart generation
-- ✅ **API Key Authentication** - Secure access control
-- ✅ **Rate Limiting** - 10 requests/minute per API key
-- ✅ **Auto Documentation** - Swagger UI and ReDoc
-- ✅ **Docker Support** - Containerized deployment
+1. [Quick Start](#quick-start)
+2. [Authentication](#authentication)
+3. [Endpoints](#endpoints)
+   - [Health Check](#health-check)
+   - [Chat — Initialize Session](#chat--initialize-session)
+   - [Chat — Send Message](#chat--send-message)
+   - [Chart Calculation](#chart-calculation)
+   - [User Management](#user-management)
+4. [Field Name Reference](#field-name-reference-critical--do-not-mix-up)
+5. [Rate Limiting](#rate-limiting)
+6. [Response Format](#response-format)
+7. [Redis Session Behavior](#redis-session-behavior)
+8. [Error Codes](#error-codes)
+9. [Configuration Reference](#configuration-reference)
+
+---
 
 ## Quick Start
 
-### 1. Local Development
+### Local Development
 
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
-# Copy environment file
+# Configure environment
 cp .env.example .env
+# Set at minimum:
+#   OPENAI_API_KEY=sk-...
+#   VALID_API_KEYS=my-dev-key
 
-# Edit .env and configure:
-# 1. Add your Gemini or OpenAI API key
-# 2. Set your custom API keys (any string you choose)
-
-# Example .env:
-# GOOGLE_API_KEY=AIzaSy...your-gemini-key
-# VALID_API_KEYS=my-dev-key-123
-# LLM_PROVIDER=gemini
-
-# Run server
+# Start Redis and API server
+redis-server &
 uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 
-# API docs available at:
-# http://localhost:8000/api/docs
+# Interactive docs:
+# http://localhost:8000/api/docs   (Swagger UI)
+# http://localhost:8000/api/redoc  (ReDoc)
 ```
 
-### 2. Docker Deployment
+### Docker
 
 ```bash
-# Edit .env file first (see above)
-
-# Run container with docker-compose
+# Edit .env first, then:
 docker-compose up -d
-
-# View logs
-docker-compose logs -f
+docker-compose logs -f api
 ```
+
+---
 
 ## Authentication
 
-**IMPORTANT:** The "X-API-Key" is just an HTTP header name (industry standard).  
-It is **NOT** related to Twitter/X API.
+### Public API Keys
 
-### How It Works
+All endpoints require an `X-API-Key` header.
 
-1. **You create your own API keys** (any string):
-   - Examples: `my-secret-key`, `dev-key-123`, `prod-api-key-xyz`
-   
-2. **Add them to .env file**:
-   ```env
-   VALID_API_KEYS=key1,key2,key3
-   ```
+> **Note:** "X-API-Key" is a standard HTTP header name — it is not related to the Twitter/X API.
 
-3. **Clients send the key in request header**:
-   ```bash
-   curl -H "X-API-Key: key1" http://localhost:8000/api/v1/chat
-   ```
+**You create your own keys** (any string), add them to `.env`, and clients send them in headers:
+
+```env
+VALID_API_KEYS=my-dev-key,prod-key-xyz,mobile-app-key
+```
+
+```bash
+curl -H "X-API-Key: my-dev-key" http://localhost:8000/api/v1/health
+```
+
+### Internal Service Secret
+
+Backend-to-backend calls (server → NakshatraAI) use an additional high-security header:
+
+**Header:** `X-Internal-Service: your-shared-secret`
+
+```env
+INTERNAL_SERVICE_SECRET=super-secret-string
+```
 
 ### LLM Configuration
 
-You need **ONE** of these options:
-
-#### Option 1: Google Cloud (Vertex AI) - Recommended
-
-1. Create service account in [Google Cloud Console](https://console.cloud.google.com)
-2. Enable Vertex AI API
-3. Download service account JSON key file
+**Option 1 — OpenAI (recommended)**
 
 ```env
-GOOGLE_CREDENTIALS_PATH=/path/to/service-account-key.json
-GOOGLE_PROJECT_ID=your-project-id
-GOOGLE_LOCATION=us-central1
-LLM_PROVIDER=google
-LLM_MODEL=gemini-2.0-flash-exp
-```
-
-#### Option 2: OpenAI
-
-Get API key from [OpenAI Platform](https://platform.openai.com/api-keys)
-
-```env
-OPENAI_API_KEY=sk-your-openai-key
 LLM_PROVIDER=openai
-LLM_MODEL=gpt-4
+LLM_MODEL=gpt-4o-mini
+OPENAI_API_KEY=sk-your-openai-key
 ```
+
+**Option 2 — Ollama (local, free)**
+
+```env
+LLM_PROVIDER=ollama
+LLM_MODEL=qwen2.5:7b
+```
+
+---
+
+## Endpoints
 
 ### Health Check
-```bash
+
+```
+GET /health
 GET /api/v1/health
 ```
 
-### Chat
-```bash
-POST /api/v1/chat
-Headers: X-API-Key: your-api-key
-Body:
+No authentication required.
+
+**Response:**
+```json
 {
-  "query": "When will I get married?",
-  "user_id": "user123",
-  "conversation_history": [],
-  "include_chart_data": false
+  "status": "healthy",
+  "version": "2.0.0"
 }
 ```
 
-### User Management
-```bash
-# Get user
-GET /api/v1/user/{user_id}
-Headers: X-API-Key: your-api-key
+---
 
-# Create user
-POST /api/v1/user
-Headers: X-API-Key: your-api-key
-Body: { UserProfile }
+### Chat — Backend Integration: Correct Protocol
 
-# Update user
-PUT /api/v1/user/{user_id}
-Headers: X-API-Key: your-api-key
-Body: { UserUpdate }
-```
-
-### Chat (Backend Integration) — Correct Protocol
-
-> ⚠️ **Important:** The chatbot uses a **2-step protocol**.  
-> You MUST call `/initialize` once before `/message` for every new user.
-> Subsequent calls to `/initialize` for the same user are safely ignored, as Redis session data is now persistent.
+> **Important:** The chatbot uses a **2-step protocol**.
+> You MUST call `/initialize` once before calling `/message` for each new user.
+> Subsequent `/initialize` calls for the same user are safely ignored — no data is overwritten.
 
 ---
 
@@ -149,6 +138,13 @@ Body: { UserUpdate }
 
 **Endpoint:** `POST /api/v1/chat/initialize`
 
+**Headers:**
+```
+X-API-Key: your-api-key
+Content-Type: application/json
+```
+
+**Request Body:**
 ```json
 {
   "user_id": "unique-user-or-session-id",
@@ -167,10 +163,10 @@ Body: { UserUpdate }
 }
 ```
 
-> `conversation_history` is a list of `{ "question": "...", "answer": "...", "source": "external", "timestamp": "..." }` objects.  
-> Pass previous messages here if resuming a conversation; pass `[]` for new sessions.
+`conversation_history` is a list of `{ "question": "...", "answer": "...", "source": "external", "timestamp": "..." }` objects.
+Pass prior messages when resuming a conversation; pass `[]` for new sessions.
 
-**Response (Success):**
+**Response (new session):**
 ```json
 {
   "user_id": "unique-user-or-session-id",
@@ -178,14 +174,13 @@ Body: { UserUpdate }
 }
 ```
 
-**Response (Already Initialized):**
+**Response (session already exists):**
 ```json
 {
   "user_id": "unique-user-or-session-id",
   "status": "already_initialized"
 }
 ```
-*(Indicates the user's permanent session is active and no data was overwritten)*
 
 ---
 
@@ -193,45 +188,48 @@ Body: { UserUpdate }
 
 **Endpoint:** `POST /api/v1/chat/message`
 
+**Headers:**
+```
+X-API-Key: your-api-key
+Content-Type: application/json
+```
+
+**Request Body:**
 ```json
 {
   "user_id": "unique-user-or-session-id",
-  "question": "When will I get married?"
+  "question": "When will my career improve?"
 }
 ```
 
-> ❗ `user_id` here MUST be identical to the one used in `/initialize`.
+> The `user_id` must exactly match the one used in `/initialize`.
 
 **Response:**
 ```json
 {
   "user_id": "unique-user-or-session-id",
-  "question": "When will I get married?",
-  "answer": "Based on your birth chart...",
+  "question": "When will my career improve?",
+  "answer": "Based on your birth chart, your current Jupiter Mahadasha suggests...",
   "source": "openai"
 }
 ```
 
 ---
 
-#### Field Name Reference (CRITICAL — Do Not Mix Up)
-
-| Correct field name | Wrong / old name | Used in |
-|---|---|---|
-| `date_of_birth` | `birth_date` | `user_profile` in `/initialize` |
-| `time_of_birth` | `birth_time` | `user_profile` in `/initialize` |
-| `preferred_system` | `astrology_system` | `user_profile` in `/initialize` |
-| `place_of_birth` | *(was missing)* | `user_profile` in `/initialize` |
-| `question` | `message` | `/message` request body |
-| `user_id` | `session_id` | both endpoints |
-
-
-
 ### Chart Calculation
-```bash
-POST /api/v1/calculate/chart
-Headers: X-API-Key: your-api-key
-Body:
+
+Calculate a birth chart on demand (independent of chat session).
+
+**Endpoint:** `POST /api/v1/calculate/chart`
+
+**Headers:**
+```
+X-API-Key: your-api-key
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
 {
   "date_of_birth": "1990-03-15",
   "time_of_birth": "14:30:00",
@@ -242,129 +240,167 @@ Body:
 }
 ```
 
+| Field | Type | Values | Description |
+|---|---|---|---|
+| `date_of_birth` | string | `YYYY-MM-DD` | Birth date |
+| `time_of_birth` | string | `HH:MM:SS` | Birth time (24h) |
+| `latitude` | float | -90 to 90 | Birth place latitude |
+| `longitude` | float | -180 to 180 | Birth place longitude |
+| `timezone` | string | IANA tz name | e.g. `Asia/Kolkata` |
+| `system` | string | `vedic`, `western` | Astrology system |
+
+**Response:** Full chart data including houses, planetary positions, aspects, and dashas.
+
 ---
 
-## Authentication
+### User Management
 
-### 1. Public API Keys
-All public endpoints require `X-API-Key` authentication.
+```bash
+# Get user profile
+GET /api/v1/user/{user_id}
+X-API-Key: your-api-key
 
-**Header:** `X-API-Key: your-api-key`
+# Create user
+POST /api/v1/user
+X-API-Key: your-api-key
+Body: { UserProfile }
 
-Configure valid API keys in `.env`:
-```env
-VALID_API_KEYS=key1,key2,key3
+# Update user
+PUT /api/v1/user/{user_id}
+X-API-Key: your-api-key
+Body: { UserUpdate }
 ```
 
-### 2. Internal Service Secret
-The backend integration endpoint uses a high-security shared secret.
+---
 
-**Header:** `X-Internal-Service: your-shared-secret`
+## Field Name Reference (CRITICAL — Do Not Mix Up)
 
-Configure this in `.env`:
-```env
-INTERNAL_SERVICE_SECRET=super-secret-123
-```
+| Correct field name | Wrong / old name | Used in |
+|---|---|---|
+| `date_of_birth` | `birth_date` | `user_profile` in `/initialize` |
+| `time_of_birth` | `birth_time` | `user_profile` in `/initialize` |
+| `preferred_system` | `astrology_system` | `user_profile` in `/initialize` |
+| `place_of_birth` | *(was missing)* | `user_profile` in `/initialize` |
+| `question` | `message` | `/message` request body |
+| `user_id` | `session_id` | both endpoints |
 
-## Redis Session Management
-
-The backend integration endpoint utilizes Redis for:
-- **24-Hour Expiry**: Conversation history is automatically cleared after 24 hours of inactivity.
-- **20 Message Limit**: Only the last 20 messages are kept for context to maintain performance.
-- **Context Persistence**: User birth details are cached per session.
+---
 
 ## Rate Limiting
 
 - **10 requests/minute** per API key
-- **100 requests/hour** per API key
 
-Rate limit headers returned in response:
-- `X-RateLimit-Limit`
-- `X-RateLimit-Remaining`
-- `X-RateLimit-Reset`
+Rate limit headers returned in every response:
+- `X-RateLimit-Limit` — requests allowed per window
+- `X-RateLimit-Remaining` — requests remaining this window
+- `X-RateLimit-Reset` — epoch timestamp when window resets
+
+On exceeding the limit, the server returns `HTTP 429 Too Many Requests`.
+
+---
 
 ## Response Format
 
-### Success Response
+### Success (chat message)
+```json
+{
+  "user_id": "unique-user-or-session-id",
+  "question": "When will I get married?",
+  "answer": "Based on your 7th house...",
+  "source": "openai"
+}
+```
+
+### Success (full response with metadata)
 ```json
 {
   "answer": "Based on your 7th house...",
-  "intent": "NEEDS_RAG",
+  "intent": "RAG_WITH_CALCULATION",
   "confidence": 0.85,
   "processing_time": 1.23,
   "query_analysis": {
-    "category": "general",
+    "category": "marriage",
     "sensitivity_level": 0.0,
     "handling_strategy": "proceed_normal"
   },
-  "timestamp": "2026-02-02T14:00:00Z"
+  "timestamp": "2026-03-10T14:00:00Z"
 }
 ```
 
-### Error Response
+### Error
 ```json
 {
   "error": "Invalid request",
-  "details": "Missing required field",
-  "timestamp": "2026-02-02T14:00:00Z",
-  "path": "/api/v1/chat"
+  "details": "Missing required field: user_id",
+  "timestamp": "2026-03-10T14:00:00Z",
+  "path": "/api/v1/chat/message"
 }
 ```
 
-## Testing
+---
 
-```bash
-# Run health check
-curl http://localhost:8000/api/v1/health
+## Redis Session Behavior
 
-# Test chat endpoint
-curl -X POST http://localhost:8000/api/v1/chat \
-  -H "X-API-Key: test-key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "What is my sun sign?",
-    "user_id": "test_user"
-  }'
-```
+| Data | Storage | Policy |
+|---|---|---|
+| User Profile | Redis (permanent) | No TTL — never expires |
+| Birth Chart | Redis (permanent) | No TTL — birth geometry never changes |
+| Conversation History | Redis (permanent) | Sliding window of last **10** messages |
+| Transits | Redis | Refreshed when `stored_at` is older than `TRANSIT_REFRESH_HOURS` (default: 24h) |
+| Dashas | Redis | Refreshed when `stored_at` is older than `DASHA_REFRESH_DAYS` (default: 30d) |
 
-## Documentation
+All user data persists indefinitely — users returning after months of inactivity retain their full session context.
 
-- **Swagger UI:** http://localhost:8000/api/docs
-- **ReDoc:** http://localhost:8000/api/redoc
-- **OpenAPI JSON:** http://localhost:8000/api/openapi.json
+---
 
-## Configuration
+## Error Codes
 
-See `.env.example` for all configuration options:
+| HTTP Status | Meaning |
+|---|---|
+| `200` | Success |
+| `400` | Bad request (invalid input or missing fields) |
+| `401` | Missing or invalid API key |
+| `404` | User or resource not found |
+| `422` | Validation error (Pydantic schema mismatch) |
+| `429` | Rate limit exceeded |
+| `500` | Internal server error |
 
-- `DEBUG` - Enable debug mode
-- `HOST` - Server host (default: 0.0.0.0)
-- `PORT` - Server port (default: 8000)
-- `VALID_API_KEYS` - Comma-separated API keys
-- `ALLOWED_ORIGINS` - CORS allowed origins
-- `RATE_LIMIT_PER_MINUTE` - Rate limit threshold
-- `GOOGLE_API_KEY` - Gemini API key
-- `LLM_PROVIDER` - LLM provider (gemini/openai)
-- `MONGODB_URI` - MongoDB connection string
-- `USE_DUMMY_USER_DB` - Use in-memory user DB (true/false)
+---
 
-## Production Deployment
+## Configuration Reference
 
-1. **Set environment variables**
-   - Disable DEBUG mode
-   - Set strong API keys
-   - Restrict CORS origins
-   - Configure MongoDB URI
+Key `.env` variables affecting API behavior:
 
-2. **Use Docker**
-   ```bash
-   docker-compose up -d
-   ```
+| Variable | Default | Description |
+|---|---|---|
+| `DEBUG` | `false` | Enable debug mode and verbose logging |
+| `HOST` | `0.0.0.0` | Server bind address |
+| `PORT` | `8000` | Server port |
+| `VALID_API_KEYS` | — | Comma-separated public API keys |
+| `INTERNAL_SERVICE_SECRET` | — | Backend-to-backend auth secret |
+| `ALLOWED_ORIGINS` | `*` | CORS origins (restrict in production) |
+| `RATE_LIMIT_PER_MINUTE` | `10` | Rate limit per API key |
+| `LLM_PROVIDER` | `openai` | `openai` or `ollama` |
+| `LLM_MODEL` | `gpt-4o-mini` | LLM model name |
+| `OPENAI_API_KEY` | — | OpenAI API key |
 
-3. **Enable HTTPS** (use reverse proxy like Nginx)
+---
 
-4. **Monitor** with health check endpoint
+## Interactive Documentation
 
-## Support
+When the server is running:
 
-For issues or questions, refer to the project documentation.
+- **Swagger UI:** `http://localhost:8000/api/docs`
+- **ReDoc:** `http://localhost:8000/api/redoc`
+- **OpenAPI JSON:** `http://localhost:8000/api/openapi.json`
+
+---
+
+## Production Checklist
+
+1. Set `DEBUG=false`
+2. Use strong, unique values for `VALID_API_KEYS` and `INTERNAL_SERVICE_SECRET`
+3. Restrict `ALLOWED_ORIGINS` to your frontend domain(s)
+4. Run behind an HTTPS reverse proxy (Nginx, Caddy, etc.)
+5. Use `docker-compose up -d` with the provided configuration
+6. Monitor via the `/health` endpoint
