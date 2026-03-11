@@ -19,7 +19,7 @@ _startup_time = time.time()
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health_check():
+def health_check():
     """
     Health check endpoint.
 
@@ -53,6 +53,6 @@ async def health_check():
 
 
 @router.get("/ping")
-async def ping():
+def ping():
     """Simple ping endpoint for basic connectivity check."""
     return {"status": "pong", "timestamp": time.time()}

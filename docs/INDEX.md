@@ -1,14 +1,57 @@
 # NakshatraAI — Documentation Index
 
-Welcome to the documentation for NakshatraAI.
+Welcome to the NakshatraAI documentation. This index links to all project docs.
+
+---
 
 ## Core Documents
 
-- [**DEVELOPER_GUIDE.md**](./DEVELOPER_GUIDE.md)  
-  A foundational guide bringing together Quick Start Instructions, Installation/Setup steps, Developer Integration patterns (extending predictive calculation engines), PDF RAG Document Processing, and Cost Tracking configurations.
+| Document | Audience | Description |
+|---|---|---|
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | All developers | System design, data flow, calculation engines, RAG pipeline, safety framework, and caching strategy |
+| [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md) | Backend & AI engineers | Local setup, environment configuration, mobile app integration, extending predictions, RAG book management, cost tracking |
+| [API_REFERENCE.md](./API_REFERENCE.md) | Mobile & backend integrators | All REST endpoints, authentication, request/response schemas, field names, rate limits, and error formats |
 
-- [**ARCHITECTURE.md**](./ARCHITECTURE.md)  
-  A masterful breakdown of the overall system components, including the LangGraph orchestration flow, safety framework design, Vedic and Western calculation engines, and caching strategies.
+---
 
-- [**API_REFERENCE.md**](./API_REFERENCE.md)  
-  Thorough documentation of the API connectivity logic between the mobile front-end and the Python FastAPI back-end, including details on authentication, chat protocol, and calculation endpoints.
+## Quick Navigation
+
+### Getting Started
+- [Local setup & installation](./DEVELOPER_GUIDE.md#-quick-start-local-setup)
+- [Docker deployment](./DEVELOPER_GUIDE.md#docker-deployment)
+- [Environment variables reference](./DEVELOPER_GUIDE.md#environment-variables-reference)
+
+### API Integration
+- [2-step chat protocol](./API_REFERENCE.md#chat-backend-integration--correct-protocol)
+- [Authentication](./API_REFERENCE.md#authentication)
+- [Field name reference (critical)](./API_REFERENCE.md#field-name-reference-critical--do-not-mix-up)
+- [Rate limiting](./API_REFERENCE.md#rate-limiting)
+- [Response format](./API_REFERENCE.md#response-format)
+
+### Architecture
+- [Data flow overview](./ARCHITECTURE.md#data-flow--lifecycle)
+- [Vedic calculation engine](./ARCHITECTURE.md#vedic-engine-srcenginesvedic)
+- [Western calculation engine](./ARCHITECTURE.md#western-engine-srcengineswestern)
+- [RAG pipeline](./ARCHITECTURE.md#rag-pipeline)
+- [LangGraph orchestrator](./ARCHITECTURE.md#orchestrator--validation)
+- [Safety framework](./ARCHITECTURE.md#safety-framework)
+- [Redis caching strategy](./ARCHITECTURE.md#caching--state-architecture)
+
+### AI Engineering
+- [Extending prediction logic](./DEVELOPER_GUIDE.md#-extending-prediction-logic-for-ai-engineers)
+- [Managing RAG books](./DEVELOPER_GUIDE.md#-managing--expanding-the-rag-books)
+- [Cost tracking](./DEVELOPER_GUIDE.md#-cost-tracking-system)
+
+---
+
+## Project Stats
+
+| Metric | Value |
+|---|---|
+| Python source files | 113 |
+| Orchestrator size | 3,100+ lines |
+| Validation rules | 750+ |
+| RAG knowledge chunks | 14,000+ |
+| Supported languages | 4 (EN, HI, TA, PA) + Hinglish |
+| Safety gates | 4 |
+| Test files | 20 |

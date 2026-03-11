@@ -172,7 +172,7 @@ def send_message(user_id: str, question: str) -> Optional[dict]:
         response = requests.post(
             f"{API_BASE_URL}/message",
             json=payload,
-            timeout=60
+            timeout=120
         )
         
         if response.status_code == 200:
