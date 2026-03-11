@@ -468,29 +468,64 @@ class EnhancedLangGraphOrchestrator:
     def _detect_language_node(self, state: NakshatraState) -> NakshatraState:
         """Node 1.5: Detect query language using library-based detection with LLM fallback."""
         from src.locales.language_detector import get_language_detector
-        
+
         query = state['query']
         print(f"[LANG] Detecting language for: '{query[:30]}...'")
-        
+
+        # ── Session language prior ──────────────────────────────────────────────
+        # If the session already stored a non-English detected_language from a
+        # previous turn (injected via session_data), use it as a fallback for short,
+        # low-confidence responses (e.g. "Haan batao", "Theek hai", "OK").
+        # This prevents langdetect from flipping to English on short Hinglish phrases.
+        _session_lang = state.get('detected_language')  # injected by authenticate_node
+        _session_lang_is_indian = (
+            _session_lang and _session_lang != 'en' and _session_lang in {
+                'hi', 'hi-lat', 'ta', 'ta-lat', 'te', 'te-lat',
+                'ml', 'ml-lat', 'mr', 'mr-lat', 'pa', 'pa-lat'
+            }
+        )
+        _query_word_count = len(query.strip().split())
+        # ───────────────────────────────────────────────────────────────────────
+
         # Use new LanguageDetector with LLM fallback
         detector = get_language_detector(llm=self.fast_llm)
-        
+
         try:
             # Get language with confidence
             detected_lang, confidence = detector.detect_with_confidence(query)
-            
+
+            # ── Session-prior fallback ──────────────────────────────────────────
+            # If the freshly detected language is English BUT:
+            #   (a) the session was previously non-English, AND
+            #   (b) the query is short (≤ 4 words), AND
+            #   (c) confidence is not high (≤ 0.75)
+            # → trust the session language (the user didn't switch languages).
+            if (
+                detected_lang == 'en'
+                and _session_lang_is_indian
+                and _query_word_count <= 4
+                and confidence <= 0.75
+            ):
+                print(
+                    f"[LANG] Low-confidence English ({confidence:.2f}) on short query "
+                    f"({_query_word_count}w) — keeping session language: {_session_lang}"
+                )
+                detected_lang = _session_lang
+                confidence = 0.80  # synthetic confidence for the inherited value
+            # ───────────────────────────────────────────────────────────────────
+
             state['detected_language'] = detected_lang
             state['original_query'] = query
-            
+
             # Log detection method
             method = "library" if confidence > 0.7 else "LLM fallback"
             print(f"[LANG] Detected: {detected_lang} ({method}, confidence: {confidence:.2f})")
-            
+
         except Exception as e:
             print(f"[LANG] Detection error: {e}, defaulting to 'en'")
-            state['detected_language'] = 'en'
+            state['detected_language'] = _session_lang if _session_lang_is_indian else 'en'
             state['original_query'] = query
-            
+
         return state
     
     def _handle_safety_check_node(self, state: NakshatraState) -> NakshatraState:
@@ -1763,14 +1798,21 @@ Provide a concise answer:"""
                     _pre_orig_q, _last_bot_s3, getattr(self, 'fast_llm', None), _pre_phase
                 )
 
-            # When user responds with an affirmative to AWAITING_DETAIL/FOLLOWUP_LOOP,
-            # use the ORIGINAL question (last_query) for prompt building so that
-            # domain-specific hints (marriage, career, etc.) fire correctly.
+            # Choose effective query for prompt domain-hint generation:
+            # - Short pure affirmatives ("Haan", "batao", "ok") → use last_query so that
+            #   marriage/career keywords still fire for the topic being discussed.
+            # - Long direct questions ("Mujhe batao kya qualities hongi partner mein?") →
+            #   use state['query'] so domain hints match what the user ACTUALLY asked.
+            #   Without this, a 7-word question about partner qualities would still
+            #   generate marriage-timing hints (from last_query "Meri shadi kab hogi?"),
+            #   causing the LLM to answer timing instead of qualities.
             _last_q = _pre_phase_data.get('last_query', '')
+            _is_short_affirmative = len(_pre_orig_q.strip().split()) <= 5
             _is_continuation_affirmative = (
                 _pre_phase in (_PAD, _PFL)
                 and _pre_resp == 'AFFIRMATIVE'
                 and _last_q
+                and _is_short_affirmative  # Only redirect for short pure affirmatives
             )
             _effective_query = _last_q if _is_continuation_affirmative else state['query']
 
@@ -1887,25 +1929,80 @@ Provide a concise answer:"""
             print(f"[PHASE] topic={_topic} (val_qt={_val_qt}, current_topic={current_topic})")
 
             # Choose follow-up question — prefer LLM-generated (contextual) over static bank.
-            # The static bank is used as fallback if the LLM call fails or returns nothing.
+            # generate_followup_question() has a 4-second hard timeout internally so it
+            # NEVER blocks the pipeline — falls back to the static bank on timeout/error.
             _followup_bank = FOLLOWUP_QUESTION_BANK.get(_topic, FOLLOWUP_QUESTION_BANK['general'])
             _followup_idx = followup_count % len(_followup_bank) if _followup_bank else 0
             _static_followup = _followup_bank[_followup_idx] if _followup_bank else ""
-            # For FOLLOWUP_LOOP, generate a dynamic question that flows from the last answer.
-            # For AWAITING_DETAIL (first follow-up), static bank is usually good enough but
-            # we also attempt dynamic generation.
             _last_bot_msg_for_fq = next(
                 (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
                  if m.get('role') == 'assistant'), ''
             )
+            # Infer conversation language from the last bot message rather than from the
+            # current user message. Short affirmatives like "Haan" are detected as English
+            # by langdetect, which would make the LLM generate English follow-up questions
+            # in an otherwise Hindi conversation.
+            _detected_lang = state.get('detected_language', 'en')
+            _fq_language = _detected_lang
+            if _detected_lang in ('en', '') and _last_bot_msg_for_fq:
+                _bot_lower = _last_bot_msg_for_fq.lower()
+                _hinglish_markers = ['hai', ' hain', ' ke ', ' ka ', ' ki ', ' aur ', ' mein ', ' se ', ' jo ', 'aap', 'kya']
+                if any(m in _bot_lower for m in _hinglish_markers):
+                    _fq_language = 'hi-lat'
+                elif any('\u0900' <= c <= '\u097F' for c in _last_bot_msg_for_fq):
+                    _fq_language = 'hi'
+            # Build a compact chart context string with specific planet placements so the
+            # LLM generates personalized questions ("Jupiter in your 3rd house...") instead
+            # of generic/conditional ones ("agar koi planet hai toh...").
+            _chart_ctx = None
+            _cd = state.get('chart_data') or {}
+            if _cd:
+                try:
+                    _hl = (state.get('enhanced_analysis') or {}).get('house_lords', {})
+                    _planets = _cd.get('planets', {})
+                    _lagna = _cd.get('lagna', {})
+                    _ctx_lines = []
+                    if _lagna:
+                        _ctx_lines.append(f"Lagna: {_lagna.get('sign','?')} ({_lagna.get('nakshatra','?')})")
+                    # Topic-relevant lords
+                    _topic_lords = {
+                        'marriage': ['H7', 'H2', 'H5'],
+                        'career':   ['H10', 'H6', 'H11'],
+                        'finance':  ['H2', 'H11', 'H5'],
+                        'health':   ['H6', 'H8', 'H1'],
+                        'children': ['H5', 'H9'],
+                        'foreign':  ['H12', 'H9', 'H3'],
+                    }.get(_topic, ['H1', 'H9', 'H10'])
+                    for _hk in _topic_lords:
+                        _lord = _hl.get(_hk, {})
+                        _lord_name = _lord.get('lord') or _lord.get('planet')
+                        if _lord_name and _lord_name in _planets:
+                            _p = _planets[_lord_name]
+                            _ctx_lines.append(
+                                f"{_hk} lord {_lord_name}: {_p.get('sign','?')} in house {_p.get('house','?')}"
+                                + (' (R)' if _p.get('is_retrograde') else '')
+                                + (' [combust]' if _p.get('is_combust') else '')
+                            )
+                    # Venus and Jupiter always relevant for marriage/general
+                    for _pn in ('VENUS', 'JUPITER', 'SATURN'):
+                        if _pn in _planets and _pn not in [l.get('lord','') for l in _hl.values()]:
+                            _p = _planets[_pn]
+                            _ctx_lines.append(f"{_pn}: {_p.get('sign','?')} in house {_p.get('house','?')}")
+                    if _ctx_lines:
+                        _chart_ctx = '\n'.join(_ctx_lines)
+                except Exception:
+                    pass
+            print(f"[PHASE] Generating follow-up question (topic={_topic}, lang={_fq_language}, timeout=4s)...")
             _suggested_followup = generate_followup_question(
                 topic=_topic,
                 last_answer=_last_bot_msg_for_fq,
-                language=state.get('detected_language', 'en'),
+                language=_fq_language,
                 fast_llm=getattr(self, 'fast_llm', None),
-                fallback=_static_followup
+                fallback=_static_followup,
+                chart_context=_chart_ctx,
+                timeout=4.0
             )
-            print(f"[PHASE] Follow-up question: {_suggested_followup[:80]}")
+            print(f"[PHASE] Follow-up question ready: {_suggested_followup[:80]}")
 
             phase_instruction = ""
             new_phase_data = {}  # Will be set on state for chat_stateless to persist
@@ -1930,25 +2027,22 @@ Provide a concise answer:"""
                 return state  # Skip LLM call — direct response
 
             elif current_phase == PHASE_AWAITING_DETAIL and user_response_type == 'AFFIRMATIVE':
-                # ── User wants details → Generate comprehensive 250-300 word response ──
+                # ── User wants details → Generate comprehensive ~400 word response ──
                 print(f"[PHASE] AWAITING_DETAIL + AFFIRMATIVE → detailed response")
+                _lang_for_phase = state.get('detected_language', 'en')
                 phase_instruction = f"""
-⚡ PROGRESSIVE DISCLOSURE — DETAILED RESPONSE MODE (OVERRIDES word-limit instructions above):
+PROGRESSIVE DISCLOSURE -- DETAILED RESPONSE MODE (OVERRIDES word-limit instructions above):
 The user asked for more details. Give a comprehensive, insightful answer now.
-1. WORD LIMIT: 250-300 words. Use the full space — be thorough.
+LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lang_for_phase}. Do NOT mix languages.
+1. WORD LIMIT: 300-350 words maximum. Be thorough but do not exceed 400 words.
 2. Cover 3-5 key astrological factors (house lords, dasha timing, transit effects, dignities).
 3. Include specific Pratyantar timing windows from the data above.
-4. Include the "Next Favorable Window" section.
-5. Maintain warm, conversational narrative — weave factors together, don't just list them.
-6. NEVER use "H1", "H2", "H3" etc. — always write "1st house", "2nd house", "3rd house".
-   Use house annotations: e.g., "7th house (Marriage & Partnership)".
-7. DO NOT repeat the brief answer already given — build deeper upon it.
-8. MANDATORY — at the very END of your response, ask this follow-up question naturally in the user's language:
-   "{_suggested_followup}"
-   IMPORTANT: Do NOT rephrase it as "Would you like to know X?" or "Shall I tell you about X?".
-   Ask it as a direct, intriguing question — as if you are naturally curious and inviting conversation.
-   Example of WRONG format: "Would you like to know about your Venus placement?"
-   Example of RIGHT format: "Your Venus placement has something interesting to say about your love life — curious what it reveals?"
+4. Include the Next Favorable Window section.
+5. Maintain warm, conversational narrative -- weave factors together, do not just list them.
+6. NEVER use H1, H2, H3 etc. -- always write 1st house, 2nd house, 3rd house.
+   Use house annotations: e.g., 7th house (Marriage and Partnership).
+7. DO NOT repeat the brief answer already given -- build deeper upon it.
+8. END your response naturally after covering the key factors. Do NOT append any follow-up question or teaser line.
 """
                 new_phase_data = {
                     "phase": PHASE_FOLLOWUP_LOOP,
@@ -1958,11 +2052,8 @@ The user asked for more details. Give a comprehensive, insightful answer now.
                 }
 
             elif current_phase == PHASE_FOLLOWUP_LOOP and user_response_type == 'AFFIRMATIVE':
-                # ── User agreed to a follow-up question → Answer it ──
-                print(f"[PHASE] FOLLOWUP_LOOP + AFFIRMATIVE → answering follow-up")
-                # _suggested_followup already contains the LLM-generated (or static fallback)
-                # question for AFTER this response — use it as the next follow-up.
-                _next_followup = _suggested_followup
+                # ── User agreed to a follow-up question → Answer it, then STOP asking ──
+                print(f"[PHASE] FOLLOWUP_LOOP + AFFIRMATIVE → answering follow-up (no further questions)")
                 # Extract the exact question the bot asked in its last message so we
                 # can inject it explicitly — the LLM often ignores "look at last message"
                 _hist = state.get('conversation_history') or []
@@ -1979,39 +2070,37 @@ The user asked for more details. Give a comprehensive, insightful answer now.
                     if _q_sentences:
                         _last_question = _q_sentences[-1].strip()
                 _answer_topic = f'"{_last_question}"' if _last_question else "the specific question in your previous message"
+                _lang_for_phase = state.get('detected_language', 'en')
                 print(f"[PHASE] Follow-up topic to answer: {_last_question[:80]}")
                 phase_instruction = f"""
-⚡ PROGRESSIVE DISCLOSURE — FOLLOW-UP ANSWER MODE (THIS OVERRIDES ALL OTHER INSTRUCTIONS):
+PROGRESSIVE DISCLOSURE -- FOLLOW-UP ANSWER MODE (THIS OVERRIDES ALL OTHER INSTRUCTIONS):
+
+LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lang_for_phase}. Do NOT mix languages.
 
 YOU MUST ANSWER THIS SPECIFIC QUESTION (extracted from your previous message):
   {_answer_topic}
 
 The user just said YES to that question. Answer ONLY that specific topic.
-DO NOT repeat marriage timing, Venus Pratyantar, or Next Favorable Window — those were already covered.
+DO NOT repeat marriage timing, Venus Pratyantar, or Next Favorable Window -- those were already covered.
 
 RULES:
-1. WORD LIMIT: 150-200 words. Focused and insightful.
-2. Use chart data to answer {_answer_topic} directly — cite 2-3 specific planetary factors.
-3. Be personalized and specific — NOT a summary of what was already said.
-4. NEVER use "H1", "H2", "H3" etc. — always write "1st house", "2nd house", "3rd house".
-5. NEVER include "Next Favorable Window" — this is a follow-up, not a timing response.
-6. MANDATORY — end with this NEW follow-up question in the user's language (natural, conversational):
-   "{_next_followup}"
-   Ask it as a direct intriguing question, NOT as "Would you like to know X?".
-   Example WRONG: "Would you like to know about your Venus placement?"
-   Example RIGHT: "Venus mein kuch aur bhi interesting hai — aapke prem jeevan ke baare mein kya kehta hai?"
-   Do not skip this. The conversation must continue.
+1. WORD LIMIT: 150-200 words maximum. Stay focused and do not exceed 200 words.
+2. Use chart data to answer {_answer_topic} directly -- cite 2-3 specific planetary factors.
+3. Be personalized and specific -- NOT a summary of what was already said.
+4. NEVER use H1, H2, H3 etc. -- always write 1st house, 2nd house, 3rd house.
+5. NEVER include Next Favorable Window -- this is a follow-up, not a timing response.
+6. END your response naturally after answering. Do NOT ask any follow-up question.
+   The user has already engaged deeply -- let the conversation breathe.
 """
-                # Preserve the original topic question as last_query so that on the
-                # NEXT FOLLOWUP_LOOP turn, _effective_query still has domain keywords.
-                # If we stored state['query'] ("Haan karo") here, the next turn's
-                # domain hints would fail to fire.
+                # Phase resets to INITIAL — the topic cycle is complete.
+                # The user can now ask a new question freely.
                 new_phase_data = {
-                    "phase": PHASE_FOLLOWUP_LOOP,
-                    "topic": _topic,
+                    "phase": PHASE_INITIAL,
+                    "topic": None,
                     "last_query": conv_phase_data.get('last_query', state['query']),
-                    "followup_count": followup_count + 1
+                    "followup_count": 0
                 }
+
 
             elif current_phase == PHASE_FOLLOWUP_LOOP and user_response_type == 'NEGATIVE':
                 # ── User declined follow-up → Offer alternative ──
@@ -2030,17 +2119,40 @@ RULES:
 
             else:
                 # ── INITIAL / NEW TOPIC → Short response (under 100 words) ──
-                print(f"[PHASE] INITIAL → short response with 1-2 critical factors")
+                print(f"[PHASE] INITIAL -> short response with 1-2 critical factors")
+                # Pick the closing question in the detected conversation language.
+                # Do NOT leave this as English when the user is speaking Hindi/Tamil/Punjabi.
+                _lang_now = state.get('detected_language', 'en')
+                # Closing question in all 13 supported language codes (Romanized for
+                # native-script languages -- the prompt_builder already instructs the
+                # LLM to respond in native script when detected_language has no -lat).
+                _closing_q_map = {
+                    'en':     'Would you like me to explain the detailed astrological reasoning behind this?',
+                    'hi':     'Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?',
+                    'hi-lat': 'Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?',
+                    'ta':     'Itharku pinnaal ullaa jothida karanam theriya virumbukireerga?',
+                    'ta-lat': 'Itharku pin ullana jothida karanam theriya virumbukireerga?',
+                    'pa':     'Ki tusi is de pichhe di jyotish wajah jaanna chahunde ho?',
+                    'pa-lat': 'Ki tusi is de pichhe di jyotish wajah jaanna chahunde ho?',
+                    'mr':     'Tumhala yaamagil savistara jyotishiya karan janayache aahe ka?',
+                    'mr-lat': 'Tumhala yaamagil savistara jyotishiya karan janayache aahe ka?',
+                    'te':     'Deeni venuka gala vistritamaina jyotisha karanam teluskovalanukunnaara?',
+                    'te-lat': 'Deeni venuka gala vistritamaina jyotisha karanam teluskovalanukunnaara?',
+                    'ml':     'Ithin pinnile vishadamaya jyothisha karanam ariyano?',
+                    'ml-lat': 'Ithin pinnile vishadamaya jyothisha karanam ariyano?',
+                }
+                _closing_q = _closing_q_map.get(_lang_now, _closing_q_map['en'])
                 phase_instruction = f"""
-⚡ PROGRESSIVE DISCLOSURE — INITIAL SHORT RESPONSE (OVERRIDES ALL OTHER FORMAT INSTRUCTIONS):
-STRICTLY FOLLOW THESE RULES — they override the "200-250 words" and "Next Favorable Window" instructions above:
-1. HARD WORD LIMIT: 70-100 words. Count carefully. Stop at 100.
-2. Cite only 1-2 critical planetary factors — NO long lists, NO house-by-house breakdown.
+PROGRESSIVE DISCLOSURE -- INITIAL SHORT RESPONSE (OVERRIDES ALL OTHER FORMAT INSTRUCTIONS):
+STRICTLY FOLLOW THESE RULES -- they override the word-limit and Next Favorable Window instructions above:
+1. HARD WORD LIMIT: 80-100 words. Count carefully. Stop at 100. Do NOT exceed 100 words under any circumstance.
+2. Cite only 1-2 critical planetary factors -- NO long lists, NO house-by-house breakdown.
 3. Give one timing answer (one specific date or period from the Pratyantar data).
-4. NEVER include a "Next Favorable Window" section — it belongs in the detailed response.
-5. NEVER use "H1", "H2", "H3" etc. — always write "1st house", "2nd house", "3rd house".
-6. End your response with this question (adapted to the user's language):
-   "Would you like me to explain the detailed astrological reasoning behind this?"
+4. NEVER include a Next Favorable Window section -- it belongs in the detailed response.
+5. NEVER use H1, H2, H3 etc. -- always write 1st house, 2nd house, 3rd house.
+6. Write the ENTIRE response including the closing question in the SAME language as the user's query.
+7. End your response with EXACTLY this closing question (do not translate, do not paraphrase):
+   {_closing_q}
 """
                 # BUG FIX #4: Store the true original question (pre-semantic-expansion)
                 # as last_query so that future AFFIRMATIVE turns have domain keywords.
@@ -3650,12 +3762,12 @@ EARLY CONVERSATION:
         domain_spotlight = self._get_domain_pratyantar_spotlight(query)
 
         # ════════════════════════════════════════════════════════════════════════
-        # MOBILE RESPONSE LENGTH CONTROL (250 words max)
+        # MOBILE RESPONSE LENGTH CONTROL
         # ════════════════════════════════════════════════════════════════════════
         mobile_length_instruction = """
 
 RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
-1. DEFAULT LENGTH: 200-250 words total (unless overridden by PROGRESSIVE DISCLOSURE instructions below).
+1. DEFAULT LENGTH: 100 words maximum (unless overridden by PROGRESSIVE DISCLOSURE instructions below).
 2. TONE: Write like a warm, knowledgeable astrologer speaking directly to the person — not a data sheet.
    Use natural sentence flow. Weave chart factors into a coherent narrative, not a bullet list.
    Show genuine care: acknowledge the importance of the question before diving into analysis.

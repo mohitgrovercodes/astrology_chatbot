@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 
 # ── Conversation Phase Constants ──────────────────────────────────────────────
 # Phases control the progressive disclosure response pattern:
-#   INITIAL           → First time asking a question on this topic
-#   AWAITING_DETAIL   → Bot asked "want more details?" — waiting for yes/no
-#   FOLLOWUP_LOOP     → Bot asked a follow-up question — loop continues
+#   INITIAL           -> First time asking a question on this topic
+#   AWAITING_DETAIL   -> Bot asked "want more details?" -- waiting for yes/no
+#   FOLLOWUP_LOOP     -> Bot asked a follow-up question -- loop continues
 PHASE_INITIAL = "INITIAL"
 PHASE_AWAITING_DETAIL = "AWAITING_DETAIL"
 PHASE_FOLLOWUP_LOOP = "FOLLOWUP_LOOP"
@@ -81,7 +81,7 @@ def detect_user_response_type(query: str) -> str:
     if any(q.startswith(s) for s in _NEGATIVE_SIGNALS if len(s) > 3):
         return 'NEGATIVE'
 
-    # Short-token prefix match — handles "ok karo", "ha bhai", "haan samjhao",
+    # Short-token prefix match -- handles "ok karo", "ha bhai", "haan samjhao",
     # "no please", "nahi yaar" etc. where the affirmative/negative is the first word.
     _SHORT_AFF = ('ok ', 'ok,', 'ha ', 'ha,', 'haan ', 'hmm ', 'hmm,')
     _SHORT_NEG = ('no ', 'no,', 'nahi ', 'naa ', 'nai ')
@@ -95,59 +95,56 @@ def detect_user_response_type(query: str) -> str:
 
 # ── Follow-up Question Domains ────────────────────────────────────────────────
 # Each domain maps to follow-up questions the bot CAN reliably answer.
-# These are used as LLM-prompt guidance — the LLM picks the most relevant one
+# These are used as LLM-prompt guidance -- the LLM picks the most relevant one
 # based on what was already discussed.
 FOLLOWUP_QUESTION_BANK = {
     'marriage': [
-        "Jupiter in your 3rd house is your 7th lord — that placement quietly shapes what your future partner will be like. What does it actually reveal about their personality?",
-        "Venus is the primary karaka for love and marriage, and its exact placement in your chart tells a very specific story about your romantic life — what does yours say?",
-        "The Navamsa (D9) chart is the real test of marriage strength in Vedic astrology — your birth chart sets the stage, but D9 reveals the depth. What does yours show?",
-        "Your 2nd house (family) and 5th house (romance) together map the full journey from falling in love to building a home — what pattern do they form in your chart?",
-        "There are specific Dasha periods in your chart that activate marriage far more powerfully than others — and some of them might surprise you. Which ones stand out?",
-        "Interestingly, the same planetary period that opens your marriage window also influences your financial life — your chart connects these two in a specific way. Want to see how?",
+        "7th lord ki placement mein ek twist hai jo future partner ki personality ke baare mein kuch unexpected reveal karta hai -- woh angle abhi cover nahi hua.",
+        "Venus aapke chart mein jahan hai, woh prem aur attraction ke baare mein kuch specific kehta hai jo bahut log notice hi nahi karte.",
+        "Navamsa (D9) chart ko shadi ka asli aaina kaha jaata hai -- aur aapke D9 mein kuch aisa hai jo birth chart se bilkul alag picture banata hai.",
+        "Aapke Dasha timeline mein ek period hai jo shadi ke liye unusually powerful hai -- aur woh woh nahi hai jo obvious lagta hai.",
+        "Jo planetary period aapki shadi ka darwaza khol raha hai, wahi period ek doosri zindagi-badalne wali cheez bhi leke aa raha hai.",
     ],
     'career': [
-        "Your 10th house lord's placement is the single biggest indicator of which career direction suits you best — it's quite specific in your chart. What does it point to?",
-        "The 11th house in your chart reveals your true income ceiling and how you'll actually reach it — job, business, or something else entirely. What does yours show?",
-        "Saturn's position shapes everything about long-term career — discipline, delays, and the eventual breakthrough. Its placement in your chart has a particular story to tell.",
-        "There's a window in your Dasha timeline when career growth accelerates sharply — a promotion, a leap, or a complete shift. When does that open for you?",
-        "Your lagnesh (ascendant lord) is the captain of your whole chart — where it sits tells you what drives your ambition. Its placement in your chart is quite revealing.",
-        "Your 2nd and 11th houses together tell the real financial story behind your career — not just what you earn, but how and when. What do they indicate?",
+        "10th lord ki placement ek specific career direction clearly point karti hai -- aur woh field usually woh nahi hoti jo log pehle sochte hain.",
+        "11th house mein ek indicator hai jo bata sakta hai ki aap job se zyada earn karenge ya business se -- aur answer genuinely surprising ho sakta hai.",
+        "Saturn aapke chart mein career ke baare mein ek unusual message de raha hai -- delay ki nahi, ek specific breakthrough window ki baat hai.",
+        "Aapke Dasha mein ek window hai jab career ek sharp leap leta hai -- woh period khulne wala hai, aur yeh jaanna preparation ke liye zaroori hai.",
+        "Lagnesh ki placement professional drive ke baare mein ek hidden indicator hai -- jo aapko actually aage push karta hai woh chart mein clearly visible hai.",
     ],
     'finance': [
-        "Your 2nd house (accumulated wealth) and 11th house (income gains) together reveal your real wealth-building pattern — and there's something specific worth knowing about yours.",
-        "There's a planetary period in your timeline that's unusually powerful for financial gains — it's coming, and it's worth knowing exactly when.",
-        "Your chart has clear indicators about whether you're built more for a job, business, or investments — which one does it favour?",
-        "Jupiter and Venus are the two primary wealth karakas — their placements in your chart say a lot about your relationship with money. Where do they sit?",
-        "Your career growth and financial growth windows are connected in your chart in an interesting way — the same period that advances one tends to move the other.",
+        "2nd aur 11th houses ka jo combination aapke chart mein hai, woh income ke baare mein ek specific aur somewhat surprising picture banata hai.",
+        "Ek planetary period aapke aage aa raha hai jo financial gains ke liye unusually powerful hai -- aur woh woh nahi jo surface pe obvious dikhta hai.",
+        "Aapke chart mein ek clear indicator hai ki aap job, business, ya investments -- kin mein se kisme naturally zyada success milegi.",
+        "Jupiter aur Venus dono wealth ke karak hain -- aur aapke chart mein inki placement mein ek interesting tension hai jo money ke saath relationship ko shape karta hai.",
     ],
     'health': [
-        "Your 6th house is the primary health indicator in Vedic astrology — its lord's placement points to specific areas that need attention in your chart.",
-        "Certain Dasha and Antardasha periods bring health pressure — not to alarm, but knowing which ones lets you be prepared. Which ones appear in your chart?",
-        "Your lagna and its lord define your constitution and natural vitality — it's the foundation of everything else. What does your chart say about your physical makeup?",
-        "Mars and Saturn together govern physical endurance and vulnerability — their placements in your chart tell a clear story about stamina and what to watch.",
+        "6th house lord ki placement ek specific area point karti hai jahan dhyan rakhna genuinely helpful hoga -- aur woh woh area nahi hoga jo aap expect karein.",
+        "Ek Dasha period hai jab health extra attention maangta hai -- yeh jaanna advance mein genuinely practical hai.",
+        "Lagna lord ki placement constitution aur natural vitality ke baare mein ek interesting picture banata hai -- strength aur weakness dono clearly visible hain wahan.",
+        "Mars aur Saturn ka jo angle aapke chart mein hai, woh physical stamina ke baare mein ek specific aur somewhat unexpected story batata hai.",
     ],
     'children': [
-        "Your 5th house is the primary house for children in Vedic astrology — its lord's placement gives specific clues about timing and the nature of your children.",
-        "Jupiter is the karaka for children, and its placement in your chart says a lot — not just about children, but also about fortune and wisdom. Where does it sit?",
-        "The 5th house also governs intelligence, creativity, and past-life merit — beyond children, there's a fascinating picture of your natural gifts hidden there.",
+        "5th house lord ki placement children ki timing ke baare mein ek clear signal deta hai -- aur kuch aur bhi hai wahan jo intelligence aur creativity ke baare mein interesting hai.",
+        "Jupiter aapke chart mein jahan hai, woh children ke baare mein ek picture banata hai jo birth chart se zyada D5 mein clearly dikhta hai.",
+        "5th house sirf bachcho ka ghar nahi -- past-life merit aur natural gifts ka bhi hai, aur aapke chart mein ek specific strength wahan chhupi hui hai.",
     ],
     'foreign': [
-        "Rahu is the primary indicator for foreign connections and unconventional paths — its placement in your chart gives very specific clues about your ties to distant places.",
-        "The 9th and 12th houses together map your foreign travel and settlement story — one shows the journey, the other shows where you might actually land. What do they say?",
-        "Foreign opportunities in your chart tend to cluster around specific Dasha periods — some are for career, some for personal growth. Which ones are yours?",
+        "Rahu ki placement foreign connection ke baare mein ek clear hint deta hai -- aur jo indicate karta hai woh career se personal life tak ek specific angle hai.",
+        "9th aur 12th houses ka combination bata sakta hai ki foreign travel ya settlement ka waqt aur direction kya hoga -- aapke chart mein kuch specific hai.",
+        "Foreign opportunities aapke Dasha timeline mein ek particular period ke around cluster karti hain -- kaunsa period hai aur kya type ki opportunity?",
     ],
     'general': [
-        "Your Dasha timeline has some interesting peaks and valleys ahead — the next major phase shift is closer than you might think. What does it look like?",
-        "Every chart has 2-3 standout planetary positions that give real natural advantages — yours has some specific ones worth knowing about.",
-        "There's a significant transit in your chart right now that's quietly shaping your circumstances — what is it and how much longer does it last?",
-        "Your lagna and its lord are the foundation of your entire chart — they reveal your core personality and life direction in a very specific way.",
-        "Your Sade Sati status (Saturn transiting near your Moon sign) has a measurable effect on mood, effort, and outcomes — what does yours currently show?",
-        "Every chart has one dominant planet that colours the whole life — a kind of personal signature. Which one is yours and what does it mean for your path?",
+        "Aapke Dasha mein agla major phase shift ek interesting mix leke aata hai -- kuch challenges, kuch unexpected openings. Kya dikhta hai aage?",
+        "Aapke chart mein 2-3 planetary positions hain jo real natural advantages dete hain -- woh strengths hain jo shayad aap abhi fully use nahi kar rahe.",
+        "Ek significant transit abhi chal raha hai jo silently current circumstances shape kar raha hai -- aur exactly kab tak chalega yeh jaanna helpful hai.",
+        "Lagna lord ki exact placement personality aur life direction ke baare mein jo picture banata hai, woh usually jo log expect karte hain usse alag hota hai.",
+        "Sade Sati ka aapke chart par ek measurable asar hai -- exactly kab peak hai aur kab lift hota hai, yeh practically jaanna zaroori hai.",
+        "Har chart mein ek dominant planet hota hai jo puri zindagi ko color karta hai -- aapka woh signature planet kaunsa hai?",
     ],
 }
 
-# Answerable topics per domain — used to constrain LLM-generated follow-up questions
+# Answerable topics per domain -- used to constrain LLM-generated follow-up questions
 # so the chatbot only asks about things it can actually answer from chart data.
 ANSWERABLE_TOPICS_BY_DOMAIN: Dict[str, List[str]] = {
     'marriage': [
@@ -210,13 +207,20 @@ def generate_followup_question(
     last_answer: str,
     language: str,
     fast_llm,
-    fallback: str = ""
+    fallback: str = "",
+    timeout: float = 4.0,
+    chart_context: Optional[str] = None
 ) -> str:
-    """Generate a contextually relevant follow-up question using the fast LLM.
+    """Generate a personalized, chart-specific follow-up question using the fast LLM.
 
-    The question is constrained to chart-answerable topics so the chatbot can
-    always answer what it asks.  Falls back to `fallback` on any error.
+    Uses actual planetary placements from the user's chart so questions are specific
+    ("Jupiter in your 3rd house shapes your partner's nature -- what does it reveal?")
+    rather than generic ("agar koi planet hai toh...").
+
+    Falls back to `fallback` on any error or timeout -- never blocks the pipeline.
     """
+    import concurrent.futures
+
     if not fast_llm:
         return fallback
 
@@ -224,35 +228,65 @@ def generate_followup_question(
     topics_list = '\n'.join(f'- {t}' for t in domain_topics)
 
     lang_hint = {
-        'hi': 'Hindi (Roman/Devanagari, conversational Hinglish is fine)',
-        'hi-lat': 'Hinglish (Roman-script Hindi)',
-        'ta': 'Tamil',
-        'pa': 'Punjabi',
-        'en': 'English',
-    }.get(language, 'match the language of the last answer')
+        'en':     'English',
+        'hi':     'Hindi in Devanagari script (native script only, NOT Roman)',
+        'hi-lat': 'Hinglish -- Roman-script Hindi (e.g. "Meri shadi kab hogi")',
+        'ta':     'Tamil in Tamil script (native script only, NOT Roman)',
+        'ta-lat': 'Tanglish -- Roman-script Tamil (e.g. "En thirumanam eppodhu")',
+        'pa':     'Punjabi in Gurmukhi script (native script only, NOT Roman)',
+        'pa-lat': 'Punjabi in Roman script (e.g. "Mera vivaah kaddon hoga")',
+        'mr':     'Marathi in Devanagari script (native script only, NOT Roman)',
+        'mr-lat': 'Marathi in Roman script',
+        'te':     'Telugu in Telugu script (native script only, NOT Roman)',
+        'te-lat': 'Telugu in Roman script',
+        'ml':     'Malayalam in Malayalam script (native script only, NOT Roman)',
+        'ml-lat': 'Malayalam in Roman script',
+    }.get(language, 'match the exact language and script of the last answer')
 
-    prompt = f"""An astrology chatbot just answered a question about "{topic}".
+    chart_block = f"USER'S ACTUAL CHART PLACEMENTS:\n{chart_context}" if chart_context else "No chart data available."
 
-Last answer (excerpt): "{last_answer[:300]}"
+    prompt = f"""You are a sharp, insightful Vedic astrologer who notices things others miss.
 
-Generate ONE short follow-up question for the user. Rules:
-1. The question MUST be about one of these chart-answerable topics only:
-{topics_list}
-2. Do NOT repeat what was already covered in the last answer.
-3. Phrase it as a direct observation + intriguing question, like a curious human astrologer would ask.
-   WRONG style: "Would you like to know about your Venus?" / "Shall I explain X?"
-   RIGHT style: "Venus in your chart carries a very specific message about your love life — what does it actually say?"
-4. Language: {lang_hint}
-5. Length: 15-25 words maximum.
-6. Return ONLY the question itself — no preamble, no quotes, no explanation."""
+{chart_block}
+
+Topic just discussed: {topic}
+Last answer (do NOT repeat anything from here): "{last_answer[:200]}"
+
+TASK: Write ONE follow-up question this specific user will want to answer immediately.
+
+HOW TO BUILD IT (think in steps):
+  1. Pick the single most interesting chart placement above that relates to {topic} and was NOT covered in the last answer.
+  2. Identify what is surprising, ironic, or revealing about it -- something the user does not know yet.
+  3. Name the actual planet and house. Tease the insight. End with a hook.
+
+NON-NEGOTIABLE RULES:
+  - Use a real placement from the chart above. NEVER say "agar koi planet ho" or "if a planet is present".
+  - Do NOT ask permission: no "kya aap jaanna chahenge", no "would you like to know".
+  - Tease, do not tell. The question should make the user feel: "I did not know that -- tell me."
+  - Language: {lang_hint}. Max 20 words. Return ONLY the question.
+
+EXAMPLES of the exact quality and style to match (adapt planet/house to the actual chart):
+  "Venus 1st house mein debilitate hone ke bawajood ek hidden strength carry karti hai -- zyada tar log yeh miss karte hain."
+  "Jupiter 3rd house mein aapka 7th lord hai -- yeh ek unusual spot hai jo future partner ki personality ke baare mein kuch specific aur unexpected batata hai."
+  "Aapka 10th lord Mercury exalted aur 1st house mein -- yeh rare placement success ke tarike ke baare mein ek surprising picture banata hai."
+  "Moon aur Saturn jo combination aapke chart mein bana rahe hain, woh career timing ke baare mein ek window dikhaata hai jo bahut kam log jaante hain."
+  "Rahu ki placement aapki financial growth se ek aisa angle se connected hai jo surface pe nahi dikhta."
+"""
+
+    def _call() -> str:
+        response = fast_llm.invoke(prompt)
+        return (response.content if hasattr(response, 'content') else str(response)).strip().strip('"').strip("'")
 
     try:
-        response = fast_llm.invoke(prompt)
-        q = (response.content if hasattr(response, 'content') else str(response)).strip().strip('"').strip("'")
-        if q and len(q) > 8:
-            return q
-    except Exception:
-        pass
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_call)
+            q = future.result(timeout=timeout)
+            if q and len(q) > 8:
+                return q
+    except concurrent.futures.TimeoutError:
+        logger.warning("[FOLLOWUP_GEN] Timed out after %.1fs -- using static fallback", timeout)
+    except Exception as e:
+        logger.debug("[FOLLOWUP_GEN] Failed (%s) -- using static fallback", e)
 
     return fallback
 
@@ -267,7 +301,7 @@ def detect_response_type_with_llm_fallback(
 
     Chain:
       1. Pattern matching (fast_match via detect_user_response_type)
-      2. LLM fallback — only in active phases when #1 returns OTHER
+      2. LLM fallback - only in active phases when #1 returns OTHER
 
     Returns: 'AFFIRMATIVE', 'NEGATIVE', or 'OTHER'
     """
@@ -276,7 +310,7 @@ def detect_response_type_with_llm_fallback(
     if result != 'OTHER':
         return result
 
-    # Step 2: LLM fallback — only when in active phase
+    # Step 2: LLM fallback -- only when in active phase
     if current_phase not in (PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP):
         return 'OTHER'
 
@@ -285,15 +319,15 @@ def detect_response_type_with_llm_fallback(
 
     # Truncate for minimal token usage
     bot_msg = last_bot_message[-300:] if last_bot_message else ''
-    prompt = f"""Chatbot just said: "{bot_msg}"
-User replied: "{query}"
-
-Is the user's reply:
-A) AFFIRMATIVE — agreeing, curious, or asking to know more about the same topic
-B) NEGATIVE — declining, dismissing, or clearly not interested
-C) OTHER — asking a completely different/new question or changing topic
-
-Reply with exactly one word: AFFIRMATIVE, NEGATIVE, or OTHER"""
+    prompt = (
+        f'Chatbot just said: "{bot_msg}"\n'
+        f'User replied: "{query}"\n\n'
+        'Is the user reply:\n'
+        'A) AFFIRMATIVE - agreeing, curious, or asking to know more about the same topic\n'
+        'B) NEGATIVE - declining, dismissing, or clearly not interested\n'
+        'C) OTHER - asking a completely different/new question or changing topic\n\n'
+        'Reply with exactly one word: AFFIRMATIVE, NEGATIVE, or OTHER'
+    )
 
     try:
         response = fast_llm.invoke(prompt)
