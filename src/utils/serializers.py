@@ -198,12 +198,31 @@ def serialize_vedic_chart(chart: VedicChart) -> Dict[str, Any]:
         "tradition": "jyotish"
     }
     
+    # Build divisional_charts_simple — flat {D9: {PLANET: sign, ...}, ...} format
+    # required by divisional_chart_helper and schema validation in EnhancedSessionManager
+    divisional_charts_simple = {
+        vtype: vdata["planets"]
+        for vtype, vdata in vargas.items()
+        if isinstance(vdata, dict) and "planets" in vdata
+    }
+
+    # Compute vargottama planets — same sign in D1 and D9
+    vargottama = []
+    d9_planets = divisional_charts_simple.get("D9", {})
+    for planet_name, planet_data in planets.items():
+        d1_sign = planet_data.get("sign_sanskrit") or planet_data.get("sign", "")
+        d9_sign = d9_planets.get(planet_name, "")
+        if d1_sign and d9_sign and d1_sign.upper() == d9_sign.upper():
+            vargottama.append(planet_name)
+
     return {
         "chart_type": "vedic",
         "birth_data": birth_data,
         "lagna": lagna,
         "planets": planets,
         "vargas": vargas,
+        "divisional_charts_simple": divisional_charts_simple,
+        "vargottama": vargottama,
         "yogas": yogas,
         "dasha": dasha_serialized,
         "strengths": strengths,

@@ -190,7 +190,7 @@ VOICE — English names first, Sanskrit in parentheses. Example: "Mars (Mangal)"
             "Be professional, warm, and conversational. "
             "Speak as a knowledgeable astrologer — insightful and empathetic, not robotic. "
             "Explain clearly without unnecessary jargon. "
-            "IMPORTANT: Limit your response to a maximum of 300 words."
+            "IMPORTANT: Follow the word limit specified in the PROGRESSIVE DISCLOSURE or RESPONSE FORMAT instructions."
         )
 
         if intent in ["PREDICTION", "RAG_WITH_CALCULATION"]:

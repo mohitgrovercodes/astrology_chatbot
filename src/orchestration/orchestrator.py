@@ -122,6 +122,9 @@ class NakshatraState(TypedDict):
     intent_analysis: Optional[Dict]          # From context manager
     resolution_result: Optional[Dict]        # From semantic interpreter
 
+    # Progressive Disclosure Phase
+    conversation_phase: Optional[Dict]       # Phase data for progressive disclosure
+
 class EnhancedLangGraphOrchestrator:
     """
     Enhanced orchestrator with 3-way routing and REAL calculations.
@@ -498,9 +501,44 @@ class EnhancedLangGraphOrchestrator:
         query = state['query']
         user_profile = state.get('user_profile', {})
         conversation_history = state.get('conversation_history', [])
-        
+
+        # ── Progressive Disclosure Phase Bypass ──────────────────────────────
+        # When the bot asked "want more details?" or a follow-up question, any
+        # short affirmative/negative response ("Hmm karo", "haan", "samjhao")
+        # must be let through without safety analysis.  The safety classifier
+        # sees these in isolation (without the bot's previous question as context)
+        # and wrongly flags them as out-of-scope or ambiguous queries.
+        from src.ai.context_manager import (
+            detect_user_response_type, detect_response_type_with_llm_fallback,
+            PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP
+        )
+        _safety_phase = (state.get('session_data') or {}).get('conversation_phase', {}).get('phase', 'INITIAL')
+        _safety_orig_q = (state.get('session_data') or {}).get('original_user_question') or query
+        _safety_resp_type = detect_user_response_type(_safety_orig_q)
+        _is_short = len(_safety_orig_q.strip().split()) <= 5
+        # LLM fallback: if pattern matching returned OTHER and not a short phrase,
+        # try LLM classification before sending through the full safety pipeline
+        if (_safety_resp_type == 'OTHER' and not _is_short
+                and _safety_phase in (PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP)):
+            _last_bot = next(
+                (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
+                 if m.get('role') == 'assistant'), ''
+            )
+            _safety_resp_type = detect_response_type_with_llm_fallback(
+                _safety_orig_q, _last_bot, getattr(self, 'fast_llm', None), _safety_phase
+            )
+            if _safety_resp_type != 'OTHER':
+                print(f"[SAFETY] LLM fallback classified: {_safety_resp_type}")
+        if _safety_phase in (PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP) and (
+            _safety_resp_type in ('AFFIRMATIVE', 'NEGATIVE') or _is_short
+        ):
+            print(f"[SAFETY] Phase bypass: phase={_safety_phase}, response={_safety_resp_type} — skipping safety classifier")
+            state['is_safe'] = True
+            return state
+        # ─────────────────────────────────────────────────────────────────────
+
         print(f"[SAFETY] Checking query safety...")
-        
+
         # Import safety classifier
         from src.safety import create_safety_classifier
         
@@ -627,6 +665,48 @@ class EnhancedLangGraphOrchestrator:
     def _classify_intent_node(self, state: NakshatraState) -> NakshatraState:
         """Node 2: Classify intent."""
         print(f"[INTENT] Classifying query: '{state['query'][:50]}...'")
+
+        # == PROGRESSIVE DISCLOSURE PHASE GUARD ================================
+        # When the bot asked "Want more details?" or asked a follow-up question,
+        # short affirmative/negative responses must be routed to RAG_WITH_CALCULATION
+        # (not CHITCHAT) so the progressive disclosure flow continues.
+        from src.ai.context_manager import (
+            detect_user_response_type, detect_response_type_with_llm_fallback,
+            PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP
+        )
+        conv_phase_data = (state.get('session_data') or {}).get('conversation_phase', {})
+        current_phase = conv_phase_data.get('phase', 'INITIAL')
+
+        if current_phase in (PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP):
+            _original_q = (state.get('session_data') or {}).get('original_user_question') or state['query']
+            user_response = detect_user_response_type(_original_q)
+            _intent_analysis = (state.get('session_data') or {}).get('intent_analysis', {})
+            _is_short_continuation = (
+                current_phase == PHASE_FOLLOWUP_LOOP
+                and len(_original_q.strip().split()) <= 6
+                and _intent_analysis.get('intent_type') in ('CONTINUATION', 'CLARIFICATION')
+                and user_response == 'OTHER'
+            )
+            # LLM fallback for longer phrases that pattern matching missed
+            if user_response == 'OTHER' and not _is_short_continuation:
+                _last_bot = next(
+                    (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
+                     if m.get('role') == 'assistant'), ''
+                )
+                user_response = detect_response_type_with_llm_fallback(
+                    _original_q, _last_bot, getattr(self, 'fast_llm', None), current_phase
+                )
+                if user_response != 'OTHER':
+                    print(f"[INTENT] [PHASE_GUARD] LLM fallback classified: {user_response}")
+            print(f"[INTENT] [PHASE_GUARD] original='{_original_q[:40]}' → response_type={user_response}, short_cont={_is_short_continuation}")
+            if user_response in ('AFFIRMATIVE', 'NEGATIVE') or _is_short_continuation:
+                print(f"[INTENT] [PHASE_GUARD] Phase={current_phase}, response={user_response} → RAG_WITH_CALCULATION")
+                state['intent'] = 'RAG_WITH_CALCULATION'
+                state['confidence'] = 0.95
+                state['intent_reasoning'] = f'Progressive disclosure: {user_response} in {current_phase}'
+                state['is_safe'] = True
+                return state
+        # ─────────────────────────────────────────────────────────────────────
 
         # == CONTINUATION GUARD ================================================
         # Bare follow-up phrases must reach the RAG node — not CHITCHAT/BLOCKED.
@@ -1646,9 +1726,68 @@ Provide a concise answer:"""
             # ================================================================
             # STEP 3: Build Prompt (with validation constraints)
             # ================================================================
+            # Pre-read the phase so we can pass it into the prompt builder
+            # (suppresses "Next Favorable Window" for the INITIAL short response)
+            from src.ai.context_manager import (
+                PHASE_INITIAL as _PI, PHASE_AWAITING_DETAIL as _PAD, PHASE_FOLLOWUP_LOOP as _PFL,
+                detect_user_response_type as _durt, detect_response_type_with_llm_fallback as _durt_llm
+            )
+            _pre_phase_data = (state.get('session_data') or {}).get('conversation_phase', {})
+            _pre_phase = _pre_phase_data.get('phase', _PI)
+            _pre_orig_q = (state.get('session_data') or {}).get('original_user_question') or state['query']
+            _pre_resp = _durt(_pre_orig_q)
+            _pre_intent_info = (state.get('session_data') or {}).get('intent_analysis', {})
+
+            # BUG FIX #2: Short CONTINUATION in AWAITING_DETAIL or FOLLOWUP_LOOP
+            # Both phases accept short CONTINUATION queries as AFFIRMATIVE.
+            # Previously only FOLLOWUP_LOOP was covered — AWAITING_DETAIL was missing.
+            if (
+                _pre_phase in (_PAD, _PFL)
+                and _pre_resp == 'OTHER'
+                and len(_pre_orig_q.strip().split()) <= 6
+                and _pre_intent_info.get('intent_type') in ('CONTINUATION', 'CLARIFICATION')
+            ):
+                _pre_resp = 'AFFIRMATIVE'
+
+            # BUG FIX #1: LLM fallback in STEP 3 to match STEP 3.5's fallback logic.
+            # Without this, STEP 3 could set response_mode='initial' for an ambiguous
+            # message that STEP 3.5 later classifies as AFFIRMATIVE via the LLM, producing
+            # conflicting instructions (response_mode suppresses timing window while
+            # phase_instruction explicitly says to include it).
+            if _pre_resp == 'OTHER' and _pre_phase in (_PAD, _PFL):
+                _last_bot_s3 = next(
+                    (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
+                     if m.get('role') == 'assistant'), ''
+                )
+                _pre_resp = _durt_llm(
+                    _pre_orig_q, _last_bot_s3, getattr(self, 'fast_llm', None), _pre_phase
+                )
+
+            # When user responds with an affirmative to AWAITING_DETAIL/FOLLOWUP_LOOP,
+            # use the ORIGINAL question (last_query) for prompt building so that
+            # domain-specific hints (marriage, career, etc.) fire correctly.
+            _last_q = _pre_phase_data.get('last_query', '')
+            _is_continuation_affirmative = (
+                _pre_phase in (_PAD, _PFL)
+                and _pre_resp == 'AFFIRMATIVE'
+                and _last_q
+            )
+            _effective_query = _last_q if _is_continuation_affirmative else state['query']
+
+            # Determine prompt response mode — must agree with STEP 3.5's phase_instruction
+            # so that timing-window suppression and word-limits are consistent.
+            if _pre_phase == _PAD and _pre_resp == 'AFFIRMATIVE':
+                _prompt_response_mode = 'detailed'
+            elif _pre_phase == _PFL and _pre_resp == 'AFFIRMATIVE':
+                _prompt_response_mode = 'followup'
+            elif _pre_phase in (_PI, '') or _pre_phase is None:
+                _prompt_response_mode = 'initial'
+            else:
+                _prompt_response_mode = 'initial'  # Default to short for any new/ambiguous question
+
             if state.get('chart_data'):
                 prompt = self._build_prediction_prompt(
-                    query=state['query'],
+                    query=_effective_query,
                     chart_data=state['chart_data'],
                     dasha_data=state.get('dasha_data', {}),
                     transit_data=state.get('transit_data', {}),
@@ -1658,7 +1797,8 @@ Provide a concise answer:"""
                     language=state.get('detected_language', 'en'),
                     validation_result=state.get('validation_result'),
                     enhanced_analysis=state.get('enhanced_analysis'),  # NEW
-                    synthesis=state.get('synthesis')  # NEW
+                    synthesis=state.get('synthesis'),  # NEW
+                    response_mode=_prompt_response_mode
                 )
             else:
                 # Chart calculation failed — do NOT hallucinate chart-specific details.
@@ -1698,6 +1838,232 @@ Provide a concise answer:"""
                     )
             
             # ================================================================
+            # STEP 3.5: PROGRESSIVE DISCLOSURE — Phase-Aware Prompt Injection
+            # ================================================================
+            from src.ai.context_manager import (
+                detect_user_response_type, detect_response_type_with_llm_fallback,
+                PHASE_INITIAL, PHASE_AWAITING_DETAIL,
+                PHASE_FOLLOWUP_LOOP, FOLLOWUP_QUESTION_BANK,
+                generate_followup_question
+            )
+            conv_phase_data = (state.get('session_data') or {}).get('conversation_phase', {})
+            current_phase = conv_phase_data.get('phase', PHASE_INITIAL)
+            current_topic = conv_phase_data.get('topic')
+            followup_count = conv_phase_data.get('followup_count', 0)
+            # Use the true original question (before semantic expansion) for detection
+            _orig_q = (state.get('session_data') or {}).get('original_user_question') or state['query']
+            user_response_type = detect_user_response_type(_orig_q)
+            _intent_info = (state.get('session_data') or {}).get('intent_analysis', {})
+            _is_short_cont = (
+                current_phase == PHASE_FOLLOWUP_LOOP
+                and len(_orig_q.strip().split()) <= 6
+                and _intent_info.get('intent_type') in ('CONTINUATION', 'CLARIFICATION')
+                and user_response_type == 'OTHER'
+            )
+            if _is_short_cont:
+                user_response_type = 'AFFIRMATIVE'
+                print(f"[PHASE] Short CONTINUATION in FOLLOWUP_LOOP → treating as AFFIRMATIVE")
+            # LLM fallback for remaining OTHER cases in active phases
+            elif user_response_type == 'OTHER' and current_phase in (PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP):
+                _last_bot = next(
+                    (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
+                     if m.get('role') == 'assistant'), ''
+                )
+                user_response_type = detect_response_type_with_llm_fallback(
+                    _orig_q, _last_bot, getattr(self, 'fast_llm', None), current_phase
+                )
+                if user_response_type != 'OTHER':
+                    print(f"[PHASE] LLM fallback classified: {user_response_type}")
+            print(f"[PHASE] user_response_type={user_response_type} (from original: '{_orig_q[:40]}')")
+
+            # Detect the query domain for follow-up question selection
+            # For AWAITING_DETAIL/FOLLOWUP_LOOP affirmatives, validation ran on "Haan karo"
+            # (detected as 'general') — preserve the stored topic from the conversation phase.
+            _val_qt = state.get('validation_query_type')
+            if _is_continuation_affirmative and current_topic and (_val_qt in (None, 'general')):
+                _topic = current_topic
+            else:
+                _topic = _val_qt or current_topic or 'general'
+            print(f"[PHASE] topic={_topic} (val_qt={_val_qt}, current_topic={current_topic})")
+
+            # Choose follow-up question — prefer LLM-generated (contextual) over static bank.
+            # The static bank is used as fallback if the LLM call fails or returns nothing.
+            _followup_bank = FOLLOWUP_QUESTION_BANK.get(_topic, FOLLOWUP_QUESTION_BANK['general'])
+            _followup_idx = followup_count % len(_followup_bank) if _followup_bank else 0
+            _static_followup = _followup_bank[_followup_idx] if _followup_bank else ""
+            # For FOLLOWUP_LOOP, generate a dynamic question that flows from the last answer.
+            # For AWAITING_DETAIL (first follow-up), static bank is usually good enough but
+            # we also attempt dynamic generation.
+            _last_bot_msg_for_fq = next(
+                (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
+                 if m.get('role') == 'assistant'), ''
+            )
+            _suggested_followup = generate_followup_question(
+                topic=_topic,
+                last_answer=_last_bot_msg_for_fq,
+                language=state.get('detected_language', 'en'),
+                fast_llm=getattr(self, 'fast_llm', None),
+                fallback=_static_followup
+            )
+            print(f"[PHASE] Follow-up question: {_suggested_followup[:80]}")
+
+            phase_instruction = ""
+            new_phase_data = {}  # Will be set on state for chat_stateless to persist
+
+            if current_phase == PHASE_AWAITING_DETAIL and user_response_type == 'NEGATIVE':
+                # ── User declined details → Ask an alternative follow-up question ──
+                print(f"[PHASE] AWAITING_DETAIL + NEGATIVE → generating alternative follow-up")
+                # Pick a different follow-up than the one we would have asked
+                _alt_idx = (_followup_idx + 1) % len(_followup_bank) if _followup_bank else 0
+                alt_followup = _followup_bank[_alt_idx] if _followup_bank else "Would you like to explore another aspect of your chart?"
+
+                state['answer'] = (
+                    f"No problem! Here's something interesting from your chart though — {alt_followup}"
+                )
+                new_phase_data = {
+                    "phase": PHASE_FOLLOWUP_LOOP,
+                    "topic": _topic,
+                    "last_query": conv_phase_data.get('last_query', state['query']),
+                    "followup_count": followup_count + 1
+                }
+                state['conversation_phase'] = new_phase_data
+                return state  # Skip LLM call — direct response
+
+            elif current_phase == PHASE_AWAITING_DETAIL and user_response_type == 'AFFIRMATIVE':
+                # ── User wants details → Generate comprehensive 250-300 word response ──
+                print(f"[PHASE] AWAITING_DETAIL + AFFIRMATIVE → detailed response")
+                phase_instruction = f"""
+⚡ PROGRESSIVE DISCLOSURE — DETAILED RESPONSE MODE (OVERRIDES word-limit instructions above):
+The user asked for more details. Give a comprehensive, insightful answer now.
+1. WORD LIMIT: 250-300 words. Use the full space — be thorough.
+2. Cover 3-5 key astrological factors (house lords, dasha timing, transit effects, dignities).
+3. Include specific Pratyantar timing windows from the data above.
+4. Include the "Next Favorable Window" section.
+5. Maintain warm, conversational narrative — weave factors together, don't just list them.
+6. NEVER use "H1", "H2", "H3" etc. — always write "1st house", "2nd house", "3rd house".
+   Use house annotations: e.g., "7th house (Marriage & Partnership)".
+7. DO NOT repeat the brief answer already given — build deeper upon it.
+8. MANDATORY — at the very END of your response, ask this follow-up question naturally in the user's language:
+   "{_suggested_followup}"
+   IMPORTANT: Do NOT rephrase it as "Would you like to know X?" or "Shall I tell you about X?".
+   Ask it as a direct, intriguing question — as if you are naturally curious and inviting conversation.
+   Example of WRONG format: "Would you like to know about your Venus placement?"
+   Example of RIGHT format: "Your Venus placement has something interesting to say about your love life — curious what it reveals?"
+"""
+                new_phase_data = {
+                    "phase": PHASE_FOLLOWUP_LOOP,
+                    "topic": _topic,
+                    "last_query": conv_phase_data.get('last_query', state['query']),
+                    "followup_count": followup_count + 1
+                }
+
+            elif current_phase == PHASE_FOLLOWUP_LOOP and user_response_type == 'AFFIRMATIVE':
+                # ── User agreed to a follow-up question → Answer it ──
+                print(f"[PHASE] FOLLOWUP_LOOP + AFFIRMATIVE → answering follow-up")
+                # _suggested_followup already contains the LLM-generated (or static fallback)
+                # question for AFTER this response — use it as the next follow-up.
+                _next_followup = _suggested_followup
+                # Extract the exact question the bot asked in its last message so we
+                # can inject it explicitly — the LLM often ignores "look at last message"
+                _hist = state.get('conversation_history') or []
+                _last_bot_msg = next(
+                    (m.get('content', '') for m in reversed(_hist) if m.get('role') == 'assistant'),
+                    ''
+                )
+                # Pull out the trailing question (after last '—' or '?' sentence boundary)
+                _last_question = ''
+                if _last_bot_msg:
+                    import re as _re
+                    _sentences = _re.split(r'(?<=[.!?।])\s+', _last_bot_msg.strip())
+                    _q_sentences = [s for s in _sentences if '?' in s]
+                    if _q_sentences:
+                        _last_question = _q_sentences[-1].strip()
+                _answer_topic = f'"{_last_question}"' if _last_question else "the specific question in your previous message"
+                print(f"[PHASE] Follow-up topic to answer: {_last_question[:80]}")
+                phase_instruction = f"""
+⚡ PROGRESSIVE DISCLOSURE — FOLLOW-UP ANSWER MODE (THIS OVERRIDES ALL OTHER INSTRUCTIONS):
+
+YOU MUST ANSWER THIS SPECIFIC QUESTION (extracted from your previous message):
+  {_answer_topic}
+
+The user just said YES to that question. Answer ONLY that specific topic.
+DO NOT repeat marriage timing, Venus Pratyantar, or Next Favorable Window — those were already covered.
+
+RULES:
+1. WORD LIMIT: 150-200 words. Focused and insightful.
+2. Use chart data to answer {_answer_topic} directly — cite 2-3 specific planetary factors.
+3. Be personalized and specific — NOT a summary of what was already said.
+4. NEVER use "H1", "H2", "H3" etc. — always write "1st house", "2nd house", "3rd house".
+5. NEVER include "Next Favorable Window" — this is a follow-up, not a timing response.
+6. MANDATORY — end with this NEW follow-up question in the user's language (natural, conversational):
+   "{_next_followup}"
+   Ask it as a direct intriguing question, NOT as "Would you like to know X?".
+   Example WRONG: "Would you like to know about your Venus placement?"
+   Example RIGHT: "Venus mein kuch aur bhi interesting hai — aapke prem jeevan ke baare mein kya kehta hai?"
+   Do not skip this. The conversation must continue.
+"""
+                # Preserve the original topic question as last_query so that on the
+                # NEXT FOLLOWUP_LOOP turn, _effective_query still has domain keywords.
+                # If we stored state['query'] ("Haan karo") here, the next turn's
+                # domain hints would fail to fire.
+                new_phase_data = {
+                    "phase": PHASE_FOLLOWUP_LOOP,
+                    "topic": _topic,
+                    "last_query": conv_phase_data.get('last_query', state['query']),
+                    "followup_count": followup_count + 1
+                }
+
+            elif current_phase == PHASE_FOLLOWUP_LOOP and user_response_type == 'NEGATIVE':
+                # ── User declined follow-up → Offer alternative ──
+                print(f"[PHASE] FOLLOWUP_LOOP + NEGATIVE → alternative follow-up")
+                _alt_idx = (followup_count + 2) % len(_followup_bank) if _followup_bank else 0
+                alt_followup = _followup_bank[_alt_idx] if _followup_bank else "Your chart has more to reveal — what else are you curious about?"
+                state['answer'] = f"Sure! Here's something else interesting from your chart — {alt_followup}"
+                new_phase_data = {
+                    "phase": PHASE_FOLLOWUP_LOOP,
+                    "topic": _topic,
+                    "last_query": conv_phase_data.get('last_query', state['query']),
+                    "followup_count": followup_count + 1
+                }
+                state['conversation_phase'] = new_phase_data
+                return state  # Skip LLM call — direct response
+
+            else:
+                # ── INITIAL / NEW TOPIC → Short response (under 100 words) ──
+                print(f"[PHASE] INITIAL → short response with 1-2 critical factors")
+                phase_instruction = f"""
+⚡ PROGRESSIVE DISCLOSURE — INITIAL SHORT RESPONSE (OVERRIDES ALL OTHER FORMAT INSTRUCTIONS):
+STRICTLY FOLLOW THESE RULES — they override the "200-250 words" and "Next Favorable Window" instructions above:
+1. HARD WORD LIMIT: 70-100 words. Count carefully. Stop at 100.
+2. Cite only 1-2 critical planetary factors — NO long lists, NO house-by-house breakdown.
+3. Give one timing answer (one specific date or period from the Pratyantar data).
+4. NEVER include a "Next Favorable Window" section — it belongs in the detailed response.
+5. NEVER use "H1", "H2", "H3" etc. — always write "1st house", "2nd house", "3rd house".
+6. End your response with this question (adapted to the user's language):
+   "Would you like me to explain the detailed astrological reasoning behind this?"
+"""
+                # BUG FIX #4: Store the true original question (pre-semantic-expansion)
+                # as last_query so that future AFFIRMATIVE turns have domain keywords.
+                # state['query'] is the processed/expanded query from chat_stateless;
+                # original_user_question is the raw text the user actually typed.
+                _orig_user_q = (state.get('session_data') or {}).get('original_user_question') or state['query']
+                new_phase_data = {
+                    "phase": PHASE_AWAITING_DETAIL,
+                    "topic": _topic,
+                    "last_query": _orig_user_q,
+                    "followup_count": 0
+                }
+
+            state['conversation_phase'] = new_phase_data
+
+            # Inject phase instruction into the prompt (before the USER_QUERY_MARKER)
+            if phase_instruction and "====USER_QUERY_MARKER====" in prompt:
+                parts = prompt.split("====USER_QUERY_MARKER====")
+                prompt = parts[0] + "\n" + phase_instruction + "\n====USER_QUERY_MARKER====" + parts[1]
+            elif phase_instruction:
+                prompt = prompt + "\n" + phase_instruction
+
+            # ================================================================
             # STEP 4: Build Messages Array with Conversation History
             # ================================================================
             messages = []
@@ -1725,7 +2091,7 @@ Provide a concise answer:"""
             # ================================================================
             # STEP 5: Generate LLM Response with Full Context
             # ================================================================
-            print(f"[LLM] Sending {len(messages)} messages to LLM")
+            print(f"[LLM] Sending {len(messages)} messages to LLM (phase={current_phase})")
             response = self.llm.invoke(messages)
             state['answer'] = response.content if hasattr(response, 'content') else str(response)
             
@@ -2369,7 +2735,8 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         query: str,
         lang_name: str,
         script_instruction: str,
-        mode: str = 'theory'  # 'theory' or 'prediction'
+        mode: str = 'theory',  # 'theory' or 'prediction'
+        response_mode: str = 'default'  # 'initial' | 'detailed' | 'followup' | 'default'
     ) -> str:
         """
         Build adaptive response instructions based on what the user is actually asking.
@@ -2633,7 +3000,15 @@ CRITICAL — HOW TO PICK THIS WINDOW (read carefully):
 Format: "Next Favorable Window: [Planet] Pratyantar [start → end] — [one-line reason why this planet is relevant for this topic]."
 NEVER fabricate dates. NEVER cite the same Pratyantar already mentioned above."""
 
-        _timing_section = next_window_block if _needs_timing_window else ""
+        # Suppress timing window for INITIAL and FOLLOWUP phases:
+        # - INITIAL: too much detail for a short preview
+        # - FOLLOWUP: follow-up questions are about specific factors (partner nature,
+        #   Venus placement, etc.) — timing windows are off-topic and confuse the LLM
+        _timing_section = (
+            (next_window_block if _needs_timing_window else "")
+            if response_mode not in ('initial', 'followup')
+            else ""
+        )
 
         if wants_detail:
             if mode == 'prediction':
@@ -2925,6 +3300,7 @@ Provide a concise, clear answer:"""
         validation_result: Optional[Dict] = None,
         enhanced_analysis: Optional[Dict] = None,  # NEW
         synthesis: Optional[Dict] = None,  # NEW
+        response_mode: str = "default",  # PROGRESSIVE DISCLOSURE: "initial" | "detailed" | "followup" | "default"
     ) -> str:
         
         context_parts = []
@@ -3265,7 +3641,8 @@ EARLY CONVERSATION:
             query=query,
             lang_name=lang_name,
             script_instruction=script_instruction,
-            mode='prediction'
+            mode='prediction',
+            response_mode=response_mode
         )
 
         # Domain-specific Pratyantar spotlight — injected into the dasha block so the LLM
@@ -3278,21 +3655,18 @@ EARLY CONVERSATION:
         mobile_length_instruction = """
 
 RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
-1. MAXIMUM LENGTH: 200-250 words total. Use the space — a fuller answer is better than a clipped one.
+1. DEFAULT LENGTH: 200-250 words total (unless overridden by PROGRESSIVE DISCLOSURE instructions below).
 2. TONE: Write like a warm, knowledgeable astrologer speaking directly to the person — not a data sheet.
    Use natural sentence flow. Weave chart factors into a coherent narrative, not a bullet list.
    Show genuine care: acknowledge the importance of the question before diving into analysis.
 3. STRUCTURE (narrative, not mechanical):
    - Opening: 1 sentence acknowledging the topic warmly and giving the headline answer.
-   - Body: 3-4 sentences covering the key chart factors with their real-world meaning explained, not just stated.
-   - Timing: 1-2 sentences giving the specific Pratyantar window with a reason it's favorable.
-   - Next Favorable Window: as instructed above.
-   DO NOT use bullet lists. DO NOT ask follow-up questions.
+   - Body: Key chart factors with their real-world meaning explained, not just stated.
+   - Timing: Specific Pratyantar window with a reason it's favorable (when applicable).
+   DO NOT use bullet lists.
 4. HOUSE NUMBER FORMAT (MANDATORY): NEVER write "H1", "H2", "H10" etc. in your response.
    The H-notation is for internal data only. In your response always use ordinal format:
-   1st house, 2nd house, 3rd house … 10th house, 11th house, 12th house.
-   Bad:  "Jupiter H3 mein hai"       → Good: "Jupiter 3rd house mein hai"
-   Bad:  "Venus H1 mein debilitated" → Good: "Venus 1st house mein debilitated"
+   1st house, 2nd house, 3rd house ... 10th house, 11th house, 12th house.
 5. HOUSE ANNOTATIONS (MANDATORY): Every time you mention a house by number, ALWAYS
    add its primary domain in parentheses immediately after. No exceptions.
    Use this exact mapping:
@@ -3303,14 +3677,8 @@ RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
 6. NO META-COMMENTARY: Never say "Based on your chart I can see..." or "Looking at your horoscope...".
    Start directly with the insight. The user knows you're reading their chart.
 7. NO THANKING: User details come from the backend — never thank them for providing details.
-8. NO FOLLOW-UP QUESTIONS: Never end with "Do you want remedies?", "Shall I explain more?" etc.
-   Give the complete, self-contained answer.
-
-EXAMPLE GOOD RESPONSE (Marriage — warm, human, narrative):
-"Shadi ke liye aapki kundli mein kuch strong indications hain. 7th house (Marriage & Partnership) ki lord Venus 2nd house (Wealth & Family) mein hai — iska matlab hai partner family-loving aur financially grounded hoga. Lekin Saturn ki 7th house par drishti thodi patience maangti hai — yeh delay nahi, balki ek solid foundation ke liye time hai. 2nd house (Wealth & Family) ka lord Jupiter strong position mein hai jo family ka full support dikhata hai. Timing ki baat karein toh Venus Pratyantar [cite exact dates from table above] mein bahut promising window ban rahi hai — Jupiter uswaqt 7th house (Marriage & Partnership) se guzar raha hai jo ek double confirmation hai. Next Favorable Window: Jupiter Pratyantar [next different dates from table] — yeh agla strong window hai."
-
-EXAMPLE GOOD RESPONSE (Career — warm, human, narrative):
-"Career mein aapka chart ek solid professional journey dikhata hai. 10th house (Career & Status) ki lord Mercury 2nd house (Wealth & Family) mein hai — communication, writing, ya finance-related fields mein aap naturally strong hain. 6th house (Health & Service) ka lord Saturn 10th house mein hai jo service sector ya government work mein long-term stability ka yog banata hai — Saturn jo deta hai, tikau deta hai. Income ke liye 11th house (Gains & Desires) ka lord Moon bhi favorable position mein hai. Saturn Pratyantar [cite exact dates] mein Saturn gochar 10th house se align kar raha hai — yeh promotion ya naye role ke liye sabse strong window hai. Next Favorable Window: Sun Pratyantar [next different dates] — career authority aur recognition ka agla peak window."
+8. FOLLOW-UP QUESTIONS: Only ask a follow-up question if explicitly instructed by PROGRESSIVE DISCLOSURE
+   instructions. Otherwise, give a complete, self-contained answer.
 """
         instructions += mobile_length_instruction
 
@@ -3601,6 +3969,9 @@ substituting a training-knowledge default.
             "conversation_summary": None,
             "intent_analysis": None,
             "resolution_result": None,
+
+            # Progressive Disclosure Phase (set by rag_with_calculation node)
+            "conversation_phase": None,
         }
 
         

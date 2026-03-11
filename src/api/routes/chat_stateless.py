@@ -992,6 +992,35 @@ class EnhancedSessionManager:
         except Exception as e:
             print(f"[SESSION] Error overwriting history for {user_id}: {e}")
 
+    def get_conversation_phase(self, user_id: str) -> dict:
+        """Get conversation phase for progressive disclosure."""
+        if not self.redis:
+            return {"phase": "INITIAL", "topic": None, "last_query": None, "followup_count": 0}
+        try:
+            data = self.redis.get(f"session:{user_id}:conv_phase")
+            if data:
+                return json.loads(data)
+        except:
+            pass
+        return {"phase": "INITIAL", "topic": None, "last_query": None, "followup_count": 0}
+
+    def set_conversation_phase(self, user_id: str, phase: str, topic: str = None,
+                                last_query: str = None, followup_count: int = 0):
+        """Store conversation phase for progressive disclosure."""
+        if not self.redis:
+            return
+        try:
+            data = {
+                "phase": phase,
+                "topic": topic,
+                "last_query": last_query,
+                "followup_count": followup_count,
+                "updated_at": datetime.utcnow().isoformat()
+            }
+            self.redis.set(f"session:{user_id}:conv_phase", json.dumps(data))
+        except Exception as e:
+            print(f"[PHASE] Error storing phase: {e}")
+
     def extend_session(self, user_id: str):
         """No-op: all session data is stored permanently in Redis (no TTL to extend)."""
         pass
@@ -1007,7 +1036,8 @@ class EnhancedSessionManager:
                 f"session:{session_id}:metadata",
                 f"session:{session_id}:chart",
                 f"session:{session_id}:dasha",
-                f"session:{session_id}:transit"
+                f"session:{session_id}:transit",
+                f"session:{session_id}:conv_phase"
             ]
             self.redis.delete(*keys)
             return True
@@ -1091,7 +1121,7 @@ class SendMessageResponse(BaseModel):
 # ============================================================================
 
 @router.post("/initialize", response_model=InitializeSessionResponse)
-async def initialize_session(request: InitializeSessionRequest):
+def initialize_session(request: InitializeSessionRequest):
     """Initialize a new chatbot session."""
     try:
         session_manager = get_session_manager()
@@ -1175,7 +1205,7 @@ async def initialize_session(request: InitializeSessionRequest):
 # ============================================================================
 
 @router.post("/message", response_model=SendMessageResponse)
-async def send_message(request: SendMessageRequest):
+def send_message(request: SendMessageRequest):
     """
     Send a message with professional context management.
     
@@ -1349,7 +1379,14 @@ async def send_message(request: SendMessageRequest):
             conversation_history=full_history[-10:],  # Last 10 messages for context
             conversation_summary=conversation_summary
         )
-        
+
+        # ── Reset conversation phase on NEW_TOPIC ────────────────────────
+        if intent_analysis.get('intent_type') == 'NEW_TOPIC':
+            conv_phase_check = session_manager.get_conversation_phase(user_id)
+            if conv_phase_check.get('phase') != 'INITIAL':
+                print(f"[PHASE] NEW_TOPIC detected → resetting phase from {conv_phase_check.get('phase')} to INITIAL")
+                session_manager.set_conversation_phase(user_id, phase="INITIAL")
+
         # ====================================================================
         # STEP 3: RESOLVE CONTEXTUAL QUERY (Confidence-Based)
         # ====================================================================
@@ -1370,12 +1407,39 @@ async def send_message(request: SendMessageRequest):
             "explanation": "New topic - no resolution needed"
         }
 
-        if intent_analysis['intent_type'] in ['CONTINUATION', 'CLARIFICATION'] and real_user_messages_in_history:
+        # ── Progressive Disclosure: skip expansion for affirmative/negative responses ──
+        # When the bot asked "want more details?" or a follow-up question, the user's
+        # "yes"/"no"/"haan" must reach the orchestrator intact.  The semantic expander
+        # would otherwise rewrite it into the bot's own question, causing CHITCHAT misrouting.
+        from src.ai.context_manager import detect_user_response_type
+        _phase_now = session_manager.get_conversation_phase(user_id).get('phase', 'INITIAL')
+        _response_type_now = detect_user_response_type(question)
+        # Skip expansion when in an active progressive disclosure phase AND the
+        # user's message is short (≤5 words). Short messages in these phases are
+        # continuations/affirmations, NOT new questions that need context injection.
+        # This prevents "Hmm samjhao" → "Hmm samjhao iske peeche ki vyakhya...?" rewrites
+        # that confuse the safety classifier and misroute to BLOCKED.
+        _is_short_phrase = len(question.strip().split()) <= 5
+        _skip_expansion = (
+            _phase_now in ('AWAITING_DETAIL', 'FOLLOWUP_LOOP')
+            and (_response_type_now in ('AFFIRMATIVE', 'NEGATIVE') or _is_short_phrase)
+        )
+
+        if not _skip_expansion and intent_analysis['intent_type'] in ['CONTINUATION', 'CLARIFICATION'] and real_user_messages_in_history:
             resolution_result = context_manager.resolve_contextual_query(
                 current_query=question,
                 conversation_history=full_history,
                 intent_analysis=intent_analysis
             )
+        elif _skip_expansion:
+            print(f"[PHASE] Skipping semantic expansion — phase={_phase_now}, response={_response_type_now}")
+            resolution_result = {
+                "action": "NONE",
+                "processed_query": question,
+                "ambiguity_score": 0.0,
+                "clarification_needed": False,
+                "explanation": "Progressive disclosure phase — expansion skipped"
+            }
             
             # If clarification needed, return early
             if resolution_result.get('clarification_needed'):
@@ -1467,12 +1531,18 @@ async def send_message(request: SendMessageRequest):
         print(f"  Transit: {'[OK] Fetched from Redis' if cached_transit else '[MISSING] Not in Redis'}")
 
         
+        # ── Load conversation phase for progressive disclosure ────────────
+        conv_phase_data = session_manager.get_conversation_phase(user_id)
+        print(f"[PHASE] Current phase: {conv_phase_data.get('phase')} | topic: {conv_phase_data.get('topic')}")
+
         orchestrator_session_data = {
             "chart_data": cached_chart,
             "dasha_data": cached_dasha,
             "transit_data": cached_transit,
             "summary": conversation_summary,
-            "intent_analysis": intent_analysis
+            "intent_analysis": intent_analysis,
+            "conversation_phase": conv_phase_data,
+            "original_user_question": question  # True original before semantic expansion
         }
         
         # Log what cached data is being passed to orchestrator
@@ -1528,8 +1598,20 @@ async def send_message(request: SendMessageRequest):
         if answer != original_answer:
             print(f"[POST_PROCESS] Removed 'thank you' pattern")
         
-        # Enforce 250-word maximum for mobile
-        MAX_MOBILE_WORDS = 250
+        # Enforce word maximum for mobile (phase-aware)
+        # Use the RESULT phase (what the orchestrator decided) not the INPUT phase
+        result_phase = (result.get('conversation_phase') or {}).get('phase', conv_phase_data.get('phase', 'INITIAL'))
+        if result_phase == 'FOLLOWUP_LOOP' and conv_phase_data.get('phase') == 'AWAITING_DETAIL':
+            # User agreed to details → allow up to 350 words
+            MAX_MOBILE_WORDS = 350
+        elif result_phase == 'FOLLOWUP_LOOP':
+            # Follow-up responses capped at 250 words
+            MAX_MOBILE_WORDS = 250
+        elif result_phase == 'AWAITING_DETAIL':
+            # Initial short response (phase transitions to AWAITING_DETAIL) → cap at 150
+            MAX_MOBILE_WORDS = 150
+        else:
+            MAX_MOBILE_WORDS = 300  # Default fallback
         word_count = len(answer.split())
 
         if word_count > MAX_MOBILE_WORDS:
@@ -1552,8 +1634,8 @@ async def send_message(request: SendMessageRequest):
             
             answer = ' '.join(truncated_sentences)
             
-            # Add continuation hint if content was cut
-            if len(truncated_sentences) < len(sentences):
+            # Add continuation hint only if truncated AND not in progressive disclosure flow
+            if len(truncated_sentences) < len(sentences) and result_phase not in ('AWAITING_DETAIL', 'FOLLOWUP_LOOP'):
                 detected_lang = result.get('detected_language', 'en')
                 if detected_lang in ['hi', 'hi-lat']:
                     answer += " Aur gehrai mein jaanna chahein toh poochh sakte hain."
@@ -1608,6 +1690,20 @@ async def send_message(request: SendMessageRequest):
         )
         
         # ====================================================================
+        # STEP 8.5: UPDATE CONVERSATION PHASE (Progressive Disclosure)
+        # ====================================================================
+        new_phase = result.get('conversation_phase')
+        if new_phase:
+            session_manager.set_conversation_phase(
+                user_id,
+                phase=new_phase.get('phase', 'INITIAL'),
+                topic=new_phase.get('topic'),
+                last_query=new_phase.get('last_query'),
+                followup_count=new_phase.get('followup_count', 0)
+            )
+            print(f"[PHASE] Updated to: {new_phase.get('phase')} | topic: {new_phase.get('topic')}")
+
+        # ====================================================================
         # STEP 9: UPDATE CONVERSATION SUMMARY (Every 10 messages)
         # ====================================================================
         if session_manager.should_update_summary(user_id):
@@ -1657,7 +1753,7 @@ async def send_message(request: SendMessageRequest):
 # ============================================================================
 
 @router.get("/session/{session_id}/status")
-async def get_session_status(session_id: str):
+def get_session_status(session_id: str):
     """Get session status with summary information."""
     try:
         session_manager = get_session_manager()
@@ -1692,7 +1788,7 @@ async def get_session_status(session_id: str):
 
 
 @router.delete("/session/{session_id}")
-async def clear_session(session_id: str):
+def clear_session(session_id: str):
     """Clear a session."""
     try:
         session_manager = get_session_manager()
@@ -1710,7 +1806,7 @@ async def clear_session(session_id: str):
 
 
 @router.get("/stats")
-async def get_stats():
+def get_stats():
     """Get chatbot statistics."""
     try:
         session_manager = get_session_manager()

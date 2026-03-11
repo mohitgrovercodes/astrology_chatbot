@@ -243,6 +243,42 @@ class SessionManager:
         
         return status
 
+    # --- Conversation Phase (Progressive Disclosure) ---
+
+    def get_conversation_phase(self, user_id: str) -> Dict:
+        """Get the current conversation phase for progressive disclosure.
+
+        Returns dict with:
+            phase: INITIAL | AWAITING_DETAIL | FOLLOWUP_LOOP
+            topic: The current topic being discussed (e.g. 'marriage', 'career')
+            last_query: The original question that started the current topic
+            followup_count: Number of follow-up exchanges in current loop
+        """
+        if not self.redis:
+            return {"phase": "INITIAL", "topic": None, "last_query": None, "followup_count": 0}
+        data = self.redis.get(self._key(user_id, "conv_phase"))
+        if data:
+            return json.loads(data)
+        return {"phase": "INITIAL", "topic": None, "last_query": None, "followup_count": 0}
+
+    def set_conversation_phase(self, user_id: str, phase: str, topic: str = None,
+                                last_query: str = None, followup_count: int = 0):
+        """Store conversation phase for progressive disclosure."""
+        if not self.redis: return
+        data = {
+            "phase": phase,
+            "topic": topic,
+            "last_query": last_query,
+            "followup_count": followup_count,
+            "updated_at": datetime.utcnow().isoformat()
+        }
+        key = self._key(user_id, "conv_phase")
+        val = json.dumps(data)
+        if settings.SESSION_EXPIRY_HOURS > 0:
+            self.redis.setex(key, settings.SESSION_EXPIRY_HOURS * 3600, val)
+        else:
+            self.redis.set(key, val)
+
     # --- Cleanup ---
 
     def clear_session(self, user_id: str, clear_calculations: bool = False):
@@ -251,7 +287,8 @@ class SessionManager:
             self._key(user_id, "user_profile"),
             self._key(user_id, "history"),
             self._key(user_id, "summary"),
-            self._key(user_id, "metadata")
+            self._key(user_id, "metadata"),
+            self._key(user_id, "conv_phase")
         ]
         if clear_calculations:
             # Delete all calculation keys for this user

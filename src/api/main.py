@@ -5,18 +5,33 @@ FastAPI Main Application for NakshatraAI Chatbot.
 Includes stateless chat routes with Redis session management.
 """
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import asyncio
 import os
 
 # Import routers
 from src.api.routes import chat_stateless, calculation, health
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Pre-warm the orchestrator at startup to avoid cold-start on first request."""
+    from src.api.orchestrator_helper import get_orchestrator
+    print("[STARTUP] Pre-warming orchestrator (this may take ~30s)...")
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, get_orchestrator)
+    print("[STARTUP] Orchestrator ready. Server accepting requests.")
+    yield
+
+
 # Create FastAPI app
 app = FastAPI(
     title="NakshatraAI Chatbot API",
     description="Vedic Astrology Chatbot with Redis Session Management",
-    version="2.0.0"
+    version="2.0.0",
+    lifespan=lifespan,
 )
 
 # CORS Configuration

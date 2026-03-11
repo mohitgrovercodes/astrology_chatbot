@@ -22,7 +22,7 @@ router = APIRouter()
 @router.get("/user/{user_id}", include_in_schema=False)
 @router.put("/user/{user_id}", include_in_schema=False)
 @router.post("/user", include_in_schema=False)
-async def user_routes_retired(*args, **kwargs):
+def user_routes_retired(*args, **kwargs):
     raise HTTPException(
         status_code=501,
         detail=(
