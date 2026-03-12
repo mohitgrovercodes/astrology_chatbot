@@ -3915,7 +3915,8 @@ TODAY'S DATE: {today_date}
   - Only cite periods that are "IN PROGRESS" (remaining portion) or fully in the future.
   - If all favorable Pratyantardashas in the current Antardasha have already passed, move to the NEXT Antardasha.
 
-TIMING GUIDANCE: Pratyantardasha gives month-level precision, Antardasha gives multi-month context, Mahadasha gives year-level context. When Pratyantar + Gochara alignment point to the same window, cite that specific Pratyantar date range as the peak timing.
+TIMING GUIDANCE: Pratyantardasha gives month-level precision.
+CRITICAL TIMING SELECTION RULE: Look at the PRATYANTAR PRIORITY FOR THIS QUERY block. Find the highest priority planet listed there. You MUST search the Step 3.5 and Step 3.6 lists for THAT specific planet's window. Do NOT just pick the first "IN PROGRESS" window unless its planet matches the priority list. If the priority planet is missing from the windows, state that the strongest timing is further in the future.
 CRITICAL: These dates are CALCULATED using Swiss Ephemeris. Use ONLY these exact dates. Do not invent or estimate dates.
 
 CURRENT TRANSITS (as of {transit_date}):
