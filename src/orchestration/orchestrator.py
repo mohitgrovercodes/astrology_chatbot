@@ -3484,7 +3484,6 @@ Provide a concise, clear answer:"""
             print(f"[DASHA STALE] Mahadasha end ({_md_end}) is in the past — "
                   f"cache is from wrong MD period. Clearing dasha_data for recalc.")
             dasha_data = {}
-            state['dasha_data'] = {}
 
         # Extract dasha info safely
         maha_planet = dasha_data.get('mahadasha', {}).get('planet', 'Unknown')
@@ -3517,48 +3516,59 @@ Provide a concise, clear answer:"""
         upcoming_pds = dasha_data.get('upcoming_pratyantardashas', [])
 
         # REFACTORED: Centralized DOMAIN-SPECIFIC FILTERING
+        # Keys here must match validation_result['query_type'] values (e.g. marriage, career, finance, health, children)
         DOMAIN_PLANETS = {
+            # Relationship / marriage timing
             "marriage": {"planets": ["VENUS", "JUPITER"], "lords": ["H7"]},
+            # Career / job / profession
             "career": {"planets": ["SATURN", "SUN", "MERCURY"], "lords": ["H10"]},
-            "home": {"planets": ["MOON", "MARS"], "lords": ["H4"]},
-            "foreign": {"planets": ["RAHU"], "lords": ["H9", "H12"]},
-            "children": {"planets": ["JUPITER", "MOON"], "lords": ["H5"]},
+            # Finance / wealth / gains
+            "finance": {"planets": ["VENUS", "JUPITER"], "lords": ["H2", "H11"]},
             "wealth": {"planets": ["VENUS", "JUPITER"], "lords": ["H2", "H11"]},
+            # Children / fertility
+            "children": {"planets": ["JUPITER", "MOON"], "lords": ["H5"]},
+            # Health / disease
             "health": {"planets": ["SATURN", "MARS", "RAHU", "KETU"], "lords": ["H6", "H8"]},
+            # Property / home
+            "home": {"planets": ["MOON", "MARS"], "lords": ["H4"]},
+            "property": {"planets": ["MOON", "MARS"], "lords": ["H4"]},
+            # Foreign travel / settlement
+            "foreign": {"planets": ["RAHU"], "lords": ["H9", "H12"]},
+            "foreign_travel": {"planets": ["RAHU"], "lords": ["H9", "H12"]},
         }
         
         query_type = validation_result.get('query_type', 'general') if validation_result else 'general'
         domain_info = DOMAIN_PLANETS.get(query_type)
 
         if domain_info:
+            # Start with the core domain planets
             relevant_planets = list(domain_info["planets"])
+
+            # Add the actual house lords for the domain houses (e.g. H7 for marriage, H10 for career)
             house_lords = self._get_house_lords(chart_data)
-                
-        if lords_to_add:
-            
-            relevant_planets.extend(lords_to_add)
-            
-            relevant_planets = list(set(relevant_planets))
-            
-            
-            
-            print(f"[DASHA_FILTER] Query domain filtering for '{query_type}': relevant_planets={relevant_planets}")
-            
-            
-            
-            domain_filtered_pds = [
-            
-            pd for pd in upcoming_pds
-            
-            if pd.get('planet', '').upper() in relevant_planets
+            lords_to_add = []
+            for h in domain_info.get("lords", []):
+                lord = house_lords.get(h)
+                if lord:
+                    lords_to_add.append(lord)
 
-        ]
+            if lords_to_add:
+                relevant_planets.extend(lords_to_add)
+                # De-duplicate while preserving upper-case planet names
+                relevant_planets = list({p.upper() for p in relevant_planets})
 
-            if domain_filtered_pds:
-                print(f"[DASHA_FILTER] Filtered {len(upcoming_pds) - len(domain_filtered_pds)} pratyantars based on query domain.")
-                upcoming_pds = domain_filtered_pds
-            else:
-                print(f"[DASHA_FILTER] No domain-relevant pratyantars found for '{query_type}', using all upcoming.")
+                print(f"[DASHA_FILTER] Query domain filtering for '{query_type}': relevant_planets={relevant_planets}")
+
+                domain_filtered_pds = [
+                    pd for pd in upcoming_pds
+                    if pd.get('planet', '').upper() in relevant_planets
+                ]
+
+                if domain_filtered_pds:
+                    print(f"[DASHA_FILTER] Filtered {len(upcoming_pds) - len(domain_filtered_pds)} pratyantars based on query domain.")
+                    upcoming_pds = domain_filtered_pds
+                else:
+                    print(f"[DASHA_FILTER] No domain-relevant pratyantars found for '{query_type}', using all upcoming.")
 
 
         # ── CODE-LEVEL PAST-DATE FILTER ───────────────────────────────────────
