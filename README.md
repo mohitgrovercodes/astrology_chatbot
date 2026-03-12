@@ -56,7 +56,7 @@
 | **Hybrid Retrieval** | BM25 (30%) + Semantic Vector (70%) |
 | **Reranking** | Sentence-Transformers cross-encoder |
 | **Session Storage** | Redis (permanent, no TTL) |
-| **PDF Extraction** | Gemini Vision (gemini-2.5-flash-lite / gemini-2.5-pro fallback) |
+| **PDF Extraction** | Gemini Vision (gemini-2.5-flash / gemini-2.5-pro fallback) |
 | **Language Detection** | Langdetect (50+ languages) |
 | **Containerization** | Docker + Docker Compose |
 

@@ -1,11 +1,8 @@
 # src/routing/semantic_router.py
 
-import hashlib
 import json
 import numpy as np
 import logging
-import pickle
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from pydantic import BaseModel
 from dataclasses import dataclass
@@ -18,9 +15,6 @@ except ImportError:
 
 # Configure logger
 logger = logging.getLogger(__name__)
-
-# ── Disk-cache directory (project-relative) ────────────────────────────────
-_CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "route_cache"
 
 
 @dataclass
@@ -43,12 +37,9 @@ class RouteResult(BaseModel):
 
 class SemanticRouter:
     """
-    Semantic router backed by OpenAI embeddings with disk-caching.
+    Semantic router backed by OpenAI embeddings.
 
     Startup optimisations:
-    - Route embeddings are persisted to disk keyed by a hash of the examples.
-      On the SECOND and every subsequent server start the cache is loaded in
-      milliseconds — NO OpenAI API call is made.
     - add_routes_batch() embeds ALL routes in a SINGLE API call, reducing the
       N-routes × 1-API-call pattern to exactly 1 call on a cold start.
     """
@@ -69,8 +60,6 @@ class SemanticRouter:
         self.routes: Dict[str, Any] = {}
         self.route_embeddings: Dict[str, Any] = {}
 
-        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
         if Embedder:
             try:
                 logger.info(f"Loading semantic routing model (OpenAI): {model_name}")
@@ -87,58 +76,19 @@ class SemanticRouter:
             self.embedder = None
 
     # ──────────────────────────────────────────────────────────────────────────
-    # CACHE HELPERS
-    # ──────────────────────────────────────────────────────────────────────────
-
-    def _cache_key(self, name: str, examples: List[str]) -> str:
-        """Stable hash for (route_name, examples, model) triplet."""
-        payload = json.dumps({"name": name, "examples": sorted(examples), "model": self.model_name},
-                             sort_keys=True)
-        return hashlib.md5(payload.encode()).hexdigest()
-
-    def _cache_path(self, cache_key: str) -> Path:
-        return _CACHE_DIR / f"{cache_key}.pkl"
-
-    def _load_from_cache(self, cache_key: str) -> Optional[np.ndarray]:
-        p = self._cache_path(cache_key)
-        if p.exists():
-            try:
-                with open(p, "rb") as f:
-                    return pickle.load(f)
-            except Exception as e:
-                logger.warning(f"[ROUTER CACHE] Failed to load cache {p}: {e}")
-        return None
-
-    def _save_to_cache(self, cache_key: str, embeddings: np.ndarray):
-        p = self._cache_path(cache_key)
-        try:
-            with open(p, "wb") as f:
-                pickle.dump(embeddings, f)
-        except Exception as e:
-            logger.warning(f"[ROUTER CACHE] Failed to save cache {p}: {e}")
-
-    # ──────────────────────────────────────────────────────────────────────────
     # ROUTE REGISTRATION
     # ──────────────────────────────────────────────────────────────────────────
 
     def add_route(self, name: str, examples: List[str], metadata: Dict[str, Any] = None):
         """
-        Add a single semantic route. Embeddings are disk-cached so the OpenAI
-        API is only called once per unique (name, examples) pair.
+        Add a single semantic route.
         """
         if not self.model or getattr(self, 'embedder', None) is None:
             return
 
-        cache_key = self._cache_key(name, examples)
-        embeddings_arr = self._load_from_cache(cache_key)
-
-        if embeddings_arr is not None:
-            logger.info(f"[ROUTER CACHE] HIT — loaded '{name}' from disk ({len(examples)} examples)")
-        else:
-            logger.info(f"[ROUTER CACHE] MISS — embedding '{name}' via API ({len(examples)} examples)")
-            raw = self.embedder.embed_texts(examples)
-            embeddings_arr = np.array(raw)
-            self._save_to_cache(cache_key, embeddings_arr)
+        logger.info(f"[ROUTER] embedding '{name}' via API ({len(examples)} examples)")
+        raw = self.embedder.embed_texts(examples)
+        embeddings_arr = np.array(raw)
 
         self.routes[name] = {"examples": examples, "metadata": metadata or {}}
         self.route_embeddings[name] = embeddings_arr
@@ -148,12 +98,6 @@ class SemanticRouter:
         Register multiple routes in a SINGLE batched API call (fast path).
 
         routes: list of dicts with keys 'name', 'examples', 'metadata' (optional).
-
-        Algorithm:
-        1. Check disk cache for each route.
-        2. Collect ALL uncached examples into one flat list.
-        3. Make a *single* embed_texts() call for all missing examples.
-        4. Distribute embeddings back and cache each route.
         """
         if not self.model or getattr(self, 'embedder', None) is None:
             return
@@ -166,26 +110,19 @@ class SemanticRouter:
             name = route["name"]
             examples = route["examples"]
             metadata = route.get("metadata", {})
-            cache_key = self._cache_key(name, examples)
-            cached = self._load_from_cache(cache_key)
-
-            if cached is not None:
-                logger.info(f"[ROUTER CACHE] HIT — loaded '{name}' from disk ({len(examples)} examples)")
-                self.routes[name] = {"examples": examples, "metadata": metadata}
-                self.route_embeddings[name] = cached
-            else:
-                start = len(pending_texts)
-                pending_texts.extend(examples)
-                end = len(pending_texts)
-                pending_offsets.append((start, end))
-                pending_routes.append({"name": name, "examples": examples, "metadata": metadata,
-                                       "cache_key": cache_key})
+            
+            start = len(pending_texts)
+            pending_texts.extend(examples)
+            end = len(pending_texts)
+            pending_offsets.append((start, end))
+            pending_routes.append({"name": name, "examples": examples, "metadata": metadata})
 
         if pending_texts:
-            logger.info(f"[ROUTER CACHE] MISS — batching {len(pending_texts)} examples "
+            logger.info(f"[ROUTER] batching {len(pending_texts)} examples "
                         f"for {len(pending_routes)} routes in ONE API call")
             print(f"[SEMANTIC_ROUTER] Embedding {len(pending_texts)} examples "
                   f"for {len(pending_routes)} routes in one batch...")
+            
             all_embeddings = self.embedder.embed_texts(pending_texts)
 
             for i, prt in enumerate(pending_routes):
@@ -193,12 +130,10 @@ class SemanticRouter:
                 arr = np.array(all_embeddings[start:end])
                 self.routes[prt["name"]] = {"examples": prt["examples"], "metadata": prt["metadata"]}
                 self.route_embeddings[prt["name"]] = arr
-                self._save_to_cache(prt["cache_key"], arr)
-                logger.info(f"[ROUTER CACHE] Cached '{prt['name']}' to disk")
+                logger.info(f"[ROUTER] Loaded '{prt['name']}' in memory")
 
         print(f"[SEMANTIC_ROUTER] {len(routes)} routes ready "
-              f"({len(routes) - len(pending_routes)} from cache, "
-              f"{len(pending_routes)} newly embedded)")
+              f"({len(pending_routes)} newly embedded)")
 
     # ──────────────────────────────────────────────────────────────────────────
     # ROUTING
