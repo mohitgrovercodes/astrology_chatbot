@@ -499,6 +499,8 @@ Respond with ONLY the summary.
         return "\n".join(formatted)
 
 
+import json as _json
+
 # Global context manager instance
 _context_manager = None
 
@@ -508,6 +510,117 @@ def get_context_manager() -> ContextManager:
     if _context_manager is None:
         _context_manager = ContextManager()
     return _context_manager
+
+
+_response_validator_llm = None
+
+
+def _get_response_validator_llm():
+    """Lazily create a low-temperature LLM for semantic response validation."""
+    global _response_validator_llm
+    if _response_validator_llm is None:
+        _response_validator_llm = LLMFactory.create(
+            purpose="classification",
+            temperature=0.1,
+        )
+    return _response_validator_llm
+
+
+def validate_and_sanitize_response(
+    question: str,
+    answer: str,
+    intent_analysis: Dict[str, Any],
+    recent_history: List[Dict[str, Any]],
+    context_window: int = 6,
+) -> str:
+    """
+    Use a small LLM to semantically validate and, if needed, rewrite the draft
+    answer so that it stays consistent with the user's intent and recent context.
+
+    This replaces brittle word-level pattern matching with holistic,
+    sentence-level understanding.
+    """
+    draft_answer = answer or ""
+    try:
+        conv_snippet: List[str] = []
+        for msg in (recent_history or [])[-context_window:]:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            conv_snippet.append(f"{role.upper()}: {content}")
+        conv_text = "\n".join(conv_snippet) or "No previous messages"
+
+        analysis = intent_analysis or {}
+
+        validator_prompt = f"""You are a STRICT semantic validator and re-writer for an astrology chatbot.
+
+Your job is to check whether the assistant's draft answer is:
+- logically correct and non-contradictory
+- emotionally appropriate to what the user asked
+- consistent with the recent conversation history
+
+You MUST rely on MEANING, not keyword matching. Think about what the user is
+really asking and whether the answer respects that.
+
+You must pay special attention to these cases:
+
+1) DIVORCE / SEPARATION QUERIES
+   - When the user asks about divorce or separation, the answer MUST:
+     • Acknowledge that the user is asking about possible strain, distance, or separation.
+     • Focus on relationship pressure/tension phases, and talk gently about communication,
+       boundaries, or counseling.
+   - The answer MUST NOT:
+     • Re-start the discussion as if it is a "happy marriage timing" or "favourable time for marriage".
+     • Celebrate getting a new partner, strong romantic progress, or "bahut hi accha/sukhad samay"
+       for marriage immediately after a divorce question.
+   - Only talk about favourable marriage / remarriage timing if the user explicitly asks
+     about remarriage in a later question.
+
+2) TIMELINE COHERENCE
+   - If the chat already stated a clear FUTURE marriage window (e.g., strong chance in 2027–2028),
+     do NOT allow a later answer to confidently state that divorce happens clearly BEFORE that
+     in an obviously impossible way.
+   - In such cases, soften the timing for divorce (e.g., "aane wale kuch saalon mein") and
+     emphasize emotional themes rather than hard earlier dates.
+
+3) GENERAL COHERENCE
+   - Avoid sentences that directly contradict what was said just before
+     (e.g., "no children possible" right after "strong chance for children in 2028").
+   - Avoid robotic repetition of the same phrasing; keep the tone natural and human.
+
+CONVERSATION (last {context_window} messages):
+{conv_text}
+
+LATEST USER QUESTION:
+USER: "{question}"
+
+INTENT ANALYSIS (for your reference):
+{_json.dumps(analysis, ensure_ascii=False)}
+
+DRAFT ASSISTANT ANSWER (in user's language):
+ASSISTANT_DRAFT:
+\"\"\"{draft_answer}\"\"\"
+
+Respond in STRICT JSON ONLY, no extra text, like this:
+{{
+  "is_coherent": true/false,
+  "needs_revision": true/false,
+  "reason": "short explanation of any problem you see",
+  "revised_answer": "a fully corrected answer in the SAME LANGUAGE as the draft, or empty string if no change is needed"
+}}"""
+
+        llm = _get_response_validator_llm()
+        resp = llm.invoke(validator_prompt)
+        raw = getattr(resp, "content", str(resp))
+        data = _json.loads(raw)
+
+        if isinstance(data, dict) and data.get("needs_revision") and data.get("revised_answer"):
+            print(f"[VALIDATOR] LLM revised answer: {data.get('reason', '')}")
+            return data["revised_answer"]
+
+        return draft_answer
+    except Exception as e:
+        print(f"[VALIDATOR] Error in LLM response validator: {e}")
+        return draft_answer
 
 
 # ============================================================================
@@ -1620,9 +1733,10 @@ def send_message(request: SendMessageRequest):
         if answer != original_answer:
             print(f"[POST_PROCESS] Removed 'thank you' pattern")
         
-        # Enforce word maximum for mobile (phase-aware)
         # Use the RESULT phase (what the orchestrator decided) not the INPUT phase
         result_phase = (result.get('conversation_phase') or {}).get('phase', conv_phase_data.get('phase', 'INITIAL'))
+
+        # Enforce word maximum for mobile (phase-aware)
         if result_phase == 'FOLLOWUP_LOOP' and conv_phase_data.get('phase') == 'AWAITING_DETAIL':
             # User agreed to details → detailed response capped at 400 words
             MAX_MOBILE_WORDS = 400
@@ -1665,7 +1779,34 @@ def send_message(request: SendMessageRequest):
                     answer += " Feel free to ask if you'd like to explore this further."
             
             print(f"[MOBILE] Truncated: {word_count} → {len(answer.split())} words")
+
+        # ── FINAL ENFORCEMENT: ensure initial short response ends with offer-for-detail question ──
+        # This runs *after* any truncation so the closing question cannot be accidentally cut off.
+        if result_phase == 'AWAITING_DETAIL':
+            _detected_lang = result.get('detected_language') or session_manager.get_detected_language(user_id) or 'en'
+            _closing_q_map = {
+                'en': 'Would you like me to explain the detailed astrological reasoning behind this?',
+                'hi': 'Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?',
+                'hi-lat': 'Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?',
+                'ta': 'Itharku pinnaal ullaa jothida karanam theriya virumbukireerga?',
+                'ta-lat': 'Itharku pin ullana jothida karanam theriya virumbukireerga?',
+                'pa': 'Ki tusi is de pichhe di jyotish wajah jaanna chahunde ho?',
+                'pa-lat': 'Ki tusi is de pichhe di jyotish wajah jaanna chahunde ho?',
+            }
+            _closing_q = _closing_q_map.get(_detected_lang, _closing_q_map['en'])
+            if _closing_q not in answer:
+                answer = (answer.rstrip() + "\n\n" + _closing_q).strip()
+                print(f"[POST_PROCESS] Appended offer-for-detail question (initial short response, final guard)")
         
+        # Run final semantic validator using a small conversation context window
+        answer = validate_and_sanitize_response(
+            question=question,
+            answer=answer,
+            intent_analysis=intent_analysis,
+            recent_history=recent_history,
+            context_window=6,
+        )
+
         print(f"\n[ORCHESTRATOR RESULT]")
         print(f"  Intent: {intent}")
         print(f"  Confidence: {confidence:.2f}")

@@ -1889,13 +1889,17 @@ Provide a concise answer:"""
                 generate_followup_question
             )
             conv_phase_data = (state.get('session_data') or {}).get('conversation_phase', {})
+            _intent_info = (state.get('session_data') or {}).get('intent_analysis', {})
             current_phase = conv_phase_data.get('phase', PHASE_INITIAL)
+            # When user intent is NEW_TOPIC, always treat as INITIAL so we give short response + offer detail
+            if _intent_info.get('intent_type') == 'NEW_TOPIC':
+                current_phase = PHASE_INITIAL
+                print(f"[PHASE] intent_type=NEW_TOPIC → forcing phase to INITIAL (short response + offer detail)")
             current_topic = conv_phase_data.get('topic')
             followup_count = conv_phase_data.get('followup_count', 0)
             # Use the true original question (before semantic expansion) for detection
             _orig_q = (state.get('session_data') or {}).get('original_user_question') or state['query']
             user_response_type = detect_user_response_type(_orig_q)
-            _intent_info = (state.get('session_data') or {}).get('intent_analysis', {})
             _is_short_cont = (
                 current_phase == PHASE_FOLLOWUP_LOOP
                 and len(_orig_q.strip().split()) <= 6
@@ -2037,15 +2041,20 @@ LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lan
 1. WORD LIMIT: 300-350 words. Be thorough but do not exceed 350 words.
 2. Explain 3-5 key astrological factors, but always translate them into simple, real-life language.
    Avoid long Sanskrit lists; briefly name a factor, then explain what it means in everyday terms.
-3. Include specific Pratyantar timing windows from the data above (only future windows as shown).
-4. Include the Next Favorable Window section.
+3. Use the Pratyantar and Antardasha data above to derive longer but precise timing windows:
+   - Always respect the full mathematical span of the relevant Pratyantars/Antardashas — do NOT compress everything into the current year if the data extends into later years.
+   - Express timing only as approximate ranges such as "between Aug 2027 and Mar 2028", "from late 2026 to mid 2027", or "most of 2030",
+     typically covering 6–12 months, never just 1-2 months.
+   - Do NOT mention exact calendar days (no DD/MM); use only month names and years in user-facing text (e.g., "March 2027", "Oct 2028").
+   - Avoid framing the MAIN timing window as starting exactly "now" or "from today" in user-facing language. Even if a Pratyantar is currently in progress, describe the supportive phase as a FUTURE-leaning window (for example: "coming months", "second half of 2026", "from early 2027 to mid 2027"), not "abhi se".
+   - CONSISTENCY WITH INITIAL ANSWER (CRITICAL): The main timing window in this detailed answer MUST stay aligned with the headline window you already gave in the initial short response (e.g., "2027 ke shuruaat se 2028 ke beech"). You may refine inside that same broad window (by describing smaller sub‑windows), but do NOT contradict it by shifting the best period to a totally different year or only a 1–2 month slice.
+4. Include the Next Favorable Window section, also expressed as an approximate month/year range.
 5. Maintain a warm, conversational narrative -- weave factors together, do not just list them.
 6. NEVER use H1, H2, H3 etc. -- always write 1st house, 2nd house, 3rd house.
    Use house annotations: e.g., 7th house (Marriage and Partnership).
 7. DO NOT repeat the brief answer already given -- build deeper upon it.
-8. End your response with EXACTLY this follow-up question (do not translate, do not paraphrase). 
-   This question should invite the user to explore related information about the same topic:
-   {_suggested_followup}
+8. MANDATORY ENDING: Your very last sentence MUST be EXACTLY this related follow-up question (copy verbatim, same language). This is a RELATED topic question (e.g. partner qualities, D9 chart, or another angle on the same theme), NOT a generic "want more detail?". Do NOT replace it with "want more reasoning" or "aur detail mein samjha sakta hoon":
+   "{_suggested_followup}"
 """
                 new_phase_data = {
                     "phase": PHASE_FOLLOWUP_LOOP,
@@ -2053,6 +2062,8 @@ LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lan
                     "last_query": conv_phase_data.get('last_query', state['query']),
                     "followup_count": followup_count + 1
                 }
+                # So we can append the related follow-up if the LLM omits it
+                state['_detailed_followup'] = _suggested_followup
 
             elif current_phase == PHASE_FOLLOWUP_LOOP and user_response_type == 'AFFIRMATIVE':
                 # ── User agreed to a follow-up question → Answer it, then STOP asking ──
@@ -2144,17 +2155,25 @@ RULES:
                 _closing_q = _closing_q_map.get(_lang_now, _closing_q_map['en'])
                 phase_instruction = f"""
 PROGRESSIVE DISCLOSURE -- INITIAL SHORT RESPONSE (OVERRIDES ALL OTHER FORMAT INSTRUCTIONS):
-STRICTLY FOLLOW THESE RULES -- they override the word-limit and Next Favorable Window instructions above:
-1. HARD WORD LIMIT: 150-180 words. Count carefully. Stop at 180. Do NOT exceed 180 words under any circumstance.
-2. Cite only ONE critical supporting factor from the chart, explained in simple, non-technical language.
-   Avoid lists of planets/houses; keep the focus on a single clear idea.
-3. Give one timing answer (one specific date or period from the Pratyantar data), using only future or in-progress windows.
-4. NEVER include a Next Favorable Window section -- it belongs in the detailed response.
-5. NEVER use H1, H2, H3 etc. -- always write 1st house, 2nd house, 3rd house.
-6. Use as few astrological terms as possible; where you must name a planet or house, immediately explain it in plain words.
-7. Write the ENTIRE response including the closing question in the SAME language as the user's query.
-8. End your response with EXACTLY this closing question (do not translate, do not paraphrase):
-   {_closing_q}
+You MUST follow every rule below. The response is WRONG if it breaks any of them.
+
+1. HARD WORD LIMIT: 150-180 words. Stop at 180. Do NOT exceed 180 words.
+
+2. ZERO ASTROLOGICAL JARGON in this short answer. Do NOT use: house, houses, 7th, 10th, lord, dasha, pratyantar, antardasha, nakshatra, Venus, Jupiter, Saturn, Mars, Mercury, Moon, Sun, Rahu, Ketu, sign, signs, yoga, aspect, or any Sanskrit/technical terms. Describe the prediction in plain everyday language only (e.g. "this period is favourable for marriage" or "you may meet your partner through friends").
+
+3. Always ground the short answer in at least ONE concrete anchor from the chart:
+   - EITHER: one clear, simple prediction about life (e.g. stability, strain, change in work, improvement in health), OR
+   - one approximate FUTURE time window in plain language (e.g. "around 2027", "between March and August 2027", or "in the second half of 2026").
+   You may include BOTH a simple prediction and a future window, but never give a vague answer with no fact or timeframe.
+   Do NOT phrase the window as "abhi", "ab se", "from now", or "immediately" — always describe a FUTURE period starting at least some weeks/months ahead of today (for example: "aane wale kuch mahino mein", "2026 ke doosre aadhe mein", "2027 ke shuruat se").
+
+4. NEVER include a "Next Favorable Window" section — that belongs in the detailed response only.
+
+5. Write the ENTIRE response in the SAME language as the user's query.
+
+6. MANDATORY ENDING: Your very last sentence MUST be exactly this closing question (copy it verbatim, do not translate or paraphrase):
+   "{_closing_q}"
+   If your response does not end with this exact question, it is INCOMPLETE. Add it at the end.
 """
                 # BUG FIX #4: Store the true original question (pre-semantic-expansion)
                 # as last_query so that future AFFIRMATIVE turns have domain keywords.
@@ -2206,6 +2225,11 @@ STRICTLY FOLLOW THESE RULES -- they override the word-limit and Next Favorable W
             print(f"[LLM] Sending {len(messages)} messages to LLM (phase={current_phase})")
             response = self.llm.invoke(messages)
             state['answer'] = response.content if hasattr(response, 'content') else str(response)
+            # If we just generated the detailed response, ensure it ends with the RELATED follow-up question
+            _followup = state.pop('_detailed_followup', None)
+            if _followup and _followup not in (state.get('answer') or ''):
+                state['answer'] = (state['answer'].rstrip() + "\n\n" + _followup).strip()
+                print(f"[PHASE] Appended related follow-up question to detailed response")
             
         except Exception as e:
             print(f"[ERROR] RAG_WITH_CALCULATION failed: {e}")
@@ -2502,6 +2526,8 @@ this table, STOP and use the correct lord from the table above.
             script_instruction = "Respond in clear, professional English."
 
         # Use dynamic instruction builder (adapts to query content and verbosity preference)
+        # We don't have intent_analysis in this pure-theory path, so we rely on
+        # query-only classification inside _build_response_instructions.
         instructions = self._build_response_instructions(
             query=query,
             lang_name=lang_name,
@@ -2848,7 +2874,10 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         lang_name: str,
         script_instruction: str,
         mode: str = 'theory',  # 'theory' or 'prediction'
-        response_mode: str = 'default'  # 'initial' | 'detailed' | 'followup' | 'default'
+        response_mode: str = 'default',  # 'initial' | 'detailed' | 'followup' | 'default'
+        intent_domain: Optional[str] = None,
+        question_mode: Optional[str] = None,
+        polarity: Optional[str] = None,
     ) -> str:
         """
         Build adaptive response instructions based on what the user is actually asking.
@@ -2858,14 +2887,23 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         q = query.lower()
         wants_detail = self._user_wants_detail(query)
 
+        # Prefer LLM-classified domain/mode/polarity when available (from context_manager.analyze_message_intent)
+        # Fall back to keyword-based detection only when these are missing.
+        _domain = (intent_domain or "").lower().strip() if intent_domain else ""
+        _qmode = (question_mode or "").lower().strip() if question_mode else ""
+        _polarity = (polarity or "").lower().strip() if polarity else ""
+
         # Domain-specific timing guidance — tells the LLM which Pratyantar windows
         # and Gochara factors are relevant for THIS specific query type.
         domain_hints = []
 
-        # ── Generic timing hint (always add when timing is asked) ──────────────
-        if any(w in q for w in ['when', 'kab', 'timing', 'which year', 'how long',
-                                  'kitne din', 'which month', 'period', 'dasha', 'antardasha',
-                                  'kab hoga', 'kab milega', 'kab hogi']):
+        # ── Generic timing hint (LLM-driven when possible) ──────────────
+        _is_timing_mode = _qmode == 'timing' or any(
+            w in q for w in ['when', 'kab', 'timing', 'which year', 'how long',
+                             'kitne din', 'which month', 'period', 'dasha', 'antardasha',
+                             'kab hoga', 'kab milega', 'kab hogi']
+        )
+        if _is_timing_mode:
             domain_hints.append(
                 "TIMING PRECISION: Use the Pratyantar Dasha windows (listed above under 'Upcoming Pratyantardashas') "
                 "combined with the Gochara factors to narrow timing to a specific 1-4 week window. "
@@ -2886,7 +2924,17 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             'break-up', 'judicial separation', 'relationship end', 'marriage end'
         ]
 
-        if any(w in q for w in _marriage_keywords):
+        # HARD OVERRIDE 1: if the literal query mentions divorce/separation, force the
+        # semantic domain to 'divorce' even if the LLM classified it as 'marriage'.
+        if any(w in q for w in _divorce_keywords):
+            _domain = 'divorce'
+
+        # HARD OVERRIDE 2: if the LLM polarity is explicitly negative for a relationship
+        # query, prefer the divorce/strain framing over a celebratory marriage framing.
+        if _polarity == 'negative' and _domain == 'marriage':
+            _domain = 'divorce'
+
+        if _domain == 'marriage' or (_domain == "" and any(w in q for w in _marriage_keywords) and not any(w in q for w in _divorce_keywords)):
             # Standard marriage / partner-focus instructions
             domain_hints.append(
                 "MARRIAGE & PARTNER ANALYSIS — Answer ALL parts of the user's question:\n"
@@ -2905,7 +2953,7 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             )
 
         # Divorce / separation specific guidance – must NOT talk like a generic 'good marriage timing' question
-        if any(w in q for w in _divorce_keywords):
+        if _domain == 'divorce' or (_domain == "" and any(w in q for w in _divorce_keywords)):
             domain_hints.append(
                 "DIVORCE / SEPARATION QUERY — interpret the question as assessing relationship strain, not new marriage timing:\n"
                 "  • Focus on 7th house (Marriage & Partnership), 8th house (Longevity & Transformation), and 12th house (Foreign & Moksha) for stress indicators.\n"
@@ -2916,9 +2964,11 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             )
 
         # ── Career / job / business ────────────────────────────────────────────
-        if any(w in q for w in ['career', 'job', 'business', 'naukri', 'profession', 'promotion',
-                                  'kaam', 'vyapar', 'work', 'income', 'salary', 'office',
-                                  'interview', 'selection', 'appointment']):
+        if _domain == 'career' or (_domain == "" and any(
+            w in q for w in ['career', 'job', 'business', 'naukri', 'profession', 'promotion',
+                             'kaam', 'vyapar', 'work', 'income', 'salary', 'office',
+                             'interview', 'selection', 'appointment']
+        )):
             domain_hints.append(
                 "CAREER ANALYSIS — Cross-reference ALL of the following from the HOUSE LORDS table:\n"
                 "  CHART FACTORS (check each from birth chart positions above):\n"
@@ -2940,9 +2990,11 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             )
 
         # ── Foreign travel / abroad ────────────────────────────────────────────
-        if any(w in q for w in ['foreign', 'abroad', 'videsh', 'travel', 'yatra', 'immigration',
-                                  'visa', 'overseas', 'bahar', 'country', 'settle abroad',
-                                  'job abroad', 'foreign land']):
+        if _domain in ('foreign', 'foreign_travel') or (_domain == "" and any(
+            w in q for w in ['foreign', 'abroad', 'videsh', 'travel', 'yatra', 'immigration',
+                             'visa', 'overseas', 'bahar', 'country', 'settle abroad',
+                             'job abroad', 'foreign land']
+        )):
             domain_hints.append(
                 "FOREIGN TRAVEL ANALYSIS — Cross-reference ALL of the following from the HOUSE LORDS table:\n"
                 "  CHART FACTORS (check each from birth chart positions above):\n"
@@ -2965,8 +3017,10 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             )
 
         # ── Children ───────────────────────────────────────────────────────────
-        if any(w in q for w in ['child', 'children', 'baby', 'pregnancy', 'bachha', 'bacche',
-                                  'santan', 'offspring', 'conceive', 'delivery']):
+        if _domain == 'children' or (_domain == "" and any(
+            w in q for w in ['child', 'children', 'baby', 'pregnancy', 'bachha', 'bacche',
+                             'santan', 'offspring', 'conceive', 'delivery']
+        )):
             domain_hints.append(
                 "CHILDREN ANALYSIS — Cross-reference ALL of the following from the HOUSE LORDS table:\n"
                 "  CHART FACTORS (check each from birth chart positions above):\n"
@@ -2984,10 +3038,12 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             )
 
         # ── Home / property / real estate ──────────────────────────────────────
-        if any(w in q for w in ['ghar', 'makaan', 'makan', 'home', 'house', 'flat', 'plot', 'property',
-                                  'real estate', 'zameen', 'naya ghar', 'new home', 'ghar lena',
-                                  'ghar kharidna', 'buy house', 'buy home', 'property buy',
-                                  'renovation', 'construction', 'bhumi', 'land']):
+        if _domain in ('home', 'property') or (_domain == "" and any(
+            w in q for w in ['ghar', 'makaan', 'makan', 'home', 'house', 'flat', 'plot', 'property',
+                             'real estate', 'zameen', 'naya ghar', 'new home', 'ghar lena',
+                             'ghar kharidna', 'buy house', 'buy home', 'property buy',
+                             'renovation', 'construction', 'bhumi', 'land']
+        )):
             domain_hints.append(
                 "HOME & PROPERTY ANALYSIS — Cross-reference ALL of the following from the HOUSE LORDS table:\n"
                 "  CHART FACTORS (check each from birth chart positions above):\n"
@@ -3009,8 +3065,10 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             )
 
         # ── Finance / wealth ───────────────────────────────────────────────────
-        if any(w in q for w in ['money', 'wealth', 'paisa', 'dhan', 'rich', 'invest', 'finance',
-                                  'loan', 'debt', 'savings', 'profit', 'loss']):
+        if _domain in ('finance', 'wealth') or (_domain == "" and any(
+            w in q for w in ['money', 'wealth', 'paisa', 'dhan', 'rich', 'invest', 'finance',
+                             'loan', 'debt', 'savings', 'profit', 'loss']
+        )):
             domain_hints.append(
                 "FINANCE ANALYSIS — Cross-reference ALL of the following from the HOUSE LORDS table:\n"
                 "  CHART FACTORS (check each from birth chart positions above):\n"
@@ -3032,8 +3090,10 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             )
 
         # ── Health ─────────────────────────────────────────────────────────────
-        if any(w in q for w in ['health', 'illness', 'sick', 'disease', 'bimari', 'sehat', 'swasth',
-                                  'hospital', 'surgery', 'pain', 'accident', 'injury']):
+        if _domain == 'health' or (_domain == "" and any(
+            w in q for w in ['health', 'illness', 'sick', 'disease', 'bimari', 'sehat', 'swasth',
+                             'hospital', 'surgery', 'pain', 'accident', 'injury']
+        )):
             domain_hints.append(
                 "HEALTH ANALYSIS — Cross-reference ALL of the following from the HOUSE LORDS table:\n"
                 "  CHART FACTORS:\n"
@@ -3077,8 +3137,9 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                     "  3. For timing: find the Pratyantar of the most relevant planet in Step 3.5 above.\n"
                     "  4. For Sade Sati or Saturn-related phases: check Saturn's current transit house "
                     "     from Moon (Gochara block) — Sade Sati ends when Saturn leaves the sign just after "
-                    "     natal Moon sign. Cite the actual transit dates.\n"
-                    "  5. Provide a specific time window from the Pratyantar table, not a vague range."
+                    "     natal Moon sign. Use these dates only as the mathematical basis.\n"
+                    "  5. In user-facing text, express timing as an approximate 6–12 month window (month/year only), "
+                    "     never as exact calendar days."
                 )
 
         domain_text = ("\n" + "\n".join(f"- {h}" for h in domain_hints)) if domain_hints else ""
@@ -3134,6 +3195,13 @@ NEVER fabricate dates. NEVER cite the same Pratyantar already mentioned above.""
             else ""
         )
 
+        # Global stylistic reminder so the LLM does not copy any of these
+        # instruction bullets verbatim into user-facing text.
+        _style_flex = (
+            "\nSTYLE FLEXIBILITY (IMPORTANT): These bullets are constraints, not sentences to copy. "
+            "Do NOT echo their wording. Write in your own natural style while staying inside these rules."
+        )
+
         if wants_detail:
             if mode == 'prediction':
                 return f"""INSTRUCTIONS:
@@ -3141,7 +3209,7 @@ NEVER fabricate dates. NEVER cite the same Pratyantar already mentioned above.""
 2. Ground every claim in specific chart data (actual houses, signs, planets listed above).
 3. Include dasha periods AND approximate calendar timeframes for any timing claims.
 4. Do NOT cite classical texts or provide book names as sources unless the user explicitly demands it.
-5. {script_instruction}{domain_text}{_timing_section}
+5. {script_instruction}{domain_text}{_timing_section}{_style_flex}
 
 Provide a thorough, detailed prediction:"""
             else:
@@ -3149,17 +3217,20 @@ Provide a thorough, detailed prediction:"""
 1. Provide a comprehensive explanation covering the concept fully.
 2. Ground the answer in the retrieved classical texts above.
 3. Do NOT cite books or provide source names unless the user explicitly demands it.
-4. {script_instruction}{domain_text}
+4. {script_instruction}{domain_text}{_style_flex}
 
 Provide a detailed explanation:"""
         else:
             if mode == 'prediction':
                 return f"""INSTRUCTIONS:
-1. Give a warm, human, narrative answer — 3-5 sentences flowing naturally (100-150 words).
-2. Cover 2-3 key chart factors with their real-world meaning, not just technical data.
-3. Include one specific timing window with a brief reason it's favorable.
-4. Do NOT cite sources or provide book names unless the user explicitly demands it.
-5. {script_instruction}{domain_text}{_timing_section}
+1. Give a warm, human, narrative answer — 150-180 words flowing naturally.
+2. DO NOT mention houses, dashas, nakshatras, yogas, aspects, or Sanskrit technical terms in this short answer.
+   Avoid naming specific planets or signs; keep the language purely practical and everyday.
+3. State the prediction clearly in plain language, focusing on how life is likely to feel or unfold for the user.
+4. Include one specific timing window with a brief reason it's favorable, expressed without astrological jargon, using only future or in-progress dates.
+5. At the end, briefly offer to explain the astrological reasoning in more detail if the user wants it.
+6. Do NOT cite sources or provide book names unless the user explicitly demands it.
+7. {script_instruction}{domain_text}{_timing_section}{_style_flex}
 
 Provide a warm, self-contained response:"""
             else:
@@ -3167,7 +3238,7 @@ Provide a warm, self-contained response:"""
 1. Answer in 2-3 focused sentences (80-120 words).
 2. Base the answer only on retrieved texts above.
 3. Do NOT cite sources or provide book names unless the user explicitly demands it.
-4. {script_instruction}{domain_text}
+4. {script_instruction}{domain_text}{_style_flex}
 
 Provide a concise, clear answer:"""
 
@@ -3536,6 +3607,8 @@ Provide a concise, clear answer:"""
         DOMAIN_PLANETS = {
             # Relationship / marriage timing
             "marriage": {"planets": ["VENUS", "JUPITER"], "lords": ["H7"]},
+            # Divorce / separation / strain periods in relationship
+            "divorce": {"planets": ["SATURN", "MARS", "RAHU", "KETU"], "lords": ["H7", "H8", "H12"]},
             # Career / job / profession
             "career": {"planets": ["SATURN", "SUN", "MERCURY"], "lords": ["H10"]},
             # Finance / wealth / gains
@@ -3629,6 +3702,24 @@ Provide a concise, clear answer:"""
               f"{len(upcoming_pds_filtered)} after past-date filter")
         for _pd in upcoming_pds_filtered:
             print(f"  Pratyantar: {_pd.get('planet'):10} {_pd.get('start')} -> {_pd.get('end')} [{_pd.get('status')}]")
+
+        # ── BROAD SUPPORTIVE WINDOW (for longer, but accurate timeframes) ───────
+        # Compute a mathematically correct broader window summarizing when the
+        # topic-relevant Dasha energy is active, clipped to today → end.
+        broader_window_str = ""
+        if upcoming_pds_filtered:
+            first_pd = upcoming_pds_filtered[0]
+            last_pd = upcoming_pds_filtered[-1]
+            bw_start_raw = first_pd.get('start', _today_str)
+            bw_end_raw = last_pd.get('end', _today_str)
+            if bw_end_raw and bw_end_raw >= _today_str:
+                bw_start = _today_str if bw_start_raw and bw_start_raw < _today_str else bw_start_raw
+                broader_window_str = (
+                    "\nStep 3.7 - Broader Supportive Phase (for narrative timing):\n"
+                    f"  • Topic-relevant Pratyantar sequence spans {bw_start} → {bw_end_raw}.\n"
+                    "  Use this ONLY as a broad phase description (e.g., 'overall supportive phase'),\n"
+                    "  and still mention at least one exact Pratyantar window from Step 3.5."
+                )
 
         # First pratyantar of each upcoming Antardasha (cross-level convergence)
         next_ad_fp = dasha_data.get('next_antardasha_first_pratyantar', [])
@@ -3775,18 +3866,25 @@ Provide a concise, clear answer:"""
         if chart_anchor:
             system_prompt = chart_anchor + "\n\n" + system_prompt
 
-        # ── Hard timing rule injected into system prompt ──────────────────────
+        # ── Hard timing & anti-hallucination rule injected into system prompt ─
         # Placed here (system prompt level) so the LLM reliably follows it
         # regardless of where it appears in the user context.
         _ref_date = _today_str  # reuse _today_str already defined above
+        _has_core_dasha = bool(dasha_data.get('upcoming_pratyantardashas') or dasha_data.get('upcoming_antardashas'))
+        _has_transit = bool(transit_data)
         system_prompt += (
             f"\n\nCRITICAL TIMING RULE: Today's date is {_ref_date}. "
             "NEVER predict or cite any date range that ended before today. "
             "If a Pratyantar or Antardasha period has already fully elapsed "
             f"(its end date is before {_ref_date}), you MUST skip it and find the next future window. "
-            "For a period currently 'IN PROGRESS', cite only today → its end date, not its original start. "
-            "NEVER compute or invent sub-windows from your training knowledge — "
-            "use ONLY the Pratyantar dates explicitly listed in the prompt."
+            "For a period currently 'IN PROGRESS', treat the start as today, not the original start date, but when speaking to the user you should still describe a FUTURE window (e.g., 'agale kuch mahine', '2026 ke doosre aadhe mein') rather than saying 'abhi se' or 'right now'. "
+            "In ALL user-facing answers, do NOT mention exact calendar days (no DD/MM or specific dates). "
+            "Express timing only as approximate windows such as 'between Aug 2027 and early 2028', "
+            "'in the second half of 2026', or 'across most of 2030', and when helpful say month names with years such as 'from March 2027 to October 2027'. "
+            "Within the SAME conversation session, avoid repeating the exact same timing phrase for different NEW_TOPIC questions — you may point to overlapping or identical mathematical windows, but vary your wording naturally (e.g., 'around mid 2026' vs 'from June to August 2026') so the answers do not sound robotic. "
+            "NEVER compute or invent sub-windows or planetary positions from your training knowledge — "
+            "use ONLY the Pratyantar, Antardasha, and transit dates explicitly listed in the prompt as the mathematical basis. "
+            "If any of these calculation blocks are missing or look incomplete, clearly say that you do NOT have enough data for an exact timing prediction and give only high-level, non-date-specific guidance instead."
         )
 
         # ════════════════════════════════════════════════════════════════════════
@@ -3861,13 +3959,18 @@ EARLY CONVERSATION:
         else:
             script_instruction = "Respond in clear, professional English."
 
-        # Use dynamic instruction builder — adapts to query content (timing, career, etc) and verbosity
+        # Use dynamic instruction builder — adapts to query content (timing, career, etc) and verbosity.
+        # LLM-classified intent/domain/polarity are passed in via validation_result when available.
+        _ia = (validation_result or {}).get('intent_analysis', {}) if validation_result else {}
         instructions = self._build_response_instructions(
             query=query,
             lang_name=lang_name,
             script_instruction=script_instruction,
             mode='prediction',
-            response_mode=response_mode
+            response_mode=response_mode,
+            intent_domain=_ia.get('domain'),
+            question_mode=_ia.get('question_mode'),
+            polarity=_ia.get('polarity'),
         )
 
         # Domain-specific Pratyantar spotlight — injected into the dasha block so the LLM
@@ -3882,14 +3985,14 @@ EARLY CONVERSATION:
 RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
 1. DEFAULT LENGTH (when no PROGRESSIVE DISCLOSURE override is active):
    - Keep answers roughly in the 150–180 word range.
-   - Use simple, everyday language and avoid heavy astrological jargon.
-   - At most ONE explicitly named planet or house in the short answer.
+   - Use simple, everyday language and avoid astrological jargon in the short answer.
+   - Do NOT mention houses, dashas, nakshatras, yogas, aspects, or Sanskrit technical terms in the short answer.
 2. TONE: Write like a warm, knowledgeable astrologer speaking directly to the person — not a data sheet.
    Use natural sentence flow. Weave factors into a coherent narrative, not a bullet list.
    Show genuine care: acknowledge the importance of the question before diving into analysis.
 3. STRUCTURE (narrative, not mechanical):
-   - Opening: 1–2 sentences acknowledging the topic warmly and giving the headline answer.
-   - Body: ONE critical supporting factor in plain language (e.g., “a strong career house makes growth easier”) without long Sanskrit lists.
+   - Opening: 1–2 sentences acknowledging the topic warmly and giving the headline answer in plain language.
+   - Body: ONE critical supporting idea about their life (e.g., “this phase favours stable relationships”) described without referring to planets, houses, or dashas.
    - Closing: Briefly offer to explain the deeper astrological reasoning in detail if the user wants it.
    DO NOT use bullet lists.
 4. HOUSE NUMBER FORMAT (MANDATORY): NEVER write "H1", "H2", "H10" etc. in your response.
