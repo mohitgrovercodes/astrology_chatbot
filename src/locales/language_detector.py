@@ -126,7 +126,7 @@ class LanguageDetector:
             "hoga": 2, "hogi": 2, "kaisa": 2, "batao": 2, "bataye": 2,
             "chahiye": 2, "milega": 2, "milegi": 2, "karta": 2, "karti": 2,
             # Common Hinglish affirmatives (also used in Punjabi but dominant in Hinglish)
-            "haan": 2, "nahi": 2, "accha": 2, "bilkul": 2, "zaroor": 2,
+            "haan": 2, "haa": 2, "ha": 2, "nahi": 2, "accha": 2, "bilkul": 2, "zaroor": 2,
             # Weight-1 (need cumulative ≥ 3)
             "kya": 1, "hai": 1, "hoon": 1, "hain": 1, "tha": 1, "thi": 1,
             "nahin": 1, "aur": 1, "par": 1, "se": 1,

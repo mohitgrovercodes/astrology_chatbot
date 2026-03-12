@@ -35,7 +35,7 @@ _AFFIRMATIVE_SIGNALS = {
     'sounds good', 'let me know', "i'd like that", 'that would be great',
     'hmm', 'uh huh', 'mm', 'interesting', 'okay go on',
     # Hindi / Hinglish
-    'haan', 'ha', 'haji', 'bilkul', 'zaroor', 'aur batao', 'aur bataiye',
+    'haan', 'haa', 'ha', 'haji', 'bilkul', 'zaroor', 'aur batao', 'aur bataiye',
     'haan bataiye', 'haan ji', 'theek hai batao', 'batao', 'bataiye',
     'ji haan', 'detail mein batao', 'detail se batao', 'aur samjhao',
     'samjhao', 'samjhaiye', 'samjha do', 'bata do', 'bata na', 'batao na',
@@ -83,7 +83,7 @@ def detect_user_response_type(query: str) -> str:
 
     # Short-token prefix match -- handles "ok karo", "ha bhai", "haan samjhao",
     # "no please", "nahi yaar" etc. where the affirmative/negative is the first word.
-    _SHORT_AFF = ('ok ', 'ok,', 'ha ', 'ha,', 'haan ', 'hmm ', 'hmm,')
+    _SHORT_AFF = ('ok ', 'ok,', 'ha ', 'ha,', 'haa ', 'haa,', 'haan ', 'hmm ', 'hmm,')
     _SHORT_NEG = ('no ', 'no,', 'nahi ', 'naa ', 'nai ')
     if any(q.startswith(p) for p in _SHORT_AFF):
         return 'AFFIRMATIVE'
@@ -99,48 +99,48 @@ def detect_user_response_type(query: str) -> str:
 # based on what was already discussed.
 FOLLOWUP_QUESTION_BANK = {
     'marriage': [
-        "7th lord ki placement mein ek twist hai jo future partner ki personality ke baare mein kuch unexpected reveal karta hai -- woh angle abhi cover nahi hua.",
-        "Venus aapke chart mein jahan hai, woh prem aur attraction ke baare mein kuch specific kehta hai jo bahut log notice hi nahi karte.",
-        "Navamsa (D9) chart ko shadi ka asli aaina kaha jaata hai -- aur aapke D9 mein kuch aisa hai jo birth chart se bilkul alag picture banata hai.",
-        "Aapke Dasha timeline mein ek period hai jo shadi ke liye unusually powerful hai -- aur woh woh nahi hai jo obvious lagta hai.",
-        "Jo planetary period aapki shadi ka darwaza khol raha hai, wahi period ek doosri zindagi-badalne wali cheez bhi leke aa raha hai.",
+        "7th lord ki placement mein ek aisa angle hai jo future partner ki personality ke baare mein kuch unexpected reveal karta hai — kya aap jaanna chahenge?",
+        "Venus aapke chart mein jahan hai, woh prem aur attraction ke baare mein kuch specific kehta hai jo bahut log notice hi nahi karte — main vistar se samjhaaun?",
+        "Navamsa (D9) chart ko shadi ka asli aaina kaha jaata hai — aur aapke D9 mein birth chart se bilkul alag ek picture hai jo abhi cover nahi hui — shall I explain?",
+        "Aapke Dasha timeline mein ek period hai jo shadi ke liye unusually powerful hai — aur woh woh nahi hai jo surface pe obvious lagta hai — kya aap jaanna chahenge?",
+        "Jo planetary period aapki shadi ka darwaza khol raha hai, wahi period ek doosri mahatvapurn ghatna bhi leke aa raha hai — would you like me to elaborate?",
     ],
     'career': [
-        "10th lord ki placement ek specific career direction clearly point karti hai -- aur woh field usually woh nahi hoti jo log pehle sochte hain.",
-        "11th house mein ek indicator hai jo bata sakta hai ki aap job se zyada earn karenge ya business se -- aur answer genuinely surprising ho sakta hai.",
-        "Saturn aapke chart mein career ke baare mein ek unusual message de raha hai -- delay ki nahi, ek specific breakthrough window ki baat hai.",
-        "Aapke Dasha mein ek window hai jab career ek sharp leap leta hai -- woh period khulne wala hai, aur yeh jaanna preparation ke liye zaroori hai.",
-        "Lagnesh ki placement professional drive ke baare mein ek hidden indicator hai -- jo aapko actually aage push karta hai woh chart mein clearly visible hai.",
+        "10th lord ki placement ek specific career direction clearly point karti hai jo typically logon ki pehli soch se alag hoti hai — main vistar se bata sakta hoon.",
+        "11th house mein ek indicator hai jo clearly dikhata hai ki aap job se zyada earn karenge ya business se — kya aap jaanna chahenge?",
+        "Saturn aapke chart mein career ke baare mein ek unusual message de raha hai — delay ki nahi, ek specific breakthrough window ki baat hai — shall I explain?",
+        "Aapke Dasha mein ek window hai jab career ek sharp leap leta hai — woh period khulne wala hai — kya aap iske baare mein aur jaanna chahenge?",
+        "Lagnesh ki placement professional drive ke baare mein ek hidden indicator hai jo chart mein clearly visible hai — would you like me to walk you through it?",
     ],
     'finance': [
-        "2nd aur 11th houses ka jo combination aapke chart mein hai, woh income ke baare mein ek specific aur somewhat surprising picture banata hai.",
-        "Ek planetary period aapke aage aa raha hai jo financial gains ke liye unusually powerful hai -- aur woh woh nahi jo surface pe obvious dikhta hai.",
-        "Aapke chart mein ek clear indicator hai ki aap job, business, ya investments -- kin mein se kisme naturally zyada success milegi.",
-        "Jupiter aur Venus dono wealth ke karak hain -- aur aapke chart mein inki placement mein ek interesting tension hai jo money ke saath relationship ko shape karta hai.",
+        "2nd aur 11th houses ka jo combination aapke chart mein hai, woh income ke baare mein ek specific aur surprising picture banata hai — kya aap jaanna chahenge?",
+        "Ek planetary period aapke aage aa raha hai jo financial gains ke liye unusually powerful hai — aur woh woh nahi jo surface pe obvious dikhta hai — main samjhaaun?",
+        "Aapke chart mein ek clear indicator hai ki job, business, aur investments mein se kisme naturally zyada success milegi — shall I explain this?",
+        "Jupiter aur Venus ka aapke chart mein jo tension hai, woh money ke saath relationship ko ek specific tarike se shape karta hai — would you like me to elaborate?",
     ],
     'health': [
-        "6th house lord ki placement ek specific area point karti hai jahan dhyan rakhna genuinely helpful hoga -- aur woh woh area nahi hoga jo aap expect karein.",
-        "Ek Dasha period hai jab health extra attention maangta hai -- yeh jaanna advance mein genuinely practical hai.",
-        "Lagna lord ki placement constitution aur natural vitality ke baare mein ek interesting picture banata hai -- strength aur weakness dono clearly visible hain wahan.",
-        "Mars aur Saturn ka jo angle aapke chart mein hai, woh physical stamina ke baare mein ek specific aur somewhat unexpected story batata hai.",
+        "6th house lord ki placement ek specific area point karti hai jahan dhyan rakhna genuinely helpful hoga — kya aap jaanna chahenge?",
+        "Aapke chart mein ek Dasha period hai jab health extra attention maangti hai — yeh advance mein jaanna practically helpful hai — shall I explain?",
+        "Lagna lord ki placement constitution aur natural vitality ke baare mein ek clear picture banata hai — strength aur weakness dono wahan visible hain — main vistar se bata sakta hoon.",
+        "Mars aur Saturn ka jo angle aapke chart mein hai, woh physical stamina ke baare mein ek unexpected story batata hai — kya aap iske baare mein jaanna chahenge?",
     ],
     'children': [
-        "5th house lord ki placement children ki timing ke baare mein ek clear signal deta hai -- aur kuch aur bhi hai wahan jo intelligence aur creativity ke baare mein interesting hai.",
-        "Jupiter aapke chart mein jahan hai, woh children ke baare mein ek picture banata hai jo birth chart se zyada D5 mein clearly dikhta hai.",
-        "5th house sirf bachcho ka ghar nahi -- past-life merit aur natural gifts ka bhi hai, aur aapke chart mein ek specific strength wahan chhupi hui hai.",
+        "5th house lord ki placement children ki timing ke baare mein ek clear signal deta hai — saath hi intelligence aur creativity ka ek interesting angle bhi hai — shall I elaborate?",
+        "Jupiter aapke chart mein jahan hai, woh children ke baare mein D5 mein ek alag picture banata hai jo birth chart mein nahi dikhti — kya aap jaanna chahenge?",
+        "5th house sirf bachcho ka ghar nahi — past-life merit aur natural gifts ka bhi hai — aapke chart mein ek specific strength wahan chhupi hui hai — would you like me to explain?",
     ],
     'foreign': [
-        "Rahu ki placement foreign connection ke baare mein ek clear hint deta hai -- aur jo indicate karta hai woh career se personal life tak ek specific angle hai.",
-        "9th aur 12th houses ka combination bata sakta hai ki foreign travel ya settlement ka waqt aur direction kya hoga -- aapke chart mein kuch specific hai.",
-        "Foreign opportunities aapke Dasha timeline mein ek particular period ke around cluster karti hain -- kaunsa period hai aur kya type ki opportunity?",
+        "Rahu ki placement foreign connection ke baare mein ek clear angle indicate karta hai jo career se personal life tak extend karta hai — kya aap jaanna chahenge?",
+        "9th aur 12th houses ka combination foreign travel ya settlement ke waqt aur direction ke baare mein kuch specific kehta hai — main vistar se samjhaaun?",
+        "Foreign opportunities aapke Dasha timeline mein ek particular period ke around cluster karti hain — woh period aur opportunity ka type chart mein clearly visible hai — shall I explain?",
     ],
     'general': [
-        "Aapke Dasha mein agla major phase shift ek interesting mix leke aata hai -- kuch challenges, kuch unexpected openings. Kya dikhta hai aage?",
-        "Aapke chart mein 2-3 planetary positions hain jo real natural advantages dete hain -- woh strengths hain jo shayad aap abhi fully use nahi kar rahe.",
-        "Ek significant transit abhi chal raha hai jo silently current circumstances shape kar raha hai -- aur exactly kab tak chalega yeh jaanna helpful hai.",
-        "Lagna lord ki exact placement personality aur life direction ke baare mein jo picture banata hai, woh usually jo log expect karte hain usse alag hota hai.",
-        "Sade Sati ka aapke chart par ek measurable asar hai -- exactly kab peak hai aur kab lift hota hai, yeh practically jaanna zaroori hai.",
-        "Har chart mein ek dominant planet hota hai jo puri zindagi ko color karta hai -- aapka woh signature planet kaunsa hai?",
+        "Aapke Dasha mein agla major phase shift ek interesting mix leke aata hai — kuch challenges, kuch unexpected openings — would you like me to walk you through it?",
+        "Aapke chart mein 2-3 planetary positions hain jo real natural advantages dete hain — woh strengths hain jo shayad abhi fully use nahi ho rahe — kya aap jaanna chahenge?",
+        "Ek significant transit abhi chal raha hai jo silently current circumstances shape kar raha hai — exactly kab tak chalega yeh practically jaanna helpful hai — shall I explain?",
+        "Lagna lord ki exact placement personality aur life direction ke baare mein jo picture banata hai woh usually expected se alag hota hai — main vistar se bata sakta hoon.",
+        "Sade Sati ka aapke chart par ek measurable asar hai — exactly kab peak hai aur kab lift hota hai — kya aap jaanna chahenge?",
+        "Aapke chart mein ek dominant planet hai jo puri zindagi ko color karta hai — aur uski placement mein kuch aisa hai jo shayad aap expect nahi karenge — would you like me to elaborate?",
     ],
 }
 
@@ -245,32 +245,33 @@ def generate_followup_question(
 
     chart_block = f"USER'S ACTUAL CHART PLACEMENTS:\n{chart_context}" if chart_context else "No chart data available."
 
-    prompt = f"""You are a sharp, insightful Vedic astrologer who notices things others miss.
+    prompt = f"""You are a perceptive Vedic astrologer delivering a personalised reading.
 
 {chart_block}
 
 Topic just discussed: {topic}
 Last answer (do NOT repeat anything from here): "{last_answer[:200]}"
 
-TASK: Write ONE follow-up question this specific user will want to answer immediately.
+TASK: Write ONE follow-up line that surfaces a specific, unexplored insight from THIS chart and formally invites the user to hear it.
 
-HOW TO BUILD IT (think in steps):
-  1. Pick the single most interesting chart placement above that relates to {topic} and was NOT covered in the last answer.
-  2. Identify what is surprising, ironic, or revealing about it -- something the user does not know yet.
-  3. Name the actual planet and house. Tease the insight. End with a hook.
+HOW TO BUILD IT:
+  1. Scan the chart placements above. Identify the single placement most relevant to '{topic}' that was NOT mentioned in the last answer.
+  2. Find what is genuinely surprising, rare, or revealing about that placement — something only visible in this specific chart.
+  3. State the planet and house by name. Tease the hidden angle without revealing it. Close with a formal invitation.
 
-NON-NEGOTIABLE RULES:
-  - Use a real placement from the chart above. NEVER say "agar koi planet ho" or "if a planet is present".
-  - Do NOT ask permission: no "kya aap jaanna chahenge", no "would you like to know".
-  - Tease, do not tell. The question should make the user feel: "I did not know that -- tell me."
-  - Language: {lang_hint}. Max 20 words. Return ONLY the question.
+RULES:
+  - Ground the question entirely in the actual chart data above. A reader of this line must feel it was written specifically for this person, not a generic template.
+  - YOU are the one offering to reveal something. NEVER frame it as a question that asks the user to explain astrology to you (e.g. "Jupiter 3rd mein hai, yeh communication ko kaise influence karta hai?" is WRONG — that tests the user, not informs them).
+  - Use only real placements listed above. NEVER write "agar koi planet ho" or "if a planet is present".
+  - Close with a formal, respectful invitation in the same language — e.g. "— kya aap jaanna chahenge?", "— main vistar se samjhaaun?", "— shall I explain this?", "— would you like me to elaborate?" — not casual phrases.
+  - Language: {lang_hint}. Maximum 28 words. Return ONLY the single follow-up line.
 
-EXAMPLES of the exact quality and style to match (adapt planet/house to the actual chart):
-  "Venus 1st house mein debilitate hone ke bawajood ek hidden strength carry karti hai -- zyada tar log yeh miss karte hain."
-  "Jupiter 3rd house mein aapka 7th lord hai -- yeh ek unusual spot hai jo future partner ki personality ke baare mein kuch specific aur unexpected batata hai."
-  "Aapka 10th lord Mercury exalted aur 1st house mein -- yeh rare placement success ke tarike ke baare mein ek surprising picture banata hai."
-  "Moon aur Saturn jo combination aapke chart mein bana rahe hain, woh career timing ke baare mein ek window dikhaata hai jo bahut kam log jaante hain."
-  "Rahu ki placement aapki financial growth se ek aisa angle se connected hai jo surface pe nahi dikhta."
+STYLE REFERENCE (these illustrate tone and structure — your output must use the actual chart placements above, not these planets/houses):
+  "Venus 1st house mein debilitate hone ke bawajood ek hidden strength hai jo shadi ki timing ko seedha shape karti hai — kya aap jaanna chahenge?"
+  "Jupiter 3rd house mein aapka 7th lord hai — yeh future partner ki personality ke baare mein kuch aise reveal karta hai jo bahut kam log notice karte hain — main samjhaaun?"
+  "Aapka 10th lord Mercury exalted aur lagna mein — yeh rare yoga career ki direction ke baare mein ek surprising picture banata hai — shall I elaborate?"
+  "Moon aur Saturn ka jo yog aapke chart mein hai, woh career mein ek specific timing window dikhata hai jo surface pe nahi dikhti — would you like me to explain?"
+  "Rahu ki placement aapki financial growth se ek aisa angle se connected hai jo sirf is specific chart mein dikhta hai — main vistar se bata sakta hoon."
 """
 
     def _call() -> str:

@@ -2017,8 +2017,8 @@ Provide a concise answer:"""
                 return state  # Skip LLM call — direct response
 
             elif current_phase == PHASE_AWAITING_DETAIL and user_response_type == 'AFFIRMATIVE':
-                # ── User wants details → Generate comprehensive ~400 word response ──
-                print(f"[PHASE] AWAITING_DETAIL + AFFIRMATIVE → detailed response")
+                # ── User wants details → Generate comprehensive response + follow-up question ──
+                print(f"[PHASE] AWAITING_DETAIL + AFFIRMATIVE → detailed response with follow-up")
                 _lang_for_phase = state.get('detected_language', 'en')
                 phase_instruction = f"""
 PROGRESSIVE DISCLOSURE -- DETAILED RESPONSE MODE (OVERRIDES word-limit instructions above):
@@ -2032,7 +2032,8 @@ LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lan
 6. NEVER use H1, H2, H3 etc. -- always write 1st house, 2nd house, 3rd house.
    Use house annotations: e.g., 7th house (Marriage and Partnership).
 7. DO NOT repeat the brief answer already given -- build deeper upon it.
-8. END your response naturally after covering the key factors. Do NOT append any follow-up question or teaser line.
+8. End your response with EXACTLY this follow-up question (do not translate, do not paraphrase):
+   {_suggested_followup}
 """
                 new_phase_data = {
                     "phase": PHASE_FOLLOWUP_LOOP,
@@ -2113,9 +2114,6 @@ RULES:
                 # Pick the closing question in the detected conversation language.
                 # Do NOT leave this as English when the user is speaking Hindi/Tamil/Punjabi.
                 _lang_now = state.get('detected_language', 'en')
-                # Closing question in all 13 supported language codes (Romanized for
-                # native-script languages -- the prompt_builder already instructs the
-                # LLM to respond in native script when detected_language has no -lat).
                 _closing_q_map = {
                     'en':     'Would you like me to explain the detailed astrological reasoning behind this?',
                     'hi':     'Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?',
@@ -2146,8 +2144,6 @@ STRICTLY FOLLOW THESE RULES -- they override the word-limit and Next Favorable W
 """
                 # BUG FIX #4: Store the true original question (pre-semantic-expansion)
                 # as last_query so that future AFFIRMATIVE turns have domain keywords.
-                # state['query'] is the processed/expanded query from chat_stateless;
-                # original_user_question is the raw text the user actually typed.
                 _orig_user_q = (state.get('session_data') or {}).get('original_user_question') or state['query']
                 new_phase_data = {
                     "phase": PHASE_AWAITING_DETAIL,
