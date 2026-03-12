@@ -194,98 +194,88 @@ class EnhancedLangGraphOrchestrator:
         self.input_validator = InputValidator()
         
         # PHASE 11: Initialize Semantic Router for Chitchat
+        # PERF: Use add_routes_batch() → single OpenAI API call for ALL routes.
+        #       Embeddings are disk-cached so subsequent restarts load in <1s.
         self.semantic_router = SemanticRouter()
         if self.semantic_router.model:
-            # Route 1: Greetings
-            self.semantic_router.add_route(
-                name="greeting",
-                examples=[
-                    "hi", "hello", "hey", "namaste", "namaskaram", "vanakkam", "hola",
-                    "good morning", "good evening", "good afternoon", "howdy",
-                    "wassup", "sup", "yo", "greetings", "salaam", "bonjour"
-                ],
-                metadata={"type": "greeting", "subtype": "simple_greeting"}
-            )
-            
-            # Route 2: Identity questions
-            self.semantic_router.add_route(
-                name="identity",
-                examples=[
-                    "who are you", "what are you", "tell me about yourself",
-                    "what can you do", "introduce yourself",
-                    # Bot name questions ONLY ("your" / "aap" / "tum")
-                    "what is your name", "what's your name",
-                    "kaun ho tum", "kya ho tum", "aap kaun hain",
-                    "aapka naam kya hai", "tumhara naam kya hai",
-                ],
-                metadata={"type": "chitchat", "subtype": "identity"}
-            )
-
-            # Route 2b: Personal profile questions (what is MY name/DOB/chart)
-            # MUST be added BEFORE identity so the router resolves correctly
-            self.semantic_router.add_route(
-                name="personal_profile_query",
-                examples=[
-                    # English
-                    "what is my name", "what's my name", "do you know my name",
-                    "what is my date of birth", "what is my birth date",
-                    "what is my sun sign", "what is my moon sign", "what is my ascendant",
-                    "tell me my details", "what do you know about me",
-                    "what city am I from", "where was I born",
-                    # Hindi (Hinglish)
-                    "mera naam kya hai", "mera name kya hai", "mera naam batao",
-                    "meri date of birth kya hai", "meri DOB kya hai",
-                    "mera janam kab hua", "main kahan paida hua", "meri birthplace kya hai",
-                    "mera sign kya hai", "meri rashi kya hai", "mera lagna kya hai",
-                    "tum mujhe jaante ho", "aap mujhe jaante hain",
-                    "mere baare mein kya jaante ho",
-                    # Hindi (native script)
-                    "मेरा नाम क्या है", "मेरी जन्म तिथि क्या है",
-                    "आप मुझे जानते हैं",
-                ],
-                metadata={"type": "chitchat", "subtype": "personal_profile_query"}
-            )
-            
-            # Route 3: Gratitude
-            self.semantic_router.add_route(
-                name="gratitude",
-                examples=[
-                    "thanks", "thank you", "appreciate it", "grateful", "thankyou",
-                    "dhanyavad", "shukriya", "dhanyawad", "shukriya-ji"
-                ],
-                metadata={"type": "chitchat", "subtype": "gratitude"}
-            )
-            
-            # Route 4: How are you / Well-being checks
-            self.semantic_router.add_route(
-                name="wellbeing",
-                examples=[
-                    "how are you", "how's it going", "what's up", "how do you do",
-                    "kaise ho", "kya haal hai", "all good"
-                ],
-                metadata={"type": "chitchat", "subtype": "wellbeing"}
-            )
-            
-            # Route 4.5: Closure
-            self.semantic_router.add_route(
-                name="closure",
-                examples=[
-                    "ok", "okay", "got it", "understood", "alright", "sure",
-                    "theek hai", "samajh gaya", "thik hai", "achha",
-                    "fine", "makes sense"
-                ],
-                metadata={"type": "chitchat", "subtype": "closure"}
-            )
-            
-            # Route 5: Farewell
-            self.semantic_router.add_route(
-                name="farewell",
-                examples=[
-                    "bye", "goodbye", "see you", "talk later", "take care",
-                    "alvida", "khuda hafiz", "catch you later"
-                ],
-                metadata={"type": "chitchat", "subtype": "farewell"}
-            )
+            self.semantic_router.add_routes_batch([
+                {
+                    "name": "greeting",
+                    "examples": [
+                        "hi", "hello", "hey", "namaste", "namaskaram", "vanakkam", "hola",
+                        "good morning", "good evening", "good afternoon", "howdy",
+                        "wassup", "sup", "yo", "greetings", "salaam", "bonjour"
+                    ],
+                    "metadata": {"type": "greeting", "subtype": "simple_greeting"},
+                },
+                {
+                    # Route 2b must appear BEFORE identity so the router resolves correctly
+                    "name": "personal_profile_query",
+                    "examples": [
+                        # English
+                        "what is my name", "what's my name", "do you know my name",
+                        "what is my date of birth", "what is my birth date",
+                        "what is my sun sign", "what is my moon sign", "what is my ascendant",
+                        "tell me my details", "what do you know about me",
+                        "what city am I from", "where was I born",
+                        # Hindi (Hinglish)
+                        "mera naam kya hai", "mera name kya hai", "mera naam batao",
+                        "meri date of birth kya hai", "meri DOB kya hai",
+                        "mera janam kab hua", "main kahan paida hua", "meri birthplace kya hai",
+                        "mera sign kya hai", "meri rashi kya hai", "mera lagna kya hai",
+                        "tum mujhe jaante ho", "aap mujhe jaante hain",
+                        "mere baare mein kya jaante ho",
+                        # Hindi (native script)
+                        "मेरा नाम क्या है", "मेरी जन्म तिथि क्या है",
+                        "आप मुझे जानते हैं",
+                    ],
+                    "metadata": {"type": "chitchat", "subtype": "personal_profile_query"},
+                },
+                {
+                    "name": "identity",
+                    "examples": [
+                        "who are you", "what are you", "tell me about yourself",
+                        "what can you do", "introduce yourself",
+                        "what is your name", "what's your name",
+                        "kaun ho tum", "kya ho tum", "aap kaun hain",
+                        "aapka naam kya hai", "tumhara naam kya hai",
+                    ],
+                    "metadata": {"type": "chitchat", "subtype": "identity"},
+                },
+                {
+                    "name": "gratitude",
+                    "examples": [
+                        "thanks", "thank you", "appreciate it", "grateful", "thankyou",
+                        "dhanyavad", "shukriya", "dhanyawad", "shukriya-ji"
+                    ],
+                    "metadata": {"type": "chitchat", "subtype": "gratitude"},
+                },
+                {
+                    "name": "wellbeing",
+                    "examples": [
+                        "how are you", "how's it going", "what's up", "how do you do",
+                        "kaise ho", "kya haal hai", "all good"
+                    ],
+                    "metadata": {"type": "chitchat", "subtype": "wellbeing"},
+                },
+                {
+                    "name": "closure",
+                    "examples": [
+                        "ok", "okay", "got it", "understood", "alright", "sure",
+                        "theek hai", "samajh gaya", "thik hai", "achha",
+                        "fine", "makes sense"
+                    ],
+                    "metadata": {"type": "chitchat", "subtype": "closure"},
+                },
+                {
+                    "name": "farewell",
+                    "examples": [
+                        "bye", "goodbye", "see you", "talk later", "take care",
+                        "alvida", "khuda hafiz", "catch you later"
+                    ],
+                    "metadata": {"type": "chitchat", "subtype": "farewell"},
+                },
+            ])
         
         # PHASE 12: Initialize Validation Engine
         self.validation_engine = None

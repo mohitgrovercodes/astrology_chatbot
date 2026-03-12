@@ -6,28 +6,34 @@ Ensures orchestrator is properly initialized.
 Passes None for components that will auto-initialize or are optional.
 """
 
+import threading
+
 from src.orchestration.orchestrator import EnhancedLangGraphOrchestrator
 from src.rag.retriever import AstrologyRetriever
 
 # Global orchestrator instance (singleton per worker)
 _orchestrator_instance = None
 _retriever_instance = None
+_init_lock = threading.Lock()
+_retriever_lock = threading.Lock()
 
 
 def _get_retriever():
     """Lazy-init retriever so import never fails if vectordb is missing."""
     global _retriever_instance
     if _retriever_instance is None:
-        print("[RETRIEVER] Initializing AstrologyRetriever...")
-        try:
-            _retriever_instance = AstrologyRetriever(
-                collection_name="vedic_astrology_books_knowledge",
-                db_path="data/vectordb"
-            )
-            print("[RETRIEVER] Initialized successfully.")
-        except Exception as e:
-            print(f"[RETRIEVER] WARNING: Could not initialize retriever: {e}")
-            _retriever_instance = None
+        with _retriever_lock:
+            if _retriever_instance is None:  # double-checked
+                print("[RETRIEVER] Initializing AstrologyRetriever...")
+                try:
+                    _retriever_instance = AstrologyRetriever(
+                        collection_name="vedic_astrology_books_knowledge",
+                        db_path="data/vectordb"
+                    )
+                    print("[RETRIEVER] Initialized successfully.")
+                except Exception as e:
+                    print(f"[RETRIEVER] WARNING: Could not initialize retriever: {e}")
+                    _retriever_instance = None
     return _retriever_instance
 
 
@@ -124,29 +130,29 @@ Respond ONLY with valid JSON:
 def get_orchestrator():
     """
     Get or create orchestrator instance with all required dependencies.
-    
-    Uses singleton pattern to avoid recreating orchestrator on every request.
+
+    Thread-safe singleton: double-checked locking prevents duplicate init when
+    concurrent threads (background prewarm + first request) race to initialize.
     """
     global _orchestrator_instance
-    
+
     if _orchestrator_instance is None:
-        print("[ORCHESTRATOR] Initializing for API...")
-        
-        # Create simple intent classifier
-        print("[ORCHESTRATOR] Creating intent classifier...")
-        intent_classifier = SimpleIntentClassifier()
-        
-        # Create orchestrator - other components will auto-initialize
-        # hybrid_retriever, prompt_builder, calculation_tools, llm all auto-load if None
-        _orchestrator_instance = EnhancedLangGraphOrchestrator(
-            intent_classifier=intent_classifier,
-            hybrid_retriever=_get_retriever(),  # Lazy init — safe if vectordb missing
-            prompt_builder=None,
-            calculation_tools=None,
-            llm=None,
-            fast_llm=None
-        )
-        
-        print("[ORCHESTRATOR] Initialized successfully")
-    
+        with _init_lock:
+            if _orchestrator_instance is None:  # double-checked
+                print("[ORCHESTRATOR] Initializing for API...")
+
+                print("[ORCHESTRATOR] Creating intent classifier...")
+                intent_classifier = SimpleIntentClassifier()
+
+                _orchestrator_instance = EnhancedLangGraphOrchestrator(
+                    intent_classifier=intent_classifier,
+                    hybrid_retriever=_get_retriever(),
+                    prompt_builder=None,
+                    calculation_tools=None,
+                    llm=None,
+                    fast_llm=None
+                )
+
+                print("[ORCHESTRATOR] Initialized successfully")
+
     return _orchestrator_instance

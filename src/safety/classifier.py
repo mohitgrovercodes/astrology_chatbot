@@ -77,19 +77,24 @@ SAFETY_ROUTES = {
 }
 
 def _initialize_safety_routes():
-    """Initialize semantic routes for safety checks."""
+    """
+    Initialize semantic routes for safety checks.
+    PERF: Uses add_routes_batch() — single OpenAI API call for ALL routes.
+          Results are disk-cached; subsequent calls load in milliseconds.
+    """
     router = SemanticRouter()
     if not router.model:
         return
-        
-    for reason, examples in SAFETY_ROUTES.items():
-        router.add_route(name=reason, examples=examples, metadata={"reason": reason})
 
-# Initialize routes on module load (if singleton allows)
-try:
-    _initialize_safety_routes()
-except Exception as e:
-    pass
+    router.add_routes_batch([
+        {"name": reason, "examples": examples, "metadata": {"reason": reason}}
+        for reason, examples in SAFETY_ROUTES.items()
+    ])
+
+# NOTE: Routes are intentionally NOT initialized at module load time.
+# They are initialized lazily on the first classify() call.
+# This avoids 9 OpenAI API calls at import time, which was the main startup bottleneck.
+# See SafetyClassifier._ensure_routes_initialized() below.
 
 
 
@@ -316,6 +321,8 @@ class SafetyClassifier:
     ):
         """
         Initialize safety classifier.
+        PERF: SemanticRouter routes are NOT loaded here — they are initialized
+              lazily on the first classify() call to avoid API calls at startup.
         """
         if llm:
             self.llm = llm
@@ -324,10 +331,11 @@ class SafetyClassifier:
             self.llm = LLMFactory.create(purpose="classification", temperature=0.0)
         self.use_pattern_matching = use_pattern_matching
         self.confidence_threshold = confidence_threshold
-        
-        # Initialize semantic router
+
+        # Semantic router: singleton, routes loaded lazily on first classify()
         self.semantic_router = SemanticRouter()
-        
+        self._safety_routes_initialized = False
+
         # Build classifier chain
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", SAFETY_CLASSIFIER_SYSTEM_PROMPT.format(
@@ -335,12 +343,22 @@ class SafetyClassifier:
             )),
             ("human", "PREVIOUS CONTEXT:\n{context}\n\nQuery: {query}")
         ])
-        
+
         self.chain = (
-            self.prompt 
-            | self.llm 
+            self.prompt
+            | self.llm
             | JsonOutputParser(pydantic_object=SafetyDecision)
         )
+
+    def _ensure_routes_initialized(self):
+        """Lazy-init safety routes on first classify() call (disk-cached)."""
+        if self._safety_routes_initialized:
+            return
+        try:
+            _initialize_safety_routes()
+        except Exception as e:
+            print(f"[SAFETY] Warning: could not initialize semantic routes: {e}")
+        self._safety_routes_initialized = True
     
     # ── Astrological safe-words: queries containing these skip the LLM vulgarity gate ──
     _ASTRO_SAFE_WORDS = frozenset([
@@ -545,9 +563,10 @@ class SafetyClassifier:
             )
             return self._build_result(query, decision)
         
-        # Gate 1: Fast Semantic Routing
+        # Gate 1: Fast Semantic Routing (lazy-initialize routes on first call)
         if self.use_pattern_matching and self.semantic_router.model:
-            route_result = self.semantic_router.route(query, threshold=0.75) # Tuned threshold for safety
+            self._ensure_routes_initialized()
+            route_result = self.semantic_router.route(query, threshold=0.75)  # Tuned threshold for safety
             
             if route_result:
                 # Semantic match found
