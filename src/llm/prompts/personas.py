@@ -307,6 +307,8 @@ def format_voice_guidelines(persona: PersonaConfig) -> str:
     guidelines = ["Voice Guidelines:"]
     for i, guideline in enumerate(persona.voice_guidelines, 1):
         guidelines.append(f"{i}. {guideline}")
+        
+    guidelines.append(f"{len(persona.voice_guidelines) + 1}. Just take inspiration from any given examples, do not use them word for word. Use creativity within professional boundaries but do not sway away from context.")
     return "\n".join(guidelines)
 
 
