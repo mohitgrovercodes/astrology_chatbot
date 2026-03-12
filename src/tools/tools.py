@@ -195,23 +195,45 @@ def calculate_current_dasha(
                     "end": ad.end_date.strftime("%Y-%m-%d")
                 })
 
-        # Upcoming pratyantardashas within the current Antardasha (precise week-level timing)
-        # Only include periods that END in the future — fully elapsed periods are excluded.
-        # A period currently in progress (started in past, ends in future) is included
-        # and flagged as "in_progress" so the LLM knows not to cite its start as future.
-        current_ad = periods["antardasha"]
-        all_pds = compute_pratyantardashas(current_ad)
+        # Upcoming pratyantardashas for the current and next few antardashas
         upcoming_pds = []
-        for pd in all_pds:
-            if pd.end_date > calc_dt:
-                in_progress = pd.start_date <= calc_dt < pd.end_date
-                upcoming_pds.append({
-                    "planet": pd.lord.name,
-                    "start": pd.start_date.strftime("%Y-%m-%d"),
-                    "end": pd.end_date.strftime("%Y-%m-%d"),
-                    "duration_days": pd.duration_days,
-                    "status": "IN PROGRESS (started in past)" if in_progress else "upcoming"
-                })
+        
+        # Get the current antardasha index
+        current_ad_index = -1
+        for i, ad in enumerate(all_ads):
+            if ad.start_date <= calc_dt <= ad.end_date:
+                current_ad_index = i
+                break
+
+        if current_ad_index != -1:
+            # Scan current AD and next 9 ADs
+            ads_to_scan = all_ads[current_ad_index : current_ad_index + 10] 
+            for ad_period in ads_to_scan:
+                all_pds_in_ad = compute_pratyantardashas(ad_period)
+                for pd in all_pds_in_ad:
+                    if pd.end_date > calc_dt:
+                        in_progress = pd.start_date <= calc_dt < pd.end_date
+                        upcoming_pds.append({
+                            "planet": pd.lord.name,
+                            "start": pd.start_date.strftime("%Y-%m-%d"),
+                            "end": pd.end_date.strftime("%Y-%m-%d"),
+                            "duration_days": pd.duration_days,
+                            "status": "IN PROGRESS (started in past)" if in_progress else "upcoming"
+                        })
+        else:
+             # Fallback for safety, though this case should be rare
+            current_ad = periods["antardasha"]
+            all_pds = compute_pratyantardashas(current_ad)
+            for pd in all_pds:
+                if pd.end_date > calc_dt:
+                    in_progress = pd.start_date <= calc_dt < pd.end_date
+                    upcoming_pds.append({
+                        "planet": pd.lord.name,
+                        "start": pd.start_date.strftime("%Y-%m-%d"),
+                        "end": pd.end_date.strftime("%Y-%m-%d"),
+                        "duration_days": pd.duration_days,
+                        "status": "IN PROGRESS (started in past)" if in_progress else "upcoming"
+                    })
 
         # First pratyantardasha of each upcoming Antardasha (cross-level convergence timing)
         next_ad_first_pd = []
@@ -242,11 +264,6 @@ def calculate_current_dasha(
                 "planet": periods["antardasha"].lord.name,
                 "start": periods["antardasha"].start_date.strftime("%Y-%m-%d"),
                 "end": periods["antardasha"].end_date.strftime("%Y-%m-%d")
-            },
-            "pratyantardasha": {
-                "planet": periods["pratyantardasha"].lord.name,
-                "start": periods["pratyantardasha"].start_date.strftime("%Y-%m-%d"),
-                "end": periods["pratyantardasha"].end_date.strftime("%Y-%m-%d")
             },
             "upcoming_pratyantardashas": upcoming_pds,
             "upcoming_antardashas": upcoming_ads,
