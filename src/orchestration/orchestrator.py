@@ -642,7 +642,7 @@ class EnhancedLangGraphOrchestrator:
             dob = user_profile.get('date_of_birth')
             if dob:
                 dob_validation = AgeValidator.validate_dob(dob)
-                print(f"[AGE_CHECK] Validated DOB live: {dob} → {dob_validation.get('issue') or 'ok'} (age {dob_validation.get('age_years')}y)")
+                print(f"[AGE_CHECK] Validated DOB live: {dob} -> {dob_validation.get('issue') or 'ok'} (age {dob_validation.get('age_years')}y)")
             else:
                 dob_validation = {}
 
@@ -674,7 +674,7 @@ class EnhancedLangGraphOrchestrator:
                     state['answer'] = appropriateness['message']
                     return state  # Or your return format
 
-                print(f"[AGE_CHECK] ✅ Age-appropriate query")
+                print(f"[AGE_CHECK] Age-appropriate query")
 
                 
 
@@ -723,9 +723,9 @@ class EnhancedLangGraphOrchestrator:
                 )
                 if user_response != 'OTHER':
                     print(f"[INTENT] [PHASE_GUARD] LLM fallback classified: {user_response}")
-            print(f"[INTENT] [PHASE_GUARD] original='{_original_q[:40]}' → response_type={user_response}, short_cont={_is_short_continuation}")
+            print(f"[INTENT] [PHASE_GUARD] original='{_original_q[:40]}' -> response_type={user_response}, short_cont={_is_short_continuation}")
             if user_response in ('AFFIRMATIVE', 'NEGATIVE') or _is_short_continuation:
-                print(f"[INTENT] [PHASE_GUARD] Phase={current_phase}, response={user_response} → RAG_WITH_CALCULATION")
+                print(f"[INTENT] [PHASE_GUARD] Phase={current_phase}, response={user_response} -> RAG_WITH_CALCULATION")
                 state['intent'] = 'RAG_WITH_CALCULATION'
                 state['confidence'] = 0.95
                 state['intent_reasoning'] = f'Progressive disclosure: {user_response} in {current_phase}'
@@ -752,9 +752,9 @@ class EnhancedLangGraphOrchestrator:
             or (len(q.split()) <= 2 and q.split()[0] in _SHORT_QUESTION_STARTERS) # Refined to avoid intercepting full questions
         )
         if is_continuation and len(history) > 0:
-            print(f"[INTENT] [CONTINUATION] CONTINUATION GUARD: routed to RAG_ONLY (history={len(history)} msgs)")
+            print(f"[INTENT] [CONTINUATION] CONTINUATION GUARD: routed to RAG_WITH_CALCULATION (history={len(history)} msgs)")
 
-            state['intent'] = 'RAG_ONLY'
+            state['intent'] = 'RAG_WITH_CALCULATION'
             state['confidence'] = 0.85
             state['intent_reasoning'] = 'Bare continuation query with active conversation'
             state['is_safe'] = True
@@ -1190,12 +1190,12 @@ class EnhancedLangGraphOrchestrator:
         # Nothing known
         if language in ('hi', 'hi-lat'):
             return (
-                "Abhi mere paas aapki details nahi hain. "
-                "Kya aap apni janam tithi, samay aur jagah bata sakte hain?"
+                "Abhi system mein aapki details uplabdh nahi hain. "
+                "Kripya app mein apna profile update karein."
             )
         return (
-            "I don't have your details on file yet. "
-            "Could you share your date of birth, time, and place?"
+            "Your details are not available in the system yet. "
+            "Please update your profile in the app."
         )
         
     def _extract_topic(self, query: str) -> str:
@@ -1346,7 +1346,11 @@ Reply with "1" for theory or "2" for personalized analysis."""
         
         # Check if user has birth data
         if not user_profile.get('date_of_birth'):
-            state['answer'] = "I don't have your birth details. Please update your profile with date, time, and place of birth."
+            lang = state.get('detected_language', 'en')
+            if lang in ('hi', 'hi-lat'):
+                state['answer'] = "System mein aapki janm details uplabdh nahi hain. Kripya app mein apna profile update karein."
+            else:
+                state['answer'] = "Your birth details are not available in the system. Please update your profile in the app."
             return state
         
         # FIX #4: Check if user is asking about their profile/birth data
@@ -1545,7 +1549,13 @@ Provide a concise answer:"""
                         print(f"[RAG_WITH_CALCULATION] Transit calculation error: {e}")
 
             else:
-                print("[RAG_WITH_CALCULATION] No birth data - proceeding without chart")
+                print("[RAG_WITH_CALCULATION] No birth data. Routing to ask for profile.")
+                lang = state.get('detected_language', 'en')
+                if lang in ('hi', 'hi-lat'):
+                    state['answer'] = "Apki kundli ka vishleshan karne ke liye janm vivran ki avashyakta hai. Kripya app mein apna profile pura karein."
+                else:
+                    state['answer'] = "To provide a personalized astrological analysis, your birth details are required. Please ensure your profile is complete in the app."
+                return state
 
             # ================================================================
             # STEP 1.25: ENHANCED CHART ANALYSIS (PHASE 13 - NEW)
@@ -1708,10 +1718,10 @@ Provide a concise answer:"""
                         
                         state['synthesis'] = synthesis
                         
-                        print(f"[SYNTHESIS] ✓ Identified {len(synthesis.get('chart_strengths', []))} strengths")
-                        print(f"[SYNTHESIS] ✓ Identified {len(synthesis.get('chart_challenges', []))} challenges")
-                        print(f"[SYNTHESIS] ✓ Detected {len(synthesis.get('yogas_detected', []))} yogas")
-                        print(f"[SYNTHESIS] ✓ Analyzed {len(synthesis.get('key_houses', []))} key houses")
+                        print(f"[SYNTHESIS] [OK] Identified {len(synthesis.get('chart_strengths', []))} strengths")
+                        print(f"[SYNTHESIS] [OK] Identified {len(synthesis.get('chart_challenges', []))} challenges")
+                        print(f"[SYNTHESIS] [OK] Detected {len(synthesis.get('yogas_detected', []))} yogas")
+                        print(f"[SYNTHESIS] [OK] Analyzed {len(synthesis.get('key_houses', []))} key houses")
                     else:
                         print(f"[SYNTHESIS] Skipped - query_type is '{query_type_for_synthesis}'")
                         
@@ -2018,7 +2028,7 @@ Provide a concise answer:"""
 
             elif current_phase == PHASE_AWAITING_DETAIL and user_response_type == 'AFFIRMATIVE':
                 # ── User wants details → Generate comprehensive response + follow-up question ──
-                print(f"[PHASE] AWAITING_DETAIL + AFFIRMATIVE → detailed response with follow-up")
+                print(f"[PHASE] AWAITING_DETAIL + AFFIRMATIVE > detailed response with follow-up")
                 _lang_for_phase = state.get('detected_language', 'en')
                 phase_instruction = f"""
 PROGRESSIVE DISCLOSURE -- DETAILED RESPONSE MODE (OVERRIDES word-limit instructions above):
@@ -3307,13 +3317,10 @@ Provide a concise, clear answer:"""
         
         return "\n".join(lines)
 
-    def _compute_house_lords_block(self, chart_data: Dict) -> str:
+    def _get_house_lords(self, chart_data: Dict) -> Dict[str, str]:
         """
-        Compute all 12 house lords deterministically from chart_data.
-
-        This runs unconditionally — no dependency on ChartAnalyzer or
-        ENHANCED_ANALYSIS_AVAILABLE. Uses only the lagna sign and planetary
-        positions already present in chart_data.
+        Computes and returns a dictionary of all 12 house lords.
+        Returns: Dict mapping "H1", "H2"... to planet names e.g., {"H1": "MARS", "H7": "VENUS"}
         """
         _SIGNS = [
             'Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo',
@@ -3325,6 +3332,50 @@ Provide a concise, clear answer:"""
             'Libra': 'VENUS', 'Scorpio': 'MARS', 'Sagittarius': 'JUPITER',
             'Capricorn': 'SATURN', 'Aquarius': 'SATURN', 'Pisces': 'JUPITER'
         }
+        _SANSKRIT = {
+            'Mesha': 'Aries', 'Vrishabha': 'Taurus', 'Mithuna': 'Gemini',
+            'Karka': 'Cancer', 'Simha': 'Leo', 'Kanya': 'Virgo',
+            'Tula': 'Libra', 'Vrischika': 'Scorpio', 'Dhanu': 'Sagittarius',
+            'Makara': 'Capricorn', 'Kumbha': 'Aquarius', 'Meena': 'Pisces'
+        }
+
+        def _norm(s):
+            if not s:
+                return s
+            return _SANSKRIT.get(s, _SANSKRIT.get(s.title(), s))
+
+        lagna_data = chart_data.get('lagna') or chart_data.get('ascendant', {})
+        lagna_sign = _norm(lagna_data.get('sign') or lagna_data.get('rashi', ''))
+
+        if not lagna_sign or lagna_sign not in _SIGNS:
+            return {}
+
+        lagna_idx = _SIGNS.index(lagna_sign)
+        
+        lords = {}
+        for h in range(1, 13):
+            house_sign = _SIGNS[(lagna_idx + h - 1) % 12]
+            lord = _SIGN_LORDS.get(house_sign, '?')
+            lords[f'H{h}'] = lord
+            
+        return lords
+
+    def _compute_house_lords_block(self, chart_data: Dict) -> str:
+        """
+        Compute all 12 house lords deterministically from chart_data.
+
+        This runs unconditionally — no dependency on ChartAnalyzer or
+        ENHANCED_ANALYSIS_AVAILABLE. Uses only the lagna sign and planetary
+        positions already present in chart_data.
+        """
+        lords_map = self._get_house_lords(chart_data)
+        if not lords_map:
+            return ""
+            
+        _SIGNS = [
+            'Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo',
+            'Libra', 'Scorpio', 'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces'
+        ]
         _EXALT = {
             'SUN': 'Aries', 'MOON': 'Taurus', 'MARS': 'Capricorn',
             'MERCURY': 'Virgo', 'JUPITER': 'Cancer', 'VENUS': 'Pisces', 'SATURN': 'Libra'
@@ -3361,10 +3412,6 @@ Provide a concise, clear answer:"""
 
         lagna_data = chart_data.get('lagna') or chart_data.get('ascendant', {})
         lagna_sign = _norm(lagna_data.get('sign') or lagna_data.get('rashi', ''))
-
-        if not lagna_sign or lagna_sign not in _SIGNS:
-            return ""
-
         lagna_idx = _SIGNS.index(lagna_sign)
         planets = chart_data.get('planets', {})
 
@@ -3373,7 +3420,7 @@ Provide a concise, clear answer:"""
         ]
         for h in range(1, 13):
             house_sign = _SIGNS[(lagna_idx + h - 1) % 12]
-            lord = _SIGN_LORDS.get(house_sign, '?')
+            lord = lords_map.get(f'H{h}', '?')
             lord_data = planets.get(lord, {})
             lord_house = lord_data.get('house', '?')
             lord_sign = _norm(lord_data.get('sign') or lord_data.get('rashi') or '?')
@@ -3437,7 +3484,6 @@ Provide a concise, clear answer:"""
             print(f"[DASHA STALE] Mahadasha end ({_md_end}) is in the past — "
                   f"cache is from wrong MD period. Clearing dasha_data for recalc.")
             dasha_data = {}
-            state['dasha_data'] = {}
 
         # Extract dasha info safely
         maha_planet = dasha_data.get('mahadasha', {}).get('planet', 'Unknown')
@@ -3468,6 +3514,63 @@ Provide a concise, clear answer:"""
 
         # Build upcoming pratyantardashas timeline (precise week/month level timing)
         upcoming_pds = dasha_data.get('upcoming_pratyantardashas', [])
+
+        # REFACTORED: Centralized DOMAIN-SPECIFIC FILTERING
+        # Keys here must match validation_result['query_type'] values (e.g. marriage, career, finance, health, children)
+        DOMAIN_PLANETS = {
+            # Relationship / marriage timing
+            "marriage": {"planets": ["VENUS", "JUPITER"], "lords": ["H7"]},
+            # Career / job / profession
+            "career": {"planets": ["SATURN", "SUN", "MERCURY"], "lords": ["H10"]},
+            # Finance / wealth / gains
+            "finance": {"planets": ["VENUS", "JUPITER"], "lords": ["H2", "H11"]},
+            "wealth": {"planets": ["VENUS", "JUPITER"], "lords": ["H2", "H11"]},
+            # Children / fertility
+            "children": {"planets": ["JUPITER", "MOON"], "lords": ["H5"]},
+            # Health / disease
+            "health": {"planets": ["SATURN", "MARS", "RAHU", "KETU"], "lords": ["H6", "H8"]},
+            # Property / home
+            "home": {"planets": ["MOON", "MARS"], "lords": ["H4"]},
+            "property": {"planets": ["MOON", "MARS"], "lords": ["H4"]},
+            # Foreign travel / settlement
+            "foreign": {"planets": ["RAHU"], "lords": ["H9", "H12"]},
+            "foreign_travel": {"planets": ["RAHU"], "lords": ["H9", "H12"]},
+        }
+        
+        query_type = validation_result.get('query_type', 'general') if validation_result else 'general'
+        domain_info = DOMAIN_PLANETS.get(query_type)
+
+        if domain_info:
+            # Start with the core domain planets
+            relevant_planets = list(domain_info["planets"])
+
+            # Add the actual house lords for the domain houses (e.g. H7 for marriage, H10 for career)
+            house_lords = self._get_house_lords(chart_data)
+            lords_to_add = []
+            for h in domain_info.get("lords", []):
+                lord = house_lords.get(h)
+                if lord:
+                    lords_to_add.append(lord)
+
+            if lords_to_add:
+                relevant_planets.extend(lords_to_add)
+                # De-duplicate while preserving upper-case planet names
+                relevant_planets = list({p.upper() for p in relevant_planets})
+
+                print(f"[DASHA_FILTER] Query domain filtering for '{query_type}': relevant_planets={relevant_planets}")
+
+                domain_filtered_pds = [
+                    pd for pd in upcoming_pds
+                    if pd.get('planet', '').upper() in relevant_planets
+                ]
+
+                if domain_filtered_pds:
+                    print(f"[DASHA_FILTER] Filtered {len(upcoming_pds) - len(domain_filtered_pds)} pratyantars based on query domain.")
+                    upcoming_pds = domain_filtered_pds
+                else:
+                    print(f"[DASHA_FILTER] No domain-relevant pratyantars found for '{query_type}', using all upcoming.")
+
+
         # ── CODE-LEVEL PAST-DATE FILTER ───────────────────────────────────────
         # Strip pratyantar periods whose end date has already passed.
         # No nested functions — inline comparison avoids all closure issues.
@@ -3501,7 +3604,7 @@ Provide a concise, clear answer:"""
         print(f"[DEBUG] upcoming_pratyantardashas: {len(upcoming_pds)} total, "
               f"{len(upcoming_pds_filtered)} after past-date filter")
         for _pd in upcoming_pds_filtered:
-            print(f"  Pratyantar: {_pd.get('planet'):10} {_pd.get('start')} → {_pd.get('end')} [{_pd.get('status')}]")
+            print(f"  Pratyantar: {_pd.get('planet'):10} {_pd.get('start')} -> {_pd.get('end')} [{_pd.get('status')}]")
 
         # First pratyantar of each upcoming Antardasha (cross-level convergence)
         next_ad_fp = dasha_data.get('next_antardasha_first_pratyantar', [])
@@ -3905,7 +4008,8 @@ TODAY'S DATE: {today_date}
   - Only cite periods that are "IN PROGRESS" (remaining portion) or fully in the future.
   - If all favorable Pratyantardashas in the current Antardasha have already passed, move to the NEXT Antardasha.
 
-TIMING GUIDANCE: Pratyantardasha gives month-level precision, Antardasha gives multi-month context, Mahadasha gives year-level context. When Pratyantar + Gochara alignment point to the same window, cite that specific Pratyantar date range as the peak timing.
+TIMING GUIDANCE: Pratyantardasha gives month-level precision.
+CRITICAL TIMING SELECTION RULE: Look at the PRATYANTAR PRIORITY FOR THIS QUERY block. Find the highest priority planet listed there. You MUST search the Step 3.5 and Step 3.6 lists for THAT specific planet's window. Do NOT just pick the first "IN PROGRESS" window unless its planet matches the priority list. If the priority planet is missing from the windows, state that the strongest timing is further in the future.
 CRITICAL: These dates are CALCULATED using Swiss Ephemeris. Use ONLY these exact dates. Do not invent or estimate dates.
 
 CURRENT TRANSITS (as of {transit_date}):

@@ -532,9 +532,9 @@ class EnhancedSessionManager:
                 socket_connect_timeout=5,
             )
             self.redis.ping()
-            print(f"[SESSION] ✅ Redis connected on {redis_host}:{redis_port}")
+            print(f"[SESSION] [OK] Redis connected on {redis_host}:{redis_port}")
         except Exception as e:
-            print(f"[SESSION] ❌ Redis connection failed: {e}")
+            print(f"[SESSION] [FAIL] Redis connection failed: {e}")
             self.redis = None
     
     def require_redis(self):
@@ -751,7 +751,7 @@ class EnhancedSessionManager:
                     print(f"[DOB_VALIDATION] ⚠️  Invalid: {validation['issue']}")
                     print(f"  - Message: {validation['message']}")
                 else:
-                    print(f"[DOB_VALIDATION] ✅ Valid - Age: {validation['age_years']} years, {validation['age_months']} months")
+                    print(f"[DOB_VALIDATION] [OK] Valid - Age: {validation['age_years']} years, {validation['age_months']} months")
 
                 user_profile['_dob_validation'] = validation
 
@@ -801,10 +801,10 @@ class EnhancedSessionManager:
             print(f"\n{'='*80}")
             print(f"[REDIS STORAGE] Session initialized for user: {user_id}")
             print(f"{'='*80}")
-            print(f"[REDIS] ✅ User profile stored:")
+            print(f"[REDIS] [OK] User profile stored:")
             print(f"  - Name: {user_profile.get('name', 'Unknown')}")
             print(f"  - DOB: {user_profile.get('date_of_birth', 'Unknown')}")
-            print(f"\n[REDIS] ✅ Conversation history stored:")
+            print(f"\n[REDIS] [OK] Conversation history stored:")
             print(f"  - Total messages in Redis: {len(internal_conversation)}")
             
             if internal_conversation:
