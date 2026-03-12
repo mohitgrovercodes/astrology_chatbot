@@ -752,9 +752,9 @@ class EnhancedLangGraphOrchestrator:
             or (len(q.split()) <= 2 and q.split()[0] in _SHORT_QUESTION_STARTERS) # Refined to avoid intercepting full questions
         )
         if is_continuation and len(history) > 0:
-            print(f"[INTENT] [CONTINUATION] CONTINUATION GUARD: routed to RAG_ONLY (history={len(history)} msgs)")
+            print(f"[INTENT] [CONTINUATION] CONTINUATION GUARD: routed to RAG_WITH_CALCULATION (history={len(history)} msgs)")
 
-            state['intent'] = 'RAG_ONLY'
+            state['intent'] = 'RAG_WITH_CALCULATION'
             state['confidence'] = 0.85
             state['intent_reasoning'] = 'Bare continuation query with active conversation'
             state['is_safe'] = True
@@ -1190,12 +1190,12 @@ class EnhancedLangGraphOrchestrator:
         # Nothing known
         if language in ('hi', 'hi-lat'):
             return (
-                "Abhi mere paas aapki details nahi hain. "
-                "Kya aap apni janam tithi, samay aur jagah bata sakte hain?"
+                "Abhi system mein aapki details uplabdh nahi hain. "
+                "Kripya app mein apna profile update karein."
             )
         return (
-            "I don't have your details on file yet. "
-            "Could you share your date of birth, time, and place?"
+            "Your details are not available in the system yet. "
+            "Please update your profile in the app."
         )
         
     def _extract_topic(self, query: str) -> str:
@@ -1346,7 +1346,11 @@ Reply with "1" for theory or "2" for personalized analysis."""
         
         # Check if user has birth data
         if not user_profile.get('date_of_birth'):
-            state['answer'] = "I don't have your birth details. Please update your profile with date, time, and place of birth."
+            lang = state.get('detected_language', 'en')
+            if lang in ('hi', 'hi-lat'):
+                state['answer'] = "System mein aapki janm details uplabdh nahi hain. Kripya app mein apna profile update karein."
+            else:
+                state['answer'] = "Your birth details are not available in the system. Please update your profile in the app."
             return state
         
         # FIX #4: Check if user is asking about their profile/birth data
@@ -1545,7 +1549,13 @@ Provide a concise answer:"""
                         print(f"[RAG_WITH_CALCULATION] Transit calculation error: {e}")
 
             else:
-                print("[RAG_WITH_CALCULATION] No birth data - proceeding without chart")
+                print("[RAG_WITH_CALCULATION] No birth data. Routing to ask for profile.")
+                lang = state.get('detected_language', 'en')
+                if lang in ('hi', 'hi-lat'):
+                    state['answer'] = "Apki kundli ka vishleshan karne ke liye janm vivran ki avashyakta hai. Kripya app mein apna profile pura karein."
+                else:
+                    state['answer'] = "To provide a personalized astrological analysis, your birth details are required. Please ensure your profile is complete in the app."
+                return state
 
             # ================================================================
             # STEP 1.25: ENHANCED CHART ANALYSIS (PHASE 13 - NEW)
