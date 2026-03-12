@@ -17,12 +17,18 @@ from src.api.routes import chat_stateless, calculation, health
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Pre-warm the orchestrator at startup to avoid cold-start on first request."""
-    from src.api.orchestrator_helper import get_orchestrator
-    print("[STARTUP] Pre-warming orchestrator (this may take ~30s)...")
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, get_orchestrator)
-    print("[STARTUP] Orchestrator ready. Server accepting requests.")
+    """Kick off orchestrator pre-warming in the background so uvicorn starts instantly."""
+    async def _prewarm():
+        from src.api.orchestrator_helper import get_orchestrator
+        print("[STARTUP] Pre-warming orchestrator in background...")
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, get_orchestrator)
+            print("[STARTUP] Orchestrator ready.")
+        except Exception as exc:
+            print(f"[STARTUP] Pre-warm failed (will retry on first request): {exc}")
+
+    asyncio.create_task(_prewarm())
     yield
 
 
