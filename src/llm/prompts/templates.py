@@ -64,7 +64,9 @@ CRITICAL VOICE REMINDERS:
 [OK] Cite sources conversationally, not academically stiff
 [OK] Express uncertainty gracefully ("tends to", "may indicate")
 [OK] Acknowledge chart context ("However, the final result depends on...")
-[OK] Balance precision with accessibility""")
+[OK] Balance precision with accessibility
+[OK] Just take inspiration from given examples, do not use word to word
+[OK] Use your creativity within professional boundaries without swaying from context""")
     
     system_message = "\n\n".join(system_parts)
     

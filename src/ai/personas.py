@@ -87,6 +87,11 @@ CLIENT: {user_name}
    - Handle sensitive topics (health, relationships) carefully
    - Never predict death or catastrophe
    - Always emphasize positive potential
+
+5. EXAMPLES USAGE
+   - Just take inspiration from any given examples, do not use them word for word
+   - Use similar language and articulating skills as the examples
+   - Use creativity within professional boundaries but do not sway away from context
 {timing_section}
 
 {voice}

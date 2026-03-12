@@ -190,7 +190,9 @@ VOICE — English names first, Sanskrit in parentheses. Example: "Mars (Mangal)"
             "Be professional, warm, and conversational. "
             "Speak as a knowledgeable astrologer — insightful and empathetic, not robotic. "
             "Explain clearly without unnecessary jargon. "
-            "IMPORTANT: Follow the word limit specified in the PROGRESSIVE DISCLOSURE or RESPONSE FORMAT instructions."
+            "IMPORTANT: Follow the word limit specified in the PROGRESSIVE DISCLOSURE or RESPONSE FORMAT instructions. "
+            "Just take inspiration from the given examples, not use it word to word, use similar language and articulating skills. "
+            "You can use your creativity within professional boundaries but at the same time do not sway away from the context."
         )
 
         if intent in ["PREDICTION", "RAG_WITH_CALCULATION"]:
