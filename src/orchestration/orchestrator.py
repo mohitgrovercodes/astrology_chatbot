@@ -2034,15 +2034,17 @@ Provide a concise answer:"""
 PROGRESSIVE DISCLOSURE -- DETAILED RESPONSE MODE (OVERRIDES word-limit instructions above):
 The user asked for more details. Give a comprehensive, insightful answer now.
 LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lang_for_phase}. Do NOT mix languages.
-1. WORD LIMIT: 300-350 words maximum. Be thorough but do not exceed 400 words.
-2. Cover 3-5 key astrological factors (house lords, dasha timing, transit effects, dignities).
-3. Include specific Pratyantar timing windows from the data above.
+1. WORD LIMIT: 300-350 words. Be thorough but do not exceed 350 words.
+2. Explain 3-5 key astrological factors, but always translate them into simple, real-life language.
+   Avoid long Sanskrit lists; briefly name a factor, then explain what it means in everyday terms.
+3. Include specific Pratyantar timing windows from the data above (only future windows as shown).
 4. Include the Next Favorable Window section.
-5. Maintain warm, conversational narrative -- weave factors together, do not just list them.
+5. Maintain a warm, conversational narrative -- weave factors together, do not just list them.
 6. NEVER use H1, H2, H3 etc. -- always write 1st house, 2nd house, 3rd house.
    Use house annotations: e.g., 7th house (Marriage and Partnership).
 7. DO NOT repeat the brief answer already given -- build deeper upon it.
-8. End your response with EXACTLY this follow-up question (do not translate, do not paraphrase):
+8. End your response with EXACTLY this follow-up question (do not translate, do not paraphrase). 
+   This question should invite the user to explore related information about the same topic:
    {_suggested_followup}
 """
                 new_phase_data = {
@@ -2143,13 +2145,15 @@ RULES:
                 phase_instruction = f"""
 PROGRESSIVE DISCLOSURE -- INITIAL SHORT RESPONSE (OVERRIDES ALL OTHER FORMAT INSTRUCTIONS):
 STRICTLY FOLLOW THESE RULES -- they override the word-limit and Next Favorable Window instructions above:
-1. HARD WORD LIMIT: 80-100 words. Count carefully. Stop at 100. Do NOT exceed 100 words under any circumstance.
-2. Cite only 1-2 critical planetary factors -- NO long lists, NO house-by-house breakdown.
-3. Give one timing answer (one specific date or period from the Pratyantar data).
+1. HARD WORD LIMIT: 150-180 words. Count carefully. Stop at 180. Do NOT exceed 180 words under any circumstance.
+2. Cite only ONE critical supporting factor from the chart, explained in simple, non-technical language.
+   Avoid lists of planets/houses; keep the focus on a single clear idea.
+3. Give one timing answer (one specific date or period from the Pratyantar data), using only future or in-progress windows.
 4. NEVER include a Next Favorable Window section -- it belongs in the detailed response.
 5. NEVER use H1, H2, H3 etc. -- always write 1st house, 2nd house, 3rd house.
-6. Write the ENTIRE response including the closing question in the SAME language as the user's query.
-7. End your response with EXACTLY this closing question (do not translate, do not paraphrase):
+6. Use as few astrological terms as possible; where you must name a planet or house, immediately explain it in plain words.
+7. Write the ENTIRE response including the closing question in the SAME language as the user's query.
+8. End your response with EXACTLY this closing question (do not translate, do not paraphrase):
    {_closing_q}
 """
                 # BUG FIX #4: Store the true original question (pre-semantic-expansion)
@@ -2869,34 +2873,46 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                 "State the specific Pratyantar that aligns with the relevant Gochara factor as the PEAK timing."
             )
 
-        # ── Marriage / relationship ─────────────────────────────────────────────
-        if any(w in q for w in ['marriage', 'marry', 'married', 'shaadi', 'shadi', 'vivah', 'wedding',
-                                  'partner', 'love', 'spouse', 'husband', 'wife', 'rishta', 'relationship',
-                                  'bypass', 'saat phere', 'pyaar', 'prem', 'milega', 'milegi',
-                                  'life partner', 'kesi hogi', 'kaisi hogi', 'kesa hoga', 'kaisa hoga',
-                                  'groom', 'bride', 'dulha', 'dulhan', 'shaadi kab', 'vivah kab']):
+        # ── Marriage / relationship / divorce ───────────────────────────────────
+        _marriage_keywords = [
+            'marriage', 'marry', 'married', 'shaadi', 'shadi', 'vivah', 'wedding',
+            'partner', 'love', 'spouse', 'husband', 'wife', 'rishta', 'relationship',
+            'bypass', 'saat phere', 'pyaar', 'prem', 'milega', 'milegi',
+            'life partner', 'kesi hogi', 'kaisi hogi', 'kesa hoga', 'kaisa hoga',
+            'groom', 'bride', 'dulha', 'dulhan', 'shaadi kab', 'vivah kab'
+        ]
+        _divorce_keywords = [
+            'divorce', 'separation', 'separate', 'alag hona', 'talaq', 'breakup',
+            'break-up', 'judicial separation', 'relationship end', 'marriage end'
+        ]
+
+        if any(w in q for w in _marriage_keywords):
+            # Standard marriage / partner-focus instructions
             domain_hints.append(
                 "MARRIAGE & PARTNER ANALYSIS — Answer ALL parts of the user's question:\n"
                 "  PART A — PARTNER QUALITIES (always include, regardless of exact question wording):\n"
-                "  • 7th house SIGN: directly describes the partner's personality and nature\n"
-                "  • Planets IN 7th house: each planet modifies the partner's traits\n"
-                "  • 7th lord sign and house: adds nuance to partner's character and circumstances of meeting\n"
-                "  • Venus sign (for male chart) / Jupiter sign (for female chart): partner's personal qualities\n"
-                "  ⚠ ALWAYS describe what the partner will be like from these placements — do NOT skip this.\n"
-                "  PART B — CHART FACTORS FOR TIMING:\n"
-                "  • 7th lord: which house is it placed in? Its dignity? Is it afflicted by Saturn/Rahu/Ketu?\n"
-                "  • 2nd house (Wealth & Family): its lord, condition — supports marital stability\n"
-                "  • 5th house (Children & Intellect): its lord — romance, love, attraction\n"
-                "  • 11th house (Gains & Desires): its lord — fulfillment of marital desire\n"
+                "  • 7th house (Marriage & Partnership) sign and planets: describe the partner's nature in simple words.\n"
+                "  • 7th lord sign and house: add 1 short line on how/where the partner may come into life.\n"
+                "  PART B — CHART FACTORS FOR TIMING (only when user is asking 'when'):\n"
+                "  • 7th lord dignity and afflictions (Saturn/Rahu/Ketu/Mars).\n"
+                "  • 2nd house (Wealth & Family) and 11th house (Gains & Desires) support for stable married life.\n"
                 "  PART C — TIMING (use this priority order):\n"
                 "  1. Find VENUS Pratyantar first — Venus is the primary marriage karaka.\n"
                 "  2. If no Venus Pratyantar in current AD, check 7th house lord's Pratyantar (see HOUSE LORDS table).\n"
                 "  3. Cross-check: Is Jupiter Gochar in H5, H7, or H9 from natal Moon? (Gochara section)\n"
-                "  4. Is there a Sade Sati? If yes, marriage may be delayed or come with challenges.\n"
-                "  5. Use Jupiter Pratyantar ONLY as a secondary confirmatory trigger — NEVER as the primary marriage window.\n"
-                "  6. State the specific Pratyantar date range as the peak window, NOT the full Antardasha range.\n"
-                "  ⚠ You MUST cover Part A (partner description) AND Part C (timing) in every relationship response.\n"
-                "  ⚠ You MUST discuss at least H7, H2, and H5 lords from the computed table — not just H7 alone."
+                "  4. State the specific Pratyantar date range as the peak window, NOT the full Antardasha range.\n"
+                "  ⚠ You MUST discuss at least 7th, 2nd, and 5th house lords from the computed table — not just 7th alone."
+            )
+
+        # Divorce / separation specific guidance – must NOT talk like a generic 'good marriage timing' question
+        if any(w in q for w in _divorce_keywords):
+            domain_hints.append(
+                "DIVORCE / SEPARATION QUERY — interpret the question as assessing relationship strain, not new marriage timing:\n"
+                "  • Focus on 7th house (Marriage & Partnership), 8th house (Longevity & Transformation), and 12th house (Foreign & Moksha) for stress indicators.\n"
+                "  • Highlight difficult combinations involving Mars, Saturn, Rahu, or Ketu on the 7th lord or 7th house.\n"
+                "  • Discuss whether current or upcoming Pratyantar periods of these planets show heightened conflict or the need for counseling/space.\n"
+                "  • DO NOT talk about 'favourable marriage time' or new marriage windows unless the user clearly asks about remarriage.\n"
+                "  • Keep language supportive and practical (communication, counseling, boundaries) rather than fatalistic."
             )
 
         # ── Career / job / business ────────────────────────────────────────────
@@ -3589,9 +3605,17 @@ Provide a concise, clear answer:"""
             upcoming_pds_str += "  ⚠ ONLY use windows listed here for timing. DO NOT compute sub-windows yourself.\n"
             for pd in upcoming_pds_filtered:
                 status = pd.get('status', 'upcoming')
+                raw_start = pd.get('start', 'Unknown')
+                end_date = pd.get('end', 'Unknown')
+                # Enforce 'no past starting date' rule at the data level:
+                # if the Pratyantar is already in progress, show today → end_date instead of the original start.
+                if raw_start and raw_start != 'Unknown' and raw_start < _today_str and end_date and end_date >= _today_str:
+                    display_start = _today_str
+                else:
+                    display_start = raw_start
                 upcoming_pds_str += (
                     f"• {pd.get('planet', 'Unknown'):10} "
-                    f"{pd.get('start', 'Unknown')} → {pd.get('end', 'Unknown')} "
+                    f"{display_start} → {end_date} "
                     f"({pd.get('duration_days', '?')} days) [{status}]\n"
                 )
         elif upcoming_pds:
@@ -3854,16 +3878,19 @@ EARLY CONVERSATION:
         # MOBILE RESPONSE LENGTH CONTROL
         # ════════════════════════════════════════════════════════════════════════
         mobile_length_instruction = """
-
+        
 RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
-1. DEFAULT LENGTH: 100 words maximum (unless overridden by PROGRESSIVE DISCLOSURE instructions below).
+1. DEFAULT LENGTH (when no PROGRESSIVE DISCLOSURE override is active):
+   - Keep answers roughly in the 150–180 word range.
+   - Use simple, everyday language and avoid heavy astrological jargon.
+   - At most ONE explicitly named planet or house in the short answer.
 2. TONE: Write like a warm, knowledgeable astrologer speaking directly to the person — not a data sheet.
-   Use natural sentence flow. Weave chart factors into a coherent narrative, not a bullet list.
+   Use natural sentence flow. Weave factors into a coherent narrative, not a bullet list.
    Show genuine care: acknowledge the importance of the question before diving into analysis.
 3. STRUCTURE (narrative, not mechanical):
-   - Opening: 1 sentence acknowledging the topic warmly and giving the headline answer.
-   - Body: Key chart factors with their real-world meaning explained, not just stated.
-   - Timing: Specific Pratyantar window with a reason it's favorable (when applicable).
+   - Opening: 1–2 sentences acknowledging the topic warmly and giving the headline answer.
+   - Body: ONE critical supporting factor in plain language (e.g., “a strong career house makes growth easier”) without long Sanskrit lists.
+   - Closing: Briefly offer to explain the deeper astrological reasoning in detail if the user wants it.
    DO NOT use bullet lists.
 4. HOUSE NUMBER FORMAT (MANDATORY): NEVER write "H1", "H2", "H10" etc. in your response.
    The H-notation is for internal data only. In your response always use ordinal format:
@@ -3878,8 +3905,8 @@ RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
 6. NO META-COMMENTARY: Never say "Based on your chart I can see..." or "Looking at your horoscope...".
    Start directly with the insight. The user knows you're reading their chart.
 7. NO THANKING: User details come from the backend — never thank them for providing details.
-8. FOLLOW-UP QUESTIONS: Only ask a follow-up question if explicitly instructed by PROGRESSIVE DISCLOSURE
-   instructions. Otherwise, give a complete, self-contained answer.
+8. FOLLOW-UP QUESTIONS: Only ask a follow-up question when the PROGRESSIVE DISCLOSURE instructions below tell you to
+   (initial short answer → offer detail; detailed answer → ask about related topics). Otherwise, give a complete, self-contained answer.
 """
         instructions += mobile_length_instruction
 
