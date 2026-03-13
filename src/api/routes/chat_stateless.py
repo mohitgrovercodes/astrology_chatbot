@@ -1553,7 +1553,7 @@ def send_message(request: SendMessageRequest):
                 user_id=user_id,
                 question=question,
                 answer=HARD_BLOCK_VULGAR,
-                source="openai"
+                source="Nakshatra-ai"
             )
 
         # ====================================================================
@@ -1707,7 +1707,7 @@ def send_message(request: SendMessageRequest):
                     user_id=user_id,
                     question=question,
                     answer=clarification_answer,
-                    source="openai"
+                    source="Nakshatra-ai"
                 )
         
         # Get the processed query (original, expanded, or hinted)
