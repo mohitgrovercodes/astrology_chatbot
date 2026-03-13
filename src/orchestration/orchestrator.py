@@ -470,8 +470,13 @@ class EnhancedLangGraphOrchestrator:
         """Node 1.5: Detect query language using library-based detection with LLM fallback."""
         from src.locales.language_detector import get_language_detector
 
-        query = state['query']
-        print(f"[LANG] Detecting language for: '{query[:30]}...'")
+        # Always detect language from the user's ORIGINAL text (before any semantic
+        # expansion or internal rewriting). This guarantees that the chatbot replies
+        # in the same language and script the user actually used, instead of switching
+        # to English when the semantic interpreter rewrites the query.
+        _session_data = state.get('session_data') or {}
+        query = _session_data.get('original_user_question') or state['query']
+        print(f"[LANG] Detecting language for original user text: '{query[:30]}...'")
 
         # ── Session language prior ──────────────────────────────────────────────
         # If the session already stored a non-English detected_language from a
@@ -2548,7 +2553,7 @@ this table, STOP and use the correct lord from the table above.
 
         # Build script instruction for language enforcement
         if '-lat' in language:
-            script_instruction = f"Respond in {lang_name} using ROMAN ALPHABET only (no native script)."
+            script_instruction = f"Respond entirely in {lang_name} using ROMAN ALPHABET (English script only, NOT native script)."
         elif language != 'en':
             script_instruction = f"Respond entirely in {lang_name} (native script)."
         else:

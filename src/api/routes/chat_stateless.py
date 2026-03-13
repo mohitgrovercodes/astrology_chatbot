@@ -1861,11 +1861,19 @@ def send_message(request: SendMessageRequest):
             
             # Add continuation hint only if truncated AND not in progressive disclosure flow
             if len(truncated_sentences) < len(sentences) and result_phase not in ('AWAITING_DETAIL', 'FOLLOWUP_LOOP'):
-                detected_lang = result.get('detected_language', 'en')
-                if detected_lang in ['hi', 'hi-lat']:
-                    answer += " Aur gehrai mein jaanna chahein toh poochh sakte hain."
-                else:
-                    answer += " Feel free to ask if you'd like to explore this further."
+                # Use detected language (with Redis fallback) to keep the continuation
+                # hint in the same language/script as the user.
+                _detected_lang = result.get('detected_language') or session_manager.get_detected_language(user_id) or 'en'
+                _trunc_hint_map = {
+                    'en': " Feel free to ask if you'd like to explore this further.",
+                    'hi': " Agar aap chahen to is baat ko aur gehraai se samjha sakta hoon.",
+                    'hi-lat': " Agar aap chahein to main is baat ko aur gehraai se samjha sakta hoon.",
+                    'ta': " Neengal virumbinaal idhai naan innum vivaramaaga vilakkalaam.",
+                    'ta-lat': " Neengal virumbinaal idhai naan innum vivaramaa vilakkalaam.",
+                    'pa': " Je tusi chaunde ho tan main eh gall hor vadh toon vadh spasht kar sakda haan.",
+                    'pa-lat': " Je tusi chaunde ho tan main eh gall hor vadh toon vadh spasht kar sakda haan.",
+                }
+                answer += _trunc_hint_map.get(_detected_lang, _trunc_hint_map['en'])
             
             print(f"[MOBILE] Truncated: {word_count} → {len(answer.split())} words")
 
