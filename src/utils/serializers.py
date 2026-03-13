@@ -215,6 +215,16 @@ def serialize_vedic_chart(chart: VedicChart) -> Dict[str, Any]:
         if d1_sign and d9_sign and d1_sign.upper() == d9_sign.upper():
             vargottama.append(planet_name)
 
+    # Expose Navamsa (D9) chart explicitly for validation and downstream consumers.
+    # Validation helpers look for chart_data['navamsa'] or an explicit 'D9' chart,
+    # so we construct a simple structure from the already-computed D9 planets.
+    navamsa_chart = None
+    if d9_planets:
+        navamsa_chart = {
+            "lagna": "Unknown",  # Divisional lagna is not yet computed; planets are sufficient for most rules.
+            "planets": d9_planets,
+        }
+
     return {
         "chart_type": "vedic",
         "birth_data": birth_data,
@@ -223,6 +233,8 @@ def serialize_vedic_chart(chart: VedicChart) -> Dict[str, Any]:
         "vargas": vargas,
         "divisional_charts_simple": divisional_charts_simple,
         "vargottama": vargottama,
+        # Make D9/Navamsa available to validation and analysis layers
+        **({"navamsa": navamsa_chart} if navamsa_chart else {}),
         "yogas": yogas,
         "dasha": dasha_serialized,
         "strengths": strengths,

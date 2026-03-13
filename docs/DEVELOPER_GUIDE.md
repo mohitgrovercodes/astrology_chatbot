@@ -156,6 +156,17 @@ The `user_id` must exactly match the one used in `/initialize`. All state (chart
 
 The orchestrator (`src/orchestration/orchestrator.py`) aggregates chart data, transits, dashas, RAG text, and conversation history, then passes this context to the LLM for synthesis.
 
+### Current Prediction Stack (Recommended Mental Model)
+
+1. **Intent + domain inference** (LLM + deterministic guards)
+2. **Deterministic astro evidence build** (`Astro Intelligence Layer`)
+3. **Validation rules** (tiered, domain-aware score + critical failure analysis)
+4. **Prompt assembly** (voice charter + response policy + divisional context + evidence)
+5. **LLM synthesis**
+6. **Post-processing validator/judge** (coherence + tone/style + consistency checks)
+
+This is the active production flow and should be preserved when extending features.
+
 ### Adding a New Prediction Domain
 
 To add structured deterministic reasoning for a specific topic (e.g., career, finance):
@@ -272,13 +283,15 @@ pytest tests/test_indian_languages.py
 
 The system auto-detects language from user input using `langdetect` and routes accordingly.
 
-| Language | Code | Notes |
+| Language Family | Codes | Notes |
 |---|---|---|
 | English | `en` | Default |
-| Hindi | `hi` | Devanagari script |
-| Tamil | `ta` | Tamil script |
-| Punjabi | `pa` | Gurmukhi script |
-| Hinglish | auto | Romanized Hindi; detected and handled via fallback |
+| Hindi | `hi`, `hi-lat` | Native + Romanized Hinglish |
+| Tamil | `ta`, `ta-lat` | Native + Romanized Tanglish |
+| Telugu | `te`, `te-lat` | Native + Romanized |
+| Malayalam | `ml`, `ml-lat` | Native + Romanized |
+| Marathi | `mr`, `mr-lat` | Native + Romanized |
+| Punjabi | `pa`, `pa-lat` | Native + Romanized |
 
 Translations live in `src/locales/`. Disclaimers and response templates are localized per language.
 

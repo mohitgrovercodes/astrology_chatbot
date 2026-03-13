@@ -313,7 +313,7 @@ def prepare_chart_for_validation(
     
     # CRITICAL: Ensure D9 is present (most important for marriage)
     if 'D9' not in validation_chart or not validation_chart['D9'].get('planets'):
-        # Try alternate locations
+        # Try alternate locations on the original chart payload
         d9_data = (
             chart_data.get('D9') or
             chart_data.get('navamsa') or
@@ -331,6 +331,14 @@ def prepare_chart_for_validation(
                 "lagna": "Unknown",
                 "planets": {}
             }
+
+    # Many validation rules also look for an explicit "navamsa" key, not just "D9".
+    # Mirror the D9 chart into a simple "navamsa" structure so both styles are satisfied.
+    if 'D9' in validation_chart and validation_chart['D9'].get('planets'):
+        validation_chart['navamsa'] = {
+            "lagna": validation_chart['D9'].get('lagna', 'Unknown'),
+            "planets": validation_chart['D9'].get('planets', {}),
+        }
     
     # =========================================================================
     # 3. YOGAS (Auspicious/Inauspicious Combinations)

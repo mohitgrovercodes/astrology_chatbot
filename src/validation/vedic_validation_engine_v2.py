@@ -527,6 +527,7 @@ class VedicValidationEngineV2:
                 raw_halt = rule.get("halt_on_failure", False)
                 category = rule.get("category", "").lower()
                 rule_name_lower = rule.get("rule_name", "").lower()
+                reason_lower = str(verdict.get("reason", "")).lower()
 
                 YOGA_KEYWORDS = {
                     "yoga", "combination", "conjunction", "exaltation requirement",
@@ -541,6 +542,23 @@ class VedicValidationEngineV2:
                 # Downgrade yoga-absence failures: critical -> high
                 if not passed and is_yoga_rule and severity == "critical":
                     severity = "high"
+
+                # Non-blocking infrastructure / tooling recommendations (e.g. "Generate Navamsa
+                # (D9) Chart", "chart not provided for analysis") should NOT block predictions
+                # in live chat. Treat these as high-severity hints, not critical failures.
+                NON_BLOCKING_INFRA_KEYWORDS = {
+                    "generate navamsa", "generate navamsha",
+                    "navamsa (d9) chart", "navamsa chart (d9)", "d9 chart",
+                    "not provided for analysis", "chart is not provided",
+                    "chart not provided",
+                }
+                if not passed and any(
+                    kw in rule_name_lower or kw in reason_lower
+                    for kw in NON_BLOCKING_INFRA_KEYWORDS
+                ):
+                    if severity == "critical":
+                        severity = "high"
+                    raw_halt = False
 
                 # Halt only for genuine data-integrity / astronomical impossibilities
                 HALT_CATEGORIES = {"data_integrity", "astronomical_constraint"}

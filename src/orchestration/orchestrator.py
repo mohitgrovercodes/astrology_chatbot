@@ -2075,7 +2075,9 @@ PROGRESSIVE DISCLOSURE -- DETAILED RESPONSE MODE (OVERRIDES word-limit instructi
 The user asked for more details. Give a comprehensive, insightful answer now.
 LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lang_for_phase}. Do NOT mix languages.
 1. TARGET LENGTH: 260-360 words. Be thorough without sounding repetitive.
-2. Explain 3-5 key astrological factors, but always translate them into simple, real-life language.
+2. Explain 4-5 key astrological factors, and present them as numbered points.
+   Include at least these: (a) house-lord logic, (b) dasha/pratyantar timing, (c) yoga/strength signal, (d) marriage-depth confirmation from Navamsa.
+   Always translate each point into simple, real-life language.
    Avoid long Sanskrit lists; briefly name a factor, then explain what it means in everyday terms.
 3. Use the Pratyantar and Antardasha data above to derive longer but precise timing windows:
    - Always respect the full mathematical span of the relevant Pratyantars/Antardashas — do NOT compress everything into the current year if the data extends into later years.
@@ -2084,13 +2086,13 @@ LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lan
    - Do NOT mention exact calendar days (no DD/MM); use only month names and years in user-facing text (e.g., "March 2027", "Oct 2028").
    - Avoid framing the MAIN timing window as starting exactly "now" or "from today" in user-facing language. Even if a Pratyantar is currently in progress, describe the supportive phase as a FUTURE-leaning window (for example: "coming months", "second half of 2026", "from early 2027 to mid 2027"), not "abhi se".
    - CONSISTENCY WITH INITIAL ANSWER (CRITICAL): The main timing window in this detailed answer MUST stay aligned with the headline window you already gave in the initial short response (e.g., "2027 ke shuruaat se 2028 ke beech"). You may refine inside that same broad window (by describing smaller sub‑windows), but do NOT contradict it by shifting the best period to a totally different year or only a 1–2 month slice.
-4. Include the Next Favorable Window section, also expressed as an approximate month/year range.
+4. Do NOT add any heading like "Next Favorable Window". If a secondary supportive window exists, mention it naturally inside the numbered points.
 5. Maintain a warm, conversational narrative -- weave factors together, do not just list them.
 6. NEVER use H1, H2, H3 etc. -- always write 1st house, 2nd house, 3rd house.
    Use house annotations: e.g., 7th house (Marriage and Partnership).
 7. DO NOT repeat the brief answer already given -- build deeper upon it.
-8. End naturally with a RELATED follow-up question on the same topic (wording can vary naturally).
-   Suggested follow-up intent: "{_suggested_followup}"
+8. End naturally with ONE RELATED follow-up question on a nearby topic (wording can vary naturally),
+   but do NOT ask for "more detail" of the same explanation. Suggested follow-up intent: "{_suggested_followup}"
 9. { _voice_charter }
 10. { _flow_policy }
 """
@@ -2194,15 +2196,15 @@ Use these guidelines strictly, but write in natural human phrasing.
    - one approximate FUTURE time window in plain language (e.g. "around 2027", "between March and August 2027", or "in the second half of 2026").
    You may include BOTH a simple prediction and a future window, but never give a vague answer with no fact or timeframe.
    For questions that are clearly about a FAVOURABLE EVENT (marriage, job change, buying a home), keep the focus of this short answer on the MAIN favourable window and a simple positive statement. Reserve detailed discussion of challenges, strain, or counseling for the detailed answer unless the user explicitly asks about problems.
-   Do NOT phrase the window as "abhi", "ab se", "from now", or "immediately" — always describe a FUTURE period starting at least some weeks/months ahead of today (for example: "aane wale kuch mahino mein", "2026 ke doosre aadhe mein", "2027 ke shuruat se").
+   Do NOT phrase the window as "abhi", "ab se", "from now", or "immediately" — always describe a FUTURE period starting at least some weeks/months ahead of today (for example: "aane wale kuch mahino mein", "2026 ke second half mein", "2027 ke shuruat se").
 
-4. NEVER include a "Next Favorable Window" section — that belongs in the detailed response only.
+4. Do NOT include any heading like "Next Favorable Window" in this short answer or the detailed answer. When there are secondary time windows, describe them naturally inside the explanation or numbered factor list, without using that label.
 
 5. Stay tightly on the topic the user asked about. If they asked "WHEN" something will happen, spend almost all of the short answer on that timing and its practical meaning; do NOT drift into long generic life advice or unrelated areas.
 
 6. Write the ENTIRE response in the SAME language as the user's query.
 
-7. End with one natural invitation for deeper analysis (wording can vary):
+7. End with one natural invitation for deeper analysis (wording can vary). This invitation should be about a closely related area (for example, after marriage timing, you might ask if they want to look at relationship quality, family life, or career timing next), not about "more detail" of the same explanation:
    "{_closing_q}"
 8. {_voice_charter}
 9. {_flow_policy}
@@ -2257,22 +2259,6 @@ Use these guidelines strictly, but write in natural human phrasing.
             print(f"[LLM] Sending {len(messages)} messages to LLM (phase={current_phase})")
             response = self.llm.invoke(messages)
             state['answer'] = response.content if hasattr(response, 'content') else str(response)
-            # If we just generated the detailed response, ensure it ends with
-            # a follow-up intent without forcing exact phrasing.
-            _followup = state.pop('_detailed_followup', None)
-            if _followup:
-                _ans = (state.get('answer') or "").rstrip()
-                if not _ans.endswith("?"):
-                    _lang = state.get('detected_language', 'en')
-                    _topic = (state.get('conversation_phase') or {}).get('topic', 'general')
-                    natural_followup = pick_contextual_closing(
-                        rng=random.Random(state.get('query', '')),
-                        language=_lang,
-                        domain=_topic,
-                        ask_question=True,
-                    )
-                    state['answer'] = (_ans + "\n\n" + natural_followup).strip()
-                    print("[PHASE] Appended natural follow-up prompt")
             
         except Exception as e:
             print(f"[ERROR] RAG_WITH_CALCULATION failed: {e}")
@@ -3195,18 +3181,15 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         _needs_timing_window = _is_outcome or any(domain_hints) and not _is_conceptual
         next_window_block = """
 
-MANDATORY — NEXT FAVORABLE WINDOW (include in EVERY prediction response):
-After your main answer, always add a brief "Next Favorable Window" section.
+SECONDARY SUPPORTIVE WINDOW (NO SPECIAL HEADING):
+If useful, you may mention one additional supportive window in natural prose.
+Do NOT use any heading like "Next Favorable Window".
 
-CRITICAL — HOW TO PICK THIS WINDOW (read carefully):
-  Pratyantar periods are consecutive — every period starts the day the previous one
-  ends. DO NOT simply pick the chronologically next Pratyantar. Citing the Sun
-  Pratyantar that starts the moment Venus Pratyantar ends is meaningless — it is
-  just the next slot in an unbroken sequence, not a "next favorable window."
-
-  Instead, scan Step 3.5 for the next occurrence of a TOPIC-RELEVANT planet
-  that appears meaningfully later in the list (typically 4–8+ weeks after the
-  window already cited). Skip over unrelated planets between them.
+CRITICAL — HOW TO PICK THIS WINDOW:
+  Pratyantar periods are consecutive — every period starts when the previous one
+  ends. Do NOT simply pick the chronologically next Pratyantar.
+  Pick a genuinely topic-relevant later window (typically 4–8+ weeks after the
+  primary window already cited), and skip unrelated planets.
 
   Topic → Relevant planets to scan for (priority order):
   • Marriage / relationship → Venus, then Jupiter, then 7th house lord
@@ -3217,16 +3200,7 @@ CRITICAL — HOW TO PICK THIS WINDOW (read carefully):
   • Children               → Jupiter, then Moon, then 5th house lord
   • Health                 → Sun, then Saturn
 
-  Example (marriage): If Venus Pratyantar [Feb 26–Mar 25] is cited in the main
-  answer, scan past Sun/Moon/Mars Pratyantars and find the NEXT Jupiter or 7th
-  lord Pratyantar (e.g. Jupiter Pratyantar [Jul 8–Aug 16]) — that is the true
-  "Next Favorable Window."
-
-  If NO second topic-relevant Pratyantar exists in Step 3.5, use Step 3.6
-  (opening Pratyantar of the next Antardasha) and note that clearly.
-
-Format: "Next Favorable Window: [Planet] Pratyantar [start → end] — [one-line reason why this planet is relevant for this topic]."
-NEVER fabricate dates. NEVER cite the same Pratyantar already mentioned above."""
+NEVER fabricate dates. NEVER repeat the same Pratyantar already cited as the primary window."""
 
         # Suppress timing window for INITIAL and FOLLOWUP phases:
         # - INITIAL: too much detail for a short preview
@@ -3981,11 +3955,15 @@ EARLY CONVERSATION:
         if validation_result:
             query_type = validation_result.get('query_type', 'general')
             try:
+                # Pass the original user query so the helper can smartly switch
+                # to property/education/etc. use-cases and pull the right D-charts
+                # (D1, D2, D4, D7, D9, D10, D24, etc.) for the current topic.
                 divisional_context = get_divisional_chart_context(
                     query_type=query_type,
                     chart_data=chart_data,
                     include_secondary=True,
-                    verbose=True
+                    verbose=True,
+                    original_query=query,
                 )
             except Exception as e:
                 print(f"[DIVISIONAL] Error adding divisional chart context: {e}")
@@ -4021,6 +3999,29 @@ EARLY CONVERSATION:
         domain_spotlight = self._get_domain_pratyantar_spotlight(query)
 
         # ════════════════════════════════════════════════════════════════════════
+        # ENGINE USAGE GUIDELINES
+        # ════════════════════════════════════════════════════════════════════════
+        engine_usage_instruction = """
+
+ENGINE USAGE GUIDELINES (CRITICAL - USE THE DATA ABOVE):
+- Base your interpretation primarily on:
+  1) House lords and their strength (from dignity, planetary strengths and aspects in the COMPUTED CHART DATA section).
+  2) Yogas that are actually present in the chart (from the yogas / synthesis sections) — do NOT invent new yogas.
+  3) The relevant divisional charts for this query type (from DIVISIONAL CHART ANALYSIS) — use them primarily as INTERNAL evidence; you may mention classical chart names like "Navamsa" or "Dasamsa" sparingly in detailed explanations, but avoid cryptic labels such as "D1", "D9" etc. in user-facing text.
+  4) The active Dasha stack and candidate timing windows (from ASTRO INTELLIGENCE LAYER and dasha details).
+- Never invent graha positions, house placements or yogas that are not explicitly present in the data above.
+- When a key planet is marked as RETROGRADE, describe its themes as internalised, revisited or delayed rather than completely blocked.
+- When a key planet is COMBUST, soften its ability to deliver results and acknowledge strain in its significations in this area.
+- For domain-specific focus, use the appropriate divisional charts and houses INTERNALLY and, in detailed reasoning, you may briefly refer to them by their classical Sanskrit names (e.g., "Navamsa" for marriage depth, "Dasamsa" for career) while still keeping the explanation focused on what it means for the person's life.
+- When the user has asked for detailed reasoning (second-step follow-up after an initial short answer),
+  clearly expose the main astrological factors as 3–5 short, numbered points after your narrative, for example:
+  1) 7th house lord placement and dignity,
+  2) Key supporting or challenging yogas,
+  3) Dasha and Pratyantardasha window that activates this theme,
+  4) How the deeper marriage-focused charts (for example, Navamsa) support or modify this picture.
+"""
+
+        # ════════════════════════════════════════════════════════════════════════
         # MOBILE RESPONSE LENGTH CONTROL
         # ════════════════════════════════════════════════════════════════════════
         mobile_length_instruction = """
@@ -4054,6 +4055,7 @@ RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
 8. FOLLOW-UP QUESTIONS: Only ask a follow-up question when the PROGRESSIVE DISCLOSURE instructions below tell you to
    (initial short answer → offer detail; detailed answer → ask about related topics). Otherwise, give a complete, self-contained answer.
 """
+        instructions += engine_usage_instruction
         instructions += mobile_length_instruction
 
         # CHANGE 5: Add conversation summary section
@@ -4123,13 +4125,9 @@ REASONING SCRATCHPAD (INTERNAL - DO NOT SHOW TO USER):
   3) Align these with the active Mahadasha/Antardasha/Pratyantardasha and the candidate timing windows listed in ASTRO INTELLIGENCE LAYER.
   4) Note 2–4 core interpretive points that truly matter for the person (not a laundry list).
 - You MUST use this scratchpad reasoning to keep your answer coherent and grounded, but you MUST NOT show the scratchpad itself to the user.
-- The final answer for the user goes ONLY in the section marked <final_answer> below, in the user's language/script.
+- The final answer for the user must be a single, clean paragraph-style reply in the user's language/script, without exposing any XML tags or scratchpad markers.
 
-When you are done reasoning, write ONLY the polished answer in this format:
-
-<final_answer>
-(natural, flowing answer for the user in {lang_name}, following the voice charter and response structure policy)
-</final_answer>
+When you are done reasoning, write ONLY the polished answer for the user. Do NOT wrap it in <final_answer> or any other tags.
 """
 
         # ════════════════════════════════════════════════════════════════════════

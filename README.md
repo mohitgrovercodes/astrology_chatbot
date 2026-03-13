@@ -40,6 +40,9 @@
 | **Safety Guardrails** | 4-gate framework blocking harmful/unethical queries |
 | **Cost Tracking** | SQLite-backed token & embedding cost logging with reports |
 | **Age-Based Validation** | Age validator gates timing predictions appropriately |
+| **Progressive Disclosure UX** | Short first answer, rich detailed follow-up with 4-5 astrological factors |
+| **Astro Evidence Payload** | Optional deterministic evidence object returned with `/message` responses |
+| **Language + Script Locking** | Replies mirror user language/script (native/romanized) per turn |
 
 ---
 
@@ -129,6 +132,15 @@ python interactive_chatbot.py
 
 ---
 
+## Latest Runtime Behavior
+
+- Progressive disclosure: first prediction response is concise; second-turn affirmative responses receive richer detailed analysis.
+- Language/script mirroring: replies follow the user's detected language/script for that turn (including romanized variants).
+- Validation + tone judge: semantic consistency and voice-quality checks run in a unified post-processing validator.
+- Deterministic evidence support: `/message` can return an optional `evidence` object with domain, signals, and timing windows.
+
+---
+
 ## API Integration Protocol (2-Step)
 
 All mobile/backend integrations follow a strict two-step protocol:
@@ -164,6 +176,22 @@ Content-Type: application/json
 {
   "user_id": "unique-uuid",
   "question": "When will my career improve?"
+}
+```
+
+**Response may include deterministic evidence (optional):**
+```json
+{
+  "user_id": "unique-uuid",
+  "question": "When will my career improve?",
+  "answer": "...",
+  "source": "openai",
+  "evidence": {
+    "domain": "career",
+    "signals": [],
+    "timeline_windows": [],
+    "confidence_band": "medium"
+  }
 }
 ```
 

@@ -210,9 +210,34 @@ Content-Type: application/json
   "user_id": "unique-user-or-session-id",
   "question": "When will my career improve?",
   "answer": "Based on your birth chart, your current Jupiter Mahadasha suggests...",
-  "source": "openai"
+  "source": "openai",
+  "evidence": {
+    "domain": "career",
+    "signals": [
+      {
+        "name": "active_dasha_stack",
+        "value": "SATURN/JUPITER/SUN",
+        "confidence": 0.88,
+        "rationale": "Directly sourced from computed dasha payload."
+      }
+    ],
+    "timeline_windows": [
+      {
+        "label": "SUN pratyantar",
+        "start": "2026-11-24",
+        "end": "2027-01-10",
+        "start_month": "Nov 2026",
+        "end_month": "Jan 2027",
+        "confidence": 0.85,
+        "reason": "domain-priority match"
+      }
+    ],
+    "confidence_band": "medium"
+  }
 }
 ```
+
+> `evidence` is optional. Clients should treat it as additive metadata and remain backward compatible.
 
 ---
 
@@ -307,7 +332,8 @@ On exceeding the limit, the server returns `HTTP 429 Too Many Requests`.
   "user_id": "unique-user-or-session-id",
   "question": "When will I get married?",
   "answer": "Based on your 7th house...",
-  "source": "openai"
+  "source": "openai",
+  "evidence": null
 }
 ```
 
@@ -336,6 +362,14 @@ On exceeding the limit, the server returns `HTTP 429 Too Many Requests`.
   "path": "/api/v1/chat/message"
 }
 ```
+
+---
+
+## Conversation Behavior Notes
+
+- **Progressive disclosure:** For prediction queries, the first response is concise. If the user affirms (e.g., "Haan"), the next turn is detailed with richer astrological factors.
+- **Language/script lock:** Responses mirror the user's language/script per turn (for example, Hinglish in Roman script stays Romanized).
+- **Detailed responses:** Detailed follow-up responses are designed to include multiple astrological factors (house/lord logic, dasha windows, yogas, and divisional support) and avoid repeating the same timing label as a separate heading.
 
 ---
 

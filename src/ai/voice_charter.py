@@ -62,31 +62,31 @@ def pick_contextual_closing(
         if lang.startswith("hi"):
             choices: Dict[str, List[str]] = {
                 "career": [
-                    "Agar aap chahen, main aapko next strong action-window bhi bata sakta hoon.",
-                    "Chahein to main isko interview/preparation strategy ke saath map kar doon?",
+                    "Ab agar aap chahein, to hum is phase ke career aur promotion ke yog bhi dekh sakte hain.",
+                    "Chahein to agle step mein hum aapke kaam ke direction ya role change ke samay ko bhi explore kar sakte hain.",
                 ],
                 "marriage": [
-                    "Chahein to main is phase ke practical relationship steps bhi bata doon?",
-                    "Agar aap chahen, main partner-dynamics angle ko aur clear kar sakta hoon.",
+                    "Agar aap chahein, to agle step mein hum shadi ke baad ke jeevan — jaise family, children ya career balance — ke yog bhi dekh sakte hain.",
+                    "Chahein to ab hum aapke partner ke swabhav, family background ya married life ki quality par bhi nazar daal sakte hain.",
                 ],
                 "general": [
-                    "Agar aap chahen, main isko aur detail mein simple tareeke se samjha sakta hoon.",
-                    "Kya aap iske practical next steps bhi dekhna chahenge?",
+                    "Agar aap chahein, to hum iske saath-jude hue kisi aur vishay — jaise career, health ya family — ko bhi dekh sakte hain.",
+                    "Kya aap ab kisi doosre pehlu (jaise paisa, career ya health) ke baare mein puchhna chahenge?",
                 ],
             }
         else:
             choices = {
                 "career": [
-                    "If you want, I can map this to a practical preparation strategy next.",
-                    "Would you like me to break this into a month-by-month action plan?",
+                    "If you’d like, we can next look at how this period affects your long-term career direction or promotions.",
+                    "Would you like to explore how your skills and strengths align with future career opportunities?",
                 ],
                 "marriage": [
-                    "If you want, I can also map the practical relationship steps for this phase.",
-                    "Would you like a clearer partner-dynamics breakdown for this window?",
+                    "If you’d like, we can next explore relationship dynamics, family life or children timing connected to this marriage window.",
+                    "Would you like to look at how marriage might interact with your career or relocation plans?",
                 ],
                 "general": [
-                    "If you want, I can explain the next practical step in simple terms.",
-                    "Would you like me to go one level deeper on this?",
+                    "If you’d like, we can now explore another connected area such as money, health or family.",
+                    "Would you like to ask about a related topic next, like career, finances or health?",
                 ],
             }
         bucket = choices.get(domain, choices["general"])

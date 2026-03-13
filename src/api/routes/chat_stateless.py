@@ -1844,11 +1844,11 @@ def send_message(request: SendMessageRequest):
 
         # Enforce word maximum for mobile (phase-aware)
         if result_phase == 'FOLLOWUP_LOOP' and conv_phase_data.get('phase') == 'AWAITING_DETAIL':
-            # User agreed to details → detailed response capped at 400 words
-            MAX_MOBILE_WORDS = 400
+            # User agreed to detailed reasoning → allow richer explanation (~500 words)
+            MAX_MOBILE_WORDS = 500
         elif result_phase == 'FOLLOWUP_LOOP':
-            # Follow-up loop responses capped at 200 words
-            MAX_MOBILE_WORDS = 300
+            # Follow-up loop responses (further questions) capped slightly lower
+            MAX_MOBILE_WORDS = 400
         elif result_phase == 'AWAITING_DETAIL':
             # Initial short response → hard cap at 100 words
             MAX_MOBILE_WORDS = 100
