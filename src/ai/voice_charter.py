@@ -46,6 +46,94 @@ def get_response_structure_policy() -> str:
     )
 
 
+def pick_initial_closing(
+    rng: random.Random,
+    language: str,
+    domain: str = "general",
+) -> str:
+    """
+    Return a varied closing line for the INITIAL (short) response.
+    ONLY offers deeper astrological detail on the CURRENT topic.
+    Never suggests other topics like career/health/family — those belong in the detailed follow-up.
+    """
+    lang = (language or "en").lower()
+    domain = (domain or "general").lower()
+
+    if lang.startswith("hi"):
+        choices: Dict[str, List[str]] = {
+            "marriage": [
+                "Kya aap is shadi ke yog ke peeche ki vistarit jyotishiya wajah jaanna chahenge?",
+                "Agar aap chahein, to hum is vishay mein aur gehri jyotishiya jaankaari de sakte hain.",
+                "Kya aap iske baare mein aur detail mein samajhna chahenge?",
+            ],
+            "career": [
+                "Kya aap is career phase ke peeche ke jyotishiya kaaran aur gehri jaankaari chahenge?",
+                "Agar aap chahein, to hum is vishay mein aur vistar se baat kar sakte hain.",
+                "Kya aap iske baare mein aur detail mein jaanna chahenge?",
+            ],
+            "foreign": [
+                "Kya aap is videsh yatra ke yog ki vistarit jyotishiya wajah jaanna chahenge?",
+                "Agar aap chahein, to hum is pehlu mein aur gehri jaankaari de sakte hain.",
+                "Kya aap iske baare mein aur gehri jyotishiya samajh chahte hain?",
+            ],
+            "health": [
+                "Kya aap is swasthya sambandhi yog ki vistarit jyotishiya wajah jaanna chahenge?",
+                "Agar aap chahein, to hum is vishay mein aur detail mein baat kar sakte hain.",
+            ],
+            "finance": [
+                "Kya aap is arthik phase ke peeche ki vistarit jyotishiya wajah jaanna chahenge?",
+                "Agar aap chahein, to hum is vishay mein aur gehri jaankaari de sakte hain.",
+            ],
+            "children": [
+                "Kya aap is santaan sambandhi yog ki vistarit jyotishiya wajah jaanna chahenge?",
+                "Agar aap chahein, to hum is pehlu mein aur detail mein baat kar sakte hain.",
+            ],
+            "general": [
+                "Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?",
+                "Agar aap chahein, to hum is vishay mein aur gehri jaankaari de sakte hain.",
+                "Kya aap iske baare mein aur detail mein samajhna chahenge?",
+            ],
+        }
+    else:
+        choices = {
+            "marriage": [
+                "Would you like a deeper astrological breakdown of what's shaping this marriage timing?",
+                "If you'd like, I can go deeper into the planetary factors driving this period.",
+                "Would you like to explore the astrological reasons behind this in more detail?",
+            ],
+            "career": [
+                "Would you like a deeper look at the astrological factors shaping this career period?",
+                "If you'd like, I can explain the planetary influences in more detail.",
+                "Want me to go deeper into what's driving this in your chart?",
+            ],
+            "foreign": [
+                "Would you like a deeper astrological breakdown of what's shaping this foreign travel period?",
+                "If you'd like, I can explain the planetary factors in more detail.",
+                "Want me to go deeper into the astrological picture behind this?",
+            ],
+            "health": [
+                "Would you like a deeper astrological look at the factors behind this health tendency?",
+                "If you'd like, I can go deeper into what's driving this in your chart.",
+            ],
+            "finance": [
+                "Would you like a deeper astrological breakdown of the factors shaping this financial period?",
+                "If you'd like, I can explain the planetary influences in more detail.",
+            ],
+            "children": [
+                "Would you like a deeper look at the astrological factors shaping this children-related period?",
+                "If you'd like, I can go deeper into what's driving this in your chart.",
+            ],
+            "general": [
+                "Would you like a deeper astrological breakdown of what's shaping this?",
+                "If you'd like, I can go deeper into the planetary factors behind this.",
+                "Want me to explain the astrological picture in more detail?",
+            ],
+        }
+
+    bucket = choices.get(domain, choices["general"])
+    return rng.choice(bucket)
+
+
 def pick_contextual_closing(
     rng: random.Random,
     language: str,
@@ -62,31 +150,31 @@ def pick_contextual_closing(
         if lang.startswith("hi"):
             choices: Dict[str, List[str]] = {
                 "career": [
-                    "Agar aap chahen, main aapko next strong action-window bhi bata sakta hoon.",
-                    "Chahein to main isko interview/preparation strategy ke saath map kar doon?",
+                    "Ab agar aap chahein, to hum is phase ke career aur promotion ke yog bhi dekh sakte hain.",
+                    "Chahein to agle step mein hum aapke kaam ke direction ya role change ke samay ko bhi explore kar sakte hain.",
                 ],
                 "marriage": [
-                    "Chahein to main is phase ke practical relationship steps bhi bata doon?",
-                    "Agar aap chahen, main partner-dynamics angle ko aur clear kar sakta hoon.",
+                    "Agar aap chahein, to agle step mein hum shadi ke baad ke jeevan — jaise family, children ya career balance — ke yog bhi dekh sakte hain.",
+                    "Chahein to ab hum aapke partner ke swabhav, family background ya married life ki quality par bhi nazar daal sakte hain.",
                 ],
                 "general": [
-                    "Agar aap chahen, main isko aur detail mein simple tareeke se samjha sakta hoon.",
-                    "Kya aap iske practical next steps bhi dekhna chahenge?",
+                    "Agar aap chahein, to hum iske saath-jude hue kisi aur vishay — jaise career, health ya family — ko bhi dekh sakte hain.",
+                    "Kya aap ab kisi doosre pehlu (jaise paisa, career ya health) ke baare mein puchhna chahenge?",
                 ],
             }
         else:
             choices = {
                 "career": [
-                    "If you want, I can map this to a practical preparation strategy next.",
-                    "Would you like me to break this into a month-by-month action plan?",
+                    "If you’d like, we can next look at how this period affects your long-term career direction or promotions.",
+                    "Would you like to explore how your skills and strengths align with future career opportunities?",
                 ],
                 "marriage": [
-                    "If you want, I can also map the practical relationship steps for this phase.",
-                    "Would you like a clearer partner-dynamics breakdown for this window?",
+                    "If you’d like, we can next explore relationship dynamics, family life or children timing connected to this marriage window.",
+                    "Would you like to look at how marriage might interact with your career or relocation plans?",
                 ],
                 "general": [
-                    "If you want, I can explain the next practical step in simple terms.",
-                    "Would you like me to go one level deeper on this?",
+                    "If you’d like, we can now explore another connected area such as money, health or family.",
+                    "Would you like to ask about a related topic next, like career, finances or health?",
                 ],
             }
         bucket = choices.get(domain, choices["general"])

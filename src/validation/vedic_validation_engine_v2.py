@@ -24,6 +24,9 @@ import os
 import time
 import random
 import threading
+from config.logger import get_logger
+
+logger = get_logger("validation")
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FutureTimeout
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -43,7 +46,7 @@ except ImportError:
         LLMFACTORY_AVAILABLE = True
     except ImportError:
         LLMFACTORY_AVAILABLE = False
-        print("[WARN] LLMFactory not found. Ensure src/llm/factory.py exists.")
+        logger.warning("[WARN] LLMFactory not found. Ensure src/llm/factory.py exists.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -155,8 +158,8 @@ class VedicValidationEngineV2:
             use_rate_limiting=True,
             rate_limit_delay=2.0,
         )
-        print(f"[LLM] LLM Provider: {LLMFactory._determine_provider()}")
-        print(f"[LLM] Model:        {model or LLMFactory._select_model_for_provider(LLMFactory._determine_provider(), 'validation')}")
+        logger.info(f"[LLM] LLM Provider: {LLMFactory._determine_provider()}")
+        logger.info(f"[LLM] Model:        {model or LLMFactory._select_model_for_provider(LLMFactory._determine_provider(), 'validation')}")
 
         self.llm   = _llm
         self.chain = EVAL_PROMPT | self.llm
@@ -225,7 +228,7 @@ class VedicValidationEngineV2:
             all_ids.update(composite.get("all", []))
 
         matched_ids = specific_ids | all_ids
-        print(f"  [Index] specific={len(specific_ids)} + all_fallback={len(all_ids)} = {len(matched_ids)} matched")
+        logger.debug(f"[Index] specific={len(specific_ids)} + all_fallback={len(all_ids)} = {len(matched_ids)} matched")
 
         if not matched_ids:
             return []
@@ -367,7 +370,7 @@ class VedicValidationEngineV2:
             return parsed
 
         except Exception as e:
-            print(f"\n   [ERROR] LLM error ({type(e).__name__}): {e}")
+            logger.error(f"[VALIDATION ERROR] LLM error ({type(e).__name__}): {e}")
             return [
                 {
                     "rule_id":        r["rule_id"],
@@ -403,9 +406,9 @@ class VedicValidationEngineV2:
         """
         t0 = time.time()
 
-        print(f"\n{'='*65}")
-        print(f"  VEDIC VALIDATION  |  Query: {query_type.upper()}  |  Tier: 1-{tier}")
-        print(f"{'='*65}")
+        logger.info(f"{'='*65}")
+        logger.debug(f"VEDIC VALIDATION  |  Query: {query_type.upper()}  |  Tier: 1-{tier}")
+        logger.info(f"{'='*65}")
 
         # ── Load rules: index first, linear scan fallback ────────────────
         indexed_rules = self._get_rules_via_index(query_type, tier, stage)
@@ -413,26 +416,26 @@ class VedicValidationEngineV2:
         if indexed_rules:
             applicable = indexed_rules
             all_rules  = self._get_rules_for_tier(tier)
-            print(f"  Total in Tier 1-{tier}:         {len(all_rules)}")
-            print(f"  Index hit [OK]               {len(applicable)} rules "
+            logger.debug(f"Total in Tier 1-{tier}:         {len(all_rules)}")
+            logger.debug(f"Index hit [OK]               {len(applicable)} rules "
                   f"(vs {len(all_rules)} linear scan)")
             if stage:
-                print(f"  Stage filter:               '{stage}'")
+                logger.debug(f"Stage filter:               '{stage}'")
         else:
             # Index not available — fall back to linear scan + filter
             all_rules  = self._get_rules_for_tier(tier)
             applicable = self._filter_by_query(all_rules, query_type)
             if stage:
                 applicable = self._filter_by_stage(applicable, stage)
-            print(f"  Total in Tier 1-{tier}:         {len(all_rules)}")
-            print(f"  Linear scan [WARN]           {len(applicable)} applicable "
+            logger.debug(f"Total in Tier 1-{tier}:         {len(all_rules)}")
+            logger.debug(f"Linear scan [WARN]           {len(applicable)} applicable "
                   f"(index not found)")
             if stage:
-                print(f"  Filtered to '{stage}' stage: {len(applicable)}")
+                logger.debug(f"Filtered to '{stage}' stage: {len(applicable)}")
 
         if not applicable:
-            print("  [WARN] No applicable rules found.")
-            print("  Common query types: marriage, career, finance, health, children")
+            logger.warning("[VALIDATION] No applicable rules found for this query type.")
+            logger.warning("[VALIDATION] Common query types: marriage, career, finance, health, children")
             return ValidationResult(
                 query_type=query_type, tier_used=tier,
                 rules_checked=0, passed=0, failed=0
@@ -459,16 +462,16 @@ class VedicValidationEngineV2:
             # Also cap at first 80 rules ordered by check_order
             applicable.sort(key=lambda r: r.get("check_order", 999))
             applicable = applicable[:80]
-            print(f"  Live chat filter:           {before} -> {len(applicable)} rules "
+            logger.debug(f"Live chat filter:           {before} -> {len(applicable)} rules "
                   f"(critical+high, non-yoga, capped at 80)")
 
         # Effective batch size: larger batches = fewer API calls
         eff_batch = 15 if live_chat else self.batch_size
 
         total_batches = (len(applicable) + eff_batch - 1) // eff_batch
-        print(f"  Batches:                    {total_batches} x {eff_batch} rules")
-        print(f"  Workers:                    {self.max_workers} parallel")
-        print(f"\n  Evaluating...\n")
+        logger.debug(f"Batches:                    {total_batches} x {eff_batch} rules")
+        logger.debug(f"Workers:                    {self.max_workers} parallel")
+        logger.info("[VALIDATION] Evaluating rules...")
 
         # ── Build all batches upfront ─────────────────────────────────────
         batches = [
@@ -497,11 +500,11 @@ class VedicValidationEngineV2:
                     idx, verdicts = future.result(timeout=timeout_val)
                     verdict_store[idx] = verdicts
                     completed += 1
-                    print(f"  [{completed:3d}/{total_batches}] batch {idx+1} done ({len(verdicts)} verdicts)",
+                    logger.debug(f"[{completed:3d}/{total_batches}] batch {idx+1} done ({len(verdicts)} verdicts)",
                           flush=True)
                 except FutureTimeout:
                     timed_out = True
-                    print(f"\n  [TIMEOUT] Timeout - stopping early")
+                    logger.warning("[VALIDATION] Timeout — stopping batch evaluation early")
                     break
 
         # ── Process results in original order ─────────────────────────────
@@ -527,6 +530,7 @@ class VedicValidationEngineV2:
                 raw_halt = rule.get("halt_on_failure", False)
                 category = rule.get("category", "").lower()
                 rule_name_lower = rule.get("rule_name", "").lower()
+                reason_lower = str(verdict.get("reason", "")).lower()
 
                 YOGA_KEYWORDS = {
                     "yoga", "combination", "conjunction", "exaltation requirement",
@@ -541,6 +545,23 @@ class VedicValidationEngineV2:
                 # Downgrade yoga-absence failures: critical -> high
                 if not passed and is_yoga_rule and severity == "critical":
                     severity = "high"
+
+                # Non-blocking infrastructure / tooling recommendations (e.g. "Generate Navamsa
+                # (D9) Chart", "chart not provided for analysis") should NOT block predictions
+                # in live chat. Treat these as high-severity hints, not critical failures.
+                NON_BLOCKING_INFRA_KEYWORDS = {
+                    "generate navamsa", "generate navamsha",
+                    "navamsa (d9) chart", "navamsa chart (d9)", "d9 chart",
+                    "not provided for analysis", "chart is not provided",
+                    "chart not provided",
+                }
+                if not passed and any(
+                    kw in rule_name_lower or kw in reason_lower
+                    for kw in NON_BLOCKING_INFRA_KEYWORDS
+                ):
+                    if severity == "critical":
+                        severity = "high"
+                    raw_halt = False
 
                 # Halt only for genuine data-integrity / astronomical impossibilities
                 HALT_CATEGORIES = {"data_integrity", "astronomical_constraint"}
@@ -573,10 +594,10 @@ class VedicValidationEngineV2:
                         halt_rule_name = rule.get("rule_name", rid)
 
             status = "[HALT]" if halt_triggered else f"{batch_failed} failed"
-            print(f"  Batch {batch_idx+1}: {status}")
+            logger.debug(f"Batch {batch_idx+1}: {status}")
 
             if halt_triggered:
-                print(f"\n  [HALT] Halt triggered by: {halt_rule_name}")
+                logger.warning(f"[VALIDATION] HALT triggered by rule: {halt_rule_name}")
                 break
 
         # Aggregate
@@ -626,36 +647,36 @@ class VedicValidationEngineV2:
         return result
 
     def _print_summary(self, r: ValidationResult):
-        print(f"\n{'='*65}")
-        print(f"  RESULTS")
-        print(f"{'='*65}")
-        print(f"  Rules checked:      {r.rules_checked}")
-        print(f"  Passed:             {r.passed}")
-        print(f"  Failed:             {r.failed}")
-        print(f"  Critical failures:  {len(r.critical_failures)}")
-        print(f"  High failures:      {len(r.high_failures)}")
-        print(f"  Strength:           {r.overall_strength:.1f} / 10")
-        print(f"  Halt triggered:     {'YES [HALT]' if r.halt_triggered else 'No [OK]'}")
-        print(f"  Time:               {r.elapsed_seconds:.1f}s")
-        print(f"  Can proceed:        {'YES [OK]' if r.can_proceed else 'NO [ERROR]'}")
-        print(f"\n  {r.reasoning_summary}")
+        logger.info(f"{'='*65}")
+        logger.debug(f"RESULTS")
+        logger.info(f"{'='*65}")
+        logger.debug(f"Rules checked:      {r.rules_checked}")
+        logger.debug(f"Passed:             {r.passed}")
+        logger.debug(f"Failed:             {r.failed}")
+        logger.debug(f"Critical failures:  {len(r.critical_failures)}")
+        logger.debug(f"High failures:      {len(r.high_failures)}")
+        logger.debug(f"Strength:           {r.overall_strength:.1f} / 10")
+        logger.debug(f"Halt triggered:     {'YES [HALT]' if r.halt_triggered else 'No [OK]'}")
+        logger.debug(f"Time:               {r.elapsed_seconds:.1f}s")
+        logger.debug(f"Can proceed:        {'YES [OK]' if r.can_proceed else 'NO [ERROR]'}")
+        logger.info(f"[VALIDATION] Summary: {r.reasoning_summary}")
 
         if r.critical_failures:
-            print(f"\n  [CRITICAL FAILURES]:")
+            logger.warning(f"[VALIDATION] CRITICAL FAILURES ({len(r.critical_failures)}):")
             for f in r.critical_failures[:5]:
-                print(f"     [{f.rule_id}] {f.rule_name}")
-                print(f"              Reason: {f.reason}")
-                print(f"              Source: {f.classical_ref}")
+                logger.debug(f"   [{f.rule_id}] {f.rule_name}")
+                logger.debug(f"            Reason: {f.reason}")
+                logger.debug(f"            Source: {f.classical_ref}")
                 if f.recommendation:
-                    print(f"              Note:   {f.recommendation}")
+                    logger.debug(f"            Note:   {f.recommendation}")
 
         if r.high_failures:
-            print(f"\n  [HIGH FAILURES] (first 3):")
+            logger.warning(f"[VALIDATION] HIGH FAILURES (first 3):")
             for f in r.high_failures[:3]:
-                print(f"     [{f.rule_id}] {f.rule_name}")
-                print(f"              {f.reason}")
+                logger.debug(f"   [{f.rule_id}] {f.rule_name}")
+                logger.debug(f"            {f.reason}")
 
-        print(f"{'='*65}\n")
+        logger.info(f"{'='*65}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

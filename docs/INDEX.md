@@ -27,6 +27,7 @@ Welcome to the NakshatraAI documentation. This index links to all project docs.
 - [Field name reference (critical)](./API_REFERENCE.md#field-name-reference-critical--do-not-mix-up)
 - [Rate limiting](./API_REFERENCE.md#rate-limiting)
 - [Response format](./API_REFERENCE.md#response-format)
+- [Conversation behavior notes](./API_REFERENCE.md#conversation-behavior-notes)
 
 ### Architecture
 - [Data flow overview](./ARCHITECTURE.md#data-flow--lifecycle)
@@ -52,6 +53,6 @@ Welcome to the NakshatraAI documentation. This index links to all project docs.
 | Orchestrator size | 3,100+ lines |
 | Validation rules | 750+ |
 | RAG knowledge chunks | 14,000+ |
-| Supported languages | 4 (EN, HI, TA, PA) + Hinglish |
+| Supported language codes | 13 (native + romanized Indian languages + English) |
 | Safety gates | 4 |
 | Test files | 20 |

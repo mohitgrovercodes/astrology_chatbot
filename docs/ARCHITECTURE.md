@@ -163,13 +163,23 @@ NakshatraAI uses LangGraph to construct a deterministic state machine for all co
 - LLM synthesis
 - Response formatter + disclaimer injection + localization
 
+### Runtime Behavior (Current)
+
+- **Progressive disclosure phases:** `INITIAL` -> `AWAITING_DETAIL` -> `FOLLOWUP_LOOP`
+  - Initial turn stays concise and asks whether the user wants deeper astrological reasoning.
+  - Detailed turn provides richer explanation with explicit factors (house-lord logic, dasha windows, yogas, divisional support).
+- **Language/script mirroring:** response language is enforced from the user's original text per turn (native script vs romanized).
+- **Validation + Judge merge:** post-processing validator performs semantic coherence checks and tone/voice quality checks in one LLM pass.
+- **Domain unification:** `intent_analysis.domain` is used as hint for `query_type` selection to reduce double-classification drift.
+- **Divisional chart plumbing:** Vedic vargas are exposed via `divisional_charts_simple`; Navamsa is mirrored into validation payload as both `D9` and `navamsa`.
+
 ### Validation Engine (`src/validation/vedic_validation_engine_v2.py`)
 
 - **750+ rules** organized in JSON across 3 tiers:
   - **Tier 1** (critical): Birth time required, chart integrity checks
   - **Tier 2** (standard): 7th lord position, D9 chart, Dasha strength, house occupancy
   - **Tier 3** (enhancement): Yoga combinations, special conditions
-- Returns a **strength score (0–100)** for each prediction domain
+- Returns a **strength score (0–10)** for each prediction domain
 - **Hard-halt** on invalid data (missing birth time, incomplete profile)
 - **Age validator** (`src/validation/age_validator.py`) gates timing predictions based on the user's current age
 

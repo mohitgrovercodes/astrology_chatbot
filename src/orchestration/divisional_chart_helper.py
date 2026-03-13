@@ -126,7 +126,9 @@ def get_divisional_chart_context(
         return ""
     
     mapping = DIVISIONAL_CHART_MAP[query_type]
-    divisional_simple = chart_data.get('divisional_charts_simple', {})
+    # Use 'vargas' which has {"D9": {"planets": {...}}} — the nested format this function expects.
+    # 'divisional_charts_simple' is a flattened {"D9": {planet: sign}} and lacks the 'planets' key.
+    divisional_simple = chart_data.get('vargas') or chart_data.get('divisional_charts_simple', {})
     
     if not divisional_simple:
         return ""

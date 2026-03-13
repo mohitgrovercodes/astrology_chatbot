@@ -98,15 +98,73 @@ class PromptBuilder:
         return "\n".join(lines) if lines else "No previous context"
     
     def _format_chart(self, chart: Dict, system: str) -> str:
-        if system.lower() == "vedic":
-            return f"Lagna: {chart.get('lagna', {}).get('sign', '?')}, Rashi: {chart.get('planets', {}).get('MOON', {}).get('sign', '?')}, Sun: {chart.get('planets', {}).get('SUN', {}).get('sign', '?')}"
-        else:
-            return f"Sun: {chart.get('planets', {}).get('SUN', {}).get('sign', '?')}, Moon: {chart.get('planets', {}).get('MOON', {}).get('sign', '?')}, Asc: {chart.get('ascendant', {}).get('sign', '?')}"
-    
+        if system.lower() != "vedic":
+            return (
+                f"Sun: {chart.get('planets', {}).get('SUN', {}).get('sign', '?')}, "
+                f"Moon: {chart.get('planets', {}).get('MOON', {}).get('sign', '?')}, "
+                f"Asc: {chart.get('ascendant', {}).get('sign', '?')}"
+            )
+        lagna = chart.get('lagna', {})
+        planets = chart.get('planets', {})
+        lines = [
+            f"Lagna: {lagna.get('sign', '?')} | Nakshatra: {lagna.get('nakshatra', '?')} (Lord: {lagna.get('nakshatra_lord', '?')})"
+        ]
+        _ORDER = ['SUN', 'MOON', 'MARS', 'MERCURY', 'JUPITER', 'VENUS', 'SATURN', 'RAHU', 'KETU']
+        for p in _ORDER:
+            pd = planets.get(p, {})
+            if not pd:
+                continue
+            flags = ""
+            if pd.get('is_stationary'):
+                flags += " [STAT]"
+            elif pd.get('retrograde'):
+                flags += " [R]"
+            if pd.get('combustion_status') == 'deeply_combust':
+                flags += " [DEEP COMBUST]"
+            elif pd.get('combust'):
+                flags += " [COMBUST]"
+            dignity = pd.get('dignity', {}).get('status', '') if isinstance(pd.get('dignity'), dict) else ''
+            lines.append(
+                f"{p:8}: {pd.get('sign','?'):12} H{pd.get('house','?')} "
+                f"{pd.get('degree',0.0):.1f}° | "
+                f"{pd.get('nakshatra','?')} ({pd.get('nakshatra_lord','?')}) P{pd.get('nakshatra_pada','?')} | "
+                f"{dignity}{flags}"
+            )
+        # Yogas summary
+        yogas = chart.get('yogas', [])
+        if yogas:
+            yoga_names = ', '.join(y['name'] for y in yogas[:5])
+            lines.append(f"Yogas: {yoga_names}" + (f" (+{len(yogas)-5} more)" if len(yogas) > 5 else ""))
+        # Vargottama
+        vargottama = chart.get('vargottama', [])
+        if vargottama:
+            lines.append(f"Vargottama: {', '.join(vargottama)}")
+        # Planetary wars
+        wars = chart.get('planetary_wars', [])
+        if wars:
+            war_str = '; '.join(f"{w['winner']} beats {w['loser']}" for w in wars)
+            lines.append(f"Graha Yuddha: {war_str}")
+        return "\n".join(lines)
+
     def _format_conditions(self, transits: Optional[Dict], dasha: Optional[Dict]) -> str:
         parts = [f"Date: {datetime.now().strftime('%B %d, %Y')}"]
         if dasha:
-            parts.append(f"Dasha: {dasha.get('mahadasha', '?')}/{dasha.get('antardasha', '?')}")
+            md = dasha.get('mahadasha', {})
+            ad = dasha.get('antardasha', {})
+            pd_data = dasha.get('pratyantardasha', {})
+            md_planet = md.get('planet', '?') if isinstance(md, dict) else str(md)
+            ad_planet = ad.get('planet', '?') if isinstance(ad, dict) else str(ad)
+            pd_planet = pd_data.get('planet', '') if isinstance(pd_data, dict) else ''
+            md_end = md.get('end', '') if isinstance(md, dict) else ''
+            ad_end = ad.get('end', '') if isinstance(ad, dict) else ''
+            dasha_str = f"{md_planet}/{ad_planet}"
+            if pd_planet:
+                dasha_str += f"/{pd_planet}"
+            if md_end:
+                dasha_str += f" | MD ends: {md_end}"
+            if ad_end:
+                dasha_str += f" | AD ends: {ad_end}"
+            parts.append(f"Dasha: {dasha_str}")
         return "\n".join(parts)
     
     def _format_knowledge(self, chunks: List) -> str:

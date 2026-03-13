@@ -83,15 +83,15 @@ def deep_serialize_object(obj):
 def serialize_vedic_chart(chart: VedicChart) -> Dict[str, Any]:
     """
     Convert VedicChart to LLM-friendly JSON with metadata.
-    
+
     Args:
         chart: VedicChart object from vedic_engine
-        
+
     Returns:
         Dictionary with comprehensive chart data and metadata
     """
     from src.engines.vedic.vedic_constants import RASHI_SANSKRIT_NAMES, NAKSHATRA_NAMES, VargaChart
-    
+
     # Serialize birth data
     birth_data = {
         "datetime": chart.birth_data.date.isoformat(),
@@ -101,7 +101,7 @@ def serialize_vedic_chart(chart: VedicChart) -> Dict[str, Any]:
             "timezone": chart.birth_data.timezone_str or "UTC"
         }
     }
-    
+
     # Serialize Lagna (Ascendant)
     lagna = {
         "sign": chart.lagna.rashi_name,
@@ -112,7 +112,7 @@ def serialize_vedic_chart(chart: VedicChart) -> Dict[str, Any]:
         "nakshatra_pada": chart.lagna.nakshatra_pada,
         "nakshatra_lord": chart.lagna.nakshatra_lord.name
     }
-    
+
     # Serialize planets
     planets = {}
     for planet in VEDIC_GRAHAS:
@@ -120,8 +120,19 @@ def serialize_vedic_chart(chart: VedicChart) -> Dict[str, Any]:
         nakshatra_pos = chart.vedic_mapping.nakshatra_positions.get(planet)
         dignity = chart.vedic_mapping.dignities.get(planet)
         bhava = chart.vedic_mapping.bhava_placements.get(planet)
-        
+
         if rashi_pos and nakshatra_pos and dignity and bhava:
+            # --- Graha motion & combustion details ---
+            motion = chart.graha_stats.motions.get(planet)
+            combustion = chart.graha_stats.combustions.get(planet)
+
+            motion_status = motion.status.value if motion else "direct"
+            speed = round(motion.speed, 4) if motion else None
+            is_stationary = motion.is_stationary if motion else False
+
+            combustion_status = combustion.status.value if combustion else "not_combust"
+            combustion_degrees = round(combustion.distance_from_sun, 2) if combustion else None
+
             planets[planet.name] = {
                 "sign": rashi_pos.rashi_name,
                 "sign_sanskrit": rashi_pos.rashi.name,
@@ -129,9 +140,15 @@ def serialize_vedic_chart(chart: VedicChart) -> Dict[str, Any]:
                 "minute": rashi_pos.minute,
                 "nakshatra": nakshatra_pos.nakshatra_name,
                 "nakshatra_pada": nakshatra_pos.pada,
+                "nakshatra_lord": nakshatra_pos.nakshatra_lord.name,
                 "house": bhava.bhava,
                 "retrograde": chart.is_planet_retrograde(planet),
                 "combust": chart.is_planet_combust(planet),
+                "motion_status": motion_status,
+                "speed": speed,
+                "is_stationary": is_stationary,
+                "combustion_status": combustion_status,
+                "combustion_degrees": combustion_degrees,
                 "dignity": {
                     "status": dignity.dignity.value,
                     "is_exalted": dignity.is_exalted,
@@ -187,6 +204,35 @@ def serialize_vedic_chart(chart: VedicChart) -> Dict[str, Any]:
     if hasattr(chart, 'aspects') and chart.aspects:
         aspects = deep_serialize_object(chart.aspects)
 
+    # House occupancy — which planets occupy each house
+    house_occupancy = {}
+    if hasattr(chart, 'vedic_mapping') and chart.vedic_mapping.house_occupancy:
+        for house_num, planet_list in chart.vedic_mapping.house_occupancy.items():
+            if planet_list:
+                house_occupancy[str(house_num)] = [p.name for p in planet_list]
+
+    # Planetary wars (Graha Yuddha) — planets within 1° of each other
+    planetary_wars = []
+    if hasattr(chart, 'graha_stats') and chart.graha_stats.planetary_wars:
+        for war in chart.graha_stats.planetary_wars:
+            planetary_wars.append({
+                "planet1": war.planet1.name,
+                "planet2": war.planet2.name,
+                "separation_degrees": round(war.separation, 3),
+                "winner": war.winner.name,
+                "loser": war.loser.name,
+            })
+
+    # Vimshopaka Bala — varga-based planetary strength (0–20 scale, Saptavarga scheme)
+    vimshopaka = {}
+    if hasattr(chart, 'vargas') and chart.vargas:
+        try:
+            from src.engines.vedic.divisional_charts import get_varga_vimshopaka
+            scores = get_varga_vimshopaka(chart.vargas, scheme="saptavarga")
+            vimshopaka = {body.name: round(score, 1) for body, score in scores.items()}
+        except Exception:
+            pass
+
     # Metadata for RAG retrieval
     metadata = {
         "ayanamsa": chart.ayanamsa.name,
@@ -215,6 +261,16 @@ def serialize_vedic_chart(chart: VedicChart) -> Dict[str, Any]:
         if d1_sign and d9_sign and d1_sign.upper() == d9_sign.upper():
             vargottama.append(planet_name)
 
+    # Expose Navamsa (D9) chart explicitly for validation and downstream consumers.
+    # Validation helpers look for chart_data['navamsa'] or an explicit 'D9' chart,
+    # so we construct a simple structure from the already-computed D9 planets.
+    navamsa_chart = None
+    if d9_planets:
+        navamsa_chart = {
+            "lagna": "Unknown",  # Divisional lagna is not yet computed; planets are sufficient for most rules.
+            "planets": d9_planets,
+        }
+
     return {
         "chart_type": "vedic",
         "birth_data": birth_data,
@@ -223,10 +279,15 @@ def serialize_vedic_chart(chart: VedicChart) -> Dict[str, Any]:
         "vargas": vargas,
         "divisional_charts_simple": divisional_charts_simple,
         "vargottama": vargottama,
+        # Make D9/Navamsa available to validation and analysis layers
+        **({"navamsa": navamsa_chart} if navamsa_chart else {}),
         "yogas": yogas,
         "dasha": dasha_serialized,
         "strengths": strengths,
         "aspects": aspects,
+        "house_occupancy": house_occupancy,
+        "planetary_wars": planetary_wars,
+        "vimshopaka": vimshopaka,
         "_metadata": metadata
     }
 

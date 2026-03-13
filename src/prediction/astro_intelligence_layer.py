@@ -140,6 +140,118 @@ def build_astro_evidence(
         ),
     ]
 
+    # ── Dasha date signals ──────────────────────────────────────────────────
+    md_start = (dasha_data or {}).get("mahadasha", {}).get("start")
+    md_end   = (dasha_data or {}).get("mahadasha", {}).get("end")
+    ad_start = (dasha_data or {}).get("antardasha", {}).get("start")
+    ad_end   = (dasha_data or {}).get("antardasha", {}).get("end")
+    pd_start = (dasha_data or {}).get("pratyantardasha", {}).get("start")
+    pd_end   = (dasha_data or {}).get("pratyantardasha", {}).get("end")
+
+    if md_end and ad_end:
+        signals.append(AstroSignal(
+            name="dasha_dates",
+            value=(
+                f"MD {active_md}: {md_start} to {md_end} | "
+                f"AD {active_ad}: {ad_start} to {ad_end}"
+                + (f" | PD {active_pd}: {pd_start} to {pd_end}" if pd_end else "")
+            ),
+            confidence=0.95,
+            rationale="Exact dasha start/end dates from Swiss Ephemeris calculation.",
+        ))
+
+    # ── Yoga signals ────────────────────────────────────────────────────────
+    yogas = (chart_data or {}).get("yogas", [])
+    if yogas:
+        # Group by category, prioritise high-strength yogas
+        mahapurusha = [y for y in yogas if y.get("category") == "mahapurusha"]
+        raja        = [y for y in yogas if y.get("category") == "raja"]
+        dhana       = [y for y in yogas if y.get("category") == "dhana"]
+        spiritual   = [y for y in yogas if y.get("category") == "spiritual"]
+        arishtya    = [y for y in yogas if y.get("category") == "arishtya"]
+
+        # Mahapurusha yogas — most significant
+        if mahapurusha:
+            names = ", ".join(y["name"] for y in mahapurusha[:3])
+            signals.append(AstroSignal(
+                name="mahapurusha_yogas",
+                value=names,
+                confidence=0.92,
+                rationale="Pancha Mahapurusha yogas amplify results in their Dasha period.",
+            ))
+
+        # Raja/Dhana for wealth and authority queries
+        if raja or dhana:
+            all_rd = raja + dhana
+            names = ", ".join(
+                f"{y['name']} (str={y.get('strength', 0):.1f})"
+                for y in sorted(all_rd, key=lambda x: x.get("strength", 0), reverse=True)[:4]
+            )
+            signals.append(AstroSignal(
+                name="raja_dhana_yogas",
+                value=names,
+                confidence=0.85,
+                rationale="Raja/Dhana yogas indicate periods of authority, wealth, and achievement.",
+            ))
+
+        # Arishtya yogas — challenges to note
+        if arishtya:
+            names = ", ".join(y["name"] for y in arishtya[:2])
+            signals.append(AstroSignal(
+                name="arishtya_yogas",
+                value=names,
+                confidence=0.80,
+                rationale="Arishtya yogas flag periods needing caution or remediation.",
+            ))
+
+    # ── Vimshopaka Bala for domain-relevant planet ──────────────────────────
+    vimshopaka = (chart_data or {}).get("vimshopaka", {})
+    if vimshopaka:
+        DOMAIN_KEY_PLANETS = {
+            "marriage":  ["VENUS", "JUPITER"],
+            "divorce":   ["SATURN", "MARS"],
+            "career":    ["SATURN", "SUN"],
+            "finance":   ["VENUS", "JUPITER"],
+            "children":  ["JUPITER", "MOON"],
+            "health":    ["SATURN", "MARS"],
+            "home":      ["MOON", "MARS"],
+            "foreign":   ["RAHU", "JUPITER"],
+            "general":   ["JUPITER", "SATURN"],
+        }
+        key_planets = DOMAIN_KEY_PLANETS.get(domain, DOMAIN_KEY_PLANETS["general"])
+        vims_parts = [
+            f"{p}={vimshopaka[p]:.1f}/20"
+            for p in key_planets
+            if p in vimshopaka
+        ]
+        if vims_parts:
+            signals.append(AstroSignal(
+                name="vimshopaka_strength",
+                value=", ".join(vims_parts),
+                confidence=0.83,
+                rationale=(
+                    "Vimshopaka Bala (0–20) measures planetary strength across multiple divisional charts. "
+                    "Score ≥14 = strong, 8–13 = moderate, <8 = weak."
+                ),
+            ))
+
+    # ── Planetary wars (Graha Yuddha) ───────────────────────────────────────
+    wars = (chart_data or {}).get("planetary_wars", [])
+    if wars:
+        war_parts = [
+            f"{w['winner']} defeats {w['loser']} ({w['separation_degrees']}°)"
+            for w in wars
+        ]
+        signals.append(AstroSignal(
+            name="planetary_wars",
+            value="; ".join(war_parts),
+            confidence=0.78,
+            rationale=(
+                "Graha Yuddha: loser planet's significations are significantly weakened "
+                "in its Dasha/Antardasha period."
+            ),
+        ))
+
     windows = build_timeline_windows(
         query_domain=domain,
         dasha_data=dasha_data or {},

@@ -323,12 +323,18 @@ class ChartSynthesisEngine:
         Returns structured analysis ready for LLM consumption.
         """
         # Get applicable rules
-        rules = self._get_applicable_rules(query_type, stage="promise", max_rules=50)
-        
+        rules = self._get_applicable_rules(query_type, stage="promise", max_rules=200)
+
+        # Always include yoga rules — pull them out first, then fill remaining slots
+        yoga_rules = [r for r in rules if 'yoga' in r.get('rule_name', '').lower() or 'yoga' in r.get('category', '').lower()]
+        non_yoga_rules = [r for r in rules if r not in yoga_rules]
+        # Take up to 10 yoga rules + up to 40 non-yoga rules = 50 total cap
+        selected_rules = yoga_rules[:10] + non_yoga_rules[:40]
+
         # Evaluate rules (simplified pattern matching)
         evaluated_rules = [
             self._evaluate_rule_simple(rule, chart_enhanced)
-            for rule in rules[:30]  # Limit to 30 for performance
+            for rule in selected_rules
         ]
         
         # Categorize insights

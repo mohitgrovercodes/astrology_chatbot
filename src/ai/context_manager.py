@@ -97,50 +97,57 @@ def detect_user_response_type(query: str) -> str:
 # Each domain maps to follow-up questions the bot CAN reliably answer.
 # These are used as LLM-prompt guidance -- the LLM picks the most relevant one
 # based on what was already discussed.
+# NOTE: These questions PIVOT to a different life area — they must never ask for more detail
+# on the same topic just covered. The LLM uses these as the suggested pivot topic.
 FOLLOWUP_QUESTION_BANK = {
     'marriage': [
-        "7th lord ki placement mein ek aisa angle hai jo future partner ki personality ke baare mein kuch unexpected reveal karta hai — kya aap jaanna chahenge?",
-        "Venus aapke chart mein jahan hai, woh prem aur attraction ke baare mein kuch specific kehta hai jo bahut log notice hi nahi karte — main vistar se samjhaaun?",
-        "Navamsa (D9) chart ko shadi ka asli aaina kaha jaata hai — aur aapke D9 mein birth chart se bilkul alag ek picture hai jo abhi cover nahi hui — shall I explain?",
-        "Aapke Dasha timeline mein ek period hai jo shadi ke liye unusually powerful hai — aur woh woh nahi hai jo surface pe obvious lagta hai — kya aap jaanna chahenge?",
-        "Jo planetary period aapki shadi ka darwaza khol raha hai, wahi period ek doosri mahatvapurn ghatna bhi leke aa raha hai — would you like me to elaborate?",
+        "Now that we've covered marriage timing, your career chart for this same period shows something interesting — shall I explore that?",
+        "Finances often shift around the same time as major life events like marriage — would you like to see what your chart says about that period financially?",
+        "Children timing is closely linked to this marriage window in your chart — shall I look at what the 5th house shows?",
+        "Your health indicators for this period also deserve a look — shall I explain what to be mindful of physically during this phase?",
+        "Foreign travel or relocation sometimes connects to marriage windows — your 12th house has something specific here — want me to explore?",
     ],
     'career': [
-        "10th lord ki placement ek specific career direction clearly point karti hai jo typically logon ki pehli soch se alag hoti hai — main vistar se bata sakta hoon.",
-        "11th house mein ek indicator hai jo clearly dikhata hai ki aap job se zyada earn karenge ya business se — kya aap jaanna chahenge?",
-        "Saturn aapke chart mein career ke baare mein ek unusual message de raha hai — delay ki nahi, ek specific breakthrough window ki baat hai — shall I explain?",
-        "Aapke Dasha mein ek window hai jab career ek sharp leap leta hai — woh period khulne wala hai — kya aap iske baare mein aur jaanna chahenge?",
-        "Lagnesh ki placement professional drive ke baare mein ek hidden indicator hai jo chart mein clearly visible hai — would you like me to walk you through it?",
+        "Your financial picture for this career period is closely connected — shall I look at what the 2nd and 11th houses show?",
+        "Health and stamina directly affect professional performance — your chart has a specific indicator there — want me to cover that?",
+        "Marriage or relationship timing sometimes aligns with career peaks — shall I check what your 7th house shows for this period?",
+        "Foreign opportunities or relocation for career — your 12th house has something relevant here — shall I explore?",
+        "Children timing, if relevant, often surfaces around career growth periods — want me to check what the 5th house says?",
     ],
     'finance': [
-        "2nd aur 11th houses ka jo combination aapke chart mein hai, woh income ke baare mein ek specific aur surprising picture banata hai — kya aap jaanna chahenge?",
-        "Ek planetary period aapke aage aa raha hai jo financial gains ke liye unusually powerful hai — aur woh woh nahi jo surface pe obvious dikhta hai — main samjhaaun?",
-        "Aapke chart mein ek clear indicator hai ki job, business, aur investments mein se kisme naturally zyada success milegi — shall I explain this?",
-        "Jupiter aur Venus ka aapke chart mein jo tension hai, woh money ke saath relationship ko ek specific tarike se shape karta hai — would you like me to elaborate?",
+        "Career direction is the engine behind this financial picture — shall I explore what your 10th house shows for the same period?",
+        "Your health indicators for this financial phase are worth a look — certain periods bring both financial and physical changes — shall I explain?",
+        "Marriage timing and financial shifts often coincide — want me to check whether your relationship window overlaps with this period?",
+        "Property or asset acquisition potential is a separate angle from income — shall I look at your 4th house for this?",
+        "Foreign income or overseas financial opportunities — your 12th house has something specific — want me to explore?",
     ],
     'health': [
-        "6th house lord ki placement ek specific area point karti hai jahan dhyan rakhna genuinely helpful hoga — kya aap jaanna chahenge?",
-        "Aapke chart mein ek Dasha period hai jab health extra attention maangti hai — yeh advance mein jaanna practically helpful hai — shall I explain?",
-        "Lagna lord ki placement constitution aur natural vitality ke baare mein ek clear picture banata hai — strength aur weakness dono wahan visible hain — main vistar se bata sakta hoon.",
-        "Mars aur Saturn ka jo angle aapke chart mein hai, woh physical stamina ke baare mein ek unexpected story batata hai — kya aap iske baare mein jaanna chahenge?",
+        "Career performance is directly tied to energy levels — your chart shows something specific for this period professionally — shall I explain?",
+        "Financial pressure sometimes creates health stress — want me to check whether your financial picture eases during this phase?",
+        "Marriage or relationship quality has a real impact on wellbeing — shall I look at your 7th house for this period?",
+        "Children timing, if on your mind, is worth checking alongside health indicators — shall I explore the 5th house?",
+        "Spiritual practices and daily routine are ruled by the 12th house — your chart shows a specific window for recovery and restoration — want me to explain?",
     ],
     'children': [
-        "5th house lord ki placement children ki timing ke baare mein ek clear signal deta hai — saath hi intelligence aur creativity ka ek interesting angle bhi hai — shall I elaborate?",
-        "Jupiter aapke chart mein jahan hai, woh children ke baare mein D5 mein ek alag picture banata hai jo birth chart mein nahi dikhti — kya aap jaanna chahenge?",
-        "5th house sirf bachcho ka ghar nahi — past-life merit aur natural gifts ka bhi hai — aapke chart mein ek specific strength wahan chhupi hui hai — would you like me to explain?",
+        "Career growth and children timing often coincide in charts — shall I look at what the 10th house shows for this same period?",
+        "Financial readiness for this phase is worth checking — want me to see what the 2nd and 11th houses say?",
+        "Your health indicators are particularly important around this period — shall I explain what to pay attention to?",
+        "Marriage dynamics and children timing are deeply connected — want me to look at your 7th house for the same window?",
+        "Education and learning for yourself or your child — your 5th house has more than just children timing — shall I explore?",
     ],
     'foreign': [
-        "Rahu ki placement foreign connection ke baare mein ek clear angle indicate karta hai jo career se personal life tak extend karta hai — kya aap jaanna chahenge?",
-        "9th aur 12th houses ka combination foreign travel ya settlement ke waqt aur direction ke baare mein kuch specific kehta hai — main vistar se samjhaaun?",
-        "Foreign opportunities aapke Dasha timeline mein ek particular period ke around cluster karti hain — woh period aur opportunity ka type chart mein clearly visible hai — shall I explain?",
+        "Career opportunities in that foreign destination — your 10th house has a specific connection here — shall I explore?",
+        "Financial implications of foreign relocation or travel show up clearly in your chart — want me to check that?",
+        "Health during foreign stays or long travel is worth knowing — shall I look at what your chart shows?",
+        "Relationship or marriage timing sometimes aligns with foreign phases — want me to check the 7th house for this window?",
+        "Spiritual growth and foreign connection are often linked in Vedic charts — shall I explore the deeper meaning of this placement?",
     ],
     'general': [
-        "Aapke Dasha mein agla major phase shift ek interesting mix leke aata hai — kuch challenges, kuch unexpected openings — would you like me to walk you through it?",
-        "Aapke chart mein 2-3 planetary positions hain jo real natural advantages dete hain — woh strengths hain jo shayad abhi fully use nahi ho rahe — kya aap jaanna chahenge?",
-        "Ek significant transit abhi chal raha hai jo silently current circumstances shape kar raha hai — exactly kab tak chalega yeh practically jaanna helpful hai — shall I explain?",
-        "Lagna lord ki exact placement personality aur life direction ke baare mein jo picture banata hai woh usually expected se alag hota hai — main vistar se bata sakta hoon.",
-        "Sade Sati ka aapke chart par ek measurable asar hai — exactly kab peak hai aur kab lift hota hai — kya aap jaanna chahenge?",
-        "Aapke chart mein ek dominant planet hai jo puri zindagi ko color karta hai — aur uski placement mein kuch aisa hai jo shayad aap expect nahi karenge — would you like me to elaborate?",
+        "Career direction for the coming period shows something specific in your chart — shall I explore that?",
+        "Financial picture for the next 1-2 years has a clear indicator in your chart — want me to walk you through it?",
+        "Health and vitality trends for this phase are worth knowing — shall I explain what your chart shows?",
+        "Relationship or marriage timing — if that's on your mind — is clearly indicated in your chart — want me to look at it?",
+        "Children or family expansion timing, if relevant, shows up in the 5th house — shall I check?",
     ],
 }
 
@@ -252,26 +259,29 @@ def generate_followup_question(
 Topic just discussed: {topic}
 Last answer (do NOT repeat anything from here): "{last_answer[:200]}"
 
-TASK: Write ONE follow-up line that surfaces a specific, unexplored insight from THIS chart and formally invites the user to hear it.
+TASK: Write ONE follow-up line that PIVOTS to a DIFFERENT life area than '{topic}' and invites the user to explore it.
+
+CRITICAL RULE — DO NOT OFFER MORE DETAIL ON '{topic}'. The detailed answer on that topic is now complete.
+Instead, find a natural bridge to a DIFFERENT area: career, finances, health, children, marriage, foreign travel, or similar.
 
 HOW TO BUILD IT:
-  1. Scan the chart placements above. Identify the single placement most relevant to '{topic}' that was NOT mentioned in the last answer.
-  2. Find what is genuinely surprising, rare, or revealing about that placement — something only visible in this specific chart.
-  3. State the planet and house by name. Tease the hidden angle without revealing it. Close with a formal invitation.
+  1. Choose a life area that is DIFFERENT from '{topic}' and naturally connected to the user's current life stage.
+  2. Identify ONE specific planet or house placement in the chart above that is relevant to that different area.
+  3. Tease what is interesting or revealing about it — without giving the answer. Close with a formal invitation.
 
 RULES:
-  - Ground the question entirely in the actual chart data above. A reader of this line must feel it was written specifically for this person, not a generic template.
-  - YOU are the one offering to reveal something. NEVER frame it as a question that asks the user to explain astrology to you (e.g. "Jupiter 3rd mein hai, yeh communication ko kaise influence karta hai?" is WRONG — that tests the user, not informs them).
+  - NEVER ask for more detail, a deeper breakdown, or further explanation of '{topic}'.
+  - Ground the question in the actual chart data above so it feels personal, not generic.
+  - YOU are offering to reveal something new. Never ask the user to explain astrology.
   - Use only real placements listed above. NEVER write "agar koi planet ho" or "if a planet is present".
-  - Close with a formal, respectful invitation in the same language — e.g. "— kya aap jaanna chahenge?", "— main vistar se samjhaaun?", "— shall I explain this?", "— would you like me to elaborate?" — not casual phrases.
-  - Language: {lang_hint}. Maximum 28 words. Return ONLY the single follow-up line.
+  - Close with a formal, respectful invitation: "— kya aap jaanna chahenge?", "— shall I explore that?", "— want me to look at that?".
+  - Language: {lang_hint}. Maximum 30 words. Return ONLY the single follow-up line.
 
-STYLE REFERENCE (these illustrate tone and structure — your output must use the actual chart placements above, not these planets/houses):
-  "Venus 1st house mein debilitate hone ke bawajood ek hidden strength hai jo shadi ki timing ko seedha shape karti hai — kya aap jaanna chahenge?"
-  "Jupiter 3rd house mein aapka 7th lord hai — yeh future partner ki personality ke baare mein kuch aise reveal karta hai jo bahut kam log notice karte hain — main samjhaaun?"
-  "Aapka 10th lord Mercury exalted aur lagna mein — yeh rare yoga career ki direction ke baare mein ek surprising picture banata hai — shall I elaborate?"
-  "Moon aur Saturn ka jo yog aapke chart mein hai, woh career mein ek specific timing window dikhata hai jo surface pe nahi dikhti — would you like me to explain?"
-  "Rahu ki placement aapki financial growth se ek aisa angle se connected hai jo sirf is specific chart mein dikhta hai — main vistar se bata sakta hoon."
+STYLE REFERENCE (illustrate tone — use DIFFERENT topic from '{topic}', use actual chart planets/houses):
+  "Aapke career mein bhi is samay ek interesting shift aa rahi hai — 10th lord ki placement mein kuch specific hai — kya aap jaanna chahenge?"
+  "Financial picture for this period also shows something notable in the 2nd house — shall I explore that?"
+  "Health indicators for this phase are worth knowing — Mars and Saturn have a specific angle here — want me to explain?"
+  "Children timing, if that's on your mind, connects naturally to this period in your chart — shall I look at the 5th house?"
 """
 
     def _call() -> str:

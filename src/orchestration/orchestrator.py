@@ -12,14 +12,17 @@ UPDATED: Now uses actual VedicEngine calculations (no placeholders!)
 """
 
 from datetime import datetime
+from config.logger import get_logger
 from src.utils.localization import get_localization_manager
+
+logger = get_logger("orchestrator")
 from src.safety.constitution import get_constitution_injection
 from typing import Dict, List, Optional, Any, TypedDict, Annotated, Tuple
 import random
 from src.ai.voice_charter import (
     get_voice_charter,
     get_response_structure_policy,
-    pick_contextual_closing,
+    pick_initial_closing,
 )
 
 # Types for state management
@@ -48,7 +51,7 @@ try:
     from src.validation.vedic_validation_engine_v2 import VedicValidationEngineV2
     VALIDATION_AVAILABLE = True
 except ImportError:
-    print("[VALIDATION] vedic_validation_engine_v2 not found - validation disabled")
+    logger.info("[VALIDATION] vedic_validation_engine_v2 not found - validation disabled")
     VALIDATION_AVAILABLE = False
     
 try:
@@ -56,7 +59,7 @@ try:
     from src.validation.chart_synthesis_engine import ChartSynthesisEngine, synthesize_chart_analysis
     ENHANCED_ANALYSIS_AVAILABLE = True
 except ImportError:
-    print("[ENHANCED_ANALYSIS] chart_analyzer/synthesis_engine not found - using basic analysis")
+    logger.info("[ENHANCED_ANALYSIS] chart_analyzer/synthesis_engine not found - using basic analysis")
     ENHANCED_ANALYSIS_AVAILABLE = False
 
 from src.orchestration.orchestrator_validation_helpers import (
@@ -158,9 +161,9 @@ class EnhancedLangGraphOrchestrator:
         
         # NEW: Auto-load calculation tools if not provided
         if calculation_tools is None:
-            print("[LANGGRAPH] Loading calculation tools...")
+            logger.info("[LANGGRAPH] Loading calculation tools...")
             calculation_tools = get_calculation_tools()
-            print(f"[LANGGRAPH] Loaded {len(calculation_tools)} calculation tools")
+            logger.info(f"[LANGGRAPH] Loaded {len(calculation_tools)} calculation tools")
         
         self.calculation_tools = calculation_tools
 
@@ -168,10 +171,10 @@ class EnhancedLangGraphOrchestrator:
         if prompt_builder is None:
             try:
                 from src.ai.prompt_builder import PromptBuilder
-                print("[LANGGRAPH] Auto-loading PromptBuilder...")
+                logger.info("[LANGGRAPH] Auto-loading PromptBuilder...")
                 prompt_builder = PromptBuilder()
             except ImportError as e:
-                print(f"[LANGGRAPH] [ERROR] Failed to auto-load PromptBuilder: {e}")
+                logger.info(f"[LANGGRAPH] [ERROR] Failed to auto-load PromptBuilder: {e}")
         
         self.prompt_builder = prompt_builder
 
@@ -179,17 +182,17 @@ class EnhancedLangGraphOrchestrator:
         if intent_classifier is None:
             try:
                 from src.ai.intent_classifier import LLMIntentClassifier
-                print("[LANGGRAPH] Auto-loading LLMIntentClassifier...")
+                logger.info("[LANGGRAPH] Auto-loading LLMIntentClassifier...")
                 intent_classifier = LLMIntentClassifier(llm=fast_llm or llm)
             except ImportError as e:
-                print(f"[LANGGRAPH] [ERROR] Failed to auto-load LLMIntentClassifier: {e}")
+                logger.info(f"[LANGGRAPH] [ERROR] Failed to auto-load LLMIntentClassifier: {e}")
         
         self.intent_classifier = intent_classifier
         
         # [PHASE 6] Auto-load LLM if not provided
         if llm is None:
             from src.llm.factory import LLMFactory
-            print("[LANGGRAPH] Auto-loading default LLM...")
+            logger.info("[LANGGRAPH] Auto-loading default LLM...")
             llm = LLMFactory.create()
             
         self.llm = llm  # Quality LLM for responses
@@ -198,7 +201,7 @@ class EnhancedLangGraphOrchestrator:
         # [DONE] Connect fast LLM to intent classifier
         if hasattr(self.intent_classifier, 'set_llm') and self.fast_llm is not None:
             self.intent_classifier.set_llm(self.fast_llm)
-            print("[LANGGRAPH] Fast LLM connected to intent classifier")
+            logger.info("[LANGGRAPH] Fast LLM connected to intent classifier")
         
         # PHASE 10.5: Initialize new safety components
         self.safety_classifier = create_safety_classifier(llm=self.fast_llm)
@@ -293,13 +296,13 @@ class EnhancedLangGraphOrchestrator:
         self.validation_enabled = VALIDATION_AVAILABLE
         
         if self.validation_enabled:
-            print("[VALIDATION] Validation engine enabled")
+            logger.info("[VALIDATION] Validation engine enabled")
 
         self.graph = self._build_graph()
         
-        print("[LANGGRAPH] [SUCCESS] Enhanced orchestrator initialized")
-        print("[LANGGRAPH] Routes: CHITCHAT | CALCULATION_ONLY | RAG_WITH_CALCULATION | RAG_ONLY")
-        print("[LANGGRAPH] Safety guardrails enabled (Phase 6)")
+        logger.info("[LANGGRAPH] [SUCCESS] Enhanced orchestrator initialized")
+        logger.info("[LANGGRAPH] Routes: CHITCHAT | CALCULATION_ONLY | RAG_WITH_CALCULATION | RAG_ONLY")
+        logger.info("[LANGGRAPH] Safety guardrails enabled (Phase 6)")
 
         self.chart_analyzer = None
         self.synthesis_engine = None
@@ -311,13 +314,13 @@ class EnhancedLangGraphOrchestrator:
                     indexed_rules_path="optimized/indexed_rules.json",
                     tiered_rules_path="optimized/tiered_rules.json"
                 )
-                print("[ENHANCED_ANALYSIS] Engines initialized")
+                logger.info("[ENHANCED_ANALYSIS] Engines initialized")
             except Exception as e:
-                print(f"[ENHANCED_ANALYSIS] Init failed: {e}")
+                logger.info(f"[ENHANCED_ANALYSIS] Init failed: {e}")
     
     def _build_graph(self):
         """Build LangGraph workflow."""
-        print("[LANGGRAPH] Building enhanced workflow graph...")
+        logger.info("[LANGGRAPH] Building enhanced workflow graph...")
         
         workflow = StateGraph(NakshatraState)
         
@@ -397,7 +400,7 @@ class EnhancedLangGraphOrchestrator:
         workflow.add_edge("format_response", END)
         
         # Compile
-        print("[LANGGRAPH] Compiling workflow...")
+        logger.info("[LANGGRAPH] Compiling workflow...")
         return workflow.compile()
         
     # ========================================================================
@@ -408,10 +411,10 @@ class EnhancedLangGraphOrchestrator:
         """Node 1: Authenticate user and merge session data."""
         # Check if profile is already provided (e.g., from external context)
         if state.get('user_profile'):
-            print(f"[AUTH] Using provided user profile for: {state['user_id']}")
+            logger.info(f"[AUTH] Using provided user profile for: {state['user_id']}")
             state['authenticated'] = True
         else:
-            print(f"[AUTH] Authenticating user: {state['user_id']}")
+            logger.info(f"[AUTH] Authenticating user: {state['user_id']}")
             
             # Use UserManager ONLY if it exists (Bypassed in stateless production)
             if self.user_manager and self.user_manager.user_exists(state['user_id']):
@@ -420,21 +423,21 @@ class EnhancedLangGraphOrchestrator:
                 if user_profile:
                     state['user_profile'] = user_profile.to_dict()
                     state['authenticated'] = True
-                    print(f"[AUTH] [FALLBACK] Loaded profile from database for {state['user_id']}")
+                    logger.info(f"[AUTH] [FALLBACK] Loaded profile from database for {state['user_id']}")
                     # Update last active
                     self.user_manager.update_last_active(state['user_id'])
             else:
                 if not self.user_manager:
-                    print(f"[AUTH] [INFO] Stateless mode: No UserManager provided")
+                    logger.info(f"[AUTH] [INFO] Stateless mode: No UserManager provided")
                 else:
-                    print(f"[AUTH] [INFO] User not in DB: {state['user_id']}")
+                    logger.info(f"[AUTH] [INFO] User not in DB: {state['user_id']}")
                 state['user_profile'] = {}
                 state['authenticated'] = False
 
         # SESSION DATA OVERWRITES DB DATA (Priority Tier)
         session_data = state.get('session_data')
         if session_data:
-            print(f"[AUTH] [PRIORITY] Merging session mapping for {state['user_id']}")
+            logger.info(f"[AUTH] [PRIORITY] Merging session mapping for {state['user_id']}")
             if not state['user_profile']:
                 state['user_profile'] = {}
 
@@ -444,7 +447,7 @@ class EnhancedLangGraphOrchestrator:
             internal_keys = ['chart_data', 'dasha_data', 'transit_data', 'detected_language', 'persona_type']
             for key in internal_keys:
                 if key in session_data:
-                    print(f"[AUTH] [PRIORITY] Using injected context: {key}")
+                    logger.info(f"[AUTH] [PRIORITY] Using injected context: {key}")
                     state[key] = session_data[key]
 
             # Put chart_data into user_profile so _build_theory_prompt can access it
@@ -457,12 +460,12 @@ class EnhancedLangGraphOrchestrator:
         # Tier 2 (Fallback): Load from database
         if state.get('conversation_history') is None:
             if self.user_manager:
-                print(f"[AUTH] [FALLBACK] Loading conversation history from database for {state['user_id']}")
+                logger.info(f"[AUTH] [FALLBACK] Loading conversation history from database for {state['user_id']}")
                 state['conversation_history'] = self.user_manager.get_history(state['user_id'], limit=5)
             else:
                 state['conversation_history'] = []
         else:
-            print(f"[AUTH] [PRIORITY] Using injected conversation history ({len(state['conversation_history'])} messages)")
+            logger.info(f"[AUTH] [PRIORITY] Using injected conversation history ({len(state['conversation_history'])} messages)")
 
         return state
 
@@ -476,7 +479,7 @@ class EnhancedLangGraphOrchestrator:
         # to English when the semantic interpreter rewrites the query.
         _session_data = state.get('session_data') or {}
         query = _session_data.get('original_user_question') or state['query']
-        print(f"[LANG] Detecting language for original user text: '{query[:30]}...'")
+        logger.info(f"[LANG] Detecting language for original user text: '{query[:30]}...'")
 
         # ── Session language prior ──────────────────────────────────────────────
         # If the session already stored a non-English detected_language from a
@@ -512,7 +515,7 @@ class EnhancedLangGraphOrchestrator:
                 and _query_word_count <= 4
                 and confidence <= 0.75
             ):
-                print(
+                logger.info(
                     f"[LANG] Low-confidence English ({confidence:.2f}) on short query "
                     f"({_query_word_count}w) — keeping session language: {_session_lang}"
                 )
@@ -525,10 +528,10 @@ class EnhancedLangGraphOrchestrator:
 
             # Log detection method
             method = "library" if confidence > 0.7 else "LLM fallback"
-            print(f"[LANG] Detected: {detected_lang} ({method}, confidence: {confidence:.2f})")
+            logger.info(f"[LANG] Detected: {detected_lang} ({method}, confidence: {confidence:.2f})")
 
         except Exception as e:
-            print(f"[LANG] Detection error: {e}, defaulting to 'en'")
+            logger.info(f"[LANG] Detection error: {e}, defaulting to 'en'")
             state['detected_language'] = _session_lang if _session_lang_is_indian else 'en'
             state['original_query'] = query
 
@@ -569,16 +572,16 @@ class EnhancedLangGraphOrchestrator:
                 _safety_orig_q, _last_bot, getattr(self, 'fast_llm', None), _safety_phase
             )
             if _safety_resp_type != 'OTHER':
-                print(f"[SAFETY] LLM fallback classified: {_safety_resp_type}")
+                logger.info(f"[SAFETY] LLM fallback classified: {_safety_resp_type}")
         if _safety_phase in (PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP) and (
             _safety_resp_type in ('AFFIRMATIVE', 'NEGATIVE') or _is_short
         ):
-            print(f"[SAFETY] Phase bypass: phase={_safety_phase}, response={_safety_resp_type} — skipping safety classifier")
+            logger.info(f"[SAFETY] Phase bypass: phase={_safety_phase}, response={_safety_resp_type} — skipping safety classifier")
             state['is_safe'] = True
             return state
         # ─────────────────────────────────────────────────────────────────────
 
-        print(f"[SAFETY] Checking query safety...")
+        logger.info(f"[SAFETY] Checking query safety...")
 
         # Import safety classifier
         from src.safety import create_safety_classifier
@@ -597,12 +600,12 @@ class EnhancedLangGraphOrchestrator:
             
             # If blocked, return template response immediately
             if safety_result.is_blocked:
-                print(f"[SAFETY] BLOCKED: {safety_result.decision.reason}")
+                logger.info(f"[SAFETY] BLOCKED: {safety_result.decision.reason}")
                 
                 # WORKAROUND: Don't block chitchat queries
                 CHITCHAT_REASONS = ['greeting', 'identity', 'gratitude', 'wellbeing', 'farewell', 'closure']
                 if safety_result.decision.reason in CHITCHAT_REASONS:
-                    print(f"[SAFETY] Chitchat query - allowing through")
+                    logger.info(f"[SAFETY] Chitchat query - allowing through")
                     state['is_safe'] = True
                     return state
                 
@@ -633,7 +636,7 @@ class EnhancedLangGraphOrchestrator:
 
             # Handle REFRAME: transform query here so intent classifier sees the reframed version
             if safety_result.decision.category == "REFRAME":
-                print(f"[SAFETY] [REFRAME] Reframing query: {state['query']} -> {safety_result.processed_query}")
+                logger.info(f"[SAFETY] [REFRAME] Reframing query: {state['query']} -> {safety_result.processed_query}")
                 state['original_query'] = state['query']
                 state['query'] = safety_result.processed_query
                 state['is_reframed'] = True
@@ -644,7 +647,7 @@ class EnhancedLangGraphOrchestrator:
 
             # Safe to proceed
             state['is_safe'] = True
-            print(f"[SAFETY] [OK] Safe to proceed")
+            logger.info(f"[SAFETY] [OK] Safe to proceed")
             
             # ════════════════════════════════════════════════════════════════
             # AGE-APPROPRIATENESS CHECK
@@ -658,14 +661,14 @@ class EnhancedLangGraphOrchestrator:
             dob = user_profile.get('date_of_birth')
             if dob:
                 dob_validation = AgeValidator.validate_dob(dob)
-                print(f"[AGE_CHECK] Validated DOB live: {dob} -> {dob_validation.get('issue') or 'ok'} (age {dob_validation.get('age_years')}y)")
+                logger.info(f"[AGE_CHECK] Validated DOB live: {dob} -> {dob_validation.get('issue') or 'ok'} (age {dob_validation.get('age_years')}y)")
             else:
                 dob_validation = {}
 
             # Check if DOB is invalid — use `is False` not `== False` so that a
             # missing/None 'valid' key (empty dict case) does not silently pass through.
             if dob_validation.get('valid') is False:
-                print(f"[AGE_CHECK] Invalid DOB: {dob_validation.get('issue')}")
+                logger.info(f"[AGE_CHECK] Invalid DOB: {dob_validation.get('issue')}")
                 state['intent'] = "DATA_VALIDATION_ERROR"
                 state['answer'] = dob_validation.get('message')
                 return state
@@ -675,7 +678,7 @@ class EnhancedLangGraphOrchestrator:
             query_type = AgeValidator.detect_query_type(state.get('query', ''))
 
             if query_type:
-                print(f"[AGE_CHECK] Query type: {query_type}, User age: {age_years}")
+                logger.info(f"[AGE_CHECK] Query type: {query_type}, User age: {age_years}")
                 
                 language = state.get('detected_language', 'en')
                 appropriateness = AgeValidator.is_query_appropriate(
@@ -685,17 +688,17 @@ class EnhancedLangGraphOrchestrator:
                 )
                 
                 if not appropriateness['appropriate']:
-                    print(f"[AGE_CHECK] ⚠️  Not appropriate: {appropriateness['reason']}")
+                    logger.info(f"[AGE_CHECK] ⚠️  Not appropriate: {appropriateness['reason']}")
                     state['intent'] = "AGE_INAPPROPRIATE"
                     state['answer'] = appropriateness['message']
                     return state  # Or your return format
 
-                print(f"[AGE_CHECK] Age-appropriate query")
+                logger.info(f"[AGE_CHECK] Age-appropriate query")
 
                 
 
         except Exception as e:
-            print(f"[SAFETY] [ERROR] Error in safety check: {e}")
+            logger.info(f"[SAFETY] [ERROR] Error in safety check: {e}")
             import traceback
             traceback.print_exc()
             # On error, allow to proceed (fail open for availability)
@@ -705,7 +708,7 @@ class EnhancedLangGraphOrchestrator:
 
     def _classify_intent_node(self, state: NakshatraState) -> NakshatraState:
         """Node 2: Classify intent."""
-        print(f"[INTENT] Classifying query: '{state['query'][:50]}...'")
+        logger.info(f"[INTENT] Classifying query: '{state['query'][:50]}...'")
 
         # == PROGRESSIVE DISCLOSURE PHASE GUARD ================================
         # When the bot asked "Want more details?" or asked a follow-up question,
@@ -738,10 +741,10 @@ class EnhancedLangGraphOrchestrator:
                     _original_q, _last_bot, getattr(self, 'fast_llm', None), current_phase
                 )
                 if user_response != 'OTHER':
-                    print(f"[INTENT] [PHASE_GUARD] LLM fallback classified: {user_response}")
-            print(f"[INTENT] [PHASE_GUARD] original='{_original_q[:40]}' -> response_type={user_response}, short_cont={_is_short_continuation}")
+                    logger.info(f"[INTENT] [PHASE_GUARD] LLM fallback classified: {user_response}")
+            logger.info(f"[INTENT] [PHASE_GUARD] original='{_original_q[:40]}' -> response_type={user_response}, short_cont={_is_short_continuation}")
             if user_response in ('AFFIRMATIVE', 'NEGATIVE') or _is_short_continuation:
-                print(f"[INTENT] [PHASE_GUARD] Phase={current_phase}, response={user_response} -> RAG_WITH_CALCULATION")
+                logger.info(f"[INTENT] [PHASE_GUARD] Phase={current_phase}, response={user_response} -> RAG_WITH_CALCULATION")
                 state['intent'] = 'RAG_WITH_CALCULATION'
                 state['confidence'] = 0.95
                 state['intent_reasoning'] = f'Progressive disclosure: {user_response} in {current_phase}'
@@ -768,7 +771,7 @@ class EnhancedLangGraphOrchestrator:
             or (len(q.split()) <= 2 and q.split()[0] in _SHORT_QUESTION_STARTERS) # Refined to avoid intercepting full questions
         )
         if is_continuation and len(history) > 0:
-            print(f"[INTENT] [CONTINUATION] CONTINUATION GUARD: routed to RAG_WITH_CALCULATION (history={len(history)} msgs)")
+            logger.info(f"[INTENT] [CONTINUATION] CONTINUATION GUARD: routed to RAG_WITH_CALCULATION (history={len(history)} msgs)")
 
             state['intent'] = 'RAG_WITH_CALCULATION'
             state['confidence'] = 0.85
@@ -811,7 +814,7 @@ class EnhancedLangGraphOrchestrator:
         q_normalized = state['query'].lower().strip().rstrip('!.')
         _kw_route = _CHITCHAT_KEYWORD_ROUTES.get(q_normalized)
         if _kw_route:
-            print(f"[INTENT] Keyword chitchat match: '{state['query']}' -> {_kw_route}")
+            logger.info(f"[INTENT] Keyword chitchat match: '{state['query']}' -> {_kw_route}")
             state['intent'] = 'CHITCHAT'
             state['confidence'] = 1.0
             state['intent_reasoning'] = f'Keyword chitchat match: {_kw_route}'
@@ -828,7 +831,7 @@ class EnhancedLangGraphOrchestrator:
         CHITCHAT_ROUTES = ['chitchat', 'greeting', 'identity', 'personal_profile_query', 'gratitude', 'wellbeing', 'farewell', 'closure']
         
         if chitchat_match and chitchat_match.name in CHITCHAT_ROUTES:
-            print(f"[INTENT] Semantic Chitchat Match: '{state['query']}' -> {chitchat_match.name} ({chitchat_match.confidence:.2f})")
+            logger.info(f"[INTENT] Semantic Chitchat Match: '{state['query']}' -> {chitchat_match.name} ({chitchat_match.confidence:.2f})")
             state['intent'] = 'CHITCHAT'
             state['confidence'] = chitchat_match.confidence
             state['intent_reasoning'] = f"Semantic Chitchat Match: {chitchat_match.name}"
@@ -842,9 +845,9 @@ class EnhancedLangGraphOrchestrator:
         if stored_safety:
             category = stored_safety.get('category', 'SAFE')
             disclaimer = stored_safety.get('disclaimer_type')
-            print(f"[INTENT] Using safety result from safety_check node: {category}")
+            logger.info(f"[INTENT] Using safety result from safety_check node: {category}")
             if disclaimer:
-                print(f"[INTENT] Disclaimer carried forward: {disclaimer}")
+                logger.info(f"[INTENT] Disclaimer carried forward: {disclaimer}")
         
         result = self.intent_classifier.classify(
             query=state['query'],
@@ -858,13 +861,13 @@ class EnhancedLangGraphOrchestrator:
         state['cached'] = result.get('cached', False)
         
         cache_status = "CACHED" if state['cached'] else "LLM"
-        print(f"[INTENT] [LLM] -> {state['intent']} (confidence: {state['confidence']:.2f})")
+        logger.info(f"[INTENT] [LLM] -> {state['intent']} (confidence: {state['confidence']:.2f})")
         
         return state
     
     def _handle_chitchat_node(self, state: NakshatraState) -> NakshatraState:
         """Node 3a: Handle conversational queries with semantic understanding."""
-        print(f"[CHITCHAT] Response for language: {state.get('detected_language', 'en')}")
+        logger.info(f"[CHITCHAT] Response for language: {state.get('detected_language', 'en')}")
         
         user_name = state['user_profile'].get('name', 'User')
         query = state['query']
@@ -887,19 +890,19 @@ class EnhancedLangGraphOrchestrator:
         if chitchat_match:
             match_type = chitchat_match.name
             confidence = chitchat_match.confidence
-            print(f"[CHITCHAT] Semantic match: {match_type} (confidence: {confidence:.2f})")
+            logger.info(f"[CHITCHAT] Semantic match: {match_type} (confidence: {confidence:.2f})")
             
             # 0. PERSONAL PROFILE QUERIES — "Mera naam kya hai?", "What is my name?"
             #    Must be checked BEFORE identity to avoid misrouting.
             if match_type == "personal_profile_query":
-                print(f"[CHITCHAT] [PROFILE] Match found. Calling profile helper...")
+                logger.info(f"[CHITCHAT] [PROFILE] Match found. Calling profile helper...")
                 state['answer'] = self._answer_personal_profile_query(
                     query=query, 
                     user_profile=state['user_profile'], 
                     language=lang,
                     chart_data=state.get('chart_data')
                 )
-                print(f"[CHITCHAT] [PROFILE] Result length: {len(state['answer'])} characters")
+                logger.info(f"[CHITCHAT] [PROFILE] Result length: {len(state['answer'])} characters")
                 return state
 
 
@@ -985,7 +988,7 @@ class EnhancedLangGraphOrchestrator:
                 return state
 
         # Multilingual/Complex path: Use fast LLM with persona (Fallback for no match or unhandled type)
-        print(f"[CHITCHAT] No specific semantic match or unhandled type. Using LLM fallback.")
+        logger.info(f"[CHITCHAT] No specific semantic match or unhandled type. Using LLM fallback.")
         try:
             from src.ai.personas import get_persona
             persona_type = state['user_profile'].get('preferred_system', 'vedic')
@@ -1073,10 +1076,10 @@ class EnhancedLangGraphOrchestrator:
             
             llm_response = self.fast_llm.invoke(prompt)
             state['answer'] = llm_response.content if hasattr(llm_response, 'content') else str(llm_response)
-            print(f"[CHITCHAT] [LLM] Result: {len(state['answer'])} chars")
+            logger.info(f"[CHITCHAT] [LLM] Result: {len(state['answer'])} chars")
             
         except Exception as e:
-            print(f"[CHITCHAT] Error generating response: {e}")
+            logger.info(f"[CHITCHAT] Error generating response: {e}")
             state['answer'] = get_greeting(lang)
 
         return state
@@ -1092,7 +1095,7 @@ class EnhancedLangGraphOrchestrator:
         Answer questions about the USER's own details (name, DOB, location, sign)
         using the structured user_profile dict — no LLM guesswork.
         """
-        print(f"[PROFILE_DEBUG] Answering profile query: {query}")
+        logger.info(f"[PROFILE_DEBUG] Answering profile query: {query}")
         name = user_profile.get('name', '')
 
 
@@ -1239,7 +1242,7 @@ class EnhancedLangGraphOrchestrator:
     
     def _handle_clarification_node(self, state: NakshatraState) -> NakshatraState:
         """Node 3b: Handle ambiguous queries by asking for clarification."""
-        print(f"[CLARIFICATION] Asking user to specify intent")
+        logger.info(f"[CLARIFICATION] Asking user to specify intent")
         
         user_name = state['user_profile'].get('name', 'User')
         query = state['query']
@@ -1277,7 +1280,7 @@ I can help you with **{topic}** in two ways:
 **Which would you prefer?**
 Reply with "1" for theory or "2" for personalized analysis."""
         
-        print(f"[CLARIFICATION] Topic: {topic}, Language: {lang}")
+        logger.info(f"[CLARIFICATION] Topic: {topic}, Language: {lang}")
         return state
     
     def _get_or_calculate_chart(self, user_id: str, user_profile: Dict, state: Optional[NakshatraState] = None) -> Tuple[Optional[Dict], Optional[VedicChart]]:
@@ -1289,14 +1292,14 @@ Reply with "1" for theory or "2" for personalized analysis."""
         """
         # TIER 1: Priority Injection (Redis/API)
         if state and state.get('chart_data'):
-            print(f"[CALC] [PRIORITY] Using injected chart data for {user_id}")
+            logger.info(f"[CALC] [PRIORITY] Using injected chart data for {user_id}")
             return state['chart_data'], None
 
         # TIER 2: Database Cache (Fallback)
         cached_json = user_profile.get('birth_chart_cache')
         if cached_json:
             try:
-                print(f"[CALC] [FALLBACK] Using cached chart for {user_id}. Deserializing...")
+                logger.info(f"[CALC] [FALLBACK] Using cached chart for {user_id}. Deserializing...")
                 chart_data_dict = json.loads(cached_json)
                 # Reconstruct the full VedicChart object for deeper calculations if needed
                 full_chart = VedicChart.from_dict(chart_data_dict)
@@ -1309,10 +1312,10 @@ Reply with "1" for theory or "2" for personalized analysis."""
                 # Actually, simpler: have a helper in tools.py to format a chart
                 return None, full_chart # We'll let the node handle the dict conversion
             except Exception as e:
-                print(f"[CACHE] [WARN] Failed to load cached chart: {e}")
+                logger.info(f"[CACHE] [WARN] Failed to load cached chart: {e}")
         
         # No cache or error: Calculate fresh
-        print(f"[CACHE] No cache found. Calculating fresh chart for {user_id}...")
+        logger.info(f"[CACHE] No cache found. Calculating fresh chart for {user_id}...")
         try:
             # Standardize field names (UserProfile uses date_of_birth)
             dob = user_profile.get('date_of_birth')
@@ -1322,7 +1325,7 @@ Reply with "1" for theory or "2" for personalized analysis."""
             tz = user_profile.get('timezone', 'Asia/Kolkata')
             
             if not dob or lat is None or lon is None:
-                print(f"[CACHE] [WARN] Missing birth data for {user_id}: dob={dob}, lat={lat}, lon={lon}")
+                logger.info(f"[CACHE] [WARN] Missing birth data for {user_id}: dob={dob}, lat={lat}, lon={lon}")
                 return None, None
                 
             # Combine date and time
@@ -1347,7 +1350,7 @@ Reply with "1" for theory or "2" for personalized analysis."""
             
             return None, full_chart
         except Exception as e:
-            print(f"[CACHE] [ERROR] Fresh calculation failed: {e}")
+            logger.info(f"[CACHE] [ERROR] Fresh calculation failed: {e}")
             return None, None
 
     def _handle_calculation_only_node(self, state: NakshatraState) -> NakshatraState:
@@ -1355,7 +1358,7 @@ Reply with "1" for theory or "2" for personalized analysis."""
         Node 3b: CALCULATION_ONLY - Return raw chart data without interpretation.
         Uses VedicEngine, NO RAG, NO LLM interpretation.
         """
-        print("[CALCULATION_ONLY] Generating raw chart data")
+        logger.info("[CALCULATION_ONLY] Generating raw chart data")
         
         user_profile = state['user_profile']
         query = state['query'].lower()
@@ -1377,7 +1380,7 @@ Reply with "1" for theory or "2" for personalized analysis."""
         
         if any(keyword in query for keyword in profile_keywords):
             # User asking about their own birth details - provide direct answer
-            print("[CALCULATION_ONLY] User asking about profile data")
+            logger.info("[CALCULATION_ONLY] User asking about profile data")
             
             response = f"""**Your Birth Details:**
 
@@ -1410,7 +1413,7 @@ These details are used to calculate your Vedic birth chart with precise planetar
                 state['answer'] = "Could not generate or load your birth chart. Please check your birth details."
                 return state
             
-            print(f"[CALCULATION_ONLY] Chart: Lagna={chart_data.get('lagna', {}).get('sign', 'Unknown')}, Rashi={chart_data.get('planets', {}).get('MOON', {}).get('sign', 'Unknown')}")
+            logger.info(f"[CALCULATION_ONLY] Chart: Lagna={chart_data.get('lagna', {}).get('sign', 'Unknown')}, Rashi={chart_data.get('planets', {}).get('MOON', {}).get('sign', 'Unknown')}")
             
             # Use LLM to extract only what was asked for
             extraction_prompt = f"""You are a data extraction assistant. The user asked: "{state['query']}"
@@ -1457,7 +1460,7 @@ Provide a concise answer:"""
             # Calculate current dasha if missing
             if not state.get('dasha_data'):
                 try:
-                    print("[CALCULATION_ONLY] Calculating dasha...")
+                    logger.info("[CALCULATION_ONLY] Calculating dasha...")
                     dasha_tool = self.calculation_tools.get('calculate_current_dasha')
                     if dasha_tool:
                         dasha_data = dasha_tool.invoke({
@@ -1469,22 +1472,22 @@ Provide a concise answer:"""
                         if "error" not in dasha_data:
                             state['dasha_data'] = dasha_data
                 except Exception as e:
-                    print(f"[CALCULATION_ONLY] Dasha calculation error: {e}")
+                    logger.info(f"[CALCULATION_ONLY] Dasha calculation error: {e}")
 
             # Calculate current transits if missing
             if not state.get('transit_data'):
                 try:
-                    print("[CALCULATION_ONLY] Calculating transits...")
+                    logger.info("[CALCULATION_ONLY] Calculating transits...")
                     transit_tool = self.calculation_tools.get('calculate_current_transits')
                     if transit_tool:
                         transit_data = transit_tool.invoke({})
                         if "error" not in transit_data:
                             state['transit_data'] = transit_data
                 except Exception as e:
-                    print(f"[CALCULATION_ONLY] Transit calculation error: {e}")
+                    logger.info(f"[CALCULATION_ONLY] Transit calculation error: {e}")
 
         except Exception as e:
-            print(f"[ERROR] Calculation failed: {e}")
+            logger.error(f"[ERROR] Calculation failed: {e}")
             import traceback
             traceback.print_exc()
             state['error'] = str(e)
@@ -1505,7 +1508,7 @@ Provide a concise answer:"""
         3. Build prompt with validation constraints
         4. Generate LLM response
         """
-        print("[RAG_WITH_CALCULATION] Personalized prediction flow with validation")
+        logger.info("[RAG_WITH_CALCULATION] Personalized prediction flow with validation")
         
         user_profile = state['user_profile']
         
@@ -1514,7 +1517,7 @@ Provide a concise answer:"""
             # STEP 1: Calculate user's chart
             # ================================================================
             if user_profile.get('date_of_birth'):
-                print("[RAG_WITH_CALCULATION] Step 1: Calculating user's chart...")
+                logger.info("[RAG_WITH_CALCULATION] Step 1: Calculating user's chart...")
                 
                 if not state.get('chart_data'):
                     try:
@@ -1529,14 +1532,14 @@ Provide a concise answer:"""
                             state['chart_data'] = serialize_vedic_chart(full_chart)
                             
                         if state.get('chart_data'):
-                            print(f"[RAG_WITH_CALCULATION] Chart ready: Lagna={state['chart_data'].get('lagna') or state['chart_data'].get('ascendant', {}).get('rashi', 'Unknown')}")
+                            logger.info(f"[RAG_WITH_CALCULATION] Chart ready: Lagna={state['chart_data'].get('lagna') or state['chart_data'].get('ascendant', {}).get('rashi', 'Unknown')}")
                     except Exception as e:
-                        print(f"[RAG_WITH_CALCULATION] Chart calculation error: {e}")
+                        logger.info(f"[RAG_WITH_CALCULATION] Chart calculation error: {e}")
 
                 # Calculate current dasha (UN-NESTED from chart check)
                 if not state.get('dasha_data'):
                     try:
-                        print("[RAG_WITH_CALCULATION] Calculating dasha...")
+                        logger.info("[RAG_WITH_CALCULATION] Calculating dasha...")
                         dasha_tool = self.calculation_tools.get('calculate_current_dasha')
                         if dasha_tool:
                             dasha_data = dasha_tool.invoke({
@@ -1547,25 +1550,25 @@ Provide a concise answer:"""
                             })
                             if "error" not in dasha_data:
                                 state['dasha_data'] = dasha_data
-                                print(f"[RAG_WITH_CALCULATION] Dasha: {dasha_data.get('dasha_sequence', 'Unknown')}")
+                                logger.info(f"[RAG_WITH_CALCULATION] Dasha: {dasha_data.get('dasha_sequence', 'Unknown')}")
                     except Exception as e:
-                        print(f"[RAG_WITH_CALCULATION] Dasha calculation error: {e}")
+                        logger.info(f"[RAG_WITH_CALCULATION] Dasha calculation error: {e}")
                 
                 # Calculate current transits (UN-NESTED from chart check)
                 if not state.get('transit_data'):
                     try:
-                        print("[RAG_WITH_CALCULATION] Calculating transits...")
+                        logger.info("[RAG_WITH_CALCULATION] Calculating transits...")
                         transit_tool = self.calculation_tools.get('calculate_current_transits')
                         if transit_tool:
                             transit_data = transit_tool.invoke({})
                             if "error" not in transit_data:
                                 state['transit_data'] = transit_data
-                                print(f"[RAG_WITH_CALCULATION] Transits for {transit_data.get('date', 'current')}")
+                                logger.info(f"[RAG_WITH_CALCULATION] Transits for {transit_data.get('date', 'current')}")
                     except Exception as e:
-                        print(f"[RAG_WITH_CALCULATION] Transit calculation error: {e}")
+                        logger.info(f"[RAG_WITH_CALCULATION] Transit calculation error: {e}")
 
             else:
-                print("[RAG_WITH_CALCULATION] No birth data. Routing to ask for profile.")
+                logger.info("[RAG_WITH_CALCULATION] No birth data. Routing to ask for profile.")
                 lang = state.get('detected_language', 'en')
                 if lang in ('hi', 'hi-lat'):
                     state['answer'] = "Apki kundli ka vishleshan karne ke liye janm vivran ki avashyakta hai. Kripya app mein apna profile pura karein."
@@ -1581,26 +1584,26 @@ Provide a concise answer:"""
             
             if state.get('chart_data') and ENHANCED_ANALYSIS_AVAILABLE and self.chart_analyzer:
                 try:
-                    print("[ENHANCED_ANALYSIS] Calculating dignities, lords, aspects...")
+                    logger.info("[ENHANCED_ANALYSIS] Calculating dignities, lords, aspects...")
                     enhanced_analysis = self.chart_analyzer.analyze_chart(state['chart_data'])
                     
                     # Log key findings
-                    print(f"[ENHANCED_ANALYSIS] Found {len(enhanced_analysis['dignities'])} planetary dignities")
-                    print(f"[ENHANCED_ANALYSIS] Calculated {len(enhanced_analysis['house_lords'])} house lordships")
-                    print(f"[ENHANCED_ANALYSIS] Mapped {len(enhanced_analysis['aspects'])} aspect patterns")
+                    logger.info(f"[ENHANCED_ANALYSIS] Found {len(enhanced_analysis['dignities'])} planetary dignities")
+                    logger.info(f"[ENHANCED_ANALYSIS] Calculated {len(enhanced_analysis['house_lords'])} house lordships")
+                    logger.info(f"[ENHANCED_ANALYSIS] Mapped {len(enhanced_analysis['aspects'])} aspect patterns")
                     
                     # Store in state for later use
                     state['enhanced_analysis'] = enhanced_analysis
                     
                 except Exception as e:
-                    print(f"[ENHANCED_ANALYSIS] Error: {e}")
+                    logger.info(f"[ENHANCED_ANALYSIS] Error: {e}")
 
             # ================================================================
             # STEP 1.5: VALIDATE CHART (PHASE 12 - NEW)
             # ================================================================
             if state.get('chart_data') and VALIDATION_AVAILABLE:
                 try:
-                    print("[VALIDATION] Running validation...")
+                    logger.info("[VALIDATION] Running validation...")
                     
                     # Detect query type with LLM confirmation, biased by high-level
                     # intent domain from the ContextManager (if available).
@@ -1616,11 +1619,11 @@ Provide a concise answer:"""
                     
                     # Skip validation for general questions
                     if query_type == 'general':
-                        print(f"[VALIDATION] Skipping validation for general question")
+                        logger.info(f"[VALIDATION] Skipping validation for general question")
                     else:
                         # Determine tier (optimized for live chat)
                         tier = determine_validation_tier(state['query'])
-                        print(f"[VALIDATION] Query: {query_type}, Tier: {tier}")
+                        logger.info(f"[VALIDATION] Query: {query_type}, Tier: {tier}")
                         
                         # Get or create validation engine
                         if not hasattr(self, 'validation_engine'):
@@ -1632,16 +1635,16 @@ Provide a concise answer:"""
                                 rules_path = Path("optimized/tiered_rules.json")
                                 
                                 if rules_path.exists():
-                                    print("[VALIDATION] Initializing engine...")
+                                    logger.info("[VALIDATION] Initializing engine...")
                                     self.validation_engine = VedicValidationEngineV2(
                                         tiered_rules_path=str(rules_path),
                                         indexed_rules_path="optimized/indexed_rules.json"
                                     )
-                                    print("[VALIDATION] [OK] Engine ready")
+                                    logger.info("[VALIDATION] [OK] Engine ready")
                                 else:
-                                    print("[VALIDATION] Rules file not found")
+                                    logger.info("[VALIDATION] Rules file not found")
                             except Exception as e:
-                                print(f"[VALIDATION] Init failed: {e}")
+                                logger.info(f"[VALIDATION] Init failed: {e}")
                         
                         if self.validation_engine:
                             # Prepare chart for validation
@@ -1683,12 +1686,12 @@ Provide a concise answer:"""
                             state['validation_strength'] = val_result.overall_strength
                             state['validation_can_proceed'] = val_result.can_proceed
                             
-                            print(f"[VALIDATION] [OK] Strength: {val_result.overall_strength:.1f}/10")
-                            print(f"[VALIDATION] Critical failures: {len(val_result.critical_failures)}")
+                            logger.info(f"[VALIDATION] [OK] Strength: {val_result.overall_strength:.1f}/10")
+                            logger.info(f"[VALIDATION] Critical failures: {len(val_result.critical_failures)}")
                             
                             # HARD HALT CHECK (only for extreme cases)
                             if should_hard_halt(val_result.overall_strength, val_result.critical_failures):
-                                print(f"[VALIDATION] [STOP] HARD HALT - Refusing prediction")
+                                logger.info(f"[VALIDATION] [STOP] HARD HALT - Refusing prediction")
                                 state['answer'] = build_halt_response(
                                     state['validation_result'],
                                     state['user_profile'],
@@ -1703,10 +1706,10 @@ Provide a concise answer:"""
                                     query_type,
                                     val_result.critical_failures
                                 )
-                                print(f"[VALIDATION] Added disclaimer for weak chart")
+                                logger.info(f"[VALIDATION] Added disclaimer for weak chart")
                 
                 except Exception as e:
-                    print(f"[VALIDATION] Error: {e}")
+                    logger.info(f"[VALIDATION] Error: {e}")
                     import traceback
                     traceback.print_exc()
                     # Don't block on validation errors - proceed without validation
@@ -1732,7 +1735,7 @@ Provide a concise answer:"""
                             query_type_for_synthesis = 'general'
                     
                     if query_type_for_synthesis and query_type_for_synthesis != 'general' and self.synthesis_engine:
-                        print(f"[SYNTHESIS] Building rule-based analysis for {query_type_for_synthesis}...")
+                        logger.info(f"[SYNTHESIS] Building rule-based analysis for {query_type_for_synthesis}...")
                         
                         synthesis = self.synthesis_engine.synthesize(
                             chart_data=state['chart_data'],
@@ -1743,22 +1746,22 @@ Provide a concise answer:"""
                         
                         state['synthesis'] = synthesis
                         
-                        print(f"[SYNTHESIS] [OK] Identified {len(synthesis.get('chart_strengths', []))} strengths")
-                        print(f"[SYNTHESIS] [OK] Identified {len(synthesis.get('chart_challenges', []))} challenges")
-                        print(f"[SYNTHESIS] [OK] Detected {len(synthesis.get('yogas_detected', []))} yogas")
-                        print(f"[SYNTHESIS] [OK] Analyzed {len(synthesis.get('key_houses', []))} key houses")
+                        logger.info(f"[SYNTHESIS] [OK] Identified {len(synthesis.get('chart_strengths', []))} strengths")
+                        logger.info(f"[SYNTHESIS] [OK] Identified {len(synthesis.get('chart_challenges', []))} challenges")
+                        logger.info(f"[SYNTHESIS] [OK] Detected {len(synthesis.get('yogas_detected', []))} yogas")
+                        logger.info(f"[SYNTHESIS] [OK] Analyzed {len(synthesis.get('key_houses', []))} key houses")
                     else:
-                        print(f"[SYNTHESIS] Skipped - query_type is '{query_type_for_synthesis}'")
+                        logger.info(f"[SYNTHESIS] Skipped - query_type is '{query_type_for_synthesis}'")
                         
                 except Exception as e:
-                    print(f"[SYNTHESIS] Error: {e}")
+                    logger.info(f"[SYNTHESIS] Error: {e}")
                     import traceback
                     traceback.print_exc()
 
             # ================================================================
             # STEP 2: Retrieve Relevant Knowledge
             # ================================================================
-            print("[RAG_WITH_CALCULATION] Step 2: Retrieving knowledge...")
+            logger.info("[RAG_WITH_CALCULATION] Step 2: Retrieving knowledge...")
             
             knowledge_chunks = state.get('knowledge_chunks') or []
 
@@ -1778,10 +1781,10 @@ Provide a concise answer:"""
                     language=state.get('detected_language', 'en')
                 )
             elif not knowledge_chunks:
-                print("[RAG_WITH_CALCULATION] No retriever - proceeding with zero knowledge")
+                logger.info("[RAG_WITH_CALCULATION] No retriever - proceeding with zero knowledge")
             
             state['knowledge_chunks'] = knowledge_chunks
-            print(f"[RAG_WITH_CALCULATION] Retrieved {len(knowledge_chunks)} chunks")
+            logger.info(f"[RAG_WITH_CALCULATION] Retrieved {len(knowledge_chunks)} chunks")
             
             # ================================================================
             # STEP 3: Build Prompt (with validation constraints)
@@ -1880,7 +1883,7 @@ Provide a concise answer:"""
                 # Chart calculation failed — do NOT hallucinate chart-specific details.
                 # Fall back to RAG_ONLY mode and tell the LLM explicitly that birth chart
                 # data is unavailable so it provides general guidance only.
-                print("[RAG_WITH_CALCULATION] [WARN] No chart data — falling back to RAG_ONLY prompt")
+                logger.info("[RAG_WITH_CALCULATION] [WARN] No chart data — falling back to RAG_ONLY prompt")
                 no_chart_notice = (
                     "\n\nIMPORTANT: Birth chart data could not be calculated for this user (likely due to an "
                     "invalid date of birth format). Do NOT invent, assume, or state any planetary positions, "
@@ -1907,7 +1910,7 @@ Provide a concise answer:"""
                     else:
                         prompt = prompt + no_chart_notice
                 else:
-                    print("[RAG_WITH_CALCULATION] [ERROR] No prompt_builder - using fallback template")
+                    logger.info("[RAG_WITH_CALCULATION] [ERROR] No prompt_builder - using fallback template")
                     prompt = (
                         f"You are a Vedic astrology assistant.{no_chart_notice}\n\n"
                         f"====USER_QUERY_MARKER====\n\"{state['query']}\""
@@ -1928,7 +1931,7 @@ Provide a concise answer:"""
             # When user intent is NEW_TOPIC, always treat as INITIAL so we give short response + offer detail
             if _intent_info.get('intent_type') == 'NEW_TOPIC':
                 current_phase = PHASE_INITIAL
-                print(f"[PHASE] intent_type=NEW_TOPIC → forcing phase to INITIAL (short response + offer detail)")
+                logger.info(f"[PHASE] intent_type=NEW_TOPIC → forcing phase to INITIAL (short response + offer detail)")
             current_topic = conv_phase_data.get('topic')
             followup_count = conv_phase_data.get('followup_count', 0)
             # Use the true original question (before semantic expansion) for detection
@@ -1942,7 +1945,7 @@ Provide a concise answer:"""
             )
             if _is_short_cont:
                 user_response_type = 'AFFIRMATIVE'
-                print(f"[PHASE] Short CONTINUATION in FOLLOWUP_LOOP → treating as AFFIRMATIVE")
+                logger.info(f"[PHASE] Short CONTINUATION in FOLLOWUP_LOOP → treating as AFFIRMATIVE")
             # LLM fallback for remaining OTHER cases in active phases
             elif user_response_type == 'OTHER' and current_phase in (PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP):
                 _last_bot = next(
@@ -1953,8 +1956,8 @@ Provide a concise answer:"""
                     _orig_q, _last_bot, getattr(self, 'fast_llm', None), current_phase
                 )
                 if user_response_type != 'OTHER':
-                    print(f"[PHASE] LLM fallback classified: {user_response_type}")
-            print(f"[PHASE] user_response_type={user_response_type} (from original: '{_orig_q[:40]}')")
+                    logger.info(f"[PHASE] LLM fallback classified: {user_response_type}")
+            logger.info(f"[PHASE] user_response_type={user_response_type} (from original: '{_orig_q[:40]}')")
 
             # Detect the query domain for follow-up question selection
             # For AWAITING_DETAIL/FOLLOWUP_LOOP affirmatives, validation ran on "Haan karo"
@@ -1964,7 +1967,7 @@ Provide a concise answer:"""
                 _topic = current_topic
             else:
                 _topic = _val_qt or current_topic or 'general'
-            print(f"[PHASE] topic={_topic} (val_qt={_val_qt}, current_topic={current_topic})")
+            logger.info(f"[PHASE] topic={_topic} (val_qt={_val_qt}, current_topic={current_topic})")
 
             # Choose follow-up question — prefer LLM-generated (contextual) over static bank.
             # generate_followup_question() has a 4-second hard timeout internally so it
@@ -2030,7 +2033,7 @@ Provide a concise answer:"""
                         _chart_ctx = '\n'.join(_ctx_lines)
                 except Exception:
                     pass
-            print(f"[PHASE] Generating follow-up question (topic={_topic}, lang={_fq_language}, timeout=4s)...")
+            logger.info(f"[PHASE] Generating follow-up question (topic={_topic}, lang={_fq_language}, timeout=4s)...")
             _suggested_followup = generate_followup_question(
                 topic=_topic,
                 last_answer=_last_bot_msg_for_fq,
@@ -2040,14 +2043,14 @@ Provide a concise answer:"""
                 chart_context=_chart_ctx,
                 timeout=4.0
             )
-            print(f"[PHASE] Follow-up question ready: {_suggested_followup[:80]}")
+            logger.info(f"[PHASE] Follow-up question ready: {_suggested_followup[:80]}")
 
             phase_instruction = ""
             new_phase_data = {}  # Will be set on state for chat_stateless to persist
 
             if current_phase == PHASE_AWAITING_DETAIL and user_response_type == 'NEGATIVE':
                 # ── User declined details → Ask an alternative follow-up question ──
-                print(f"[PHASE] AWAITING_DETAIL + NEGATIVE → generating alternative follow-up")
+                logger.info(f"[PHASE] AWAITING_DETAIL + NEGATIVE → generating alternative follow-up")
                 # Pick a different follow-up than the one we would have asked
                 _alt_idx = (_followup_idx + 1) % len(_followup_bank) if _followup_bank else 0
                 alt_followup = _followup_bank[_alt_idx] if _followup_bank else "Would you like to explore another aspect of your chart?"
@@ -2066,7 +2069,7 @@ Provide a concise answer:"""
 
             elif current_phase == PHASE_AWAITING_DETAIL and user_response_type == 'AFFIRMATIVE':
                 # ── User wants details → Generate comprehensive response + follow-up question ──
-                print(f"[PHASE] AWAITING_DETAIL + AFFIRMATIVE > detailed response with follow-up")
+                logger.info(f"[PHASE] AWAITING_DETAIL + AFFIRMATIVE > detailed response with follow-up")
                 _lang_for_phase = state.get('detected_language', 'en')
                 _voice_charter = get_voice_charter(_lang_for_phase)
                 _flow_policy = get_response_structure_policy()
@@ -2074,9 +2077,18 @@ Provide a concise answer:"""
 PROGRESSIVE DISCLOSURE -- DETAILED RESPONSE MODE (OVERRIDES word-limit instructions above):
 The user asked for more details. Give a comprehensive, insightful answer now.
 LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lang_for_phase}. Do NOT mix languages.
-1. TARGET LENGTH: 260-360 words. Be thorough without sounding repetitive.
-2. Explain 3-5 key astrological factors, but always translate them into simple, real-life language.
-   Avoid long Sanskrit lists; briefly name a factor, then explain what it means in everyday terms.
+1. TARGET LENGTH: 500-600 words. Be thorough without sounding repetitive.
+2. Explain AT LEAST 5 key astrological factors as numbered points — this is mandatory.
+   You MUST include a minimum of 5 numbered points. Choose from:
+   (a) House-lord logic — name the relevant house lord, its sign, dignity, and what that means for the person's life
+   (b) Dasha/Pratyantar timing — the active period with its specific window
+   (c) Named yoga — if a relevant yoga is present in the YOGAS DETECTED section, NAME IT (e.g., "Gaj Kesari Yoga", "Raj Yoga") and explain in one sentence what it means for THIS person
+   (d) Planetary condition — if a key planet is Retrograde, Combust, or Stationary, NAME the condition explicitly and explain its effect on delivery (e.g., "Venus is retrograde here, which means romantic matters tend to get revisited or delayed before they settle")
+   (e) Divisional chart confirmation — use Navamsa for marriage, Dasamsa for career — say "Navamsa confirms..." or "Dasamsa shows..." (Sanskrit names OK; never use D9, D10 numbers)
+   (f) Vargottama — if a relevant planet is listed as Vargottama, say so: "strengthened across multiple charts, giving amplified results during its dasha period"
+   (g) Gochara crosscheck — if Jupiter or Saturn transit (from GOCHARA section) supports or opposes the timing window, note it in one sentence
+   If fewer than 5 of the above are strongly applicable, use a second house-lord or a second dasha/antardasha factor to reach 5.
+   Always translate each factor into one specific real-life implication. Never just name a factor — always say what it MEANS for this person.
 3. Use the Pratyantar and Antardasha data above to derive longer but precise timing windows:
    - Always respect the full mathematical span of the relevant Pratyantars/Antardashas — do NOT compress everything into the current year if the data extends into later years.
    - Express timing only as approximate ranges such as "between Aug 2027 and Mar 2028", "from late 2026 to mid 2027", or "most of 2030",
@@ -2084,15 +2096,23 @@ LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lan
    - Do NOT mention exact calendar days (no DD/MM); use only month names and years in user-facing text (e.g., "March 2027", "Oct 2028").
    - Avoid framing the MAIN timing window as starting exactly "now" or "from today" in user-facing language. Even if a Pratyantar is currently in progress, describe the supportive phase as a FUTURE-leaning window (for example: "coming months", "second half of 2026", "from early 2027 to mid 2027"), not "abhi se".
    - CONSISTENCY WITH INITIAL ANSWER (CRITICAL): The main timing window in this detailed answer MUST stay aligned with the headline window you already gave in the initial short response (e.g., "2027 ke shuruaat se 2028 ke beech"). You may refine inside that same broad window (by describing smaller sub‑windows), but do NOT contradict it by shifting the best period to a totally different year or only a 1–2 month slice.
-4. Include the Next Favorable Window section, also expressed as an approximate month/year range.
+4. Do NOT add any heading like "Next Favorable Window". If a secondary supportive window exists, mention it naturally inside the numbered points.
 5. Maintain a warm, conversational narrative -- weave factors together, do not just list them.
 6. NEVER use H1, H2, H3 etc. -- always write 1st house, 2nd house, 3rd house.
    Use house annotations: e.g., 7th house (Marriage and Partnership).
 7. DO NOT repeat the brief answer already given -- build deeper upon it.
-8. End naturally with a RELATED follow-up question on the same topic (wording can vary naturally).
-   Suggested follow-up intent: "{_suggested_followup}"
-9. { _voice_charter }
-10. { _flow_policy }
+8. Before the follow-up question, close the substantive analysis with ONE short convergence sentence
+   that names 2-3 independent factors all pointing to the same conclusion. Vary the wording naturally.
+   Examples:
+   - "Three independent signals — Venus Mahadasha, Jupiter in the 1st house (Self), and an exalted 7th lord in Navamsa — all converge on this conclusion."
+   - "Do alag-alag kaaran — Saturn ki Dasha aur 10th house (Career) ka lord — ek hi result ki taraf ishara kar rahe hain."
+   Use the ACTUAL factors from THIS chart, not these examples verbatim.
+9. End with ONE follow-up question that pivots to a DIFFERENT life area — career, health, children, finances, or similar.
+   STRICTLY FORBIDDEN: do NOT ask if the user wants more detail, a deeper breakdown, or further explanation of the same topic just covered.
+   The question must open a new door, not dig deeper into the same one.
+   Use this as your suggested pivot topic: "{_suggested_followup}"
+10. { _voice_charter }
+11. { _flow_policy }
 """
                 new_phase_data = {
                     "phase": PHASE_FOLLOWUP_LOOP,
@@ -2105,7 +2125,7 @@ LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lan
 
             elif current_phase == PHASE_FOLLOWUP_LOOP and user_response_type == 'AFFIRMATIVE':
                 # ── User agreed to a follow-up question → Answer it, then STOP asking ──
-                print(f"[PHASE] FOLLOWUP_LOOP + AFFIRMATIVE → answering follow-up (no further questions)")
+                logger.info(f"[PHASE] FOLLOWUP_LOOP + AFFIRMATIVE → answering follow-up (no further questions)")
                 # Extract the exact question the bot asked in its last message so we
                 # can inject it explicitly — the LLM often ignores "look at last message"
                 _hist = state.get('conversation_history') or []
@@ -2123,7 +2143,7 @@ LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lan
                         _last_question = _q_sentences[-1].strip()
                 _answer_topic = f'"{_last_question}"' if _last_question else "the specific question in your previous message"
                 _lang_for_phase = state.get('detected_language', 'en')
-                print(f"[PHASE] Follow-up topic to answer: {_last_question[:80]}")
+                logger.info(f"[PHASE] Follow-up topic to answer: {_last_question[:80]}")
                 phase_instruction = f"""
 PROGRESSIVE DISCLOSURE -- FOLLOW-UP ANSWER MODE (THIS OVERRIDES ALL OTHER INSTRUCTIONS):
 
@@ -2156,7 +2176,7 @@ RULES:
 
             elif current_phase == PHASE_FOLLOWUP_LOOP and user_response_type == 'NEGATIVE':
                 # ── User declined follow-up → Offer alternative ──
-                print(f"[PHASE] FOLLOWUP_LOOP + NEGATIVE → alternative follow-up")
+                logger.info(f"[PHASE] FOLLOWUP_LOOP + NEGATIVE → alternative follow-up")
                 _alt_idx = (followup_count + 2) % len(_followup_bank) if _followup_bank else 0
                 alt_followup = _followup_bank[_alt_idx] if _followup_bank else "Your chart has more to reveal — what else are you curious about?"
                 state['answer'] = f"Sure! Here's something else interesting from your chart — {alt_followup}"
@@ -2171,13 +2191,12 @@ RULES:
 
             else:
                 # ── INITIAL / NEW TOPIC → Short response (under 100 words) ──
-                print(f"[PHASE] INITIAL -> short response with 1-2 critical factors")
+                logger.info(f"[PHASE] INITIAL -> short response with 1-2 critical factors")
                 _lang_now = state.get('detected_language', 'en')
-                _closing_q = pick_contextual_closing(
+                _closing_q = pick_initial_closing(
                     rng=random.Random(state.get('query', '')),
                     language=_lang_now,
                     domain=_topic,
-                    ask_question=True,
                 )
                 _voice_charter = get_voice_charter(_lang_now)
                 _flow_policy = get_response_structure_policy()
@@ -2185,7 +2204,7 @@ RULES:
 PROGRESSIVE DISCLOSURE -- INITIAL SHORT RESPONSE (OVERRIDES ALL OTHER FORMAT INSTRUCTIONS):
 Use these guidelines strictly, but write in natural human phrasing.
 
-1. TARGET LENGTH: 120-180 words.
+1. TARGET LENGTH: 150-200 words.
 
 2. ZERO ASTROLOGICAL JARGON in this short answer. Do NOT use: house, houses, 7th, 10th, lord, dasha, pratyantar, antardasha, nakshatra, Venus, Jupiter, Saturn, Mars, Mercury, Moon, Sun, Rahu, Ketu, sign, signs, yoga, aspect, or any Sanskrit/technical terms. Describe the prediction in plain everyday language only (e.g. "this period is favourable for marriage" or "you may meet your partner through friends").
 
@@ -2194,15 +2213,15 @@ Use these guidelines strictly, but write in natural human phrasing.
    - one approximate FUTURE time window in plain language (e.g. "around 2027", "between March and August 2027", or "in the second half of 2026").
    You may include BOTH a simple prediction and a future window, but never give a vague answer with no fact or timeframe.
    For questions that are clearly about a FAVOURABLE EVENT (marriage, job change, buying a home), keep the focus of this short answer on the MAIN favourable window and a simple positive statement. Reserve detailed discussion of challenges, strain, or counseling for the detailed answer unless the user explicitly asks about problems.
-   Do NOT phrase the window as "abhi", "ab se", "from now", or "immediately" — always describe a FUTURE period starting at least some weeks/months ahead of today (for example: "aane wale kuch mahino mein", "2026 ke doosre aadhe mein", "2027 ke shuruat se").
+   Do NOT phrase the window as "abhi", "ab se", "from now", or "immediately" — always describe a FUTURE period starting at least some weeks/months ahead of today (for example: "aane wale kuch mahino mein", "2026 ke second half mein", "2027 ke shuruat se").
 
-4. NEVER include a "Next Favorable Window" section — that belongs in the detailed response only.
+4. Do NOT include any heading like "Next Favorable Window" in this short answer or the detailed answer. When there are secondary time windows, describe them naturally inside the explanation or numbered factor list, without using that label.
 
 5. Stay tightly on the topic the user asked about. If they asked "WHEN" something will happen, spend almost all of the short answer on that timing and its practical meaning; do NOT drift into long generic life advice or unrelated areas.
 
 6. Write the ENTIRE response in the SAME language as the user's query.
 
-7. End with one natural invitation for deeper analysis (wording can vary):
+7. End with EXACTLY this closing line — do not rephrase it, do not add a second version before or after it:
    "{_closing_q}"
 8. {_voice_charter}
 9. {_flow_policy}
@@ -2227,6 +2246,32 @@ Use these guidelines strictly, but write in natural human phrasing.
                 prompt = prompt + "\n" + phase_instruction
 
             # ================================================================
+            # PROMPT DEBUG LOGGING — confirms instructions reach the LLM
+            # ================================================================
+            system_part = prompt.split("====USER_QUERY_MARKER====")[0].strip()
+            logger.debug(f"[PROMPT_DEBUG] phase={current_phase} | system_prompt_length={len(system_part)}")
+            # Log key sections to verify they are present
+            has_engine_guidelines = "ENGINE USAGE GUIDELINES" in system_part
+            has_planetary_conditions = "PLANETARY CONDITIONS" in system_part
+            has_yogas = "Yogas (from YOGAS DETECTED" in system_part
+            has_dosha_reframe = "FEARED PLACEMENT REFRAMING" in system_part
+            has_convergence = "convergence sentence" in system_part
+            has_dispositor = "DISPOSITOR CHAIN" in system_part
+            has_divisional = "DIVISIONAL CHART ANALYSIS" in system_part
+            logger.info(
+                f"[PROMPT_CHECKLIST] phase={current_phase} | "
+                f"ENGINE_GUIDELINES={has_engine_guidelines} | "
+                f"PLANETARY_CONDITIONS={has_planetary_conditions} | "
+                f"YOGAS={has_yogas} | "
+                f"DOSHA_REFRAME={has_dosha_reframe} | "
+                f"CONVERGENCE={has_convergence} | "
+                f"DISPOSITOR={has_dispositor} | "
+                f"DIVISIONAL_CHARTS={has_divisional}"
+            )
+            if phase_instruction:
+                logger.info(f"[PHASE_INSTRUCTION] length={len(phase_instruction)} | preview={phase_instruction[:200].replace(chr(10), ' ')!r}")
+
+            # ================================================================
             # STEP 4: Build Messages Array with Conversation History
             # ================================================================
             messages = []
@@ -2242,7 +2287,7 @@ Use these guidelines strictly, but write in natural human phrasing.
             if conversation_history:
                 formatted_history = self._format_conversation_for_llm(conversation_history)
                 messages.extend(formatted_history)
-                print(f"[RAG_WITH_CALCULATION] Including {len(formatted_history)} previous messages")
+                logger.info(f"[RAG_WITH_CALCULATION] Including {len(formatted_history)} previous messages")
 
             # Add current query with chart context
             user_prompt = "USER_QUERY:" + prompt.split("====USER_QUERY_MARKER====")[1]
@@ -2254,28 +2299,12 @@ Use these guidelines strictly, but write in natural human phrasing.
             # ================================================================
             # STEP 5: Generate LLM Response with Full Context
             # ================================================================
-            print(f"[LLM] Sending {len(messages)} messages to LLM (phase={current_phase})")
+            logger.info(f"[LLM] Sending {len(messages)} messages to LLM (phase={current_phase})")
             response = self.llm.invoke(messages)
             state['answer'] = response.content if hasattr(response, 'content') else str(response)
-            # If we just generated the detailed response, ensure it ends with
-            # a follow-up intent without forcing exact phrasing.
-            _followup = state.pop('_detailed_followup', None)
-            if _followup:
-                _ans = (state.get('answer') or "").rstrip()
-                if not _ans.endswith("?"):
-                    _lang = state.get('detected_language', 'en')
-                    _topic = (state.get('conversation_phase') or {}).get('topic', 'general')
-                    natural_followup = pick_contextual_closing(
-                        rng=random.Random(state.get('query', '')),
-                        language=_lang,
-                        domain=_topic,
-                        ask_question=True,
-                    )
-                    state['answer'] = (_ans + "\n\n" + natural_followup).strip()
-                    print("[PHASE] Appended natural follow-up prompt")
             
         except Exception as e:
-            print(f"[ERROR] RAG_WITH_CALCULATION failed: {e}")
+            logger.error(f"[ERROR] RAG_WITH_CALCULATION failed: {e}")
             import traceback
             traceback.print_exc()
             state['error'] = str(e)
@@ -2290,7 +2319,7 @@ Use these guidelines strictly, but write in natural human phrasing.
         
         For questions like: "What does Mars in 7th house mean?", "Explain the 10th house"
         """
-        print("[RAG_ONLY] General theory question - no chart calculation needed")
+        logger.info("[RAG_ONLY] General theory question - no chart calculation needed")
         
         try:
             knowledge_chunks = state.get('knowledge_chunks') or []
@@ -2303,10 +2332,10 @@ Use these guidelines strictly, but write in natural human phrasing.
                     language=state.get('detected_language', 'en')
                 )
             elif not knowledge_chunks:
-                 print("[RAG_ONLY] [WARN] No retriever provided and no chunks injected.")
+                 logger.info("[RAG_ONLY] [WARN] No retriever provided and no chunks injected.")
             
             state['knowledge_chunks'] = knowledge_chunks
-            print(f"[RAG_ONLY] Retrieved {len(knowledge_chunks)} knowledge chunks")
+            logger.info(f"[RAG_ONLY] Retrieved {len(knowledge_chunks)} knowledge chunks")
             
             # Step 2: Build prompt for general theory
             prompt = self._build_theory_prompt(
@@ -2317,7 +2346,7 @@ Use these guidelines strictly, but write in natural human phrasing.
             )
             
             if not knowledge_chunks or len(knowledge_chunks) == 0:
-                print("[RAG_ONLY] [WARN] No chunks - using fallback")
+                logger.info("[RAG_ONLY] [WARN] No chunks - using fallback")
                 
                 # Quick fallback for common queries
                 query_lower = state['query'].lower()
@@ -2362,7 +2391,7 @@ I apologize, but I could not find relevant information in the classical astrolog
 I prefer to say "I don't know" rather than provide information not grounded in classical sources.
 
 🙏 Thank you for understanding."""
-                print("[RAG_ONLY] [GROUNDED] Refused to answer without sources")
+                logger.info("[RAG_ONLY] [GROUNDED] Refused to answer without sources")
                 return state
             
             # Step 3: Generate response with LLM (only if we have sources!)
@@ -2380,7 +2409,7 @@ I prefer to say "I don't know" rather than provide information not grounded in c
             if conversation_history:
                 formatted_history = self._format_conversation_for_llm(conversation_history)
                 messages.extend(formatted_history)
-                print(f"[RAG_ONLY] Including {len(formatted_history)} previous messages")
+                logger.info(f"[RAG_ONLY] Including {len(formatted_history)} previous messages")
 
             # Current query
             user_prompt = "USER_QUERY:" + prompt.split("====USER_QUERY_MARKER====")[1]
@@ -2390,12 +2419,12 @@ I prefer to say "I don't know" rather than provide information not grounded in c
             })
 
             # Invoke with full context
-            print(f"[LLM] Sending {len(messages)} messages to LLM")
+            logger.info(f"[LLM] Sending {len(messages)} messages to LLM")
             response = self.llm.invoke(messages)
             state['answer'] = response.content if hasattr(response, 'content') else str(response)
             
         except Exception as e:
-            print(f"[ERROR] RAG_ONLY path failed: {e}")
+            logger.error(f"[ERROR] RAG_ONLY path failed: {e}")
             import traceback
             traceback.print_exc()
             state['error'] = str(e)
@@ -2688,7 +2717,7 @@ Return "UNSAFE: <reason>" if violations found.
                 return False, response.replace("UNSAFE:", "").strip()
                 
         except Exception as e:
-            print(f"[CRITIC] Validation failed: {e}")
+            logger.info(f"[CRITIC] Validation failed: {e}")
             return True, f"Validation error: {e}"  # Fail open to avoid blocking users on technical error
             
     def _validate_response_node(self, state: NakshatraState) -> NakshatraState:
@@ -2696,7 +2725,7 @@ Return "UNSAFE: <reason>" if violations found.
         Node 3.5: The Critic - Verification Loop.
         Checks generated answer against safety constitution.
         """
-        print("[CRITIC] Validating response safety...")
+        logger.info("[CRITIC] Validating response safety...")
         
         # Skip validation for calculation-only or if already validated
         if state.get('intent') == 'CALCULATION_ONLY' or state.get('is_safe', False) is True: 
@@ -2712,13 +2741,13 @@ Return "UNSAFE: <reason>" if violations found.
         state['validation_attempts'] += 1
         
         if not is_safe:
-            print(f"[CRITIC] [FAIL] Unsafe response detected: {feedback}")
+            logger.info(f"[CRITIC] [FAIL] Unsafe response detected: {feedback}")
             state['validation_feedback'] = feedback
             
             # Simple Self-Correction (Rewrite)
             # If this is the first failure, try to fix it.
             if state['validation_attempts'] <= 1:
-                print("[CRITIC] Attempting to rewrite safely...")
+                logger.info("[CRITIC] Attempting to rewrite safely...")
                 constitution = get_constitution_injection()
                 rewrite_prompt = f"""The following response violated the Astrologer's Constitution.
 VIOLATION: {feedback}
@@ -2735,7 +2764,7 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                 try:
                     state['answer'] = self._call_llm(state, rewrite_prompt)
                     state['is_safe'] = True # Assume fixed (single loop for now)
-                    print("[CRITIC] [OK] Response rewritten.")
+                    logger.info("[CRITIC] [OK] Response rewritten.")
                 except Exception as e:
                     state['error'] = f"Rewriting failed: {e}"
                     state['answer'] = "I cannot answer this query due to safety guidelines."
@@ -2743,7 +2772,7 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                 # If we failed twice, block it.
                 state['answer'] = "I must decline to answer this request as it violates my safety constitution regarding harmful or fatalistic predictions."
         else:
-            print("[CRITIC] [OK] Response is SAFE.")
+            logger.info("[CRITIC] [OK] Response is SAFE.")
             
         return state
 
@@ -2764,7 +2793,7 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             validation_disclaimer = state.get('validation_disclaimer')
             if validation_disclaimer:
                 final_response = f"{final_response}{validation_disclaimer}"
-                print("[FORMATTING] Added validation disclaimer")
+                logger.info("[FORMATTING] Added validation disclaimer")
 
             # PHASE 10.5: Reframe Intro Injection
             if state.get('is_reframed', False):
@@ -2773,7 +2802,7 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                 final_response = f"{reframe_intro}{final_response}"
             
             state['answer'] = final_response
-            print("[FORMATTING] Formatted final response.")
+            logger.info("[FORMATTING] Formatted final response.")
             
         return state
     
@@ -2992,6 +3021,12 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                 "  2. If no Venus Pratyantar in current AD, check 7th house lord's Pratyantar (see HOUSE LORDS table).\n"
                 "  3. Cross-check: Is Jupiter Gochar in H5, H7, or H9 from natal Moon? (Gochara section)\n"
                 "  4. State the specific Pratyantar date range as the peak window, NOT the full Antardasha range.\n"
+                "  PART D — RELATIONSHIP QUALITY (include in detailed responses):\n"
+                "  • Briefly trace the DISPOSITOR CHAIN of Venus (or the 7th lord): what sign is Venus in? Who rules that sign?"
+                " What does that ruler's placement say about the emotional quality of the relationship?\n"
+                "  • If Venus is in a sign ruled by Moon (Cancer), emotional depth is high; if Mercury (Gemini/Virgo),"
+                " intellectual compatibility matters; if Saturn (Capricorn/Aquarius), the relationship is serious and structured — etc.\n"
+                "  • Keep this to 1-2 sentences and always translate into what it means for the person's actual love life.\n"
                 "  ⚠ You MUST discuss at least 7th, 2nd, and 5th house lords from the computed table — not just 7th alone."
             )
 
@@ -3195,18 +3230,15 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         _needs_timing_window = _is_outcome or any(domain_hints) and not _is_conceptual
         next_window_block = """
 
-MANDATORY — NEXT FAVORABLE WINDOW (include in EVERY prediction response):
-After your main answer, always add a brief "Next Favorable Window" section.
+SECONDARY SUPPORTIVE WINDOW (NO SPECIAL HEADING):
+If useful, you may mention one additional supportive window in natural prose.
+Do NOT use any heading like "Next Favorable Window".
 
-CRITICAL — HOW TO PICK THIS WINDOW (read carefully):
-  Pratyantar periods are consecutive — every period starts the day the previous one
-  ends. DO NOT simply pick the chronologically next Pratyantar. Citing the Sun
-  Pratyantar that starts the moment Venus Pratyantar ends is meaningless — it is
-  just the next slot in an unbroken sequence, not a "next favorable window."
-
-  Instead, scan Step 3.5 for the next occurrence of a TOPIC-RELEVANT planet
-  that appears meaningfully later in the list (typically 4–8+ weeks after the
-  window already cited). Skip over unrelated planets between them.
+CRITICAL — HOW TO PICK THIS WINDOW:
+  Pratyantar periods are consecutive — every period starts when the previous one
+  ends. Do NOT simply pick the chronologically next Pratyantar.
+  Pick a genuinely topic-relevant later window (typically 4–8+ weeks after the
+  primary window already cited), and skip unrelated planets.
 
   Topic → Relevant planets to scan for (priority order):
   • Marriage / relationship → Venus, then Jupiter, then 7th house lord
@@ -3217,16 +3249,7 @@ CRITICAL — HOW TO PICK THIS WINDOW (read carefully):
   • Children               → Jupiter, then Moon, then 5th house lord
   • Health                 → Sun, then Saturn
 
-  Example (marriage): If Venus Pratyantar [Feb 26–Mar 25] is cited in the main
-  answer, scan past Sun/Moon/Mars Pratyantars and find the NEXT Jupiter or 7th
-  lord Pratyantar (e.g. Jupiter Pratyantar [Jul 8–Aug 16]) — that is the true
-  "Next Favorable Window."
-
-  If NO second topic-relevant Pratyantar exists in Step 3.5, use Step 3.6
-  (opening Pratyantar of the next Antardasha) and note that clearly.
-
-Format: "Next Favorable Window: [Planet] Pratyantar [start → end] — [one-line reason why this planet is relevant for this topic]."
-NEVER fabricate dates. NEVER cite the same Pratyantar already mentioned above."""
+NEVER fabricate dates. NEVER repeat the same Pratyantar already cited as the primary window."""
 
         # Suppress timing window for INITIAL and FOLLOWUP phases:
         # - INITIAL: too much detail for a short preview
@@ -3323,7 +3346,7 @@ Provide a concise, clear answer:"""
             return []
 
         if first_user_idx > 0:
-            print(f"[HISTORY] Skipping {first_user_idx} leading assistant-only message(s) from LLM context")
+            logger.info(f"[HISTORY] Skipping {first_user_idx} leading assistant-only message(s) from LLM context")
 
         formatted = []
         skipped_external = 0
@@ -3348,7 +3371,7 @@ Provide a concise, clear answer:"""
             })
 
         if skipped_external:
-            print(f"[HISTORY] Filtered {skipped_external} external/openai assistant message(s) from LLM context (stale data)")
+            logger.info(f"[HISTORY] Filtered {skipped_external} external/openai assistant message(s) from LLM context (stale data)")
 
         return formatted
 
@@ -3614,7 +3637,7 @@ Provide a concise, clear answer:"""
         # is from the wrong MD period. Clear it so the orchestrator recalculates.
         _md_end = (dasha_data or {}).get('mahadasha', {}).get('end', '9999')
         if dasha_data and _md_end < _today_str:
-            print(f"[DASHA STALE] Mahadasha end ({_md_end}) is in the past — "
+            logger.info(f"[DASHA STALE] Mahadasha end ({_md_end}) is in the past — "
                   f"cache is from wrong MD period. Clearing dasha_data for recalc.")
             dasha_data = {}
 
@@ -3624,11 +3647,11 @@ Provide a concise, clear answer:"""
         dasha_sequence = dasha_data.get('dasha_sequence', f"{maha_planet}/{antar_planet}")
         
         # DEBUG: Print dasha data to verify it has dates
-        print(f"[DEBUG] Dasha data in prompt:")
-        print(f"  Mahadasha: {maha_planet} ({dasha_data.get('mahadasha', {}).get('start', 'NO DATE')} to {dasha_data.get('mahadasha', {}).get('end', 'NO DATE')})")
-        print(f"  Antardasha: {antar_planet} ({dasha_data.get('antardasha', {}).get('start', 'NO DATE')} to {dasha_data.get('antardasha', {}).get('end', 'NO DATE')})")
+        logger.info(f"[DEBUG] Dasha data in prompt:")
+        logger.debug(f"  Mahadasha: {maha_planet} ({dasha_data.get('mahadasha', {}).get('start', 'NO DATE')} to {dasha_data.get('mahadasha', {}).get('end', 'NO DATE')})")
+        logger.debug(f"  Antardasha: {antar_planet} ({dasha_data.get('antardasha', {}).get('start', 'NO DATE')} to {dasha_data.get('antardasha', {}).get('end', 'NO DATE')})")
         calc_details = dasha_data.get('calculation_details', {})
-        print(f"  Calculation details: Moon={calc_details.get('moon_longitude', 'MISSING')}, Nakshatra={calc_details.get('moon_nakshatra', 'MISSING')}")
+        logger.debug(f"  Calculation details: Moon={calc_details.get('moon_longitude', 'MISSING')}, Nakshatra={calc_details.get('moon_nakshatra', 'MISSING')}")
         
         # Build upcoming antardashas timeline
         upcoming_ads = dasha_data.get('upcoming_antardashas', [])
@@ -3639,7 +3662,7 @@ Provide a concise, clear answer:"""
         ]
         skipped_past_ads = len(upcoming_ads) - len(upcoming_ads_filtered)
         if skipped_past_ads > 0:
-            print(f"[DASHA FILTER] Removed {skipped_past_ads} non-future antardasha(s) from prompt (start <= today).")
+            logger.info(f"[DASHA FILTER] Removed {skipped_past_ads} non-future antardasha(s) from prompt (start <= today).")
 
         upcoming_ads_str = ""
         if upcoming_ads_filtered:
@@ -3694,7 +3717,7 @@ Provide a concise, clear answer:"""
                 # De-duplicate while preserving upper-case planet names
                 relevant_planets = list({p.upper() for p in relevant_planets})
 
-                print(f"[DASHA_FILTER] Query domain filtering for '{query_type}': relevant_planets={relevant_planets}")
+                logger.info(f"[DASHA_FILTER] Query domain filtering for '{query_type}': relevant_planets={relevant_planets}")
 
                 domain_filtered_pds = [
                     pd for pd in upcoming_pds
@@ -3702,10 +3725,10 @@ Provide a concise, clear answer:"""
                 ]
 
                 if domain_filtered_pds:
-                    print(f"[DASHA_FILTER] Filtered {len(upcoming_pds) - len(domain_filtered_pds)} pratyantars based on query domain.")
+                    logger.info(f"[DASHA_FILTER] Filtered {len(upcoming_pds) - len(domain_filtered_pds)} pratyantars based on query domain.")
                     upcoming_pds = domain_filtered_pds
                 else:
-                    print(f"[DASHA_FILTER] No domain-relevant pratyantars found for '{query_type}', using all upcoming.")
+                    logger.info(f"[DASHA_FILTER] No domain-relevant pratyantars found for '{query_type}', using all upcoming.")
 
 
         # ── CODE-LEVEL FUTURE-DATE FILTER ─────────────────────────────────────
@@ -3718,7 +3741,7 @@ Provide a concise, clear answer:"""
         ]
         skipped_past_pds = len(upcoming_pds) - len(upcoming_pds_filtered)
         if skipped_past_pds > 0:
-            print(f"[DASHA FILTER] Removed {skipped_past_pds} non-future pratyantar(s) from prompt "
+            logger.info(f"[DASHA FILTER] Removed {skipped_past_pds} non-future pratyantar(s) from prompt "
                   f"(start <= {_today_str}). Only {len(upcoming_pds_filtered)} period(s) remain.")
 
         upcoming_pds_str = ""
@@ -3741,10 +3764,10 @@ Provide a concise, clear answer:"""
                 "  ⚠ ALL pratyantardashas in the current Antardasha have already passed.\n"
                 "  Use the NEXT Antardasha's opening Pratyantar for timing (see Step 3.6 below).\n"
             )
-        print(f"[DEBUG] upcoming_pratyantardashas: {len(upcoming_pds)} total, "
+        logger.info(f"[DEBUG] upcoming_pratyantardashas: {len(upcoming_pds)} total, "
               f"{len(upcoming_pds_filtered)} after past-date filter")
         for _pd in upcoming_pds_filtered:
-            print(f"  Pratyantar: {_pd.get('planet'):10} {_pd.get('start')} -> {_pd.get('end')} [{_pd.get('status')}]")
+            logger.debug(f"  Pratyantar: {_pd.get('planet'):10} {_pd.get('start')} -> {_pd.get('end')} [{_pd.get('status')}]")
 
         # ── BROAD SUPPORTIVE WINDOW (for longer, but accurate timeframes) ───────
         # Compute a mathematically correct broader window summarizing when the
@@ -3872,7 +3895,7 @@ Provide a concise, clear answer:"""
 
             gochara_str = "\n".join(gochara_lines)
         except Exception as _ge:
-            print(f"[GOCHARA] Computation error: {_ge}")
+            logger.info(f"[GOCHARA] Computation error: {_ge}")
             gochara_str = ""
 
         # ── Vargottama ────────────────────────────────────────────────────────
@@ -3884,7 +3907,80 @@ Provide a concise, clear answer:"""
                 f"{', '.join(vargottama)}\n"
                 "These planets give strongly amplified results in their Dasha/Antardasha periods."
             )
-        
+
+        # ── Vimshopaka Bala ───────────────────────────────────────────────────
+        vimshopaka_str = ""
+        vimshopaka = chart_data.get('vimshopaka', {})
+        if vimshopaka:
+            _PLANET_ORDER = ['SUN', 'MOON', 'MARS', 'MERCURY', 'JUPITER', 'VENUS', 'SATURN', 'RAHU', 'KETU']
+            _strength_labels = {
+                (15, 20): "very strong",
+                (11, 15): "strong",
+                (7,  11): "moderate",
+                (3,   7): "weak",
+                (0,   3): "very weak",
+            }
+            def _vim_label(score):
+                for (lo, hi), label in _strength_labels.items():
+                    if lo <= score < hi:
+                        return label
+                return "very strong" if score >= 20 else "very weak"
+
+            vim_lines = []
+            for p in _PLANET_ORDER:
+                if p in vimshopaka:
+                    score = vimshopaka[p]
+                    vim_lines.append(f"  {p:8}: {score:4.1f}/20  ({_vim_label(score)})")
+            if vim_lines:
+                vimshopaka_str = (
+                    "\nVIMSHOPAKA BALA — Varga Strength (Saptavarga scheme, 0–20 scale):\n"
+                    "  Interpretation: ≥15 very strong | 11–14 strong | 7–10 moderate | <7 weak\n"
+                    + "\n".join(vim_lines)
+                    + "\n  Use this as a SECONDARY strength modifier alongside dignity. "
+                    "A planet exalted in D1 but weak in vargas may give mixed/delayed results. "
+                    "A planet in own sign with high Vimshopaka (≥14) is reliably potent."
+                )
+
+        # ── Planetary Wars (Graha Yuddha) ─────────────────────────────────────
+        planetary_wars_str = ""
+        planetary_wars = chart_data.get('planetary_wars', [])
+        if planetary_wars:
+            war_lines = []
+            for w in planetary_wars:
+                war_lines.append(
+                    f"  ⚔ {w['planet1']} vs {w['planet2']}  "
+                    f"(separation: {w['separation_degrees']}°) — "
+                    f"WINNER: {w['winner']}, LOSER: {w['loser']}"
+                )
+            planetary_wars_str = (
+                "\nGRAHA YUDDHA — PLANETARY WARS (within 1° separation):\n"
+                + "\n".join(war_lines)
+                + "\n  Classical rule: the LOSER planet's significations are severely weakened "
+                "(similar to debilitation). During the loser's Dasha/Antardasha, "
+                "its significations will underperform even if dignified in D1. "
+                "The WINNER's significations are proportionally amplified."
+            )
+
+        # ── House Occupancy Summary ───────────────────────────────────────────
+        house_occupancy_str = ""
+        house_occupancy = chart_data.get('house_occupancy', {})
+        if house_occupancy:
+            occupied = []
+            for h in range(1, 13):
+                planets_in_house = house_occupancy.get(str(h), [])
+                if planets_in_house:
+                    occupied.append(f"  H{h:2d}: {', '.join(planets_in_house)}")
+            empty_houses = [
+                str(h) for h in range(1, 13)
+                if not house_occupancy.get(str(h))
+            ]
+            if occupied:
+                house_occupancy_str = (
+                    "\nHOUSE OCCUPANCY (planets in each natal house):\n"
+                    + "\n".join(occupied)
+                    + (f"\n  Empty houses: {', '.join(empty_houses)}" if empty_houses else "")
+                )
+
         # Get persona based on language
         try:
             from src.ai.personas import get_persona
@@ -3943,7 +4039,7 @@ Provide a concise, clear answer:"""
             and not user_msgs_in_history  # All messages so far are from the app/assistant
         )
         if app_greeting_present:
-            print(f"[GREETING] App-provided initial greeting detected (no user turns yet)")
+            logger.info(f"[GREETING] App-provided initial greeting detected (no user turns yet)")
 
         if app_greeting_present or (user_msgs_in_history and len(user_msgs_in_history) >= 1):
             system_prompt += """
@@ -3975,20 +4071,25 @@ EARLY CONVERSATION:
             try:
                 validation_context = format_validation_for_prompt(validation_result)
             except Exception as e:
-                print(f"[VALIDATION] Error formatting validation: {e}")
+                logger.info(f"[VALIDATION] Error formatting validation: {e}")
 
         divisional_context = ""
         if validation_result:
             query_type = validation_result.get('query_type', 'general')
             try:
+                # Pass the original user query so the helper can smartly switch
+                # to property/education/etc. use-cases and pull the right D-charts
+                # (D1, D2, D4, D7, D9, D10, D24, etc.) for the current topic.
                 divisional_context = get_divisional_chart_context(
                     query_type=query_type,
                     chart_data=chart_data,
                     include_secondary=True,
-                    verbose=True
+                    verbose=True,
+                    original_query=query,
                 )
+                logger.info(f"[DIVISIONAL] context_length={len(divisional_context)} chars for query_type={query_type}")
             except Exception as e:
-                print(f"[DIVISIONAL] Error adding divisional chart context: {e}")
+                logger.error(f"[DIVISIONAL] Error adding divisional chart context: {e}", exc_info=True)
 
         # Map language code to descriptive name for LLM
         loc_manager = get_localization_manager()
@@ -4021,22 +4122,64 @@ EARLY CONVERSATION:
         domain_spotlight = self._get_domain_pratyantar_spotlight(query)
 
         # ════════════════════════════════════════════════════════════════════════
+        # ENGINE USAGE GUIDELINES
+        # ════════════════════════════════════════════════════════════════════════
+        engine_usage_instruction = """
+
+ENGINE USAGE GUIDELINES (CRITICAL - USE THE DATA ABOVE):
+- Base your interpretation on ALL available computed signals, not just dashas and house lords. Use:
+  1) House lords — sign, dignity, and what that means for the person's life topic.
+  2) Yogas (from YOGAS DETECTED section) — in detailed responses, NAME relevant yogas explicitly (e.g., "Gaj Kesari Yoga strengthens..."). Do NOT invent yogas not in the data.
+  3) Divisional charts — use as evidence; name them classically (Navamsa, Dasamsa) in detailed responses. Never use D9/D10 numbers.
+  4) Active Dasha stack and Pratyantar timing windows (from ASTRO INTELLIGENCE LAYER).
+  5) Vimshopaka Bala — when a domain-key planet scores ≥14 (very strong) or ≤7 (weak), note it: "Jupiter is exceptionally strong across multiple charts here" or "Venus shows mixed strength in divisional charts, which may delay full results."
+  6) Vargottama — when a relevant planet is listed in VARGOTTAMA PLANETS, SAY SO: "This planet is especially potent as it holds the same sign in both the birth chart and Navamsa, amplifying its dasha results."
+  7) Gochara (transits) — when Jupiter or Saturn transit directly supports or opposes the timing, include a one-sentence Gochara crosscheck.
+- Never invent graha positions, house placements or yogas not explicitly in the data above.
+- PLANETARY CONDITIONS — DO NOT HIDE THESE (name them, then explain):
+  - When a key planet is RETROGRADE: say "X is retrograde in your chart" and describe the effect as themes becoming internalised, revisited, or delayed — not completely blocked.
+  - When a key planet is COMBUST or DEEPLY COMBUST: say "X is combust (close to the Sun)" and explain that its ability to deliver results is weakened or strained. Deeply combust = near-total suppression in this period.
+  - When a key planet is STATIONARY: say "X is stationary" and note that stationary planets give intense, concentrated results during their period — unusually potent but slower to materialise.
+- NAKSHATRA LORDS — when a key planet's nakshatra lord is the same as the active Dasha/Antardasha lord, point this out as a timing link: "The nakshatra lord of X is Y, which happens to be active in the current dasha period — a strong alignment."
+- FEARED PLACEMENT REFRAMING (CRITICAL): When mentioning Mangal Dosha, debilitation, Sade Sati, Graha Yuddha losers,
+  or any commonly feared placement, ALWAYS use the reframe pattern:
+  (a) First state what it does NOT mean: "Iska matlab yeh nahi ki..." / "This does not mean..."
+  (b) Then explain what it actually means for THIS specific person: "Balki iska matlab hai ki..." / "Rather, it means..."
+  Never use fatalistic or generic fear-mongering language. Ground every reframe in the actual chart data.
+- For domain-specific focus, use the appropriate divisional charts; in detailed reasoning briefly refer to them by classical Sanskrit names (Navamsa for marriage, Dasamsa for career).
+- When the user has asked for detailed reasoning, clearly expose AT LEAST 5 numbered astrological factors. These MUST go beyond just house lords and dasha — include at least one of: a named yoga, a planetary condition (retrograde/combust/stationary), a divisional chart insight, or a Gochara crosscheck.
+"""
+
+        # ════════════════════════════════════════════════════════════════════════
         # MOBILE RESPONSE LENGTH CONTROL
         # ════════════════════════════════════════════════════════════════════════
-        mobile_length_instruction = """
-        
+        # Build mode-aware length instruction so it never conflicts with phase_instruction
+        if response_mode == 'detailed':
+            _default_length_line = "DEFAULT LENGTH: 500-600 words. Be comprehensive -- this is the full detailed explanation."
+            _structure_closing = "- Closing: End with a convergence sentence + ONE question about a DIFFERENT life area (career, health, children, etc.). NEVER offer more detail on the same topic."
+        elif response_mode == 'followup':
+            _default_length_line = "DEFAULT LENGTH: 300-400 words. Answer the specific follow-up question thoroughly."
+            _structure_closing = "- Closing: Give a self-contained answer. No further questions needed."
+        else:  # initial / default
+            _default_length_line = "DEFAULT LENGTH: 150-200 words. Plain language only -- no astrological jargon."
+            _structure_closing = "- Closing: One natural invitation to explain the astrological reasoning in more detail (single line, no second version)."
+
+        mobile_length_instruction = f"""
+
 RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
-1. DEFAULT LENGTH (when no PROGRESSIVE DISCLOSURE override is active):
-   - Keep answers roughly in the 150–180 word range.
-   - Use simple, everyday language and avoid astrological jargon in the short answer.
-   - Do NOT mention houses, dashas, nakshatras, yogas, aspects, or Sanskrit technical terms in the short answer.
+1. {_default_length_line}
+   The PROGRESSIVE DISCLOSURE instructions injected below this section are the final authority on length and structure — follow them precisely.
 2. TONE: Write like a warm, knowledgeable astrologer speaking directly to the person — not a data sheet.
    Use natural sentence flow. Weave factors into a coherent narrative, not a bullet list.
    Show genuine care: acknowledge the importance of the question before diving into analysis.
 3. STRUCTURE (narrative, not mechanical):
    - Opening: 1–2 sentences acknowledging the topic warmly and giving the headline answer in plain language.
-   - Body: ONE critical supporting idea about their life (e.g., “this phase favours stable relationships”) described without referring to planets, houses, or dashas.
-   - Closing: Briefly offer to explain the deeper astrological reasoning in detail if the user wants it.
+     When the user's age or life stage is contextually meaningful (e.g., early 20s asking about first marriage,
+     mid-career asking about a job change, or approaching 30 asking about children), briefly acknowledge it
+     to show genuine understanding of where they are in life. Use the date_of_birth from the user profile to
+     calculate their approximate current age. Keep this acknowledgment natural and non-generic.
+   - Body: Key astrological factors as directed by the PROGRESSIVE DISCLOSURE section below.
+   {_structure_closing}
    DO NOT use bullet lists.
 4. HOUSE NUMBER FORMAT (MANDATORY): NEVER write "H1", "H2", "H10" etc. in your response.
    The H-notation is for internal data only. In your response always use ordinal format:
@@ -4051,9 +4194,10 @@ RESPONSE FORMAT (CRITICAL - MUST FOLLOW):
 6. NO META-COMMENTARY: Never say "Based on your chart I can see..." or "Looking at your horoscope...".
    Start directly with the insight. The user knows you're reading their chart.
 7. NO THANKING: User details come from the backend — never thank them for providing details.
-8. FOLLOW-UP QUESTIONS: Only ask a follow-up question when the PROGRESSIVE DISCLOSURE instructions below tell you to
-   (initial short answer → offer detail; detailed answer → ask about related topics). Otherwise, give a complete, self-contained answer.
+8. FOLLOW-UP QUESTIONS: Only ask a follow-up question when the PROGRESSIVE DISCLOSURE instructions below tell you to.
+   In a detailed response, the follow-up MUST be about a different topic — never offer more detail on the same one.
 """
+        instructions += engine_usage_instruction
         instructions += mobile_length_instruction
 
         # CHANGE 5: Add conversation summary section
@@ -4123,13 +4267,9 @@ REASONING SCRATCHPAD (INTERNAL - DO NOT SHOW TO USER):
   3) Align these with the active Mahadasha/Antardasha/Pratyantardasha and the candidate timing windows listed in ASTRO INTELLIGENCE LAYER.
   4) Note 2–4 core interpretive points that truly matter for the person (not a laundry list).
 - You MUST use this scratchpad reasoning to keep your answer coherent and grounded, but you MUST NOT show the scratchpad itself to the user.
-- The final answer for the user goes ONLY in the section marked <final_answer> below, in the user's language/script.
+- The final answer for the user must be a single, clean paragraph-style reply in the user's language/script, without exposing any XML tags or scratchpad markers.
 
-When you are done reasoning, write ONLY the polished answer in this format:
-
-<final_answer>
-(natural, flowing answer for the user in {lang_name}, following the voice charter and response structure policy)
-</final_answer>
+When you are done reasoning, write ONLY the polished answer for the user. Do NOT wrap it in <final_answer> or any other tags.
 """
 
         # ════════════════════════════════════════════════════════════════════════
@@ -4166,25 +4306,27 @@ All values below are CALCULATED, not inferred. Use ONLY these values.
 ════════════════════════════════════════════════════════════════════════
 
 BIRTH CHART PLANETARY POSITIONS:
-  Format: Sign | House | Degree | Nakshatra Pada | Dignity | [RETRO] [COMBUST]
+  Format: Sign | House | Degree | Nakshatra (Lord) Pada | Dignity | [MOTION] [COMBUST]
   INTERPRETATION PRIORITY (apply in this order — each layer modifies the one before):
-  1. Dignity     — sets the base strength (Exalted > Own/Moolatrikona > Friend > Neutral > Enemy > Debilitated)
-  2. [RETRO]     — retrograde planet turns results inward; expression is delayed then intensified; treat as strengthened but internalized
-  3. [COMBUST]   — within Sun's orb; planet's significations are weakened/suppressed; reduce strength assessment
-  4. Nakshatra   — colours the planet's expression (Ketu-ruled nakshatras = karmic; Rahu = material ambition, etc.)
-  5. Pada        — navamsa quarter; odd pada = more outward, even = more inward expression; P1/P3 often stronger for material results
-  6. Degree      — note degrees 0–1 (very new energy, unsteady) and 29° (critical, culminating); gandanta at water-fire sign junctions
-  NOTE: A [RETRO][COMBUST] planet has competing modifiers — retrograde strengthens, combustion weakens; net effect is partial and erratic.
+  1. Dignity         — sets base strength (Exalted > Own/Moolatrikona > Friend > Neutral > Enemy > Debilitated)
+  2. [RETRO]         — retrograde planet turns results inward; expression delayed then intensified
+  3. [STATIONARY]    — planet about to change direction; results are concentrated and unusually potent
+  4. [COMBUST]       — within Sun's orb; planet's significations weakened/suppressed
+  5. [DEEPLY COMBUST]— within 3° of Sun; significations severely suppressed; near-total weakening
+  6. Nakshatra Lord  — the nakshatra lord colours the planet's expression and links to the dasha timeline
+  7. Pada            — navamsa quarter; P1/P3 stronger for material results; P2/P4 for inner/spiritual
+  8. Degree          — 0–1° = unsteady new energy; 29° = culminating; gandanta at water-fire junctions
+  NOTE: [RETRO][COMBUST] = competing modifiers — retrograde strengthens inwardly, combustion weakens delivery; net result is erratic/partial.
 • Ascendant (Lagna): {chart_data.get('lagna', {}).get('sign', 'Not available')} {chart_data.get('lagna', {}).get('degree', 0.0):.2f}° | Nakshatra: {chart_data.get('lagna', {}).get('nakshatra', 'N/A')} (Lord: {chart_data.get('lagna', {}).get('nakshatra_lord', 'N/A')})
-• Sun:     {chart_data.get('planets', {}).get('SUN',     {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('SUN',     {}).get('house', '?')} {chart_data.get('planets', {}).get('SUN',     {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('SUN',     {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('SUN',     {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('SUN',     {}).get('dignity', {}).get('status', '')}
-• Moon:    {chart_data.get('planets', {}).get('MOON',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MOON',    {}).get('house', '?')} {chart_data.get('planets', {}).get('MOON',    {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('MOON',    {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('MOON',    {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('MOON',    {}).get('dignity', {}).get('status', '')}{'  [COMBUST]' if chart_data.get('planets', {}).get('MOON', {}).get('combust') else ''}
-• Mars:    {chart_data.get('planets', {}).get('MARS',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MARS',    {}).get('house', '?')} {chart_data.get('planets', {}).get('MARS',    {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('MARS',    {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('MARS',    {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('MARS',    {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('MARS', {}).get('retrograde') else ''}{'  [COMBUST]' if chart_data.get('planets', {}).get('MARS', {}).get('combust') else ''}
-• Mercury: {chart_data.get('planets', {}).get('MERCURY', {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MERCURY', {}).get('house', '?')} {chart_data.get('planets', {}).get('MERCURY', {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('MERCURY', {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('MERCURY', {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('MERCURY', {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('MERCURY', {}).get('retrograde') else ''}{'  [COMBUST]' if chart_data.get('planets', {}).get('MERCURY', {}).get('combust') else ''}
-• Jupiter: {chart_data.get('planets', {}).get('JUPITER', {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('JUPITER', {}).get('house', '?')} {chart_data.get('planets', {}).get('JUPITER', {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('JUPITER', {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('JUPITER', {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('JUPITER', {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('JUPITER', {}).get('retrograde') else ''}{'  [COMBUST]' if chart_data.get('planets', {}).get('JUPITER', {}).get('combust') else ''}
-• Venus:   {chart_data.get('planets', {}).get('VENUS',   {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('VENUS',   {}).get('house', '?')} {chart_data.get('planets', {}).get('VENUS',   {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('VENUS',   {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('VENUS',   {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('VENUS',   {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('VENUS', {}).get('retrograde') else ''}{'  [COMBUST]' if chart_data.get('planets', {}).get('VENUS', {}).get('combust') else ''}
-• Saturn:  {chart_data.get('planets', {}).get('SATURN',  {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('SATURN',  {}).get('house', '?')} {chart_data.get('planets', {}).get('SATURN',  {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('SATURN',  {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('SATURN',  {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('SATURN',  {}).get('dignity', {}).get('status', '')}{'  [RETRO]' if chart_data.get('planets', {}).get('SATURN', {}).get('retrograde') else ''}{'  [COMBUST]' if chart_data.get('planets', {}).get('SATURN', {}).get('combust') else ''}
-• Rahu:    {chart_data.get('planets', {}).get('RAHU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('RAHU',    {}).get('house', '?')} {chart_data.get('planets', {}).get('RAHU',    {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('RAHU',    {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('RAHU',    {}).get('nakshatra_pada', '?')} [always Retro]
-• Ketu:    {chart_data.get('planets', {}).get('KETU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('KETU',    {}).get('house', '?')} {chart_data.get('planets', {}).get('KETU',    {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('KETU',    {}).get('nakshatra', 'N/A')} P{chart_data.get('planets', {}).get('KETU',    {}).get('nakshatra_pada', '?')} [always Retro]
+• Sun:     {chart_data.get('planets', {}).get('SUN',     {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('SUN',     {}).get('house', '?')} {chart_data.get('planets', {}).get('SUN',     {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('SUN',     {}).get('nakshatra', 'N/A')} ({chart_data.get('planets', {}).get('SUN',     {}).get('nakshatra_lord', 'N/A')}) P{chart_data.get('planets', {}).get('SUN',     {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('SUN',     {}).get('dignity', {}).get('status', '')}
+• Moon:    {chart_data.get('planets', {}).get('MOON',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MOON',    {}).get('house', '?')} {chart_data.get('planets', {}).get('MOON',    {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('MOON',    {}).get('nakshatra', 'N/A')} ({chart_data.get('planets', {}).get('MOON',    {}).get('nakshatra_lord', 'N/A')}) P{chart_data.get('planets', {}).get('MOON',    {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('MOON',    {}).get('dignity', {}).get('status', '')}{'  [COMBUST]' if chart_data.get('planets', {}).get('MOON', {}).get('combust') else ''}
+• Mars:    {chart_data.get('planets', {}).get('MARS',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MARS',    {}).get('house', '?')} {chart_data.get('planets', {}).get('MARS',    {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('MARS',    {}).get('nakshatra', 'N/A')} ({chart_data.get('planets', {}).get('MARS',    {}).get('nakshatra_lord', 'N/A')}) P{chart_data.get('planets', {}).get('MARS',    {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('MARS',    {}).get('dignity', {}).get('status', '')}{'  [STATIONARY]' if chart_data.get('planets', {}).get('MARS', {}).get('is_stationary') else '  [RETRO]' if chart_data.get('planets', {}).get('MARS', {}).get('retrograde') else ''}{'  [DEEPLY COMBUST]' if chart_data.get('planets', {}).get('MARS', {}).get('combustion_status') == 'deeply_combust' else '  [COMBUST]' if chart_data.get('planets', {}).get('MARS', {}).get('combust') else ''}
+• Mercury: {chart_data.get('planets', {}).get('MERCURY', {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('MERCURY', {}).get('house', '?')} {chart_data.get('planets', {}).get('MERCURY', {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('MERCURY', {}).get('nakshatra', 'N/A')} ({chart_data.get('planets', {}).get('MERCURY', {}).get('nakshatra_lord', 'N/A')}) P{chart_data.get('planets', {}).get('MERCURY', {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('MERCURY', {}).get('dignity', {}).get('status', '')}{'  [STATIONARY]' if chart_data.get('planets', {}).get('MERCURY', {}).get('is_stationary') else '  [RETRO]' if chart_data.get('planets', {}).get('MERCURY', {}).get('retrograde') else ''}{'  [DEEPLY COMBUST]' if chart_data.get('planets', {}).get('MERCURY', {}).get('combustion_status') == 'deeply_combust' else '  [COMBUST]' if chart_data.get('planets', {}).get('MERCURY', {}).get('combust') else ''}
+• Jupiter: {chart_data.get('planets', {}).get('JUPITER', {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('JUPITER', {}).get('house', '?')} {chart_data.get('planets', {}).get('JUPITER', {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('JUPITER', {}).get('nakshatra', 'N/A')} ({chart_data.get('planets', {}).get('JUPITER', {}).get('nakshatra_lord', 'N/A')}) P{chart_data.get('planets', {}).get('JUPITER', {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('JUPITER', {}).get('dignity', {}).get('status', '')}{'  [STATIONARY]' if chart_data.get('planets', {}).get('JUPITER', {}).get('is_stationary') else '  [RETRO]' if chart_data.get('planets', {}).get('JUPITER', {}).get('retrograde') else ''}{'  [DEEPLY COMBUST]' if chart_data.get('planets', {}).get('JUPITER', {}).get('combustion_status') == 'deeply_combust' else '  [COMBUST]' if chart_data.get('planets', {}).get('JUPITER', {}).get('combust') else ''}
+• Venus:   {chart_data.get('planets', {}).get('VENUS',   {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('VENUS',   {}).get('house', '?')} {chart_data.get('planets', {}).get('VENUS',   {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('VENUS',   {}).get('nakshatra', 'N/A')} ({chart_data.get('planets', {}).get('VENUS',   {}).get('nakshatra_lord', 'N/A')}) P{chart_data.get('planets', {}).get('VENUS',   {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('VENUS',   {}).get('dignity', {}).get('status', '')}{'  [STATIONARY]' if chart_data.get('planets', {}).get('VENUS', {}).get('is_stationary') else '  [RETRO]' if chart_data.get('planets', {}).get('VENUS', {}).get('retrograde') else ''}{'  [DEEPLY COMBUST]' if chart_data.get('planets', {}).get('VENUS', {}).get('combustion_status') == 'deeply_combust' else '  [COMBUST]' if chart_data.get('planets', {}).get('VENUS', {}).get('combust') else ''}
+• Saturn:  {chart_data.get('planets', {}).get('SATURN',  {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('SATURN',  {}).get('house', '?')} {chart_data.get('planets', {}).get('SATURN',  {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('SATURN',  {}).get('nakshatra', 'N/A')} ({chart_data.get('planets', {}).get('SATURN',  {}).get('nakshatra_lord', 'N/A')}) P{chart_data.get('planets', {}).get('SATURN',  {}).get('nakshatra_pada', '?')} | {chart_data.get('planets', {}).get('SATURN',  {}).get('dignity', {}).get('status', '')}{'  [STATIONARY]' if chart_data.get('planets', {}).get('SATURN', {}).get('is_stationary') else '  [RETRO]' if chart_data.get('planets', {}).get('SATURN', {}).get('retrograde') else ''}{'  [DEEPLY COMBUST]' if chart_data.get('planets', {}).get('SATURN', {}).get('combustion_status') == 'deeply_combust' else '  [COMBUST]' if chart_data.get('planets', {}).get('SATURN', {}).get('combust') else ''}
+• Rahu:    {chart_data.get('planets', {}).get('RAHU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('RAHU',    {}).get('house', '?')} {chart_data.get('planets', {}).get('RAHU',    {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('RAHU',    {}).get('nakshatra', 'N/A')} ({chart_data.get('planets', {}).get('RAHU',    {}).get('nakshatra_lord', 'N/A')}) P{chart_data.get('planets', {}).get('RAHU',    {}).get('nakshatra_pada', '?')} [always Retro]
+• Ketu:    {chart_data.get('planets', {}).get('KETU',    {}).get('sign', 'N/A'):12} H{chart_data.get('planets', {}).get('KETU',    {}).get('house', '?')} {chart_data.get('planets', {}).get('KETU',    {}).get('degree', 0.0):.1f}° | {chart_data.get('planets', {}).get('KETU',    {}).get('nakshatra', 'N/A')} ({chart_data.get('planets', {}).get('KETU',    {}).get('nakshatra_lord', 'N/A')}) P{chart_data.get('planets', {}).get('KETU',    {}).get('nakshatra_pada', '?')} [always Retro]
 {lagnesh_note}
 
 {house_lords_block}
@@ -4224,6 +4366,9 @@ CURRENT TRANSITS (as of {transit_date}):
 {gochara_str}
 
 {vargottama_str}
+{vimshopaka_str}
+{planetary_wars_str}
+{house_occupancy_str}
 
 ════════════════════════════════════════════════════════════════════════
 END OF COMPUTED DATA
@@ -4242,8 +4387,11 @@ Before stating any fact, perform this internal audit:
   exalted/debilitated)          │ NOT general planet reputation from training knowledge
   Retrograde effect             │ [RETRO] flag on that planet's row — ONLY if flag present
                                 │ If absent, planet is DIRECT — do not assume retrograde
+  Stationary planet             │ [STATIONARY] flag — if present, results concentrated/potent
   Combustion effect             │ [COMBUST] flag on that planet's row — ONLY if flag present
                                 │ If absent, planet is NOT combust — do not assume it
+  Deep combustion               │ [DEEPLY COMBUST] flag — within 3° of Sun; near-total weakening
+  Nakshatra lord                │ The (Lord) column next to nakshatra name in planet row
   House lord                    │ HOUSE LORDS table — cite both planet AND house sign
                                 │ Format: "Nth house (domain) lord [PLANET]"
   Dasha/timing dates            │ Step 2/3/3.5/3.6 dasha tables — exact dates only
@@ -4251,12 +4399,17 @@ Before stating any fact, perform this internal audit:
   Planet sign/house/nakshatra   │ BIRTH CHART PLANETARY POSITIONS rows
   Nakshatra pada                │ Pada column (P1–P4) in BIRTH CHART PLANETARY POSITIONS
   Vargottama claim              │ VARGOTTAMA PLANETS line — only if planet listed there
+  Vimshopaka strength           │ VIMSHOPAKA BALA table — use as secondary strength modifier
+  Planetary war effect          │ GRAHA YUDDHA block — loser planet weakened; winner amplified
+  House occupancy               │ HOUSE OCCUPANCY block — which planets are in which house
   ─────────────────────────────────────────────────────────────────────────────
 
 PROHIBITED INFERENCES (NEVER do these):
   X Claiming a planet is strong/weak without citing its computed dignity status
   X Stating a planet is retrograde unless [RETRO] appears on its row in the table
+  X Stating a planet is stationary unless [STATIONARY] appears on its row
   X Stating a planet is combust unless [COMBUST] appears on its row in the table
+  X Calling combustion "deep" or "severe" unless [DEEPLY COMBUST] is flagged
   X Reducing a planet's strength due to combustion when [COMBUST] is not flagged
   X Amplifying a planet's results as retrograde when [RETRO] is not flagged
   X Deriving house lords from birth date or Sun sign using training knowledge
@@ -4271,6 +4424,10 @@ PROHIBITED INFERENCES (NEVER do these):
   X Stating a planet's transit-house from Lagna or Moon unless it matches the
     GOCHARA ANALYSIS block exactly. Never self-compute "Jupiter is in H10 from Lagna"
     — only use the house numbers shown in the GOCHARA ANALYSIS block.
+  X Saying a planet in a Planetary War is "strong" if it is the LOSER — war losses
+    apply regardless of dignity. State reduced delivery of significations.
+  X Using Vimshopaka Bala as the sole strength indicator — it must be read alongside
+    D1 dignity; a planet exalted in D1 but weak in vargas gives partial results.
 
 CROSS-REFERENCING FORMAT (MANDATORY in every response):
   • House lords  → "Nth house (domain) lord [PLANET]"

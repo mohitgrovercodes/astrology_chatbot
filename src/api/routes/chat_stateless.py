@@ -15,11 +15,13 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 import time
-import os
 import redis
 import json
 from datetime import datetime
 from src.llm.factory import LLMFactory
+from config.logger import get_logger
+
+logger = get_logger("chat_stateless")
 
 from src.api.orchestrator_helper import get_orchestrator
 from src.api.config import settings
@@ -147,19 +149,19 @@ Be accurate - analyze the semantic meaning, not just keywords. If a user asks ab
             if 'confidence' not in result:
                 result['confidence'] = 0.5
             
-            print(f"\n[CONTEXT ANALYSIS]")
-            print(f"  Query: {current_query[:60]}...")
-            print(f"  Intent: {result['intent_type']}")
-            print(f"  Confidence: {result.get('confidence', 0.5):.2f}")
-            print(f"  Reasoning: {result.get('reasoning', 'N/A')}")
+            logger.info(f"[CONTEXT ANALYSIS]")
+            logger.debug(f"Query: {current_query[:60]}...")
+            logger.debug(f"Intent: {result['intent_type']}")
+            logger.debug(f"Confidence: {result.get('confidence', 0.5):.2f}")
+            logger.debug(f"Reasoning: {result.get('reasoning', 'N/A')}")
             if result.get('referenced_topic'):
-                print(f"  Referenced Topic: {result['referenced_topic']}")
+                logger.debug(f"Referenced Topic: {result['referenced_topic']}")
             
             return result
             
         except json.JSONDecodeError as e:
-            print(f"[CONTEXT] JSON Parse Error: {e}")
-            print(f"[CONTEXT] LLM Response (first 200 chars): {response.content[:200]}...")
+            logger.info(f"[CONTEXT] JSON Parse Error: {e}")
+            logger.info(f"[CONTEXT] LLM Response (first 200 chars): {response.content[:200]}...")
             # Fallback to safe default
             return {
                 "intent_type": "NEW_TOPIC",
@@ -170,7 +172,7 @@ Be accurate - analyze the semantic meaning, not just keywords. If a user asks ab
             }
             
         except Exception as e:
-            print(f"[CONTEXT] Error analyzing intent: {e}")
+            logger.error(f"[CONTEXT] Error analyzing intent: {e}")
             import traceback
             traceback.print_exc()
             # Fallback to safe default
@@ -246,9 +248,9 @@ Be accurate - analyze the semantic meaning, not just keywords. If a user asks ab
                     expanded = current_query.replace(pron, referenced_topic)
                     expanded = expanded.replace(pron.capitalize(), referenced_topic.capitalize())
                     break
-            print(f"\n[SEMANTIC INTERPRETER] [EXPAND] Deterministic EXPAND (skipping LLM)")
-            print(f"  Pattern matched: clear_followup={is_clear_followup}, pronoun={has_pronoun}, short={is_short_followup}")
-            print(f"  Expanded: '{expanded}'")
+            logger.info(f"[SEMANTIC INTERPRETER] [EXPAND] Deterministic EXPAND (skipping LLM)")
+            logger.debug(f"Pattern matched: clear_followup={is_clear_followup}, pronoun={has_pronoun}, short={is_short_followup}")
+            logger.debug(f"Expanded: '{expanded}'")
             return {
                 "action": "EXPAND",
                 "processed_query": expanded,
@@ -348,14 +350,14 @@ Remember: Higher score = More confident = Bot answers immediately!
                 ambiguity_score = float(ambiguity_analysis.get('ambiguity_score', 0.5))
                 can_resolve = ambiguity_analysis.get('can_resolve_safely', False)
                 reasoning = ambiguity_analysis.get('reasoning', 'No reasoning')
-                print(f"\n[SEMANTIC INTERPRETER]")
-                print(f"  Query: {current_query}")
-                print(f"  Ambiguity Score: {ambiguity_score:.2f}")
-                print(f"  Reasoning: {reasoning}")
+                logger.info(f"[SEMANTIC INTERPRETER]")
+                logger.debug(f"Query: {current_query}")
+                logger.debug(f"Ambiguity Score: {ambiguity_score:.2f}")
+                logger.debug(f"Reasoning: {reasoning}")
             
         except Exception as e:
             # Fallback to heuristics
-            print(f"[CONTEXT] JSON failed, using heuristics: {e}")
+            logger.info(f"[CONTEXT] JSON failed, using heuristics: {e}")
             query_lower = current_query.lower()
             
             if any(phrase in query_lower for phrase in ['tell me more about it', 'more about it']):
@@ -372,7 +374,7 @@ Remember: Higher score = More confident = Bot answers immediately!
         # STEP 2: Apply strategy based on score
         # HIGH CONFIDENCE (> 0.6): Auto-expand
         if ambiguity_score > 0.6 and can_resolve:
-            print(f"  -> Strategy: AUTO-EXPAND")
+            logger.debug(f"-> Strategy: AUTO-EXPAND")
             
             expansion_prompt = f"""You are a query pre-processor for an astrology chatbot. Your only job is pronoun resolution.
 
@@ -404,7 +406,7 @@ Respond with ONLY the rewritten query. If nothing needs changing, return the ori
         
         # MEDIUM CONFIDENCE (0.3-0.6): Add hint
         elif 0.3 <= ambiguity_score <= 0.6:
-            print(f"  -> Strategy: HINT")
+            logger.debug(f"-> Strategy: HINT")
             hinted = f"Regarding {referenced_topic}: {current_query}"
             
             return {
@@ -417,7 +419,7 @@ Respond with ONLY the rewritten query. If nothing needs changing, return the ori
         
         # LOW CONFIDENCE (< 0.3): Ask for clarification
         else:
-            print(f"  -> Strategy: ASK_CLARIFICATION")
+            logger.debug(f"-> Strategy: ASK_CLARIFICATION")
             clarification_q = f"Could you clarify what you're referring to regarding {referenced_topic}?"
             
             return {
@@ -483,10 +485,10 @@ Respond with ONLY the summary.
         try:
             response = self.fast_llm.invoke(summary_prompt)
             summary = response.content.strip()
-            print(f"[SUMMARY] Generated: {summary[:100]}...")
+            logger.info(f"[SUMMARY] Generated: {summary[:100]}...")
             return summary
         except Exception as e:
-            print(f"[SUMMARY] Error: {e}")
+            logger.info(f"[SUMMARY] Error: {e}")
             return current_summary or "Conversation about astrological insights."
     
     def _format_conversation(self, conversation: List[Dict]) -> str:
@@ -539,6 +541,7 @@ def validate_and_sanitize_response(
     intent_analysis: Dict[str, Any],
     recent_history: List[Dict[str, Any]],
     context_window: int = 20,
+    min_numbered_points: int = 0,
 ) -> str:
     """
     Use a small LLM to semantically validate and, if needed, rewrite the draft
@@ -552,7 +555,9 @@ def validate_and_sanitize_response(
     a_lower = draft_answer.lower()
 
     # Conditional validator: only rewrite when contradiction-risk or tone-risk is
-    # likely. This avoids flattening naturally good responses.
+    # likely, OR when we explicitly require numbered reasoning points (detailed mode).
+    # This avoids flattening naturally good responses while still enforcing structure
+    # when requested.
     risk_keywords = (
         "divorce", "separation", "talaq", "breakup", "remarriage",
         "children", "pregnancy", "job", "career", "marriage", "shaadi"
@@ -563,10 +568,39 @@ def validate_and_sanitize_response(
     likely_sensitive = any(k in q_lower for k in risk_keywords)
     likely_overconfident = any(m in a_lower for m in contradiction_markers)
     likely_short_or_generic = len(draft_answer.split()) < 25
-    should_validate = likely_sensitive or likely_overconfident or likely_short_or_generic
+    needs_numbering_enforcement = bool(min_numbered_points and min_numbered_points > 0)
+    should_validate = (
+        likely_sensitive
+        or likely_overconfident
+        or likely_short_or_generic
+        or needs_numbering_enforcement
+    )
 
     if not should_validate:
         return draft_answer
+
+    def _count_numbered_points(text: str) -> int:
+        """
+        Best-effort counter for clearly numbered lines like:
+        '1) ...', '2. ...', '1 - ...'. Used to enforce minimum structured
+        astrological reasoning points in detailed responses.
+        """
+        if not text:
+            return 0
+        count = 0
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            # Arabic digits: 1) 2. 3-
+            if re.match(r"^[0-9]+[\)\.\-\:]\s+", stripped):
+                count += 1
+                continue
+            # Basic Devanagari digits: १) २. ३-
+            if re.match(r"^[\u0966-\u096f]+[\)\.\-\:]\s+", stripped):
+                count += 1
+                continue
+        return count
 
     try:
         conv_snippet: List[str] = []
@@ -604,11 +638,19 @@ You must pay special attention to these cases:
      about remarriage in a later question.
 
 2) TIMELINE COHERENCE
-   - If the chat already stated a clear FUTURE marriage window (e.g., strong chance in 2027–2028),
-     do NOT allow a later answer to confidently state that divorce happens clearly BEFORE that
-     in an obviously impossible way.
-   - In such cases, soften the timing for divorce (e.g., "aane wale kuch saalon mein") and
-     emphasize emotional themes rather than hard earlier dates.
+   - If the chat already stated a clear FUTURE window for a life event (marriage, job, career,
+     foreign travel, children, etc.), do NOT allow a later answer to confidently state a
+     completely different, non-overlapping window for the SAME topic unless you clearly frame
+     it as a refinement or secondary/supporting period.
+   - For example, if the initial answer said "2027 ke beech se 2028 ke aas-paas shadi ke strong
+     yog dikh rahe hain", the detailed follow-up should EITHER reuse that 2027–2028 window,
+     OR explain it as "core" and then optionally add a nearby supporting sub‑window, not jump
+     to something like "2024 ke end tak" as the main window.
+   - When the chat already gave a specific timing, prefer to KEEP that timing and add depth
+     (houses, dashas, yogas, divisional charts) rather than inventing a new, contradictory one.
+   - For divorce/separation specifically, do NOT push it clearly BEFORE a strong future marriage
+     window that you already stated. In such cases, soften the timing for divorce (e.g.,
+     "aane wale kuch saalon mein") and emphasize emotional themes rather than hard earlier dates.
 
 3) GENERAL COHERENCE
    - Avoid sentences that directly contradict what was said just before
@@ -698,16 +740,26 @@ ASSISTANT_DRAFT:
 \"\"\"{draft_answer}\"\"\"
 
 IMPORTANT DECISION RULE:
-- If draft is already coherent, context-appropriate and naturally phrased, preserve it.
-- Rewrite only when there is a real contradiction, tone/voice mismatch, obvious generic AI phrasing,
-  or major coherence break.
+- If draft is already coherent, context-appropriate and naturally phrased, preserve it — UNLESS
+  a specific numbered structure has been requested.
+- Rewrite when there is a real contradiction, tone/voice mismatch, obvious generic AI phrasing,
+  major coherence break, OR when the answer fails to provide the minimum number of numbered
+  astrological reasoning points requested.
+
+STRUCTURE ENFORCEMENT (if requested):
+- When 'min_numbered_points' is > 0, you MUST ensure that the final answer contains AT LEAST
+  that many clearly numbered points (for example: "1)", "2)", "3)", etc.).
+- Each numbered point should describe a distinct astrological factor AND what it means for
+  the user. These points can appear after a short narrative introduction, but they must be
+  present and easy for the user to see and count.
 
 Respond in STRICT JSON ONLY, no extra text, like this:
 {{
   "is_coherent": true/false,
   "needs_revision": true/false,
   "reason": "short explanation of any problem you see",
-  "revised_answer": "a fully corrected answer in the SAME LANGUAGE as the draft, or empty string if no change is needed"
+  "revised_answer": "a fully corrected answer in the SAME LANGUAGE as the draft, or empty string if no change is needed",
+  "min_numbered_points": """ + str(int(min_numbered_points or 0)) + """
 }}"""
 
         llm = _get_response_validator_llm()
@@ -715,13 +767,53 @@ Respond in STRICT JSON ONLY, no extra text, like this:
         raw = getattr(resp, "content", str(resp))
         data = _json.loads(raw)
 
+        final_answer = draft_answer
         if isinstance(data, dict) and data.get("needs_revision") and data.get("revised_answer"):
-            print(f"[VALIDATOR] LLM revised answer: {data.get('reason', '')}")
-            return data["revised_answer"]
+            logger.info(f"[VALIDATOR] LLM revised answer: {data.get('reason', '')}")
+            final_answer = data["revised_answer"]
 
-        return draft_answer
+        # Deterministic post-check: if we explicitly require numbered points
+        # and the current answer still does not meet the minimum, trigger a
+        # second, focused rewrite pass that ONLY enforces numbered structure.
+        if needs_numbering_enforcement:
+            current_points = _count_numbered_points(final_answer)
+            if current_points < int(min_numbered_points or 0):
+                logger.info(
+                    f"[VALIDATOR] Numbering enforcement: found {current_points} "
+                    f"points, required {int(min_numbered_points or 0)}. Forcing rewrite."
+                )
+                rewrite_prompt = f"""You are an astrology editor.
+
+Rewrite the assistant's answer so that it:
+- keeps the SAME timing windows, planets, houses and factual content
+- stays in the SAME LANGUAGE and script as the original answer
+- sounds like a warm, professional astrologer
+- and MOST IMPORTANTLY, presents AT LEAST {int(min_numbered_points or 0)} clearly numbered
+  astrological reasoning points (for example: "1) ...", "2) ...", "3) ...").
+
+Guidelines:
+- You may add short connector sentences, but do NOT invent new dates or change years.
+- Group related ideas into numbered points so that each point describes ONE key factor
+  (house lord, dasha/pratyantar, yoga, planetary condition, divisional chart insight, etc.)
+  and directly states what it means for this person's life.
+- You may keep a short 1–2 sentence introduction BEFORE the numbered list.
+
+Return ONLY the rewritten answer text, no JSON, no explanation.
+
+ORIGINAL ANSWER:
+\"\"\"{final_answer}\"\"\""""
+                resp2 = llm.invoke(rewrite_prompt)
+                rewritten = getattr(resp2, "content", str(resp2)).strip()
+                if rewritten:
+                    # Even if the model still under-shoots, prefer the rewritten
+                    # version because it will usually be closer to the desired
+                    # structure.
+                    logger.info("[VALIDATOR] Applied forced numbered-structure rewrite")
+                    return rewritten
+
+        return final_answer
     except Exception as e:
-        print(f"[VALIDATOR] Error in LLM response validator: {e}")
+        logger.info(f"[VALIDATOR] Error in LLM response validator: {e}")
         return draft_answer
 
 
@@ -747,9 +839,9 @@ class EnhancedSessionManager:
                 socket_connect_timeout=5,
             )
             self.redis.ping()
-            print(f"[SESSION] [OK] Redis connected on {redis_host}:{redis_port}")
+            logger.info(f"[SESSION] [OK] Redis connected on {redis_host}:{redis_port}")
         except Exception as e:
-            print(f"[SESSION] [FAIL] Redis connection failed: {e}")
+            logger.info(f"[SESSION] [FAIL] Redis connection failed: {e}")
             self.redis = None
     
     def require_redis(self):
@@ -801,32 +893,32 @@ class EnhancedSessionManager:
             }
             key = f"session:{user_id}:summary"
             self.redis.set(key, json.dumps(summary_data))
-            print(f"[SUMMARY] Stored conversation summary permanently at key: {key}")
+            logger.info(f"[SUMMARY] Stored conversation summary permanently at key: {key}")
         except Exception as e:
-            print(f"[SUMMARY] Error storing summary: {e}")
+            logger.info(f"[SUMMARY] Error storing summary: {e}")
     
     def get_chart_data(self, user_id: str):
         if not self.redis:
             return None
         try:
             key = f"session:{user_id}:chart"
-            print(f"[REDIS] GET key={key}")
+            logger.info(f"[REDIS] GET key={key}")
             data = self.redis.get(key)
             if data:
                 chart = json.loads(data)
                 # Schema version check: evict charts missing vargottama/divisional_charts_simple
                 # (computed in serializer v2) so they get recalculated with enriched data.
                 if 'divisional_charts_simple' not in chart or 'vargottama' not in chart:
-                    print(f"[CHART] Schema v1 detected for {user_id} (missing divisional/vargottama) — evicting to upgrade.")
+                    logger.info(f"[CHART] Schema v1 detected for {user_id} (missing divisional/vargottama) — evicting to upgrade.")
                     self.redis.delete(key)
                     return None
-                print(f"[REDIS] Found chart in Redis")
+                logger.info(f"[REDIS] Found chart in Redis")
                 return chart
             else:
-                print(f"[REDIS] No chart found at key: {key}")
+                logger.info(f"[REDIS] No chart found at key: {key}")
                 return None
         except Exception as e:
-            print(f"[SESSION] ERROR: Failed to get chart data for {user_id}: {e}")
+            logger.info(f"[SESSION] ERROR: Failed to get chart data for {user_id}: {e}")
             return None
     
     def get_dasha_data(self, user_id: str):
@@ -841,10 +933,10 @@ class EnhancedSessionManager:
             return None
         try:
             key = f"session:{user_id}:dasha"
-            print(f"[REDIS] GET key={key}")
+            logger.info(f"[REDIS] GET key={key}")
             raw = self.redis.get(key)
             if not raw:
-                print(f"[REDIS] No dasha found at key: {key}")
+                logger.info(f"[REDIS] No dasha found at key: {key}")
                 return None
 
             envelope = json.loads(raw)
@@ -859,7 +951,7 @@ class EnhancedSessionManager:
                 refresh_threshold = settings.DASHA_REFRESH_DAYS
 
                 if age_days >= refresh_threshold:
-                    print(f"[DASHA] STALE — cached {age_days:.1f} days ago (threshold: {refresh_threshold} days). Evicting and forcing recompute.")
+                    logger.info(f"[DASHA] STALE — cached {age_days:.1f} days ago (threshold: {refresh_threshold} days). Evicting and forcing recompute.")
                     self.redis.delete(key)
                     return None
 
@@ -868,24 +960,24 @@ class EnhancedSessionManager:
                 # v1: missing upcoming_pratyantardashas entirely
                 # v2: has upcoming_pratyantardashas but entries lack "status" field
                 if data and "upcoming_pratyantardashas" not in data:
-                    print(f"[DASHA] Schema v1 detected for {user_id} (missing pratyantar detail) — evicting to upgrade.")
+                    logger.info(f"[DASHA] Schema v1 detected for {user_id} (missing pratyantar detail) — evicting to upgrade.")
                     self.redis.delete(key)
                     return None
                 pds = data.get("upcoming_pratyantardashas", [])
                 if pds and "status" not in pds[0]:
-                    print(f"[DASHA] Schema v2 detected for {user_id} (missing status field) — evicting to upgrade.")
+                    logger.info(f"[DASHA] Schema v2 detected for {user_id} (missing status field) — evicting to upgrade.")
                     self.redis.delete(key)
                     return None
-                print(f"[REDIS] Found dasha in Redis (age: {age_days:.1f} days, threshold: {refresh_threshold} days) — FRESH")
+                logger.info(f"[REDIS] Found dasha in Redis (age: {age_days:.1f} days, threshold: {refresh_threshold} days) — FRESH")
                 return data
             else:
                 # Legacy flat format — evict to migrate to new envelope
-                print(f"[DASHA] Legacy format detected for {user_id} — evicting and forcing recompute.")
+                logger.info(f"[DASHA] Legacy format detected for {user_id} — evicting and forcing recompute.")
                 self.redis.delete(key)
                 return None
 
         except Exception as e:
-            print(f"[SESSION] ERROR: Failed to get dasha data for {user_id}: {e}")
+            logger.info(f"[SESSION] ERROR: Failed to get dasha data for {user_id}: {e}")
             return None
     
     def get_transit_data(self, user_id: str):
@@ -900,10 +992,10 @@ class EnhancedSessionManager:
             return None
         try:
             key = f"session:{user_id}:transit"
-            print(f"[REDIS] GET key={key}")
+            logger.info(f"[REDIS] GET key={key}")
             raw = self.redis.get(key)
             if not raw:
-                print(f"[REDIS] No transit found at key: {key}")
+                logger.info(f"[REDIS] No transit found at key: {key}")
                 return None
 
             envelope = json.loads(raw)
@@ -919,20 +1011,20 @@ class EnhancedSessionManager:
                 refresh_threshold = settings.TRANSIT_REFRESH_HOURS
 
                 if age_hours >= refresh_threshold:
-                    print(f"[TRANSIT] STALE — cached {age_hours:.1f}h ago (threshold: {refresh_threshold}h). Evicting key and forcing recompute.")
+                    logger.info(f"[TRANSIT] STALE — cached {age_hours:.1f}h ago (threshold: {refresh_threshold}h). Evicting key and forcing recompute.")
                     self.redis.delete(key)
                     return None
 
-                print(f"[REDIS] Found transit in Redis (age: {age_hours:.1f}h, threshold: {refresh_threshold}h) — FRESH")
+                logger.info(f"[REDIS] Found transit in Redis (age: {age_hours:.1f}h, threshold: {refresh_threshold}h) — FRESH")
                 return envelope.get("data")
             else:
                 # Legacy flat format — treat as stale to migrate to new envelope
-                print(f"[TRANSIT] Legacy format detected for {user_id} — evicting and forcing recompute.")
+                logger.info(f"[TRANSIT] Legacy format detected for {user_id} — evicting and forcing recompute.")
                 self.redis.delete(key)
                 return None
 
         except Exception as e:
-            print(f"[SESSION] ERROR: Failed to get transit data for {user_id}: {e}")
+            logger.info(f"[SESSION] ERROR: Failed to get transit data for {user_id}: {e}")
             return None
     
     def session_exists(self, user_id: str):
@@ -961,12 +1053,12 @@ class EnhancedSessionManager:
             if dob:
                 validation = AgeValidator.validate_dob(dob)
 
-                print(f"[DOB_VALIDATION] Checking DOB: {dob}")
+                logger.info(f"[DOB_VALIDATION] Checking DOB: {dob}")
                 if not validation['valid']:
-                    print(f"[DOB_VALIDATION] ⚠️  Invalid: {validation['issue']}")
-                    print(f"  - Message: {validation['message']}")
+                    logger.info(f"[DOB_VALIDATION] ⚠️  Invalid: {validation['issue']}")
+                    logger.debug(f"- Message: {validation['message']}")
                 else:
-                    print(f"[DOB_VALIDATION] [OK] Valid - Age: {validation['age_years']} years, {validation['age_months']} months")
+                    logger.info(f"[DOB_VALIDATION] [OK] Valid - Age: {validation['age_years']} years, {validation['age_months']} months")
 
                 user_profile['_dob_validation'] = validation
 
@@ -995,7 +1087,7 @@ class EnhancedSessionManager:
                             "content": question,
                             "timestamp": timestamp
                         })
-                        print(f"[CONVERSION] Message {idx+1}: Added USER message - '{question[:50]}...'")
+                        logger.info(f"[CONVERSION] Message {idx+1}: Added USER message - '{question[:50]}...'")
                     
                     # Always add assistant message if answer exists
                     if answer:
@@ -1007,29 +1099,29 @@ class EnhancedSessionManager:
                                 "source": msg.get('source', 'external')
                             }
                         })
-                        print(f"[CONVERSION] Message {idx+1}: Added ASSISTANT message - '{answer[:50]}...' (source: {msg.get('source', 'external')})")
+                        logger.info(f"[CONVERSION] Message {idx+1}: Added ASSISTANT message - '{answer[:50]}...' (source: {msg.get('source', 'external')})")
             
             # Store conversation
             _set_data(f"session:{user_id}:history", internal_conversation)
             
             # Verification logging
-            print(f"\n{'='*80}")
-            print(f"[REDIS STORAGE] Session initialized for user: {user_id}")
-            print(f"{'='*80}")
-            print(f"[REDIS] [OK] User profile stored:")
-            print(f"  - Name: {user_profile.get('name', 'Unknown')}")
-            print(f"  - DOB: {user_profile.get('date_of_birth', 'Unknown')}")
-            print(f"\n[REDIS] [OK] Conversation history stored:")
-            print(f"  - Total messages in Redis: {len(internal_conversation)}")
+            logger.debug(f"{'='*80}")
+            logger.info(f"[REDIS STORAGE] Session initialized for user: {user_id}")
+            logger.debug(f"{'='*80}")
+            logger.info(f"[REDIS] [OK] User profile stored:")
+            logger.debug(f"- Name: {user_profile.get('name', 'Unknown')}")
+            logger.debug(f"- DOB: {user_profile.get('date_of_birth', 'Unknown')}")
+            logger.info(f"[REDIS] [OK] Conversation history stored:")
+            logger.debug(f"- Total messages in Redis: {len(internal_conversation)}")
             
             if internal_conversation:
-                print(f"\n[REDIS] First few messages in Redis:")
+                logger.info(f"[REDIS] First few messages in Redis:")
                 for i, msg in enumerate(internal_conversation[:4]):
                     role = msg.get('role', 'unknown')
                     content_preview = msg.get('content', '')[:60]
                     source = msg.get('metadata', {}).get('source', 'N/A')
-                    print(f"  {i+1}. [{role.upper()}] {content_preview}... (source: {source})")
-            print(f"{'='*80}\n")
+                    logger.debug(f"{i+1}. [{role.upper()}] {content_preview}... (source: {source})")
+            logger.debug(f"{'='*80}")
             
             # Initialize empty summary
             self.store_conversation_summary(user_id, "New conversation started.")
@@ -1050,7 +1142,7 @@ class EnhancedSessionManager:
         except Exception as e:
             import traceback
             traceback.print_exc()
-            print(f"[SESSION] Error initializing: {e}")
+            logger.info(f"[SESSION] Error initializing: {e}")
             return {
                 "status": "error",
                 "user_id": user_id,
@@ -1110,11 +1202,11 @@ class EnhancedSessionManager:
             return
         try:
             key = f"session:{user_id}:chart"
-            print(f"[REDIS] STORE key={key}")
+            logger.info(f"[REDIS] STORE key={key}")
             self.redis.set(key, json.dumps(chart_data))
-            print(f"[CACHE] [OK] Chart stored permanently (no TTL)")
+            logger.info(f"[CACHE] [OK] Chart stored permanently (no TTL)")
         except Exception as e:
-            print(f"[CACHE] Error storing chart: {e}")
+            logger.info(f"[CACHE] Error storing chart: {e}")
             pass
     
     def store_dasha_data(self, user_id: str, dasha_data: dict):
@@ -1127,15 +1219,15 @@ class EnhancedSessionManager:
             return
         try:
             key = f"session:{user_id}:dasha"
-            print(f"[REDIS] STORE key={key}")
+            logger.info(f"[REDIS] STORE key={key}")
             envelope = {
                 "data": dasha_data,
                 "stored_at": datetime.utcnow().isoformat()  # For staleness check on read
             }
             self.redis.set(key, json.dumps(envelope))
-            print(f"[CACHE] [OK] Dasha stored permanently with timestamp (refresh threshold: {settings.DASHA_REFRESH_DAYS} days)")
+            logger.info(f"[CACHE] [OK] Dasha stored permanently with timestamp (refresh threshold: {settings.DASHA_REFRESH_DAYS} days)")
         except Exception as e:
-            print(f"[CACHE] Error storing dasha: {e}")
+            logger.info(f"[CACHE] Error storing dasha: {e}")
             pass
     
     def store_transit_data(self, user_id: str, transit_data: dict):
@@ -1148,15 +1240,15 @@ class EnhancedSessionManager:
             return
         try:
             key = f"session:{user_id}:transit"
-            print(f"[REDIS] STORE key={key}")
+            logger.info(f"[REDIS] STORE key={key}")
             envelope = {
                 "data": transit_data,
                 "stored_at": datetime.utcnow().isoformat()  # For staleness check on read
             }
             self.redis.set(key, json.dumps(envelope))
-            print(f"[CACHE] [OK] Transit stored permanently with timestamp (refresh threshold: {settings.TRANSIT_REFRESH_HOURS}h)")
+            logger.info(f"[CACHE] [OK] Transit stored permanently with timestamp (refresh threshold: {settings.TRANSIT_REFRESH_HOURS}h)")
         except Exception as e:
-            print(f"[CACHE] Error storing transit: {e}")
+            logger.info(f"[CACHE] Error storing transit: {e}")
             pass
     
     def update_user_profile(self, user_id: str, user_profile: dict):
@@ -1166,9 +1258,9 @@ class EnhancedSessionManager:
         try:
             key = f"session:{user_id}:user_profile"
             self.redis.set(key, json.dumps(user_profile))
-            print(f"[REDIS] Profile updated permanently for {user_id}: DOB={user_profile.get('date_of_birth', 'N/A')}")
+            logger.info(f"[REDIS] Profile updated permanently for {user_id}: DOB={user_profile.get('date_of_birth', 'N/A')}")
         except Exception as e:
-            print(f"[SESSION] Error updating profile for {user_id}: {e}")
+            logger.info(f"[SESSION] Error updating profile for {user_id}: {e}")
 
     def overwrite_conversation_history(self, user_id: str, conversation_history: list):
         """Convert external conversation history and overwrite existing Redis history (permanent, no TTL)."""
@@ -1203,9 +1295,9 @@ class EnhancedSessionManager:
             key = f"session:{user_id}:history"
             # Store permanently — no TTL
             self.redis.set(key, json.dumps(internal_conversation))
-            print(f"[REDIS] History overwritten permanently for {user_id}: {len(internal_conversation)} messages")
+            logger.info(f"[REDIS] History overwritten permanently for {user_id}: {len(internal_conversation)} messages")
         except Exception as e:
-            print(f"[SESSION] Error overwriting history for {user_id}: {e}")
+            logger.info(f"[SESSION] Error overwriting history for {user_id}: {e}")
 
     def get_conversation_phase(self, user_id: str) -> dict:
         """Get conversation phase for progressive disclosure."""
@@ -1234,7 +1326,7 @@ class EnhancedSessionManager:
             }
             self.redis.set(f"session:{user_id}:conv_phase", json.dumps(data))
         except Exception as e:
-            print(f"[PHASE] Error storing phase: {e}")
+            logger.info(f"[PHASE] Error storing phase: {e}")
 
     def extend_session(self, user_id: str):
         """No-op: all session data is stored permanently in Redis (no TTL to extend)."""
@@ -1247,7 +1339,7 @@ class EnhancedSessionManager:
         try:
             self.redis.set(f"session:{user_id}:lang", lang_code)
         except Exception as e:
-            print(f"[LANG] Error storing detected language: {e}")
+            logger.info(f"[LANG] Error storing detected language: {e}")
 
     def get_detected_language(self, user_id: str) -> str:
         """Retrieve the previously detected language for this session (default 'en')."""
@@ -1382,7 +1474,7 @@ def initialize_session(request: InitializeSessionRequest):
             #   3. Evict chart + dasha + transit cache so they are recomputed with
             #      the fixed engine on the next /message call.
             #   4. Do NOT recreate metadata or summary (preserve session continuity).
-            print(f"\n[REDIS] Session already exists for {user_id} — performing selective refresh.")
+            logger.info(f"[REDIS] Session already exists for {user_id} — performing selective refresh.")
 
             # Refresh profile (DOB / timezone may have changed)
             profile_dict = (
@@ -1396,7 +1488,7 @@ def initialize_session(request: InitializeSessionRequest):
             if request.conversation_history:
                 conversation = [item.dict() for item in request.conversation_history]
                 session_manager.overwrite_conversation_history(user_id, conversation)
-                print(f"[REDIS] History refreshed: {len(conversation)} external messages imported.")
+                logger.info(f"[REDIS] History refreshed: {len(conversation)} external messages imported.")
 
             # Evict stale calculated data — forces recompute on next /message
             for stale_key in [
@@ -1406,7 +1498,7 @@ def initialize_session(request: InitializeSessionRequest):
             ]:
                 if session_manager.redis:
                     session_manager.redis.delete(stale_key)
-            print(f"[REDIS] Stale chart/dasha/transit cache evicted for {user_id}.")
+            logger.info(f"[REDIS] Stale chart/dasha/transit cache evicted for {user_id}.")
 
             return InitializeSessionResponse(
                 user_id=user_id,
@@ -1419,7 +1511,7 @@ def initialize_session(request: InitializeSessionRequest):
             conversation_history=conversation
         )
 
-        print(f"\n[REDIS] Initialized NEW session for {user_id} - Status: {result['status']}")
+        logger.info(f"[REDIS] Initialized NEW session for {user_id} - Status: {result['status']}")
 
         return InitializeSessionResponse(
             user_id=result['user_id'],
@@ -1429,7 +1521,7 @@ def initialize_session(request: InitializeSessionRequest):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"[SESSION_ERROR] Error initializing session: {e}")
+        logger.info(f"[SESSION_ERROR] Error initializing session: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to initialize session: {str(e)}"
@@ -1469,9 +1561,8 @@ def send_message(request: SendMessageRequest):
                 status_code=503,
                 detail=f"Backend session database (Redis) is unavailable: {str(e)}"
             )
-        print("Testing XYZ")
         if not user_profile:
-            print(f"[WARNING] /message blocked: Session not found in Redis for user: {user_id}")
+            logger.info(f"[WARNING] /message blocked: Session not found in Redis for user: {user_id}")
             raise HTTPException(
                 status_code=404,
                 detail=f"Session not found for user: {user_id}. Please call /initialize first."
@@ -1537,14 +1628,14 @@ def send_message(request: SendMessageRequest):
                 resp = context_manager.fast_llm.invoke(llm_prompt)
                 result_text = resp.content.strip().upper()
                 if result_text.startswith("YES"):
-                    print(f"[PRE-SAFETY] LLM vulgarity fallback triggered — blocking")
+                    logger.info(f"[PRE-SAFETY] LLM vulgarity fallback triggered — blocking")
                     return True
             except Exception as _e:
-                print(f"[PRE-SAFETY] LLM vulgarity check error (fail-open): {_e}")
+                logger.info(f"[PRE-SAFETY] LLM vulgarity check error (fail-open): {_e}")
             return False
 
         if _is_vulgar(question):
-            print(f"[PRE-SAFETY] Vulgar content detected — returning hard block")
+            logger.info(f"[PRE-SAFETY] Vulgar content detected — returning hard block")
             from src.safety.templates import HARD_BLOCK_VULGAR
             session_manager.add_message(user_id, "user", question)
             session_manager.add_message(user_id, "assistant", HARD_BLOCK_VULGAR,
@@ -1562,55 +1653,55 @@ def send_message(request: SendMessageRequest):
         full_history = session_manager.get_conversation_history(user_id) or []
         conversation_summary = session_manager.get_conversation_summary(user_id)
         
-        print(f"\n{'='*80}")
-        print(f"[REDIS CONVERSATION CONTEXT] Fetched from Redis for User: {user_id}")
-        print(f"{'='*80}")
-        print(f"Total messages in history: {len(full_history)}")
-        print(f"Conversation summary available: {'Yes' if conversation_summary else 'No'}")
+        logger.debug(f"{'='*80}")
+        logger.info(f"[REDIS CONVERSATION CONTEXT] Fetched from Redis for User: {user_id}")
+        logger.debug(f"{'='*80}")
+        logger.debug(f"Total messages in history: {len(full_history)}")
+        logger.debug(f"Conversation summary available: {'Yes' if conversation_summary else 'No'}")
         if conversation_summary:
-            print(f"Summary: {conversation_summary[:100]}...")
+            logger.debug(f"Summary: {conversation_summary[:100]}...")
         
         # Verification: Show what's in Redis
         if full_history:
-            print(f"\n[REDIS VERIFICATION] Conversation history details:")
+            logger.info(f"[REDIS VERIFICATION] Conversation history details:")
             for i, msg in enumerate(full_history[:6]):
                 role = msg.get('role', 'unknown')
                 content = msg.get('content', '')[:60]
                 source = msg.get('metadata', {}).get('source', 'N/A')
-                print(f"  {i+1}. [{role.upper():9}] {content}... (source: {source})")
+                logger.debug(f"{i+1}. [{role.upper():9}] {content}... (source: {source})")
             
             if len(full_history) > 6:
-                print(f"  ... and {len(full_history) - 6} more messages")
+                logger.debug(f"... and {len(full_history) - 6} more messages")
         else:
-            print(f"[REDIS VERIFICATION] No conversation history (first message)")
-            print(f"{'='*80}\n")
-            print(f"[REDIS CONVERSATION CONTEXT] Fetched from Redis for User: {user_id}")
-            print(f"{'='*80}")
-            print(f"Total messages in history: {len(full_history)}")
-            print(f"Conversation summary available: {'Yes' if conversation_summary else 'No'}")
+            logger.info(f"[REDIS VERIFICATION] No conversation history (first message)")
+            logger.debug(f"{'='*80}")
+            logger.info(f"[REDIS CONVERSATION CONTEXT] Fetched from Redis for User: {user_id}")
+            logger.debug(f"{'='*80}")
+            logger.debug(f"Total messages in history: {len(full_history)}")
+            logger.debug(f"Conversation summary available: {'Yes' if conversation_summary else 'No'}")
             if conversation_summary:
-                print(f"Summary: {conversation_summary[:100]}...")
+                logger.debug(f"Summary: {conversation_summary[:100]}...")
             
             # Verification: Show what's in Redis
             if full_history:
-                print(f"\n[REDIS VERIFICATION] Conversation history details:")
+                logger.info(f"[REDIS VERIFICATION] Conversation history details:")
                 for i, msg in enumerate(full_history[:6]):
                     role = msg.get('role', 'unknown')
                     content = msg.get('content', '')[:60]
                     source = msg.get('metadata', {}).get('source', 'N/A')
-                    print(f"  {i+1}. [{role.upper():9}] {content}... (source: {source})")
+                    logger.debug(f"{i+1}. [{role.upper():9}] {content}... (source: {source})")
                 
                 if len(full_history) > 6:
-                    print(f"  ... and {len(full_history) - 6} more messages")
+                    logger.debug(f"... and {len(full_history) - 6} more messages")
             else:
-                print(f"[REDIS VERIFICATION] No conversation history (first message)")
-            print(f"{'='*80}\n")
+                logger.info(f"[REDIS VERIFICATION] No conversation history (first message)")
+            logger.debug(f"{'='*80}")
         
         # ====================================================================
         # STEP 2: ANALYZE MESSAGE INTENT (LLM-Based)
         # ====================================================================
-        print(f"\n[STEP 1: INTENT ANALYSIS]")
-        print(f"Analyzing: '{question}'")
+        logger.info(f"[STEP 1: INTENT ANALYSIS]")
+        logger.debug(f"Analyzing: '{question}'")
         
         intent_analysis = context_manager.analyze_message_intent(
             current_query=question,
@@ -1622,13 +1713,13 @@ def send_message(request: SendMessageRequest):
         if intent_analysis.get('intent_type') == 'NEW_TOPIC':
             conv_phase_check = session_manager.get_conversation_phase(user_id)
             if conv_phase_check.get('phase') != 'INITIAL':
-                print(f"[PHASE] NEW_TOPIC detected → resetting phase from {conv_phase_check.get('phase')} to INITIAL")
+                logger.info(f"[PHASE] NEW_TOPIC detected → resetting phase from {conv_phase_check.get('phase')} to INITIAL")
                 session_manager.set_conversation_phase(user_id, phase="INITIAL")
 
         # ====================================================================
         # STEP 3: RESOLVE CONTEXTUAL QUERY (Confidence-Based)
         # ====================================================================
-        print(f"\n[STEP 2: SEMANTIC INTERPRETATION]")
+        logger.info(f"[STEP 2: SEMANTIC INTERPRETATION]")
 
         # Only resolve contextual references when there is at least one real prior
         # user message in history.  If the history contains only app-generated
@@ -1670,7 +1761,7 @@ def send_message(request: SendMessageRequest):
                 intent_analysis=intent_analysis
             )
         elif _skip_expansion:
-            print(f"[PHASE] Skipping semantic expansion — phase={_phase_now}, response={_response_type_now}")
+            logger.info(f"[PHASE] Skipping semantic expansion — phase={_phase_now}, response={_response_type_now}")
             resolution_result = {
                 "action": "NONE",
                 "processed_query": question,
@@ -1684,9 +1775,9 @@ def send_message(request: SendMessageRequest):
                 clarification_answer = resolution_result.get('clarification_question', 
                     "Could you please clarify what you're referring to?")
                 
-                print(f"\n[CLARIFICATION REQUESTED]")
-                print(f"  Ambiguity Score: {resolution_result['ambiguity_score']:.2f}")
-                print(f"  Returning clarification question instead of processing query")
+                logger.info(f"[CLARIFICATION REQUESTED]")
+                logger.debug(f"Ambiguity Score: {resolution_result['ambiguity_score']:.2f}")
+                logger.debug(f"Returning clarification question instead of processing query")
                 
                 # Store the clarification exchange
                 session_manager.add_message(user_id, "user", question)
@@ -1713,48 +1804,48 @@ def send_message(request: SendMessageRequest):
         # Get the processed query (original, expanded, or hinted)
         processed_query = resolution_result['processed_query']
         
-        print(f"\n[RESOLUTION RESULT]")
-        print(f"  Action: {resolution_result['action']}")
-        print(f"  Ambiguity Score: {resolution_result['ambiguity_score']:.2f}")
-        print(f"  Original Query: {question}")
-        print(f"  Processed Query: {processed_query}")
+        logger.info(f"[RESOLUTION RESULT]")
+        logger.debug(f"Action: {resolution_result['action']}")
+        logger.debug(f"Ambiguity Score: {resolution_result['ambiguity_score']:.2f}")
+        logger.debug(f"Original Query: {question}")
+        logger.debug(f"Processed Query: {processed_query}")
         if processed_query != question:
-            print(f"  [OK] Query enhanced for clarity")
+            logger.debug(f"[OK] Query enhanced for clarity")
         else:
-            print(f"  [INFO]  No modification needed")
+            logger.debug(f"[INFO]  No modification needed")
         
         # ====================================================================
         # STEP 4: PREPARE CONTEXT FOR ORCHESTRATOR
         # ====================================================================
-        print(f"\n[STEP 3: PREPARING ORCHESTRATOR CONTEXT]")
+        logger.info(f"[STEP 3: PREPARING ORCHESTRATOR CONTEXT]")
         
         # Get recent history (context window)
         if len(full_history) > settings.CONVERSATION_CONTEXT_WINDOW:
             recent_history = full_history[-settings.CONVERSATION_CONTEXT_WINDOW:]
-            print(f"Sending last {settings.CONVERSATION_CONTEXT_WINDOW} of {len(full_history)} messages")
+            logger.debug(f"Sending last {settings.CONVERSATION_CONTEXT_WINDOW} of {len(full_history)} messages")
         else:
             recent_history = full_history
-            print(f"Sending all {len(full_history)} messages")
+            logger.debug(f"Sending all {len(full_history)} messages")
         
         # Log what's being sent to orchestrator
-        print(f"\n{'-'*80}")
-        print(f"[MESSAGES SENT TO ORCHESTRATOR]")
-        print(f"{'-'*80}")
+        logger.debug(f"{'-'*80}")
+        logger.info(f"[MESSAGES SENT TO ORCHESTRATOR]")
+        logger.debug(f"{'-'*80}")
         for i, msg in enumerate(recent_history, 1):
             role_label = "[USER]" if msg['role'] == 'user' else "[BOT]"
             content_preview = msg['content'][:70] + "..." if len(msg['content']) > 70 else msg['content']
-            print(f"{i}. {role_label}: {content_preview}")
-        
-        print(f"\n[CURRENT QUERY TO ORCHESTRATOR]")
-        print(f"  Original User Query: {question}")
-        print(f"  Processed Query: {processed_query}")
-        print(f"  Intent Type: {intent_analysis['intent_type']}")
-        print(f"  Resolution Action: {resolution_result['action']}")
+            logger.debug(f"{i}. {role_label}: {content_preview}")
+
+        logger.info(f"[CURRENT QUERY TO ORCHESTRATOR]")
+        logger.debug(f"Original User Query: {question}")
+        logger.debug(f"Processed Query: {processed_query}")
+        logger.debug(f"Intent Type: {intent_analysis['intent_type']}")
+        logger.debug(f"Resolution Action: {resolution_result['action']}")
         if resolution_result['action'] == 'EXPAND':
-            print(f"  [OK] Query expanded for clarity (confidence: {resolution_result['ambiguity_score']:.2f})")
+            logger.debug(f"[OK] Query expanded for clarity (confidence: {resolution_result['ambiguity_score']:.2f})")
         elif resolution_result['action'] == 'HINT':
-            print(f"  [INFO]  Hint added for context (confidence: {resolution_result['ambiguity_score']:.2f})")
-        print(f"{'-'*80}\n")
+            logger.debug(f"[INFO]  Hint added for context (confidence: {resolution_result['ambiguity_score']:.2f})")
+        logger.debug(f"{'-'*80}")
         
         # ====================================================================
         # STEP 5: GET CACHED CALCULATIONS
@@ -1763,15 +1854,15 @@ def send_message(request: SendMessageRequest):
         cached_dasha = session_manager.get_dasha_data(user_id)
         cached_transit = session_manager.get_transit_data(user_id)
         
-        print(f"[REDIS CACHED DATA FETCH]")
-        print(f"  Chart: {'[OK] Fetched from Redis' if cached_chart else '[MISSING] Not in Redis'}")
-        print(f"  Dasha: {'[OK] Fetched from Redis' if cached_dasha else '[MISSING] Not in Redis'}")
-        print(f"  Transit: {'[OK] Fetched from Redis' if cached_transit else '[MISSING] Not in Redis'}")
+        logger.info(f"[REDIS CACHED DATA FETCH]")
+        logger.debug(f"Chart: {'[OK] Fetched from Redis' if cached_chart else '[MISSING] Not in Redis'}")
+        logger.debug(f"Dasha: {'[OK] Fetched from Redis' if cached_dasha else '[MISSING] Not in Redis'}")
+        logger.debug(f"Transit: {'[OK] Fetched from Redis' if cached_transit else '[MISSING] Not in Redis'}")
 
         
         # ── Load conversation phase for progressive disclosure ────────────
         conv_phase_data = session_manager.get_conversation_phase(user_id)
-        print(f"[PHASE] Current phase: {conv_phase_data.get('phase')} | topic: {conv_phase_data.get('topic')}")
+        logger.info(f"[PHASE] Current phase: {conv_phase_data.get('phase')} | topic: {conv_phase_data.get('topic')}")
 
         orchestrator_session_data = {
             "chart_data": cached_chart,
@@ -1788,16 +1879,16 @@ def send_message(request: SendMessageRequest):
         
         # Log what cached data is being passed to orchestrator
         if cached_chart:
-            print(f"[CACHE] [OK] Passing cached chart to orchestrator")
+            logger.info(f"[CACHE] [OK] Passing cached chart to orchestrator")
         if cached_dasha:
-            print(f"[CACHE] [OK] Passing cached dasha to orchestrator")
+            logger.info(f"[CACHE] [OK] Passing cached dasha to orchestrator")
         if cached_transit:
-            print(f"[CACHE] [OK] Passing cached transit to orchestrator")
+            logger.info(f"[CACHE] [OK] Passing cached transit to orchestrator")
         
         # ====================================================================
         # STEP 6: PROCESS QUERY WITH ORCHESTRATOR
         # ====================================================================
-        print(f"\n[STEP 4: CALLING ORCHESTRATOR]")
+        logger.info(f"[STEP 4: CALLING ORCHESTRATOR]")
         
         orchestrator = get_orchestrator()
         
@@ -1837,27 +1928,57 @@ def send_message(request: SendMessageRequest):
         answer = re.sub(r"^\s*(Now|Ab|So|Toh)[,.]?\s*", "", answer, flags=re.IGNORECASE)
         
         if answer != original_answer:
-            print(f"[POST_PROCESS] Removed 'thank you' pattern")
-        
+            logger.info(f"[POST_PROCESS] Removed 'thank you' pattern")
+
         # Use the RESULT phase (what the orchestrator decided) not the INPUT phase
         result_phase = (result.get('conversation_phase') or {}).get('phase', conv_phase_data.get('phase', 'INITIAL'))
 
+        # ── DETAILED RESPONSE: strip any "offer more details on same topic" sentences ──
+        # The LLM sometimes adds these even when instructed not to. Remove them by pattern.
+        if result_phase == 'FOLLOWUP_LOOP':
+            # Remove explicit "Next Favorable Window" sections in detailed responses.
+            # Secondary windows should be woven naturally into the factor explanation,
+            # not emitted as a separate heading block.
+            _next_window_original = answer
+            _next_window_patterns = [
+                r"(?is)\n*\s*next\s+favo(?:u)?rable\s+window\s*:[^\n]*(?:\n[^\n]*)?",
+                r"(?is)\n*\s*agla\s+favo(?:u)?rable\s+window\s*:[^\n]*(?:\n[^\n]*)?",
+            ]
+            for _pat in _next_window_patterns:
+                answer = re.sub(_pat, "\n", answer, flags=re.IGNORECASE)
+            if answer != _next_window_original:
+                logger.info("[POST_PROCESS] Removed standalone 'Next Favorable Window' section from detailed response")
+
+            _offer_more_patterns = [
+                r"[^.!?\n]*(agar aap chah|agar chahein).{0,80}(detail|vistar|samjha|elaborate)[^.!?\n]*[.!?]?\s*",
+                r"[^.!?\n]*(aur (bhi )?detail mein samjha|aur jaanna hai|aur detail chahiye|aur bhi (batana|samjhana))[^.!?\n]*[.!?]?\s*",
+                r"[^.!?\n]*\b(main aapko|I can).{0,50}(aur (bata|samjha|detail)|more detail|elaborate|explain further)[^.!?\n]*[.!?]?\s*",
+                r"[^.!?\n]*\b(if you.{0,20}(would like|want|wish)|would you like me to).{0,60}(more detail|elaborate|explain (further|more)|go deeper)[^.!?\n]*[.!?]?\s*",
+            ]
+            _detail_original = answer
+            for _pat in _offer_more_patterns:
+                answer = re.sub(_pat, " ", answer, flags=re.IGNORECASE)
+            answer = re.sub(r"\n{3,}", "\n\n", answer)
+            answer = re.sub(r"  +", " ", answer).strip()
+            if answer != _detail_original:
+                logger.info(f"[POST_PROCESS] Removed 'offer more details on same topic' sentence from detailed response")
+
         # Enforce word maximum for mobile (phase-aware)
         if result_phase == 'FOLLOWUP_LOOP' and conv_phase_data.get('phase') == 'AWAITING_DETAIL':
-            # User agreed to details → detailed response capped at 400 words
-            MAX_MOBILE_WORDS = 400
+            # User agreed to detailed reasoning → allow richer explanation (~600 words)
+            MAX_MOBILE_WORDS = 600
         elif result_phase == 'FOLLOWUP_LOOP':
-            # Follow-up loop responses capped at 200 words
-            MAX_MOBILE_WORDS = 300
+            # Follow-up loop responses (further questions) capped slightly lower
+            MAX_MOBILE_WORDS = 500
         elif result_phase == 'AWAITING_DETAIL':
-            # Initial short response → hard cap at 100 words
-            MAX_MOBILE_WORDS = 100
+            # Initial short response → hard cap at 200 words
+            MAX_MOBILE_WORDS = 200
         else:
-            MAX_MOBILE_WORDS = 100  # Default fallback (also initial)
+            MAX_MOBILE_WORDS = 200  # Default fallback (also initial)
         word_count = len(answer.split())
 
         if word_count > MAX_MOBILE_WORDS:
-            print(f"[MOBILE] Response too long ({word_count} words), truncating to {MAX_MOBILE_WORDS}...")
+            logger.info(f"[MOBILE] Response too long ({word_count} words), truncating to {MAX_MOBILE_WORDS}...")
             
             # Split into sentences
             sentences = re.split(r'(?<=[.!?])\s+', answer)
@@ -1892,62 +2013,79 @@ def send_message(request: SendMessageRequest):
                 }
                 answer += _trunc_hint_map.get(_detected_lang, _trunc_hint_map['en'])
             
-            print(f"[MOBILE] Truncated: {word_count} → {len(answer.split())} words")
+            logger.info(f"[MOBILE] Truncated: {word_count} → {len(answer.split())} words")
 
         # ── FINAL ENFORCEMENT: ensure initial short response ends with offer-for-detail question ──
         # This runs *after* any truncation so the closing question cannot be accidentally cut off.
+        # The orchestrator injects a closing via pick_initial_closing(); only append if it got
+        # truncated away — detected by absence of any question mark near the end of the answer.
         if result_phase == 'AWAITING_DETAIL':
-            _detected_lang = result.get('detected_language') or session_manager.get_detected_language(user_id) or 'en'
-            _closing_q_map = {
-                'en': 'Would you like me to explain the detailed astrological reasoning behind this?',
-                'hi': 'Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?',
-                'hi-lat': 'Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?',
-                'ta': 'Itharku pinnaal ullaa jothida karanam theriya virumbukireerga?',
-                'ta-lat': 'Itharku pin ullana jothida karanam theriya virumbukireerga?',
-                'pa': 'Ki tusi is de pichhe di jyotish wajah jaanna chahunde ho?',
-                'pa-lat': 'Ki tusi is de pichhe di jyotish wajah jaanna chahunde ho?',
-            }
-            _closing_q = _closing_q_map.get(_detected_lang, _closing_q_map['en'])
-            if _closing_q not in answer:
+            last_200 = answer[-200:] if len(answer) > 200 else answer
+            already_has_closing = '?' in last_200
+            if not already_has_closing:
+                _detected_lang = result.get('detected_language') or session_manager.get_detected_language(user_id) or 'en'
+                _closing_q_map = {
+                    'en': 'Would you like me to explain the detailed astrological reasoning behind this?',
+                    'hi': 'Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?',
+                    'hi-lat': 'Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?',
+                    'ta': 'Itharku pinnaal ullaa jothida karanam theriya virumbukireerga?',
+                    'ta-lat': 'Itharku pin ullana jothida karanam theriya virumbukireerga?',
+                    'pa': 'Ki tusi is de pichhe di jyotish wajah jaanna chahunde ho?',
+                    'pa-lat': 'Ki tusi is de pichhe di jyotish wajah jaanna chahunde ho?',
+                }
+                _closing_q = _closing_q_map.get(_detected_lang, _closing_q_map['en'])
                 answer = (answer.rstrip() + "\n\n" + _closing_q).strip()
-                print(f"[POST_PROCESS] Appended offer-for-detail question (initial short response, final guard)")
+                logger.info(f"[POST_PROCESS] Appended offer-for-detail question (closing was truncated)")
         
-        # Run final semantic validator using a small conversation context window
+        # Run final semantic validator using a small conversation context window.
+        # For detailed responses (second-step CONTINUATION/CLARIFICATION after an
+        # initial timing answer), require AT LEAST 5 numbered astrological reasoning
+        # points. We key this off the high-level intent returned by the orchestrator
+        # plus the intent_type from the LLM intent analysis.
+        min_points = 0
+        _ia = intent_analysis or {}
+        _ia_type = _ia.get("intent_type")
+        # Only enforce numbered astro reasoning when we're in the astro prediction
+        # flow and the message is a continuation/clarification (second step).
+        if intent == "RAG_WITH_CALCULATION" and _ia_type in ("CONTINUATION", "CLARIFICATION"):
+            min_points = 5
+
         answer = validate_and_sanitize_response(
             question=question,
             answer=answer,
             intent_analysis=intent_analysis,
             recent_history=recent_history,
+            min_numbered_points=min_points,
         )
 
-        print(f"\n[ORCHESTRATOR RESULT]")
-        print(f"  Intent: {intent}")
-        print(f"  Confidence: {confidence:.2f}")
-        print(f"  Answer length: {len(answer)} characters ({len(answer.split())} words)")
+        logger.info(f"[ORCHESTRATOR RESULT]")
+        logger.debug(f"Intent: {intent}")
+        logger.debug(f"Confidence: {confidence:.2f}")
+        logger.debug(f"Answer length: {len(answer)} characters ({len(answer.split())} words)")
         
         # ====================================================================
         # STEP 7: STORE NEW CALCULATIONS IN CACHE
         # ====================================================================
         # Only store if not already cached
         if result.get('chart_data') and not cached_chart:
-            print(f"[REDIS CACHE] Storing NEW chart data to Redis...")
+            logger.info(f"[REDIS CACHE] Storing NEW chart data to Redis...")
             session_manager.store_chart_data(user_id, result['chart_data'])
-            print(f"[REDIS CACHE] [OK] Chart stored in Redis")
+            logger.info(f"[REDIS CACHE] [OK] Chart stored in Redis")
         
         if result.get('dasha_data') and not cached_dasha:
-            print(f"[REDIS CACHE] Storing NEW dasha data to Redis...")
+            logger.info(f"[REDIS CACHE] Storing NEW dasha data to Redis...")
             session_manager.store_dasha_data(user_id, result['dasha_data'])
-            print(f"[REDIS CACHE] [OK] Dasha stored in Redis")
+            logger.info(f"[REDIS CACHE] [OK] Dasha stored in Redis")
         
         if result.get('transit_data') and not cached_transit:
-            print(f"[REDIS CACHE] Storing NEW transit data to Redis...")
+            logger.info(f"[REDIS CACHE] Storing NEW transit data to Redis...")
             session_manager.store_transit_data(user_id, result['transit_data'])
-            print(f"[REDIS CACHE] [OK] Transit stored in Redis")
+            logger.info(f"[REDIS CACHE] [OK] Transit stored in Redis")
         
         # ====================================================================
         # STEP 8: UPDATE CONVERSATION HISTORY
         # ====================================================================
-        print(f"\n[REDIS] Saving latest user & assistant messages to Redis history...")
+        logger.info(f"[REDIS] Saving latest user & assistant messages to Redis history...")
 
         session_manager.add_message(user_id, "user", question)  # Store original question
         session_manager.add_message(
@@ -1977,20 +2115,20 @@ def send_message(request: SendMessageRequest):
                 last_query=new_phase.get('last_query'),
                 followup_count=new_phase.get('followup_count', 0)
             )
-            print(f"[PHASE] Updated to: {new_phase.get('phase')} | topic: {new_phase.get('topic')}")
+            logger.info(f"[PHASE] Updated to: {new_phase.get('phase')} | topic: {new_phase.get('topic')}")
 
         # Persist the detected language for the next turn's session-prior fallback
         _new_detected_lang = result.get('detected_language', 'en')
         if _new_detected_lang and _new_detected_lang != 'en':
             session_manager.store_detected_language(user_id, _new_detected_lang)
-            print(f"[LANG] Session language persisted: {_new_detected_lang}")
+            logger.info(f"[LANG] Session language persisted: {_new_detected_lang}")
 
         # ====================================================================
         # STEP 9: UPDATE CONVERSATION SUMMARY (Every 10 messages)
         # ====================================================================
         if session_manager.should_update_summary(user_id):
-            print(f"\n[STEP 5: UPDATING CONVERSATION SUMMARY]")
-            print(f"  Threshold reached: Generating new summary...")
+            logger.info(f"[STEP 5: UPDATING CONVERSATION SUMMARY]")
+            logger.debug(f"Threshold reached: Generating new summary...")
             
             updated_history = session_manager.get_conversation_history(user_id)
             new_summary = context_manager.generate_conversation_summary(
@@ -2005,14 +2143,14 @@ def send_message(request: SendMessageRequest):
         
         processing_time = time.time() - start_time
         
-        print(f"\n[RESPONSE SUMMARY]")
-        print(f"  Processing time: {processing_time:.2f}s")
-        print(f"  Context intent: {intent_analysis['intent_type']}")
-        print(f"  Resolution action: {resolution_result['action']}")
-        print(f"  Ambiguity score: {resolution_result['ambiguity_score']:.2f}")
-        print(f"  Orchestrator intent: {intent}")
-        print(f"  Response length: {len(answer)} characters")
-        print(f"{'='*80}\n")
+        logger.info(f"[RESPONSE SUMMARY]")
+        logger.debug(f"Processing time: {processing_time:.2f}s")
+        logger.debug(f"Context intent: {intent_analysis['intent_type']}")
+        logger.debug(f"Resolution action: {resolution_result['action']}")
+        logger.debug(f"Ambiguity score: {resolution_result['ambiguity_score']:.2f}")
+        logger.debug(f"Orchestrator intent: {intent}")
+        logger.debug(f"Response length: {len(answer)} characters")
+        logger.debug(f"{'='*80}")
         
         # Return response
         return SendMessageResponse(
