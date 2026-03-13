@@ -382,6 +382,20 @@ RECENT CONVERSATION:
 CURRENT USER MESSAGE:
 "{current_query}"
 
+CRITICAL DOMAIN GUIDANCE (read carefully before answering):
+- The "domain" field must capture the TRUE life-area of the question, even if the user uses indirect or emotional language.
+- Examples that MUST be tagged as "divorce" (NOT generic "marriage"):
+  - "Meri shaadi kab tootegi?" / "Meri shaadi kab toot jayegi?"
+  - "Mera rishta kab khatam hoga?" / "Relationship kab khatam hoga?"
+  - "Ham alag kab honge?" / "kab separation hoga?"
+  - Any phrasing where the user is clearly asking when a marriage/relationship will BREAK / END / TOOT / KHATAM.
+- Examples that SHOULD stay "marriage":
+  - "Meri shaadi kab hogi?" (asking about getting married)
+  - "Meri shaadi kaisi rahegi?" (quality of marriage)
+  - "Mere partner ke baare mein batao" (partner description without breakup focus)
+
+- Use the broader conversation for nuance: if earlier messages were about marriage and now the user asks about it "tootna", treat this turn's domain as "divorce".
+
 Respond in STRICT JSON format, no extra text:
 {{
   "intent_type": "CONTINUATION" | "NEW_TOPIC" | "CLARIFICATION",
@@ -413,9 +427,26 @@ Respond in STRICT JSON format, no extra text:
             # misclassifying it as a generic 'marriage' continuation.
             _q_lower = (current_query or "").lower()
             _divorce_keywords = [
-                "divorce", "separation", "separate", "alag hona", "talaq",
-                "breakup", "break-up", "judicial separation", "relationship end",
-                "marriage end"
+                "divorce",
+                "separation",
+                "separate",
+                "alag hona",
+                "talaq",
+                "breakup",
+                "break-up",
+                "judicial separation",
+                "relationship end",
+                "marriage end",
+                # Common Hindi/Hinglish breakup phrasings
+                "shaadi tootegi",
+                "shaadi toot jayegi",
+                "shaadi tootega",
+                "shaadi toot jayega",
+                "shaadi khatam",
+                "rishta tootega",
+                "rishta toot jayega",
+                "rishta khatam",
+                "relationship khatam",
             ]
             if any(k in _q_lower for k in _divorce_keywords):
                 result["domain"] = "divorce"

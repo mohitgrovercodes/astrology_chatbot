@@ -24,12 +24,55 @@ def _safe_upper(value: Optional[str]) -> str:
     return (value or "").upper()
 
 
-def infer_query_domain(query: str, fallback_domain: str = "general") -> str:
+def infer_query_domain(
+    query: str,
+    fallback_domain: str = "general",
+    intent_domain: Optional[str] = None,
+) -> str:
+    """
+    Infer a concrete domain label for the query.
+
+    Priority:
+    1) Explicit intent_domain (from validation/intent classifier), if mapped.
+    2) Heuristics over the original user query text.
+    3) Fallback label (usually "general").
+    """
+    # 1) Use structured intent domain if available and recognized
+    normalized_intent = (intent_domain or "").strip().lower()
+    if normalized_intent in {
+        "marriage",
+        "divorce",
+        "career",
+        "finance",
+        "children",
+        "health",
+        "home",
+        "foreign",
+    }:
+        return normalized_intent
+
+    # 2) Heuristic inference from the raw query
     q = (query or "").lower()
-    if any(w in q for w in ["marriage", "shaadi", "partner", "relationship", "spouse"]):
-        return "marriage"
+
+    # Treat destructive-phrasing around marriage/relationship as divorce queries.
+    # Examples: "meri shaadi kab tootegi", "mera rishta kab tootega", "relationship kab khatam hoga".
+    if (
+        any(w in q for w in ["shaadi", "shadi", "rishta", "relationship", "marriage"])
+        and any(
+            w in q
+            for w in [
+                "toot", "tut", "tootegi", "tootega", "tutegi", "tutega",
+                "toot jayegi", "toot jayega", "khatam", "khatam hogi", "khatam hoga",
+                "tod du", "tod doon", "tod dungi", "todunga",
+            ]
+        )
+    ):
+        return "divorce"
+
     if any(w in q for w in ["divorce", "separation", "talaq", "breakup"]):
         return "divorce"
+    if any(w in q for w in ["marriage", "shaadi", "partner", "relationship", "spouse"]):
+        return "marriage"
     if any(w in q for w in ["career", "job", "profession", "promotion", "work", "naukri"]):
         return "career"
     if any(w in q for w in ["money", "finance", "wealth", "income", "paisa", "dhan"]):
@@ -42,6 +85,8 @@ def infer_query_domain(query: str, fallback_domain: str = "general") -> str:
         return "home"
     if any(w in q for w in ["foreign", "abroad", "visa", "overseas", "immigration"]):
         return "foreign"
+
+    # 3) Fallback
     return fallback_domain
 
 
@@ -54,8 +99,16 @@ def build_astro_evidence(
 ) -> Dict[str, Any]:
     """
     Build deterministic evidence payload consumed by prompt and API.
+
+    domain_hint is expected to come from higher-level intent/validation layers
+    (e.g., "marriage", "career", "health"). When present, we treat it as an
+    explicit intent_domain signal for maximum consistency across the system.
     """
-    domain = infer_query_domain(query, fallback_domain=domain_hint or "general")
+    domain = infer_query_domain(
+        query,
+        fallback_domain=domain_hint or "general",
+        intent_domain=domain_hint,
+    )
 
     active_md = _safe_upper((dasha_data or {}).get("mahadasha", {}).get("planet"))
     active_ad = _safe_upper((dasha_data or {}).get("antardasha", {}).get("planet"))

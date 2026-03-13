@@ -1602,11 +1602,15 @@ Provide a concise answer:"""
                 try:
                     print("[VALIDATION] Running validation...")
                     
-                    # Detect query type with LLM confirmation
+                    # Detect query type with LLM confirmation, biased by high-level
+                    # intent domain from the ContextManager (if available).
+                    _ia = (state.get('session_data') or {}).get('intent_analysis') or {}
+                    _intent_domain = (_ia.get('domain') or '').strip().lower() or None
                     query_type = detect_query_type(
-                        state['query'], 
+                        state['query'],
                         llm=self.fast_llm if hasattr(self, 'fast_llm') else None,
-                        use_llm_confirmation=True
+                        use_llm_confirmation=True,
+                        intent_domain_hint=_intent_domain,
                     )
                     state['validation_query_type'] = query_type
                     
@@ -1657,7 +1661,8 @@ Provide a concise answer:"""
                                 timeout_sec=None
                             )
                             
-                            # Store results
+                            # Store results (also attach upstream intent_analysis so downstream
+                            # components can treat this as the canonical semantic label set).
                             state['validation_result'] = {
                                 'query_type': val_result.query_type,
                                 'overall_strength': val_result.overall_strength,
@@ -1671,7 +1676,8 @@ Provide a concise answer:"""
                                         'classical_ref': f.classical_ref
                                     }
                                     for f in val_result.critical_failures
-                                ]
+                                ],
+                                'intent_analysis': _ia,
                             }
                             
                             state['validation_strength'] = val_result.overall_strength
@@ -1710,14 +1716,17 @@ Provide a concise answer:"""
             # ================================================================
             if ENHANCED_ANALYSIS_AVAILABLE and enhanced_analysis:
                 try:
-                    # Get query_type from validation or detect it
+                    # Get query_type from validation or detect it (prefer the same
+                    # intent_domain hint used earlier so synthesis, validation and
+                    # astro evidence all agree on the semantic domain).
                     query_type_for_synthesis = state.get('validation_query_type')
                     if not query_type_for_synthesis and state.get('chart_data'):
                         try:
                             query_type_for_synthesis = detect_query_type(
                                 state['query'],
                                 llm=self.fast_llm if hasattr(self, 'fast_llm') else None,
-                                use_llm_confirmation=True
+                                use_llm_confirmation=True,
+                                intent_domain_hint=_intent_domain,
                             )
                         except:
                             query_type_for_synthesis = 'general'
@@ -4099,12 +4108,38 @@ When user uses "it", "this", "that" or asks "why", "how" -> connect to conversat
             )
 
         # ════════════════════════════════════════════════════════════════════════
+        # CHAIN-OF-THOUGHT SCRATCHPAD (hidden reasoning)
+        # ════════════════════════════════════════════════════════════════════════
+        # We explicitly ask the model to reason step-by-step using a scratchpad
+        # BEFORE writing the final user-facing answer. The scratchpad is purely
+        # internal; the assistant must not expose it verbatim to the user.
+        reasoning_scratchpad_block = f"""
+
+REASONING SCRATCHPAD (INTERNAL - DO NOT SHOW TO USER):
+- First, silently reason step by step about this specific question using the chart data, dasha, transits and the ASTRO INTELLIGENCE evidence above.
+- Use a mental checklist like:
+  1) Identify the key houses and lords for this domain (for example: 7th for marriage, 10th for career, 4th for home, 5th for children, etc.).
+  2) Check dignity, strength and major aspects/yogas that meaningfully change results.
+  3) Align these with the active Mahadasha/Antardasha/Pratyantardasha and the candidate timing windows listed in ASTRO INTELLIGENCE LAYER.
+  4) Note 2–4 core interpretive points that truly matter for the person (not a laundry list).
+- You MUST use this scratchpad reasoning to keep your answer coherent and grounded, but you MUST NOT show the scratchpad itself to the user.
+- The final answer for the user goes ONLY in the section marked <final_answer> below, in the user's language/script.
+
+When you are done reasoning, write ONLY the polished answer in this format:
+
+<final_answer>
+(natural, flowing answer for the user in {lang_name}, following the voice charter and response structure policy)
+</final_answer>
+"""
+
+        # ════════════════════════════════════════════════════════════════════════
         # PROMPT STRUCTURE (order matters for LLM compliance):
         #   1. System prompt (persona + constitution + chart anchor + timing rule)
         #   2. ALL computed chart data (birth chart, house lords, dasha, transits)
-        #   3. Classical text knowledge (RAG)
-        #   4. Response instructions
-        #   5. User query LAST — so LLM reads all ground truth before the question
+        #   3. Classical text knowledge (RAG) and deterministic evidence
+        #   4. Response instructions + conversation context
+        #   5. Hidden reasoning scratchpad instructions
+        #   6. User query LAST — so LLM reads all ground truth before the question
         # ════════════════════════════════════════════════════════════════════════
 
         prompt = f"""{system_prompt}
@@ -4116,6 +4151,8 @@ When user uses "it", "this", "that" or asks "why", "how" -> connect to conversat
 {deterministic_evidence}
 
 {conversation_summary_section}
+
+{reasoning_scratchpad_block}
 
 USER PROFILE:
 • Name: {user_profile.get('name', 'User')}
