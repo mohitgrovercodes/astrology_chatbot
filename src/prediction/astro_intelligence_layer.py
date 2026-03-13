@@ -1,0 +1,129 @@
+"""
+Deterministic astrology intelligence layer.
+
+Purpose:
+- Build machine-readable evidence before narrative generation.
+- Keep LLM focused on computed signals instead of free-form inference.
+"""
+
+from dataclasses import dataclass
+from typing import Dict, List, Any, Optional
+
+from src.prediction.timeline_reasoner import build_timeline_windows
+
+
+@dataclass
+class AstroSignal:
+    name: str
+    value: str
+    confidence: float
+    rationale: str
+
+
+def _safe_upper(value: Optional[str]) -> str:
+    return (value or "").upper()
+
+
+def infer_query_domain(query: str, fallback_domain: str = "general") -> str:
+    q = (query or "").lower()
+    if any(w in q for w in ["marriage", "shaadi", "partner", "relationship", "spouse"]):
+        return "marriage"
+    if any(w in q for w in ["divorce", "separation", "talaq", "breakup"]):
+        return "divorce"
+    if any(w in q for w in ["career", "job", "profession", "promotion", "work", "naukri"]):
+        return "career"
+    if any(w in q for w in ["money", "finance", "wealth", "income", "paisa", "dhan"]):
+        return "finance"
+    if any(w in q for w in ["child", "children", "pregnancy", "santan", "baby"]):
+        return "children"
+    if any(w in q for w in ["health", "illness", "disease", "surgery", "sehat"]):
+        return "health"
+    if any(w in q for w in ["home", "house", "property", "ghar", "real estate"]):
+        return "home"
+    if any(w in q for w in ["foreign", "abroad", "visa", "overseas", "immigration"]):
+        return "foreign"
+    return fallback_domain
+
+
+def build_astro_evidence(
+    query: str,
+    chart_data: Dict[str, Any],
+    dasha_data: Dict[str, Any],
+    transit_data: Dict[str, Any],
+    domain_hint: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Build deterministic evidence payload consumed by prompt and API.
+    """
+    domain = infer_query_domain(query, fallback_domain=domain_hint or "general")
+
+    active_md = _safe_upper((dasha_data or {}).get("mahadasha", {}).get("planet"))
+    active_ad = _safe_upper((dasha_data or {}).get("antardasha", {}).get("planet"))
+    active_pd = _safe_upper((dasha_data or {}).get("pratyantardasha", {}).get("planet"))
+    lagna_sign = ((chart_data or {}).get("lagna") or {}).get("sign", "Unknown")
+
+    transits = (transit_data or {}).get("transits", {})
+    jupiter_sign = transits.get("JUPITER") or transits.get("Jupiter") or "Unknown"
+    saturn_sign = transits.get("SATURN") or transits.get("Saturn") or "Unknown"
+
+    signals: List[AstroSignal] = [
+        AstroSignal(
+            name="active_dasha_stack",
+            value=f"{active_md}/{active_ad}/{active_pd}",
+            confidence=0.88,
+            rationale="Directly sourced from computed dasha payload.",
+        ),
+        AstroSignal(
+            name="lagna_anchor",
+            value=str(lagna_sign),
+            confidence=0.9,
+            rationale="Lagna is the primary personalization anchor.",
+        ),
+        AstroSignal(
+            name="major_transits",
+            value=f"Jupiter:{jupiter_sign}, Saturn:{saturn_sign}",
+            confidence=0.82,
+            rationale="Jupiter/Saturn transits are high-impact timing modifiers.",
+        ),
+    ]
+
+    windows = build_timeline_windows(
+        query_domain=domain,
+        dasha_data=dasha_data or {},
+        chart_data=chart_data or {},
+    )
+
+    return {
+        "domain": domain,
+        "signals": [s.__dict__ for s in signals],
+        "timeline_windows": windows,
+        "confidence_band": "medium" if windows else "low",
+    }
+
+
+def format_evidence_for_prompt(evidence: Dict[str, Any]) -> str:
+    if not evidence:
+        return ""
+    lines = [
+        "ASTRO INTELLIGENCE LAYER (deterministic evidence):",
+        f"- Domain: {evidence.get('domain', 'general')}",
+        f"- Confidence band: {evidence.get('confidence_band', 'low')}",
+        "- Signals:",
+    ]
+    for s in evidence.get("signals", [])[:5]:
+        lines.append(
+            f"  • {s.get('name')}: {s.get('value')} "
+            f"(conf {s.get('confidence')}, reason: {s.get('rationale')})"
+        )
+    if evidence.get("timeline_windows"):
+        lines.append("- Candidate timing windows:")
+        for w in evidence["timeline_windows"][:4]:
+            lines.append(
+                f"  • {w.get('label')} {w.get('start_month')} -> {w.get('end_month')} "
+                f"(confidence={w.get('confidence')})"
+            )
+    lines.append(
+        "- Use this evidence as the primary reasoning substrate. "
+        "Narrate naturally; do not copy bullets verbatim."
+    )
+    return "\n".join(lines)

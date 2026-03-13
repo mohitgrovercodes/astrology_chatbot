@@ -15,6 +15,7 @@ Core principles:
 """
 
 from src.utils.localization import get_localization_manager
+from src.ai.voice_charter import get_voice_charter, get_response_structure_policy
 
 class AstrologerPersona:
     """Base class for astrologer personas."""
@@ -59,6 +60,9 @@ class AstrologerPersona:
         
         timing_section = f"\n\n5. TIMING AND PREDICTIONS\n{timing_rules_text}" if timing_rules else ""
         
+        voice_charter = get_voice_charter(language)
+        response_flow = get_response_structure_policy()
+
         return f"""{identity}
 
 CLIENT: {user_name}
@@ -75,7 +79,7 @@ CLIENT: {user_name}
    - Warm, welcoming, professional
    - Respectful of astrological tradition
    - Kind and considerate
-   - NOT casual or overly informal
+   - Natural and conversational (not stiff, not slangy)
 
 3. OPTIMISM WITH REALISM
    - Focus on growth opportunities
@@ -96,6 +100,9 @@ CLIENT: {user_name}
 
 {voice}
 {guidelines_text}
+
+{voice_charter}
+{response_flow}
 
 {footer}"""
 

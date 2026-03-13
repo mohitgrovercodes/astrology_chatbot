@@ -371,9 +371,9 @@ class VedicValidationEngineV2:
             return [
                 {
                     "rule_id":        r["rule_id"],
-                    "passed":         True,
-                    "reason":         "LLM error — defaulted to pass",
-                    "recommendation": "",
+                    "passed":         False,
+                    "reason":         "LLM error — deterministic safety fallback marked this rule as unverified",
+                    "recommendation": "Treat as degraded validation mode; require additional review before high-confidence prediction.",
                 }
                 for r in rules
             ]

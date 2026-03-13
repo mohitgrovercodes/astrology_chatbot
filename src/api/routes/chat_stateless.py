@@ -23,6 +23,10 @@ from src.llm.factory import LLMFactory
 
 from src.api.orchestrator_helper import get_orchestrator
 from src.api.config import settings
+from src.api.dependencies import (
+    get_context_manager as get_shared_context_manager,
+    get_session_manager as get_shared_session_manager,
+)
 
 
 router = APIRouter()
@@ -505,10 +509,13 @@ import json as _json
 _context_manager = None
 
 def get_context_manager() -> ContextManager:
-    """Get global context manager instance."""
+    """Get canonical context manager instance from dependency container."""
     global _context_manager
     if _context_manager is None:
-        _context_manager = ContextManager()
+        try:
+            _context_manager = get_shared_context_manager()
+        except Exception:
+            _context_manager = ContextManager()
     return _context_manager
 
 
@@ -531,7 +538,7 @@ def validate_and_sanitize_response(
     answer: str,
     intent_analysis: Dict[str, Any],
     recent_history: List[Dict[str, Any]],
-    context_window: int = 6,
+    context_window: int = 20,
 ) -> str:
     """
     Use a small LLM to semantically validate and, if needed, rewrite the draft
@@ -541,6 +548,26 @@ def validate_and_sanitize_response(
     sentence-level understanding.
     """
     draft_answer = answer or ""
+    q_lower = (question or "").lower()
+    a_lower = draft_answer.lower()
+
+    # Conditional validator: only rewrite when contradiction-risk or tone-risk is
+    # likely. This avoids flattening naturally good responses.
+    risk_keywords = (
+        "divorce", "separation", "talaq", "breakup", "remarriage",
+        "children", "pregnancy", "job", "career", "marriage", "shaadi"
+    )
+    contradiction_markers = (
+        "definitely", "guaranteed", "100%", "certainly happen"
+    )
+    likely_sensitive = any(k in q_lower for k in risk_keywords)
+    likely_overconfident = any(m in a_lower for m in contradiction_markers)
+    likely_short_or_generic = len(draft_answer.split()) < 25
+    should_validate = likely_sensitive or likely_overconfident or likely_short_or_generic
+
+    if not should_validate:
+        return draft_answer
+
     try:
         conv_snippet: List[str] = []
         for msg in (recent_history or [])[-context_window:]:
@@ -551,7 +578,7 @@ def validate_and_sanitize_response(
 
         analysis = intent_analysis or {}
 
-        validator_prompt = f"""You are a STRICT semantic validator and re-writer for an astrology chatbot.
+        validator_prompt = f"""You are a semantic validator for an astrology chatbot.
 
 Your job is to check whether the assistant's draft answer is:
 - logically correct and non-contradictory
@@ -586,6 +613,60 @@ You must pay special attention to these cases:
    - Avoid sentences that directly contradict what was said just before
      (e.g., "no children possible" right after "strong chance for children in 2028").
    - Avoid robotic repetition of the same phrasing; keep the tone natural and human.
+   - If the DRAFT answer already ends with a clear, user-facing follow-up question
+     (for example, inviting them to ask more about a specific topic), your revised
+     answer MUST also end with a natural follow-up question in the SAME spirit and
+     on the SAME topic, unless the conversation has clearly moved on. Do NOT strip
+     away the closing question and leave the user hanging.
+   - When the user's question is a simple, everyday request (e.g. "meri shadi kab hogi",
+     "job kab milegi", "ghar kab kharid paunga") and does NOT contain astrological
+     jargon, the SHORT initial answer must also avoid explicit house/planet/dasha
+     terminology (no "7th house", "lord", "Venus", "Mars", "dasha", etc.). In such
+     cases, if the draft uses these technical terms in a brief timing answer, rewrite
+     them into plain-life language (supportive phase, opportunity, pressure, etc.)
+     while keeping the timing window and meaning intact.
+
+4) LIFE-EVENT ORDERING (CRITICAL)
+   - NEVER make the timeline of major life events obviously backwards relative to what
+     the conversation already established. Examples of IMPOSSIBLE orderings:
+       • Predicting divorce clearly BEFORE a strong future marriage window that you
+         already stated in this conversation.
+       • Saying the user will have children clearly BEFORE marriage, when earlier
+         messages framed marriage as a necessary prior step.
+       • Saying a second marriage window that begins clearly BEFORE the first marriage
+         window you already gave.
+   - When you detect such a conflict, you MUST:
+       • Keep the emotional truth (e.g., "tension", "distance", "responsibility for family"),
+         but soften or widen the timing ("aane wale kuch saalon mein", "2026 ke baad ke kuch
+         saal") instead of giving a hard, earlier year or narrow window that breaks the
+         logical order.
+       • If needed, explicitly say that astrology shows phases of pressure or change rather
+         than a precise date, so you do not contradict the already stated sequence of events.
+
+EXAMPLE CORRECTIONS (FEW-SHOT GUIDANCE)
+
+Example 1 – BAD marriage tone after divorce question:
+- CONTEXT:
+  - Earlier answer: "2027 ke shuruat se 2028 ke beech shaadi ke sabse strong yog dikh rahe hain..."
+  - USER now: "Meri divorce kab hoga?"
+- DRAFT: "Aapke liye shadi ka samay abhi bahut hi favourable dikh raha hai..."
+- YOU SHOULD REWRITE AS (Hindi tone preserved, but meaning fixed):
+  "Aapke sawal se yeh samajh aata hai ki aap apne rishte mein alag hone ya bade badlav ki sambhavana ke baare mein soch rahe hain. Chart ke hisaab se aane wale kuch saalon mein aise phases aa sakte hain jahan tanav, doori ya uljhan zyada mehsoos ho, khaas taur par 2026 ke doosre aadhe se 2027 ke dauran. Is daur ko jaldi decision ke bajay khuli baat-cheet, boundaries clear karne aur zarurat pade to counseling ke zariye handle karna zyada sehatmand rahega. Astrology yeh batati hai ki yeh ek pressure phase hai jahan aapko apni emotional safety, respect aur bhavishya ke baare mein soch-samajh kar kadam rakhna chahiye. Kya aap chahenge ki main aapko is phase ke exact months aur chart ke un factors ke baare mein bataun jo yeh tanav dikhate hain?"
+
+Example 2 – BAD divorce before earlier marriage window:
+- CONTEXT:
+  - Earlier: "Shaadi ke liye sabse strong window 2027–2028 ke beech dikh rahi hai."
+  - USER now: "Mera divorce kab hoga?"
+- DRAFT: "2026 ke beech tak divorce hone ke chances strong hain."
+- YOU SHOULD REWRITE AS:
+  "Pehle humne dekha tha ki 2027–2028 ke aas-paas shaadi ke liye strong support dikh raha hai, isliye usse pehle hi exact divorce saal batana theek nahi hoga. Chart yeh dikhata hai ki shaadi ke baad kuch saalon mein zimmedariyon aur expectations ke chalte rishte par pressure aa sakta hai, jahan tanav ya doori mehsoos ho. Is tarah ke daur ko samvaad, practical support aur zarurat pade to counseling se kaafi had tak sambhala ja sakta hai. Agar aap separation ke baare mein soch rahe hain, to pehle apni emotional aur financial safety par dhyan dena zaruri hai, na ki sirf tareekh par."
+
+Example 3 – GOOD draft you should keep:
+- CONTEXT:
+  - USER: "Mujhe government job kab milegi?"
+- DRAFT:
+  "Aapke liye sarkari naukri ke liye sabse zyada support 2026 ke doosre aadhe se lekar 2027 ke pehle hisson tak dikhai deta hai. Is dauran exams, interviews aur selection ke liye active rehna aapke liye zyada fruitful ho sakta hai. Agar aap is period mein focused preparation karein, to ek stable government job milne ke chances mazboot dikhai dete hain."
+- In this case, "is_coherent": true, "needs_revision": false, "revised_answer": "".
 
 CONVERSATION (last {context_window} messages):
 {conv_text}
@@ -599,6 +680,10 @@ INTENT ANALYSIS (for your reference):
 DRAFT ASSISTANT ANSWER (in user's language):
 ASSISTANT_DRAFT:
 \"\"\"{draft_answer}\"\"\"
+
+IMPORTANT DECISION RULE:
+- If draft is already coherent and natural, preserve it.
+- Rewrite only when there is a real contradiction, tone mismatch, or major coherence break.
 
 Respond in STRICT JSON ONLY, no extra text, like this:
 {{
@@ -1192,7 +1277,10 @@ _session_manager = None
 def get_session_manager():
     global _session_manager
     if _session_manager is None:
-        _session_manager = EnhancedSessionManager()
+        try:
+            _session_manager = get_shared_session_manager()
+        except Exception:
+            _session_manager = EnhancedSessionManager()
     return _session_manager
 
 
@@ -1246,6 +1334,7 @@ class SendMessageResponse(BaseModel):
     question: str
     answer: str
     source: str = "openai"
+    evidence: Optional[Dict[str, Any]] = None
 
 
 # ============================================================================
@@ -1804,7 +1893,6 @@ def send_message(request: SendMessageRequest):
             answer=answer,
             intent_analysis=intent_analysis,
             recent_history=recent_history,
-            context_window=6,
         )
 
         print(f"\n[ORCHESTRATOR RESULT]")
@@ -1906,7 +1994,8 @@ def send_message(request: SendMessageRequest):
             user_id=user_id,
             question=question,
             answer=answer,
-            source="openai"
+            source="openai",
+            evidence=result.get("astro_evidence") if isinstance(result, dict) else None,
         )
     
     except HTTPException:

@@ -15,6 +15,12 @@ from datetime import datetime
 from src.utils.localization import get_localization_manager
 from src.safety.constitution import get_constitution_injection
 from typing import Dict, List, Optional, Any, TypedDict, Annotated, Tuple
+import random
+from src.ai.voice_charter import (
+    get_voice_charter,
+    get_response_structure_policy,
+    pick_contextual_closing,
+)
 
 # Types for state management
 import json
@@ -61,6 +67,10 @@ from src.orchestration.orchestrator_validation_helpers import (
     build_halt_response,
     build_validation_disclaimer,
     format_validation_for_prompt
+)
+from src.prediction.astro_intelligence_layer import (
+    build_astro_evidence,
+    format_evidence_for_prompt,
 )
 
 class NakshatraState(TypedDict):
@@ -124,6 +134,7 @@ class NakshatraState(TypedDict):
 
     # Progressive Disclosure Phase
     conversation_phase: Optional[Dict]       # Phase data for progressive disclosure
+    astro_evidence: Optional[Dict]           # Deterministic evidence payload
 
 class EnhancedLangGraphOrchestrator:
     """
@@ -1828,6 +1839,14 @@ Provide a concise answer:"""
                 _prompt_response_mode = 'initial'  # Default to short for any new/ambiguous question
 
             if state.get('chart_data'):
+                domain_hint = (((state.get("validation_result") or {}).get("intent_analysis") or {}).get("domain"))
+                state["astro_evidence"] = build_astro_evidence(
+                    query=_effective_query,
+                    chart_data=state.get("chart_data") or {},
+                    dasha_data=state.get("dasha_data") or {},
+                    transit_data=state.get("transit_data") or {},
+                    domain_hint=domain_hint,
+                )
                 prompt = self._build_prediction_prompt(
                     query=_effective_query,
                     chart_data=state['chart_data'],
@@ -1840,7 +1859,8 @@ Provide a concise answer:"""
                     validation_result=state.get('validation_result'),
                     enhanced_analysis=state.get('enhanced_analysis'),  # NEW
                     synthesis=state.get('synthesis'),  # NEW
-                    response_mode=_prompt_response_mode
+                    response_mode=_prompt_response_mode,
+                    astro_evidence=state.get("astro_evidence"),
                 )
             else:
                 # Chart calculation failed — do NOT hallucinate chart-specific details.
@@ -2034,11 +2054,13 @@ Provide a concise answer:"""
                 # ── User wants details → Generate comprehensive response + follow-up question ──
                 print(f"[PHASE] AWAITING_DETAIL + AFFIRMATIVE > detailed response with follow-up")
                 _lang_for_phase = state.get('detected_language', 'en')
+                _voice_charter = get_voice_charter(_lang_for_phase)
+                _flow_policy = get_response_structure_policy()
                 phase_instruction = f"""
 PROGRESSIVE DISCLOSURE -- DETAILED RESPONSE MODE (OVERRIDES word-limit instructions above):
 The user asked for more details. Give a comprehensive, insightful answer now.
 LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lang_for_phase}. Do NOT mix languages.
-1. WORD LIMIT: 300-350 words. Be thorough but do not exceed 350 words.
+1. TARGET LENGTH: 260-360 words. Be thorough without sounding repetitive.
 2. Explain 3-5 key astrological factors, but always translate them into simple, real-life language.
    Avoid long Sanskrit lists; briefly name a factor, then explain what it means in everyday terms.
 3. Use the Pratyantar and Antardasha data above to derive longer but precise timing windows:
@@ -2053,8 +2075,10 @@ LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lan
 6. NEVER use H1, H2, H3 etc. -- always write 1st house, 2nd house, 3rd house.
    Use house annotations: e.g., 7th house (Marriage and Partnership).
 7. DO NOT repeat the brief answer already given -- build deeper upon it.
-8. MANDATORY ENDING: Your very last sentence MUST be EXACTLY this related follow-up question (copy verbatim, same language). This is a RELATED topic question (e.g. partner qualities, D9 chart, or another angle on the same theme), NOT a generic "want more detail?". Do NOT replace it with "want more reasoning" or "aur detail mein samjha sakta hoon":
-   "{_suggested_followup}"
+8. End naturally with a RELATED follow-up question on the same topic (wording can vary naturally).
+   Suggested follow-up intent: "{_suggested_followup}"
+9. { _voice_charter }
+10. { _flow_policy }
 """
                 new_phase_data = {
                     "phase": PHASE_FOLLOWUP_LOOP,
@@ -2134,46 +2158,40 @@ RULES:
             else:
                 # ── INITIAL / NEW TOPIC → Short response (under 100 words) ──
                 print(f"[PHASE] INITIAL -> short response with 1-2 critical factors")
-                # Pick the closing question in the detected conversation language.
-                # Do NOT leave this as English when the user is speaking Hindi/Tamil/Punjabi.
                 _lang_now = state.get('detected_language', 'en')
-                _closing_q_map = {
-                    'en':     'Would you like me to explain the detailed astrological reasoning behind this?',
-                    'hi':     'Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?',
-                    'hi-lat': 'Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?',
-                    'ta':     'Itharku pinnaal ullaa jothida karanam theriya virumbukireerga?',
-                    'ta-lat': 'Itharku pin ullana jothida karanam theriya virumbukireerga?',
-                    'pa':     'Ki tusi is de pichhe di jyotish wajah jaanna chahunde ho?',
-                    'pa-lat': 'Ki tusi is de pichhe di jyotish wajah jaanna chahunde ho?',
-                    'mr':     'Tumhala yaamagil savistara jyotishiya karan janayache aahe ka?',
-                    'mr-lat': 'Tumhala yaamagil savistara jyotishiya karan janayache aahe ka?',
-                    'te':     'Deeni venuka gala vistritamaina jyotisha karanam teluskovalanukunnaara?',
-                    'te-lat': 'Deeni venuka gala vistritamaina jyotisha karanam teluskovalanukunnaara?',
-                    'ml':     'Ithin pinnile vishadamaya jyothisha karanam ariyano?',
-                    'ml-lat': 'Ithin pinnile vishadamaya jyothisha karanam ariyano?',
-                }
-                _closing_q = _closing_q_map.get(_lang_now, _closing_q_map['en'])
+                _closing_q = pick_contextual_closing(
+                    rng=random.Random(state.get('query', '')),
+                    language=_lang_now,
+                    domain=_topic,
+                    ask_question=True,
+                )
+                _voice_charter = get_voice_charter(_lang_now)
+                _flow_policy = get_response_structure_policy()
                 phase_instruction = f"""
 PROGRESSIVE DISCLOSURE -- INITIAL SHORT RESPONSE (OVERRIDES ALL OTHER FORMAT INSTRUCTIONS):
-You MUST follow every rule below. The response is WRONG if it breaks any of them.
+Use these guidelines strictly, but write in natural human phrasing.
 
-1. HARD WORD LIMIT: 150-180 words. Stop at 180. Do NOT exceed 180 words.
+1. TARGET LENGTH: 120-180 words.
 
 2. ZERO ASTROLOGICAL JARGON in this short answer. Do NOT use: house, houses, 7th, 10th, lord, dasha, pratyantar, antardasha, nakshatra, Venus, Jupiter, Saturn, Mars, Mercury, Moon, Sun, Rahu, Ketu, sign, signs, yoga, aspect, or any Sanskrit/technical terms. Describe the prediction in plain everyday language only (e.g. "this period is favourable for marriage" or "you may meet your partner through friends").
 
 3. Always ground the short answer in at least ONE concrete anchor from the chart:
-   - EITHER: one clear, simple prediction about life (e.g. stability, strain, change in work, improvement in health), OR
+   - EITHER: one clear, simple prediction about life (e.g. stability, change in work, improvement in health), OR
    - one approximate FUTURE time window in plain language (e.g. "around 2027", "between March and August 2027", or "in the second half of 2026").
    You may include BOTH a simple prediction and a future window, but never give a vague answer with no fact or timeframe.
+   For questions that are clearly about a FAVOURABLE EVENT (marriage, job change, buying a home), keep the focus of this short answer on the MAIN favourable window and a simple positive statement. Reserve detailed discussion of challenges, strain, or counseling for the detailed answer unless the user explicitly asks about problems.
    Do NOT phrase the window as "abhi", "ab se", "from now", or "immediately" — always describe a FUTURE period starting at least some weeks/months ahead of today (for example: "aane wale kuch mahino mein", "2026 ke doosre aadhe mein", "2027 ke shuruat se").
 
 4. NEVER include a "Next Favorable Window" section — that belongs in the detailed response only.
 
-5. Write the ENTIRE response in the SAME language as the user's query.
+5. Stay tightly on the topic the user asked about. If they asked "WHEN" something will happen, spend almost all of the short answer on that timing and its practical meaning; do NOT drift into long generic life advice or unrelated areas.
 
-6. MANDATORY ENDING: Your very last sentence MUST be exactly this closing question (copy it verbatim, do not translate or paraphrase):
+6. Write the ENTIRE response in the SAME language as the user's query.
+
+7. End with one natural invitation for deeper analysis (wording can vary):
    "{_closing_q}"
-   If your response does not end with this exact question, it is INCOMPLETE. Add it at the end.
+8. {_voice_charter}
+9. {_flow_policy}
 """
                 # BUG FIX #4: Store the true original question (pre-semantic-expansion)
                 # as last_query so that future AFFIRMATIVE turns have domain keywords.
@@ -2225,11 +2243,22 @@ You MUST follow every rule below. The response is WRONG if it breaks any of them
             print(f"[LLM] Sending {len(messages)} messages to LLM (phase={current_phase})")
             response = self.llm.invoke(messages)
             state['answer'] = response.content if hasattr(response, 'content') else str(response)
-            # If we just generated the detailed response, ensure it ends with the RELATED follow-up question
+            # If we just generated the detailed response, ensure it ends with
+            # a follow-up intent without forcing exact phrasing.
             _followup = state.pop('_detailed_followup', None)
-            if _followup and _followup not in (state.get('answer') or ''):
-                state['answer'] = (state['answer'].rstrip() + "\n\n" + _followup).strip()
-                print(f"[PHASE] Appended related follow-up question to detailed response")
+            if _followup:
+                _ans = (state.get('answer') or "").rstrip()
+                if not _ans.endswith("?"):
+                    _lang = state.get('detected_language', 'en')
+                    _topic = (state.get('conversation_phase') or {}).get('topic', 'general')
+                    natural_followup = pick_contextual_closing(
+                        rng=random.Random(state.get('query', '')),
+                        language=_lang,
+                        domain=_topic,
+                        ask_question=True,
+                    )
+                    state['answer'] = (_ans + "\n\n" + natural_followup).strip()
+                    print("[PHASE] Appended natural follow-up prompt")
             
         except Exception as e:
             print(f"[ERROR] RAG_WITH_CALCULATION failed: {e}")
@@ -3201,6 +3230,8 @@ NEVER fabricate dates. NEVER cite the same Pratyantar already mentioned above.""
             "\nSTYLE FLEXIBILITY (IMPORTANT): These bullets are constraints, not sentences to copy. "
             "Do NOT echo their wording. Write in your own natural style while staying inside these rules."
         )
+        _voice_charter = "\n" + get_voice_charter(lang_name.lower())
+        _response_flow = "\n" + get_response_structure_policy()
 
         if wants_detail:
             if mode == 'prediction':
@@ -3209,7 +3240,7 @@ NEVER fabricate dates. NEVER cite the same Pratyantar already mentioned above.""
 2. Ground every claim in specific chart data (actual houses, signs, planets listed above).
 3. Include dasha periods AND approximate calendar timeframes for any timing claims.
 4. Do NOT cite classical texts or provide book names as sources unless the user explicitly demands it.
-5. {script_instruction}{domain_text}{_timing_section}{_style_flex}
+5. {script_instruction}{domain_text}{_timing_section}{_style_flex}{_voice_charter}{_response_flow}
 
 Provide a thorough, detailed prediction:"""
             else:
@@ -3217,7 +3248,7 @@ Provide a thorough, detailed prediction:"""
 1. Provide a comprehensive explanation covering the concept fully.
 2. Ground the answer in the retrieved classical texts above.
 3. Do NOT cite books or provide source names unless the user explicitly demands it.
-4. {script_instruction}{domain_text}{_style_flex}
+4. {script_instruction}{domain_text}{_style_flex}{_voice_charter}{_response_flow}
 
 Provide a detailed explanation:"""
         else:
@@ -3230,7 +3261,7 @@ Provide a detailed explanation:"""
 4. Include one specific timing window with a brief reason it's favorable, expressed without astrological jargon, using only future or in-progress dates.
 5. At the end, briefly offer to explain the astrological reasoning in more detail if the user wants it.
 6. Do NOT cite sources or provide book names unless the user explicitly demands it.
-7. {script_instruction}{domain_text}{_timing_section}{_style_flex}
+7. {script_instruction}{domain_text}{_timing_section}{_style_flex}{_voice_charter}{_response_flow}
 
 Provide a warm, self-contained response:"""
             else:
@@ -3238,7 +3269,7 @@ Provide a warm, self-contained response:"""
 1. Answer in 2-3 focused sentences (80-120 words).
 2. Base the answer only on retrieved texts above.
 3. Do NOT cite sources or provide book names unless the user explicitly demands it.
-4. {script_instruction}{domain_text}{_style_flex}
+4. {script_instruction}{domain_text}{_style_flex}{_voice_charter}{_response_flow}
 
 Provide a concise, clear answer:"""
 
@@ -3533,6 +3564,7 @@ Provide a concise, clear answer:"""
         enhanced_analysis: Optional[Dict] = None,  # NEW
         synthesis: Optional[Dict] = None,  # NEW
         response_mode: str = "default",  # PROGRESSIVE DISCLOSURE: "initial" | "detailed" | "followup" | "default"
+        astro_evidence: Optional[Dict] = None,
     ) -> str:
         
         context_parts = []
@@ -3586,12 +3618,14 @@ Provide a concise, clear answer:"""
         
         # Build upcoming antardashas timeline
         upcoming_ads = dasha_data.get('upcoming_antardashas', [])
-        # Filter past antardashas too (same stale-cache issue)
-        upcoming_ads_filtered = [ad for ad in upcoming_ads
-                                  if ad.get('end', '9999') >= _today_str]
+        # Filter out any Antardasha that has already STARTED (only future windows)
+        upcoming_ads_filtered = [
+            ad for ad in upcoming_ads
+            if ad.get('start', '9999') > _today_str
+        ]
         skipped_past_ads = len(upcoming_ads) - len(upcoming_ads_filtered)
         if skipped_past_ads > 0:
-            print(f"[DASHA FILTER] Removed {skipped_past_ads} past antardasha(s) from prompt.")
+            print(f"[DASHA FILTER] Removed {skipped_past_ads} non-future antardasha(s) from prompt (start <= today).")
 
         upcoming_ads_str = ""
         if upcoming_ads_filtered:
@@ -3660,36 +3694,31 @@ Provide a concise, clear answer:"""
                     print(f"[DASHA_FILTER] No domain-relevant pratyantars found for '{query_type}', using all upcoming.")
 
 
-        # ── CODE-LEVEL PAST-DATE FILTER ───────────────────────────────────────
-        # Strip pratyantar periods whose end date has already passed.
-        # No nested functions — inline comparison avoids all closure issues.
+        # ── CODE-LEVEL FUTURE-DATE FILTER ─────────────────────────────────────
+        # Keep ONLY Pratyantar periods whose start date is strictly in the future.
+        # We do NOT expose "in-progress" windows in the prompt; user-facing timing
+        # must always refer to future periods.
         upcoming_pds_filtered = [
             pd for pd in upcoming_pds
-            if (pd.get('end') or '9999') >= _today_str
+            if (pd.get('start') or '9999') > _today_str
         ]
         skipped_past_pds = len(upcoming_pds) - len(upcoming_pds_filtered)
         if skipped_past_pds > 0:
-            print(f"[DASHA FILTER] Removed {skipped_past_pds} past pratyantar(s) from prompt "
-                  f"(end date < {_today_str}). Only {len(upcoming_pds_filtered)} period(s) remain.")
+            print(f"[DASHA FILTER] Removed {skipped_past_pds} non-future pratyantar(s) from prompt "
+                  f"(start <= {_today_str}). Only {len(upcoming_pds_filtered)} period(s) remain.")
 
         upcoming_pds_str = ""
         if upcoming_pds_filtered:
             upcoming_pds_str = f"\nStep 3.5 - Pratyantardashas within current Antardasha (TODAY = {_today_str}):\n"
             upcoming_pds_str += "  ⚠ ONLY use windows listed here for timing. DO NOT compute sub-windows yourself.\n"
             for pd in upcoming_pds_filtered:
-                status = pd.get('status', 'upcoming')
                 raw_start = pd.get('start', 'Unknown')
                 end_date = pd.get('end', 'Unknown')
-                # Enforce 'no past starting date' rule at the data level:
-                # if the Pratyantar is already in progress, show today → end_date instead of the original start.
-                if raw_start and raw_start != 'Unknown' and raw_start < _today_str and end_date and end_date >= _today_str:
-                    display_start = _today_str
-                else:
-                    display_start = raw_start
+                display_start = raw_start
                 upcoming_pds_str += (
                     f"• {pd.get('planet', 'Unknown'):10} "
                     f"{display_start} → {end_date} "
-                    f"({pd.get('duration_days', '?')} days) [{status}]\n"
+                    f"({pd.get('duration_days', '?')} days)\n"
                 )
         elif upcoming_pds:
             # All pratyantardashas in current AD have passed — tell LLM explicitly
@@ -3875,9 +3904,9 @@ Provide a concise, clear answer:"""
         system_prompt += (
             f"\n\nCRITICAL TIMING RULE: Today's date is {_ref_date}. "
             "NEVER predict or cite any date range that ended before today. "
-            "If a Pratyantar or Antardasha period has already fully elapsed "
-            f"(its end date is before {_ref_date}), you MUST skip it and find the next future window. "
-            "For a period currently 'IN PROGRESS', treat the start as today, not the original start date, but when speaking to the user you should still describe a FUTURE window (e.g., 'agale kuch mahine', '2026 ke doosre aadhe mein') rather than saying 'abhi se' or 'right now'. "
+            "You MUST also avoid using 'in-progress' periods as user-facing timing anchors — "
+            "only Pratyantar and Antardasha windows whose START date is strictly in the FUTURE (after today) "
+            "may be used as the mathematical basis for timing. "
             "In ALL user-facing answers, do NOT mention exact calendar days (no DD/MM or specific dates). "
             "Express timing only as approximate windows such as 'between Aug 2027 and early 2028', "
             "'in the second half of 2026', or 'across most of 2030', and when helpful say month names with years such as 'from March 2027 to October 2027'. "
@@ -4031,6 +4060,7 @@ When user uses "it", "this", "that" or asks "why", "how" -> connect to conversat
             enhanced_context = self._format_enhanced_analysis(
                 enhanced_analysis, synthesis, query_type=validation_result.get('query_type', 'general') if validation_result else 'general'
             )
+        deterministic_evidence = format_evidence_for_prompt(astro_evidence or {})
 
         # Always compute house lords from lagna — no dependency on enhanced analysis pipeline
         house_lords_block = self._compute_house_lords_block(chart_data)
@@ -4077,6 +4107,8 @@ When user uses "it", "this", "that" or asks "why", "how" -> connect to conversat
 {validation_context}
 
 {enhanced_context}
+
+{deterministic_evidence}
 
 {conversation_summary_section}
 
@@ -4304,6 +4336,7 @@ substituting a training-knowledge default.
 
             # Progressive Disclosure Phase (set by rag_with_calculation node)
             "conversation_phase": None,
+            "astro_evidence": None,
         }
 
         
@@ -4360,7 +4393,8 @@ substituting a training-knowledge default.
             # PHASE 10: Validation Init
             "validation_attempts": 0,
             "validation_feedback": None,
-            "is_safe": True
+            "is_safe": True,
+            "astro_evidence": None,
         }
         
         # Run through graph (non-streaming for routing & preparation)

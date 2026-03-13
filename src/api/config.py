@@ -87,12 +87,12 @@ class Settings(BaseSettings):
     
     # Conversation Context Management
     CONVERSATION_CONTEXT_WINDOW: int = Field(
-        default=6,
+        default=20,
         validation_alias="conversation_context_window",
         description="Number of recent messages to include in conversation history"
     )
     CONVERSATION_SUMMARY_THRESHOLD: int = Field(
-        default=10,
+        default=20,
         validation_alias="conversation_summary_threshold",
         description="Update conversation summary after this many messages (increased from 6 to preserve context)"
     )

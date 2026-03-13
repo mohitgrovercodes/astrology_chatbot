@@ -121,6 +121,50 @@ class SessionManager:
             logger.error(f"[SESSION] Add message error: {e}")
             return False
 
+    def update_user_profile(self, user_id: str, profile: Dict) -> bool:
+        """Compatibility helper for API routes."""
+        if not self.redis:
+            return False
+        try:
+            key = self._key(user_id, "user_profile")
+            value = json.dumps(profile)
+            if settings.SESSION_EXPIRY_HOURS > 0:
+                self.redis.setex(key, settings.SESSION_EXPIRY_HOURS * 3600, value)
+            else:
+                self.redis.set(key, value)
+            return True
+        except Exception as e:
+            logger.error(f"[SESSION] Update profile error: {e}")
+            return False
+
+    def overwrite_conversation_history(self, user_id: str, conversation: List[Dict]) -> bool:
+        """Compatibility helper to replace conversation history atomically."""
+        if not self.redis:
+            return False
+        try:
+            normalized = []
+            for msg in conversation or []:
+                if msg.get("question"):
+                    normalized.append({"role": "user", "content": msg["question"], "timestamp": msg.get("timestamp")})
+                elif msg.get("role") == "user":
+                    normalized.append(msg)
+
+                if msg.get("answer"):
+                    normalized.append({"role": "assistant", "content": msg["answer"], "timestamp": msg.get("timestamp")})
+                elif msg.get("role") == "assistant":
+                    normalized.append(msg)
+
+            key = self._key(user_id, "history")
+            value = json.dumps(normalized)
+            if settings.SESSION_EXPIRY_HOURS > 0:
+                self.redis.setex(key, settings.SESSION_EXPIRY_HOURS * 3600, value)
+            else:
+                self.redis.set(key, value)
+            return True
+        except Exception as e:
+            logger.error(f"[SESSION] Overwrite history error: {e}")
+            return False
+
     # --- Initialization ---
     def initialize_session(self, user_id: str, user_profile: Dict, conversation_history: List = None):
         if not self.redis: return {"status": "error", "message": "Redis offline"}
@@ -231,6 +275,19 @@ class SessionManager:
         transit_data['calculated_at'] = datetime.utcnow().isoformat()
         self.redis.setex(self._key(user_id, "transits", "current"), self.TTL_2H, json.dumps(transit_data))
 
+    def get_chart_data(self, user_id: str) -> Optional[Dict]:
+        """Compatibility alias for D1 chart retrieval."""
+        if not self.redis:
+            return None
+        data = self.redis.get(self._key(user_id, "calculations", "d1_chart"))
+        return json.loads(data) if data else None
+
+    def store_chart_data(self, user_id: str, chart_data: Dict):
+        """Compatibility alias for D1 chart storage."""
+        if not self.redis:
+            return
+        self.redis.setex(self._key(user_id, "calculations", "d1_chart"), self.TTL_30D, json.dumps(chart_data))
+
     def get_calculation_status(self, user_id: str) -> CalculationStatus:
         status = CalculationStatus()
         if not self.redis: return status
@@ -278,6 +335,40 @@ class SessionManager:
             self.redis.setex(key, settings.SESSION_EXPIRY_HOURS * 3600, val)
         else:
             self.redis.set(key, val)
+
+    def store_detected_language(self, user_id: str, lang_code: str) -> None:
+        """Persist detected language for multilingual continuity."""
+        if not self.redis or not lang_code:
+            return
+        try:
+            self.redis.set(self._key(user_id, "lang"), lang_code)
+        except Exception as e:
+            logger.error(f"[SESSION] Store language error: {e}")
+
+    def get_detected_language(self, user_id: str) -> str:
+        """Read previously detected language (default 'en')."""
+        if not self.redis:
+            return "en"
+        try:
+            val = self.redis.get(self._key(user_id, "lang"))
+            return val or "en"
+        except Exception:
+            return "en"
+
+    def extend_session(self, user_id: str):
+        """
+        Compatibility no-op.
+        Session expiry is already handled by key TTL policy.
+        """
+        return
+
+    def get_active_sessions_count(self) -> int:
+        if not self.redis:
+            return 0
+        try:
+            return len(self.redis.keys("session:*:metadata"))
+        except Exception:
+            return 0
 
     # --- Cleanup ---
 

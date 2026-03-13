@@ -7,6 +7,7 @@ Builds context-aware prompts - NO rigid templates.
 
 from typing import Dict, List, Optional, Any
 from datetime import datetime
+from src.ai.voice_charter import get_voice_charter, get_response_structure_policy
 
 
 class PromptBuilder:
@@ -186,11 +187,13 @@ VOICE — English names first, Sanskrit in parentheses. Example: "Mars (Mangal)"
             lang_instr = "Respond in clear, professional English."
 
         # Build tone instruction based on what the conversation is about
+        voice_charter = get_voice_charter(language)
+        response_flow = get_response_structure_policy()
         base = (
             "Be professional, warm, and conversational. "
             "Speak as a knowledgeable astrologer — insightful and empathetic, not robotic. "
             "Explain clearly without unnecessary jargon. "
-            "IMPORTANT: Follow the word limit specified in the PROGRESSIVE DISCLOSURE or RESPONSE FORMAT instructions. "
+            "Use natural variation in openings and closings. "
             "Just take inspiration from the given examples, not use it word to word, use similar language and articulating skills. "
             "You can use your creativity within professional boundaries but at the same time do not sway away from the context."
         )
@@ -200,9 +203,9 @@ VOICE — English names first, Sanskrit in parentheses. Example: "Mars (Mangal)"
                 f"{base} "
                 "Focus on the most relevant astrological factor for this specific question. "
                 "NO greetings (Namaste, Hello, etc.) — get straight to the analysis. "
-                "When timing is asked, give specific months or seasons — never just dasha names. "
+                "When timing is asked, give specific months or seasons without over-precision. "
                 "Emphasize that free will and effort shape outcomes. "
-                f"{lang_instr}"
+                f"{lang_instr}\n\n{voice_charter}\n{response_flow}"
             )
         elif intent in ["INTERPRETATION", "RAG_ONLY"]:
             return (
@@ -210,16 +213,16 @@ VOICE — English names first, Sanskrit in parentheses. Example: "Mars (Mangal)"
                 "Ground your interpretation in classical principles. "
                 "Cite texts only when they genuinely support the point. "
                 "Prioritize clarity: English planet names first, Sanskrit in parentheses. "
-                f"{lang_instr}"
+                f"{lang_instr}\n\n{voice_charter}\n{response_flow}"
             )
         elif intent == "LEARNING":
             return (
                 f"{base} "
                 "Teach the concept step by step. Use one concrete example per key idea. "
-                f"{lang_instr}"
+                f"{lang_instr}\n\n{voice_charter}\n{response_flow}"
             )
 
-        return f"{base} {lang_instr}"
+        return f"{base} {lang_instr}\n\n{voice_charter}\n{response_flow}"
 
 if __name__ == "__main__":
     print("PromptBuilder class loaded successfully")

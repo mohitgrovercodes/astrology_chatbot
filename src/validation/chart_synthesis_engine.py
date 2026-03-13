@@ -128,15 +128,45 @@ class ChartSynthesisEngine:
         rule_name = rule.get('rule_name', '').lower()
         category = rule.get('category', '').lower()
         
-        # Pattern matching on rule names to extract insights
+        # Weighted deterministic inference over chart features.
+        strengths = chart_enhanced.get('strengths', {}) or {}
+        aspects = chart_enhanced.get('aspects', []) or []
+        avg_strength = (
+            sum(v for v in strengths.values() if isinstance(v, (int, float))) / max(len(strengths), 1)
+            if strengths else 5.0
+        )
+        hard_aspect_count = sum(
+            1 for a in aspects
+            if str(a.get('aspect', '')).lower() in {'square', 'opposition', 'conjunction_malefic'}
+        )
+        soft_aspect_count = sum(
+            1 for a in aspects
+            if str(a.get('aspect', '')).lower() in {'trine', 'sextile', 'conjunction_benefic'}
+        )
+
+        weighted_score = 0.0
+        weighted_score += (avg_strength - 5.0) * 0.4
+        weighted_score += (soft_aspect_count * 0.25)
+        weighted_score -= (hard_aspect_count * 0.3)
+
+        # Rule-specific keyword signal weighting
+        if any(k in rule_name for k in ['exalted', 'own', 'mooltrikona']):
+            weighted_score += 1.25
+        if any(k in rule_name for k in ['debilitated', 'combust', 'afflicted']):
+            weighted_score -= 1.25
+        if 'raja yoga' in rule_name or 'dhana yoga' in rule_name:
+            weighted_score += 0.9
+
+        # Pattern matching on rule names to produce interpretable labels
         result = {
             "rule_id": rule['rule_id'],
             "rule_name": rule.get('rule_name', ''),
             "category": category,
-            "applies": False,
+            "applies": weighted_score >= 0.25,
             "significance": "neutral",
             "description": "",
-            "classical_ref": rule.get('classical_reference', '')
+            "classical_ref": rule.get('classical_reference', ''),
+            "weighted_score": round(weighted_score, 3),
         }
         
         # Yoga detection patterns
@@ -145,16 +175,16 @@ class ChartSynthesisEngine:
             # Extract yoga type from name
             if 'raja' in rule_name:
                 result['description'] = "Raja Yoga indicates power and authority"
-                result['significance'] = "strength"
+                result['significance'] = "strength" if weighted_score >= 0 else "neutral"
             elif 'dhana' in rule_name:
                 result['description'] = "Dhana Yoga indicates wealth accumulation"
-                result['significance'] = "strength"
+                result['significance'] = "strength" if weighted_score >= 0 else "neutral"
             elif 'gaja' in rule_name and 'kesari' in rule_name:
                 result['description'] = "Gaja Kesari Yoga brings wisdom and prosperity"
-                result['significance'] = "strength"
+                result['significance'] = "strength" if weighted_score >= 0 else "neutral"
             else:
                 result['description'] = f"{rule.get('rule_name', 'Yoga')} detected"
-                result['significance'] = "strength"
+                result['significance'] = "strength" if weighted_score >= 0 else "neutral"
         
         # House lord analysis patterns
         elif 'lord' in rule_name and 'house' in rule_name:
@@ -165,7 +195,7 @@ class ChartSynthesisEngine:
         elif any(word in rule_name for word in ['exalted', 'debilitated', 'own', 'dignity']):
             result['category'] = 'dignity'
             if 'exalted' in rule_name:
-                result['significance'] = "strength"
+                result['significance'] = "strength" if weighted_score >= 0 else "neutral"
                 result['description'] = f"{rule.get('rule_name', '')} enhances planetary strength"
             elif 'debilitated' in rule_name:
                 result['significance'] = "challenge"
@@ -181,6 +211,12 @@ class ChartSynthesisEngine:
             result['category'] = 'combustion'
             result['significance'] = "challenge"
             result['description'] = rule.get('rule_name', '')
+
+        if result['significance'] == 'neutral':
+            if weighted_score > 0.75:
+                result['significance'] = 'strength'
+            elif weighted_score < -0.75:
+                result['significance'] = 'challenge'
         
         return result
     
