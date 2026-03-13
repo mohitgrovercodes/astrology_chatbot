@@ -363,12 +363,15 @@ class ContextManager:
         conversation_history: List[Dict],
         conversation_summary: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Classify message as CONTINUATION, NEW_TOPIC, or CLARIFICATION."""
+        """
+        Classify message as CONTINUATION, NEW_TOPIC, or CLARIFICATION and
+        derive a semantic domain + question mode for downstream logic.
+        """
         conv_text = self._format_conversation(conversation_history)
         
         analysis_prompt = f"""You are a conversation analyzer for an astrology chatbot.
 
-Analyze the user's current message and determine its intent.
+Your job is to understand what the user is REALLY asking, not just match keywords.
 
 CONVERSATION SUMMARY (if available):
 {conversation_summary or "No summary yet - this is an early conversation"}
@@ -379,23 +382,85 @@ RECENT CONVERSATION:
 CURRENT USER MESSAGE:
 "{current_query}"
 
-Respond in JSON format:
+CRITICAL DOMAIN GUIDANCE (read carefully before answering):
+- The "domain" field must capture the TRUE life-area of the question, even if the user uses indirect or emotional language.
+- Examples that MUST be tagged as "divorce" (NOT generic "marriage"):
+  - "Meri shaadi kab tootegi?" / "Meri shaadi kab toot jayegi?"
+  - "Mera rishta kab khatam hoga?" / "Relationship kab khatam hoga?"
+  - "Ham alag kab honge?" / "kab separation hoga?"
+  - Any phrasing where the user is clearly asking when a marriage/relationship will BREAK / END / TOOT / KHATAM.
+- Examples that SHOULD stay "marriage":
+  - "Meri shaadi kab hogi?" (asking about getting married)
+  - "Meri shaadi kaisi rahegi?" (quality of marriage)
+  - "Mere partner ke baare mein batao" (partner description without breakup focus)
+
+- Use the broader conversation for nuance: if earlier messages were about marriage and now the user asks about it "tootna", treat this turn's domain as "divorce".
+
+Respond in STRICT JSON format, no extra text:
 {{
-    "intent_type": "CONTINUATION" | "NEW_TOPIC" | "CLARIFICATION",
-    "confidence": 0.0-1.0,
-    "reasoning": "Brief explanation",
-    "referenced_topic": "Specific topic (e.g., 'career' or 'Saturn transit')",
-    "requires_context": true/false
+  "intent_type": "CONTINUATION" | "NEW_TOPIC" | "CLARIFICATION",
+  "domain": "marriage" | "divorce" | "career" | "children" | "health" | "finance" | "home" | "foreign" | "general",
+  "question_mode": "timing" | "qualities" | "advice" | "summary",
+  "polarity": "positive" | "negative" | "mixed",
+  "confidence": 0.0-1.0,
+  "reasoning": "Brief explanation of how you inferred this",
+  "referenced_topic": "Specific topic (e.g., 'career change', 'divorce', 'foreign travel')",
+  "requires_context": true/false
 }}
 """
         try:
             response = self.fast_llm.invoke(analysis_prompt)
             result = json.loads(response.content)
+            # Basic robustness: fill missing keys with safe defaults
+            result.setdefault("intent_type", "NEW_TOPIC")
+            result.setdefault("domain", "general")
+            result.setdefault("question_mode", "summary")
+            result.setdefault("polarity", "mixed")
+            result.setdefault("confidence", 0.5)
+            result.setdefault("reasoning", "")
+            result.setdefault("referenced_topic", None)
+            result.setdefault("requires_context", False)
+
+            # HARD OVERRIDE FOR DIVORCE / SEPARATION QUERIES
+            # If the literal question talks about divorce/separation, always treat the
+            # semantic domain as 'divorce' and handle it as a fresh topic. This avoids
+            # misclassifying it as a generic 'marriage' continuation.
+            _q_lower = (current_query or "").lower()
+            _divorce_keywords = [
+                "divorce",
+                "separation",
+                "separate",
+                "alag hona",
+                "talaq",
+                "breakup",
+                "break-up",
+                "judicial separation",
+                "relationship end",
+                "marriage end",
+                # Common Hindi/Hinglish breakup phrasings
+                "shaadi tootegi",
+                "shaadi toot jayegi",
+                "shaadi tootega",
+                "shaadi toot jayega",
+                "shaadi khatam",
+                "rishta tootega",
+                "rishta toot jayega",
+                "rishta khatam",
+                "relationship khatam",
+            ]
+            if any(k in _q_lower for k in _divorce_keywords):
+                result["domain"] = "divorce"
+                # Treat as a new semantic topic even if it follows a marriage answer
+                result["intent_type"] = "NEW_TOPIC"
+                result["referenced_topic"] = "divorce or separation"
+
             return result
         except Exception as e:
             logger.error(f"[CONTEXT] Intent analysis error: {e}")
             return {
                 "intent_type": "NEW_TOPIC",
+                "domain": "general",
+                "question_mode": "summary",
                 "confidence": 0.5,
                 "reasoning": "Fallback due to error",
                 "referenced_topic": None,

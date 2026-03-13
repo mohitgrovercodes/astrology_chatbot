@@ -552,20 +552,57 @@ class WesternAstroEngine:
         Returns:
             List of aspects between transit and natal positions
         """
-        from src.engines.western.western_aspects import calculate_all_aspects
-        
-        # Get transit positions
+        from src.engines.western.western_aspects import (
+            calculate_aspect,
+            MAJOR_ASPECTS,
+        )
+
         transits = self.compute_transits(chart, transit_datetime)
-        
-        # Create combined position dict with prefixes
-        # This is a simplified version - a full implementation would
-        # need to track which is natal vs transit
-        aspects = []
-        
-        # For now, just return empty - full transit-to-natal aspect
-        # calculation would require additional logic
-        # TODO: Implement transit-to-natal aspect calculation
-        
+        natal_positions = chart.positions
+
+        aspects: List[Aspect] = []
+
+        # Cross-compare every transit planet with every natal planet.
+        for transit_planet, transit_pos in transits.items():
+            for natal_planet, natal_pos in natal_positions.items():
+                # Skip same-planet transit comparisons for nodes when not included.
+                if not self.include_outer_planets and transit_planet in (
+                    CelestialBody.URANUS,
+                    CelestialBody.NEPTUNE,
+                    CelestialBody.PLUTO,
+                ):
+                    continue
+
+                for aspect_type in MAJOR_ASPECTS:
+                    asp = calculate_aspect(
+                        transit_pos.longitude,
+                        natal_pos.longitude,
+                        aspect_type=aspect_type,
+                        max_orb=None,
+                        pos1=transit_pos,
+                        pos2=natal_pos,
+                    )
+                    if asp is None:
+                        continue
+
+                    # Preserve the original Aspect shape while assigning planet names
+                    # to represent transit->natal pairing.
+                    aspects.append(
+                        Aspect(
+                            planet1=transit_planet,
+                            planet2=natal_planet,
+                            aspect_type=asp.aspect_type,
+                            orb=asp.orb,
+                            exact_angle=asp.exact_angle,
+                            actual_angle=asp.actual_angle,
+                            strength=asp.strength,
+                            direction=asp.direction,
+                            is_major=asp.is_major,
+                            is_hard=asp.is_hard,
+                        )
+                    )
+
+        aspects.sort(key=lambda a: (a.orb, a.planet1.name, a.planet2.name))
         return aspects
 
 

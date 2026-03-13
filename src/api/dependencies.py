@@ -12,7 +12,7 @@ from typing import Optional
 import os
 
 from src.orchestration.orchestrator import create_enhanced_orchestrator
-from src.ai.intent_classifier import IntentClassifier
+from src.ai.intent_classifier import LLMIntentClassifier
 from src.ai.hybrid_retriever import HybridRetriever
 from src.ai.prompt_builder import PromptBuilder
 from src.engines.vedic.vedic_engine import VedicEngine
@@ -118,7 +118,7 @@ def get_orchestrator():
             embeddings = get_embeddings()
             
             # Initialize intent classifier with fast LLM and embeddings
-            intent_classifier = IntentClassifier(llm=fast_llm, embeddings=embeddings)
+            intent_classifier = LLMIntentClassifier(llm=fast_llm, embeddings=embeddings)
 
             hybrid_retriever = HybridRetriever(
                 vector_store=vector_store,

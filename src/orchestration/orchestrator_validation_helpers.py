@@ -140,7 +140,12 @@ ANSWER:"""
         return pattern_type  # Fallback to pattern detection
 
 
-def detect_query_type(query: str, llm=None, use_llm_confirmation: bool = True) -> str:
+def detect_query_type(
+    query: str,
+    llm=None,
+    use_llm_confirmation: bool = True,
+    intent_domain_hint: Optional[str] = None,
+) -> str:
     """
     Hybrid query type detection: patterns + optional LLM confirmation.
     
@@ -152,6 +157,15 @@ def detect_query_type(query: str, llm=None, use_llm_confirmation: bool = True) -
     Returns:
         Query type: 'marriage' | 'career' | 'finance' | 'health' | 'children' | 'general'
     """
+    # Step 0: If we already have a trusted semantic domain from the intent
+    # analyzer, use it directly when it maps cleanly to our query_type set.
+    if intent_domain_hint:
+        _hint = intent_domain_hint.strip().lower()
+        _allowed = {'marriage', 'career', 'finance', 'health', 'children', 'general'}
+        if _hint in _allowed:
+            print(f"[QUERY_TYPE] Using intent_domain_hint='{_hint}' as query_type")
+            return _hint
+
     # Step 1: Pattern-based detection
     pattern_type, confidence = detect_query_type_patterns(query)
     
