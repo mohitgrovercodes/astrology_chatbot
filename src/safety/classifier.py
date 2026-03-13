@@ -9,6 +9,9 @@ Enhanced safety classification using LangChain with multi-gate decision logic.
 import re
 from typing import Dict, List, Optional, Set
 from langchain_core.prompts import ChatPromptTemplate
+from config.logger import get_logger
+
+logger = get_logger("safety")
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.language_models import BaseChatModel
 
@@ -357,7 +360,7 @@ class SafetyClassifier:
         try:
             _initialize_safety_routes()
         except Exception as e:
-            print(f"[SAFETY] Warning: could not initialize semantic routes: {e}")
+            logger.warning(f"[SAFETY] could not initialize semantic routes: {e}")
         self._safety_routes_initialized = True
     
     # ── Astrological safe-words: queries containing these skip the LLM vulgarity gate ──
@@ -391,10 +394,10 @@ class SafetyClassifier:
             answer = response.content.strip().upper()
             is_vulgar = answer.startswith("YES")
             if is_vulgar:
-                print(f"[SAFETY] LLM vulgarity check: VULGAR — '{query[:60]}'")
+                logger.info(f"[SAFETY] LLM vulgarity check: VULGAR — '{query[:60]}'")
             return is_vulgar
         except Exception as e:
-            print(f"[SAFETY] LLM vulgarity check error (fail-open): {e}")
+            logger.error(f"[SAFETY] LLM vulgarity check error (fail-open): {e}")
             return False  # fail open — do not block on errors
 
     def classify(self, query: str, conversation_history: list = None) -> SafetyCheckResult:
@@ -437,7 +440,7 @@ class SafetyClassifier:
         }
         query_lower_vg = query.lower()
         if any(kw in query_lower_vg for kw in _VULGAR_KEYWORDS):
-            print(f"[SAFETY] Vulgar keyword detected — hard blocking")
+            logger.info(f"[SAFETY] Vulgar keyword detected — hard blocking")
             decision = SafetyDecision(
                 category="HARD_BLOCK",
                 reason=BlockReasons.VULGAR_CONTENT,
@@ -536,7 +539,7 @@ class SafetyClassifier:
         is_meta_question = any(re.search(pattern, query_lower) for pattern in meta_question_patterns)
         
         if is_meta_question:
-            print(f"[SAFETY] Meta-question detected - allowing conversation history query")
+            logger.info(f"[SAFETY] Meta-question detected - allowing conversation history query")
             decision = SafetyDecision(
                 category="SAFE",
                 reason="meta_question",
@@ -596,7 +599,7 @@ class SafetyClassifier:
         except Exception as e:
             # Fallback: Be permissive on technical errors but log the failure
             # If the query is obviously safe (e.g. "hi", "what is my rashi"), don't block
-            print(f"[INTENT] [WARN] Safety classifier technical error: {e}")
+            logger.warning(f"[INTENT] Safety classifier technical error: {e}")
             
             # Simple heuristic check for "low risk" queries
             low_risk_words = ['rashi', 'chart', 'kundali', 'hi', 'hello', 'thanks', 'name']
@@ -633,11 +636,11 @@ class SafetyClassifier:
             response = self.llm.invoke(prompt)
             answer = response.content.strip().upper()
             if answer.startswith("YES"):
-                print(f"[SAFETY] LLM third-party check: third-party query detected — '{query[:60]}'")
+                logger.info(f"[SAFETY] LLM third-party check: third-party query detected — '{query[:60]}'")
                 return True, "someone else"
             return None
         except Exception as e:
-            print(f"[SAFETY] LLM third-party check error (fail-open): {e}")
+            logger.error(f"[SAFETY] LLM third-party check error (fail-open): {e}")
             return None  # fail open
 
     def _detect_third_party(self, query: str) -> Optional[tuple[bool, str]]:

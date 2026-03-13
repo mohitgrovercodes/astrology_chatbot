@@ -73,3 +73,5 @@ consolidated_final.json
 indexed_rules.json
 tiered_rules.json
 *.pdf
+
+.cursor/

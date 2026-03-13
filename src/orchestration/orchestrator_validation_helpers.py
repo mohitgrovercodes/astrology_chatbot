@@ -7,6 +7,9 @@ FIXED VERSION - All dasha_data and transit_data null access issues resolved
 """
 
 from typing import Dict, Optional, List, Any
+from config.logger import get_logger
+
+logger = get_logger("validation_helpers")
 
 
 # ============================================================================
@@ -136,7 +139,7 @@ ANSWER:"""
             return pattern_type
             
     except Exception as e:
-        print(f"[QUERY_TYPE] LLM confirmation failed: {e}")
+        logger.error(f"[QUERY_TYPE] LLM confirmation failed: {e}")
         return pattern_type  # Fallback to pattern detection
 
 
@@ -163,24 +166,24 @@ def detect_query_type(
         _hint = intent_domain_hint.strip().lower()
         _allowed = {'marriage', 'career', 'finance', 'health', 'children', 'general'}
         if _hint in _allowed:
-            print(f"[QUERY_TYPE] Using intent_domain_hint='{_hint}' as query_type")
+            logger.info(f"[QUERY_TYPE] Using intent_domain_hint='{_hint}' as query_type")
             return _hint
 
     # Step 1: Pattern-based detection
     pattern_type, confidence = detect_query_type_patterns(query)
     
-    print(f"[QUERY_TYPE] Pattern detection: {pattern_type} (confidence: {confidence:.2f})")
+    logger.info(f"[QUERY_TYPE] Pattern detection: {pattern_type} (confidence: {confidence:.2f})")
     
     # Step 2: LLM confirmation if confidence is low
     if use_llm_confirmation and llm and confidence < 0.7 and pattern_type != 'general':
-        print(f"[QUERY_TYPE] Low confidence, confirming with LLM...")
+        logger.info(f"[QUERY_TYPE] Low confidence, confirming with LLM...")
         confirmed_type = confirm_query_type_with_llm(query, pattern_type, llm)
         
         if confirmed_type != pattern_type:
-            print(f"[QUERY_TYPE] LLM correction: {pattern_type} -> {confirmed_type}")
+            logger.info(f"[QUERY_TYPE] LLM correction: {pattern_type} -> {confirmed_type}")
             return confirmed_type
         else:
-            print(f"[QUERY_TYPE] LLM confirmed: {confirmed_type}")
+            logger.info(f"[QUERY_TYPE] LLM confirmed: {confirmed_type}")
             return confirmed_type
     
     return pattern_type
