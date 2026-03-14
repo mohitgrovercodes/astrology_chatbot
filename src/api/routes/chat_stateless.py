@@ -535,6 +535,71 @@ def _get_response_validator_llm():
     return _response_validator_llm
 
 
+def _normalized_word_tokens(text: str) -> List[str]:
+    """Normalize free text to alphanumeric tokens for stable style matching."""
+    if not text:
+        return []
+    cleaned = re.sub(r"[^\w\s]", " ", text.lower())
+    return [tok for tok in cleaned.split() if tok]
+
+
+def _edge_signature(text: str, take_words: int = 9) -> Dict[str, str]:
+    """
+    Build compact opening/closing signatures for repetition checks.
+    Uses normalized tokens so small punctuation differences do not evade matching.
+    """
+    toks = _normalized_word_tokens(text)
+    if not toks:
+        return {"opening": "", "closing": ""}
+    opening = " ".join(toks[:take_words])
+    closing = " ".join(toks[-take_words:])
+    return {"opening": opening, "closing": closing}
+
+
+def _recent_assistant_messages(
+    recent_history: List[Dict[str, Any]],
+    max_messages: int = 4,
+) -> List[str]:
+    """Return latest assistant messages from history for session-style memory."""
+    msgs: List[str] = []
+    for msg in reversed(recent_history or []):
+        if msg.get("role") == "assistant" and msg.get("content"):
+            msgs.append(str(msg.get("content")))
+        if len(msgs) >= max_messages:
+            break
+    return list(reversed(msgs))
+
+
+def _build_repetition_guard_context(
+    candidate_answer: str,
+    recent_history: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Build session-level repetition guard context used by the validator.
+    Tracks opening/closing signatures from recent assistant turns.
+    """
+    recent_answers = _recent_assistant_messages(recent_history, max_messages=4)
+    recent_edges = [_edge_signature(a) for a in recent_answers]
+    candidate_edge = _edge_signature(candidate_answer)
+
+    opening_repeated = bool(
+        candidate_edge["opening"]
+        and any(candidate_edge["opening"] == e["opening"] for e in recent_edges if e["opening"])
+    )
+    closing_repeated = bool(
+        candidate_edge["closing"]
+        and any(candidate_edge["closing"] == e["closing"] for e in recent_edges if e["closing"])
+    )
+
+    return {
+        "recent_openings": [e["opening"] for e in recent_edges if e["opening"]],
+        "recent_closings": [e["closing"] for e in recent_edges if e["closing"]],
+        "opening_repeated": opening_repeated,
+        "closing_repeated": closing_repeated,
+        "likely_repetition": opening_repeated or closing_repeated,
+    }
+
+
 def validate_and_sanitize_response(
     question: str,
     answer: str,
@@ -553,6 +618,7 @@ def validate_and_sanitize_response(
     draft_answer = answer or ""
     q_lower = (question or "").lower()
     a_lower = draft_answer.lower()
+    repetition_ctx = _build_repetition_guard_context(draft_answer, recent_history)
 
     # Conditional validator: only rewrite when contradiction-risk or tone-risk is
     # likely, OR when we explicitly require numbered reasoning points (detailed mode).
@@ -568,11 +634,13 @@ def validate_and_sanitize_response(
     likely_sensitive = any(k in q_lower for k in risk_keywords)
     likely_overconfident = any(m in a_lower for m in contradiction_markers)
     likely_short_or_generic = len(draft_answer.split()) < 25
+    likely_repetition = bool(repetition_ctx.get("likely_repetition"))
     needs_numbering_enforcement = bool(min_numbered_points and min_numbered_points > 0)
     should_validate = (
         likely_sensitive
         or likely_overconfident
         or likely_short_or_generic
+        or likely_repetition
         or needs_numbering_enforcement
     )
 
@@ -601,6 +669,12 @@ def validate_and_sanitize_response(
                 count += 1
                 continue
         return count
+
+    def _safe_score(value: Any, default: int) -> int:
+        try:
+            return int(value)
+        except Exception:
+            return default
 
     try:
         conv_snippet: List[str] = []
@@ -701,6 +775,18 @@ You must pay special attention to these cases:
    - You may gently improve phrasing, flow and warmth as long as you do not change factual content,
      dates, or key timing windows already stated in the draft.
 
+6) EMOTIONAL MIRROR + SESSION REPETITION GUARD
+   - The opening line should briefly mirror the user's emotional intent when appropriate
+     (e.g., concern, confusion, urgency, hope) before analysis.
+   - Avoid repeating the same opening/closing style used in recent assistant replies.
+   - If this draft repeats recent opening/closing signatures, rewrite with fresh phrasing
+     while preserving facts and timing.
+
+RECENT STYLE MEMORY (normalized phrase signatures from latest assistant turns):
+- Recent openings: {_json.dumps(repetition_ctx.get("recent_openings", []), ensure_ascii=False)}
+- Recent closings: {_json.dumps(repetition_ctx.get("recent_closings", []), ensure_ascii=False)}
+- Candidate flags: opening_repeated={repetition_ctx.get("opening_repeated")}, closing_repeated={repetition_ctx.get("closing_repeated")}
+
 EXAMPLE CORRECTIONS (FEW-SHOT GUIDANCE)
 
 Example 1 – BAD marriage tone after divorce question:
@@ -748,7 +834,8 @@ IMPORTANT DECISION RULE:
 
 STRUCTURE ENFORCEMENT (if requested):
 - When 'min_numbered_points' is > 0, you MUST ensure that the final answer contains AT LEAST
-  that many clearly numbered points (for example: "1)", "2)", "3)", etc.).
+  that many clearly numbered points (for example: "1)", "2)", "3)", etc.), and you should
+  NOT artificially stop at that number if more distinct, meaningful factors are available.
 - Each numbered point should describe a distinct astrological factor AND what it means for
   the user. These points can appear after a short narrative introduction, but they must be
   present and easy for the user to see and count.
@@ -759,6 +846,9 @@ Respond in STRICT JSON ONLY, no extra text, like this:
   "needs_revision": true/false,
   "reason": "short explanation of any problem you see",
   "revised_answer": "a fully corrected answer in the SAME LANGUAGE as the draft, or empty string if no change is needed",
+  "human_warmth_score": 1-10,
+  "authentic_astrologer_voice_score": 1-10,
+  "repetition_risk_score": 1-10,
   "min_numbered_points": """ + str(int(min_numbered_points or 0)) + """
 }}"""
 
@@ -772,15 +862,66 @@ Respond in STRICT JSON ONLY, no extra text, like this:
             logger.info(f"[VALIDATOR] LLM revised answer: {data.get('reason', '')}")
             final_answer = data["revised_answer"]
 
+        # Secondary style gate: enforce warmth/authenticity/repetition quality
+        # even when the model marks the draft as coherent.
+        if isinstance(data, dict):
+            warmth = _safe_score(data.get("human_warmth_score", 10), 10)
+            authenticity = _safe_score(data.get("authentic_astrologer_voice_score", 10), 10)
+            repetition_risk = _safe_score(data.get("repetition_risk_score", 1), 1)
+            min_warmth = max(1, min(10, int(getattr(settings, "STYLE_MIN_HUMAN_WARMTH_SCORE", 7))))
+            min_auth = max(1, min(10, int(getattr(settings, "STYLE_MIN_AUTHENTIC_ASTROLOGER_VOICE_SCORE", 7))))
+            max_repeat = max(1, min(10, int(getattr(settings, "STYLE_MAX_REPETITION_RISK_SCORE", 4))))
+            needs_style_rewrite = (
+                (warmth < min_warmth)
+                or (authenticity < min_auth)
+                or (repetition_risk > max_repeat)
+            )
+
+            if needs_style_rewrite and not (data.get("needs_revision") and data.get("revised_answer")):
+                logger.info(
+                    "[VALIDATOR] Style rewrite triggered "
+                    f"(warmth={warmth}<{min_warmth}, "
+                    f"authenticity={authenticity}<{min_auth}, "
+                    f"repetition_risk={repetition_risk}>{max_repeat})"
+                )
+                style_rewrite_prompt = f"""You are a response polishing editor for an astrology assistant.
+
+Rewrite the answer so that it:
+- keeps the SAME factual content, timing windows, and astrological meaning
+- stays in the SAME language/script
+- sounds warm, natural, and like a real expert astrologer
+- starts with a brief emotional mirror of the user's concern (1 line max)
+- avoids repeating recent opening/closing phrasing
+- remains concise and user-facing (not a report)
+
+Do NOT invent new dates, planets, houses, or claims.
+
+RECENT STYLE MEMORY:
+- Openings: {_json.dumps(repetition_ctx.get("recent_openings", []), ensure_ascii=False)}
+- Closings: {_json.dumps(repetition_ctx.get("recent_closings", []), ensure_ascii=False)}
+
+USER QUESTION:
+\"\"\"{question}\"\"\"
+
+ANSWER TO REWRITE:
+\"\"\"{final_answer}\"\"\"
+
+Return ONLY the rewritten answer text."""
+                style_resp = llm.invoke(style_rewrite_prompt)
+                polished = getattr(style_resp, "content", str(style_resp)).strip()
+                if polished:
+                    final_answer = polished
+
         # Deterministic post-check: if we explicitly require numbered points
         # and the current answer still does not meet the minimum, trigger a
         # second, focused rewrite pass that ONLY enforces numbered structure.
         if needs_numbering_enforcement:
+            required_points = int(min_numbered_points or 0)
             current_points = _count_numbered_points(final_answer)
-            if current_points < int(min_numbered_points or 0):
+            if current_points < required_points:
                 logger.info(
                     f"[VALIDATOR] Numbering enforcement: found {current_points} "
-                    f"points, required {int(min_numbered_points or 0)}. Forcing rewrite."
+                    f"points, required {required_points}. Forcing rewrite."
                 )
                 rewrite_prompt = f"""You are an astrology editor.
 
@@ -788,7 +929,7 @@ Rewrite the assistant's answer so that it:
 - keeps the SAME timing windows, planets, houses and factual content
 - stays in the SAME LANGUAGE and script as the original answer
 - sounds like a warm, professional astrologer
-- and MOST IMPORTANTLY, presents AT LEAST {int(min_numbered_points or 0)} clearly numbered
+- and MOST IMPORTANTLY, presents AT LEAST {required_points} clearly numbered
   astrological reasoning points (for example: "1) ...", "2) ...", "3) ...").
 
 Guidelines:
@@ -805,11 +946,32 @@ ORIGINAL ANSWER:
                 resp2 = llm.invoke(rewrite_prompt)
                 rewritten = getattr(resp2, "content", str(resp2)).strip()
                 if rewritten:
-                    # Even if the model still under-shoots, prefer the rewritten
-                    # version because it will usually be closer to the desired
-                    # structure.
                     logger.info("[VALIDATOR] Applied forced numbered-structure rewrite")
-                    return rewritten
+                    final_answer = rewritten
+
+                # After the LLM rewrite, run a deterministic fallback to guarantee
+                # visible numbering if the model still did not meet the requirement.
+                post_points = _count_numbered_points(final_answer)
+                if post_points < required_points:
+                    logger.info(
+                        f"[VALIDATOR] Deterministic numbering fallback: found {post_points}, "
+                        f"required {required_points}. Prefixing numbered points."
+                    )
+                    lines = final_answer.splitlines()
+                    numbered_lines: List[str] = []
+                    point_idx = 1
+                    for line in lines:
+                        stripped = line.strip()
+                        if (
+                            stripped
+                            and point_idx <= required_points
+                            and not re.match(r"^[0-9\u0966-\u096f]+[\)\.\-\:]\s+", stripped)
+                        ):
+                            numbered_lines.append(f"{point_idx}) {line.lstrip()}")
+                            point_idx += 1
+                        else:
+                            numbered_lines.append(line)
+                    final_answer = "\n".join(numbered_lines)
 
         return final_answer
     except Exception as e:
@@ -1350,7 +1512,37 @@ class EnhancedSessionManager:
             return val.decode() if isinstance(val, bytes) else (val or "en")
         except Exception:
             return "en"
-    
+
+    def get_voice_preferences(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve stored voice/consultation preferences for this user (detail level, remedies, tone)."""
+        if not self.redis:
+            return None
+        try:
+            key = f"session:{user_id}:preferences"
+            raw = self.redis.get(key)
+            if not raw:
+                return None
+            data = json.loads(raw)
+            return data if isinstance(data, dict) else None
+        except Exception as e:
+            logger.debug(f"[PREFERENCES] Error reading preferences for {user_id}: {e}")
+            return None
+
+    def store_voice_preferences(self, user_id: str, preferences: Dict[str, Any]) -> None:
+        """Store voice/consultation preferences (detail_level, remedy_preference, tone). Merges with existing."""
+        if not self.redis or not preferences:
+            return
+        try:
+            key = f"session:{user_id}:preferences"
+            existing = self.get_voice_preferences(user_id) or {}
+            merged = {**existing, **{k: v for k, v in preferences.items() if v is not None}}
+            if not merged:
+                return
+            self.redis.set(key, json.dumps(merged))
+            logger.info(f"[PREFERENCES] Stored for {user_id}: {list(merged.keys())}")
+        except Exception as e:
+            logger.info(f"[PREFERENCES] Error storing for {user_id}: {e}")
+
     def clear_session(self, session_id: str):
         if not self.redis:
             return False
@@ -1363,7 +1555,9 @@ class EnhancedSessionManager:
                 f"session:{session_id}:chart",
                 f"session:{session_id}:dasha",
                 f"session:{session_id}:transit",
-                f"session:{session_id}:conv_phase"
+                f"session:{session_id}:conv_phase",
+                f"session:{session_id}:lang",
+                f"session:{session_id}:preferences",
             ]
             self.redis.delete(*keys)
             return True
@@ -1378,6 +1572,33 @@ class EnhancedSessionManager:
             return len(keys)
         except:
             return 0
+
+
+def _infer_voice_preferences_from_message(question: str) -> Optional[Dict[str, str]]:
+    """
+    Infer consultation preferences from the user's message (e.g. "keep it short", "no remedies").
+    Returns a dict of keys to merge into stored voice_preferences, or None if nothing inferred.
+    """
+    if not question or len(question.strip()) < 3:
+        return None
+    q = question.lower().strip()
+    out: Dict[str, str] = {}
+    # Detail level
+    if any(phrase in q for phrase in ("keep it short", "short answer", "brief only", "brief answer", "short reply", "in short", "bas batao", "sirf short", "zyada mat likho")):
+        out["detail_level"] = "brief"
+    elif any(phrase in q for phrase in ("full detail", "detailed answer", "explain in detail", "puri detail", "sab batao", "vistar se")):
+        out["detail_level"] = "detailed"
+    # Remedy preference
+    if any(phrase in q for phrase in ("no remedies", "no upayas", "without remedies", "remedy mat batao", "upaya mat do")):
+        out["remedy_preference"] = "avoid"
+    elif any(phrase in q for phrase in ("remedies batao", "upaya batao", "suggest remedies", "include remedies")):
+        out["remedy_preference"] = "include"
+    # Tone
+    if any(phrase in q for phrase in ("cautious", "conservative", "sambhal ke", "careful")):
+        out["tone"] = "cautious"
+    elif any(phrase in q for phrase in ("encouraging", "positive", "hopeful", "positive raho")):
+        out["tone"] = "encouraging"
+    return out if out else None
 
 
 # Global session manager
@@ -1410,6 +1631,13 @@ class UserProfile(BaseModel):
     preferred_system: str = "vedic"
 
 
+class VoicePreferences(BaseModel):
+    """Optional consultation-style preferences (honored when building responses)."""
+    detail_level: Optional[str] = Field(None, description="brief | balanced | detailed")
+    remedy_preference: Optional[str] = Field(None, description="include | avoid | neutral")
+    tone: Optional[str] = Field(None, description="cautious | balanced | encouraging")
+
+
 class ConversationHistoryItem(BaseModel):
     """Single conversation item from external system."""
     question: str
@@ -1423,6 +1651,7 @@ class InitializeSessionRequest(BaseModel):
     user_id: str = Field(..., description="User identifier (also used as session_id)")
     user_profile: UserProfile
     conversation_history: Optional[List[ConversationHistoryItem]] = []
+    voice_preferences: Optional[VoicePreferences] = Field(None, description="Optional consultation style preferences")
 
 
 class InitializeSessionResponse(BaseModel):
@@ -1500,6 +1729,12 @@ def initialize_session(request: InitializeSessionRequest):
                     session_manager.redis.delete(stale_key)
             logger.info(f"[REDIS] Stale chart/dasha/transit cache evicted for {user_id}.")
 
+            if request.voice_preferences is not None:
+                prefs = request.voice_preferences.model_dump() if hasattr(request.voice_preferences, "model_dump") else request.voice_preferences.dict()
+                prefs_clean = {k: v for k, v in prefs.items() if v is not None}
+                if prefs_clean:
+                    session_manager.store_voice_preferences(user_id, prefs_clean)
+
             return InitializeSessionResponse(
                 user_id=user_id,
                 status="refreshed"
@@ -1510,6 +1745,12 @@ def initialize_session(request: InitializeSessionRequest):
             user_profile=request.user_profile.model_dump() if hasattr(request.user_profile, 'model_dump') else request.user_profile.dict(),
             conversation_history=conversation
         )
+
+        if request.voice_preferences is not None:
+            prefs = request.voice_preferences.model_dump() if hasattr(request.voice_preferences, "model_dump") else request.voice_preferences.dict()
+            prefs_clean = {k: v for k, v in prefs.items() if v is not None}
+            if prefs_clean:
+                session_manager.store_voice_preferences(user_id, prefs_clean)
 
         logger.info(f"[REDIS] Initialized NEW session for {user_id} - Status: {result['status']}")
 
@@ -1864,6 +2105,13 @@ def send_message(request: SendMessageRequest):
         conv_phase_data = session_manager.get_conversation_phase(user_id)
         logger.info(f"[PHASE] Current phase: {conv_phase_data.get('phase')} | topic: {conv_phase_data.get('topic')}")
 
+        # ── Voice preferences: merge any inferred from this message into stored ────────────
+        prefs = session_manager.get_voice_preferences(user_id) or {}
+        inferred = _infer_voice_preferences_from_message(question)
+        if inferred:
+            session_manager.store_voice_preferences(user_id, {**prefs, **inferred})
+            prefs = session_manager.get_voice_preferences(user_id) or {}
+
         orchestrator_session_data = {
             "chart_data": cached_chart,
             "dasha_data": cached_dasha,
@@ -1874,7 +2122,8 @@ def send_message(request: SendMessageRequest):
             "original_user_question": question,  # True original before semantic expansion
             # Pass the previously detected language so _detect_language_node can
             # use it as a fallback for short ambiguous queries (e.g. "Haan batao")
-            "detected_language": session_manager.get_detected_language(user_id)
+            "detected_language": session_manager.get_detected_language(user_id),
+            "voice_preferences": prefs,
         }
         
         # Log what cached data is being passed to orchestrator

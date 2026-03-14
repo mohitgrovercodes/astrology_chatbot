@@ -97,6 +97,23 @@ class Settings(BaseSettings):
         description="Update conversation summary after this many messages (increased from 6 to preserve context)"
     )
 
+    # Style Validator Thresholds (1-10 scales from validator JSON)
+    STYLE_MIN_HUMAN_WARMTH_SCORE: int = Field(
+        default=7,
+        validation_alias="style_min_human_warmth_score",
+        description="Minimum human warmth score before style rewrite is triggered"
+    )
+    STYLE_MIN_AUTHENTIC_ASTROLOGER_VOICE_SCORE: int = Field(
+        default=7,
+        validation_alias="style_min_authentic_astrologer_voice_score",
+        description="Minimum authentic astrologer voice score before style rewrite is triggered"
+    )
+    STYLE_MAX_REPETITION_RISK_SCORE: int = Field(
+        default=4,
+        validation_alias="style_max_repetition_risk_score",
+        description="Maximum allowed repetition risk score before style rewrite is triggered"
+    )
+
     # Transit Data Freshness
     # Planetary transits change daily, so cached transit data is evicted and
     # recomputed after this many hours. All other cached data (chart, dasha)
