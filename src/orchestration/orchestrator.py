@@ -1808,7 +1808,9 @@ Provide a concise answer:"""
                     query=retrieval_query,
                     intent="RAG_WITH_CALCULATION",
                     top_k=RAGConfig.get_top_k(content_type='interpretation'),
-                    language=state.get('detected_language', 'en')
+                    language=state.get('detected_language', 'en'),
+                    content_type='interpretation',
+                    user_id=state.get('user_id')
                 )
             elif not knowledge_chunks:
                 logger.info("[RAG_WITH_CALCULATION] No retriever - proceeding with zero knowledge")
@@ -2361,7 +2363,9 @@ Use these guidelines strictly, but write in natural human phrasing.
                     query=state['query'],
                     intent="RAG_ONLY",
                     top_k=RAGConfig.get_top_k(content_type='general'),  # Auto: 8 chunks
-                    language=state.get('detected_language', 'en')
+                    language=state.get('detected_language', 'en'),
+                    content_type='general',
+                    user_id=state.get('user_id')
                 )
             elif not knowledge_chunks:
                  logger.info("[RAG_ONLY] [WARN] No retriever provided and no chunks injected.")

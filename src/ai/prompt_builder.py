@@ -68,6 +68,12 @@ class PromptBuilder:
         # Knowledge
         if knowledge_chunks:
             sections.append(f"\nKNOWLEDGE:\n{self._format_knowledge(knowledge_chunks)}")
+            sections.append(
+                "\nGROUNDING RULES:\n"
+                "- Prioritize the retrieved passages over generic priors.\n"
+                "- Mention source names naturally when giving key claims.\n"
+                "- Synthesize in your own words; do not copy chunks verbatim."
+            )
         
         # Guidance — pass has_dasha so timing instructions are only forced when
         # actual dasha periods are available in the prompt.
@@ -168,12 +174,33 @@ class PromptBuilder:
         return "\n".join(parts)
     
     def _format_knowledge(self, chunks: List) -> str:
-        texts = []
-        for i, c in enumerate(chunks[:3], 1):
-            text = c.page_content[:200] if hasattr(c, 'page_content') else str(c)[:200]
-            texts.append(f"[{i}] {text}...")
-        return "\n".join(texts)
-    
+        entries = []
+        for i, c in enumerate(chunks[:5], 1):
+            if hasattr(c, 'page_content'):
+                text = c.page_content
+                meta = getattr(c, 'metadata', {}) or {}
+            else:
+                text = str(c)
+                meta = {}
+
+            source = meta.get('source_book', 'Unknown Source')
+            chapter = meta.get('chapter')
+            verse = meta.get('verse_number')
+            score = meta.get('rerank_score', meta.get('score'))
+
+            citation = f"[{i}] {source}"
+            if chapter:
+                citation += f" | {chapter}"
+            if verse:
+                citation += f" | Verse {verse}"
+            if isinstance(score, (int, float)):
+                citation += f" | Score {score:.3f}"
+
+            snippet = text[:320].replace("\n", " ").strip()
+            entries.append(f"{citation}\n{snippet}...")
+
+        return "\n\n".join(entries)
+
     def _get_guidance(self, intent: str, query: str, has_dasha: bool = False) -> Optional[str]:
         """Generate contextual guidance based on WHAT the user is actually asking."""
         q = query.lower()

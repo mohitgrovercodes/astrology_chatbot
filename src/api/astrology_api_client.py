@@ -20,6 +20,9 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 from functools import lru_cache
 import hashlib
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class AstrologyAPIClient:
@@ -53,7 +56,7 @@ class AstrologyAPIClient:
             headers=self._get_default_headers()
         )
         
-        print(f"[ASTRO-API] Initialized client: {base_url}")
+        logger.info(f"[ASTRO-API] Initialized client: {base_url}")
     
     def _get_default_headers(self) -> Dict[str, str]:
         """Get default headers for requests."""
@@ -79,7 +82,7 @@ class AstrologyAPIClient:
         if cache_key in self._cache:
             data, timestamp = self._cache[cache_key]
             if datetime.now() - timestamp < timedelta(seconds=self.cache_ttl):
-                print(f"[ASTRO-API] Cache hit: {cache_key[:8]}...")
+                logger.debug(f"[ASTRO-API] Cache hit: {cache_key[:8]}...")
                 return data
             else:
                 # Expired, remove from cache
@@ -89,6 +92,19 @@ class AstrologyAPIClient:
     def _set_cache(self, cache_key: str, data: Any):
         """Store data in cache."""
         self._cache[cache_key] = (data, datetime.now())
+
+    def _prune_cache(self):
+        """Keep in-memory cache bounded and remove expired entries."""
+        if not self._cache:
+            return
+        now = datetime.now()
+        expired = [k for k, (_, ts) in self._cache.items() if now - ts >= timedelta(seconds=self.cache_ttl)]
+        for k in expired:
+            self._cache.pop(k, None)
+        if len(self._cache) > 2000:
+            # If cache is too large, keep newest ~1000 entries
+            items = sorted(self._cache.items(), key=lambda kv: kv[1][1], reverse=True)[:1000]
+            self._cache = dict(items)
     
     def _make_request(
         self,
@@ -116,6 +132,8 @@ class AstrologyAPIClient:
         """
         url = f"{self.base_url}{endpoint}"
         
+        self._prune_cache()
+
         # Check cache for GET requests
         if method.upper() == "GET" and use_cache:
             cache_key = self._get_cache_key(endpoint, params or {})
@@ -125,7 +143,7 @@ class AstrologyAPIClient:
         
         # Make request
         try:
-            print(f"[ASTRO-API] {method} {endpoint}")
+            logger.debug(f"[ASTRO-API] {method} {endpoint}")
             
             response = self.client.request(
                 method=method,
@@ -145,13 +163,13 @@ class AstrologyAPIClient:
             return result
             
         except httpx.HTTPStatusError as e:
-            print(f"[ASTRO-API] HTTP Error {e.response.status_code}: {e.response.text}")
+            logger.error(f"[ASTRO-API] HTTP Error {e.response.status_code}: {e.response.text}")
             raise
         except httpx.RequestError as e:
-            print(f"[ASTRO-API] Request Error: {e}")
+            logger.error(f"[ASTRO-API] Request Error: {e}")
             raise
         except json.JSONDecodeError as e:
-            print(f"[ASTRO-API] JSON Decode Error: {e}")
+            logger.error(f"[ASTRO-API] JSON Decode Error: {e}")
             raise
     
     # =========================================================================
@@ -364,12 +382,12 @@ class AstrologyAPIClient:
     def clear_cache(self):
         """Clear all cached data."""
         self._cache.clear()
-        print("[ASTRO-API] Cache cleared")
+        logger.info("[ASTRO-API] Cache cleared")
     
     def close(self):
         """Close HTTP client."""
         self.client.close()
-        print("[ASTRO-API] Client closed")
+        logger.info("[ASTRO-API] Client closed")
     
     def __enter__(self):
         """Context manager entry."""
@@ -403,7 +421,7 @@ def get_astrology_api_client(
     api_key = api_key or os.getenv("ASTRO_API_KEY")
     
     if not base_url:
-        print("[ASTRO-API] No API URL configured, skipping external API")
+        logger.info("[ASTRO-API] No API URL configured, skipping external API")
         return None
     
     timeout = int(os.getenv("ASTRO_API_TIMEOUT", "30"))

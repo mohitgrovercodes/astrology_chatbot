@@ -38,11 +38,11 @@ load_dotenv()
 # ── LLM: via LLMFactory (OpenAI or Ollama) ──────────────────────────────────
 from langchain_core.prompts import ChatPromptTemplate
 try:
-    from src.llm.factory import LLMFactory
+    from src.llm.factory import LLMFactory, get_validation_llm
     LLMFACTORY_AVAILABLE = True
 except ImportError:
     try:
-        from llm.factory import LLMFactory
+        from llm.factory import LLMFactory, get_validation_llm
         LLMFACTORY_AVAILABLE = True
     except ImportError:
         LLMFACTORY_AVAILABLE = False
@@ -149,15 +149,19 @@ class VedicValidationEngineV2:
         self._indexed_data = None   # loaded on first use
         self._api_lock     = threading.Semaphore(max_workers)
 
-        # Create LLM via factory (respects LLM_PROVIDER env var)
-        _llm = LLMFactory.create(
-            purpose="validation",
-            model=model,           # None -> factory picks default
-            temperature=0,
-            max_tokens=8192,
-            use_rate_limiting=True,
-            rate_limit_delay=2.0,
-        )
+        # Use dedicated validation constructor when no explicit model override is needed.
+        # This keeps tuning centralized in src.llm.factory.get_validation_llm().
+        if model is None:
+            _llm = get_validation_llm()
+        else:
+            _llm = LLMFactory.create(
+                purpose="validation",
+                model=model,
+                temperature=0,
+                max_tokens=8192,
+                use_rate_limiting=True,
+                rate_limit_delay=2.0,
+            )
         logger.info(f"[LLM] LLM Provider: {LLMFactory._determine_provider()}")
         logger.info(f"[LLM] Model:        {model or LLMFactory._select_model_for_provider(LLMFactory._determine_provider(), 'validation')}")
 

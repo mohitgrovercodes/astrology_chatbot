@@ -55,7 +55,7 @@
 | **Embeddings** | OpenAI text-embedding-3-large |
 | **Astro Calculations** | PySwissEph (Swiss Ephemeris) |
 | **Vector Store** | ChromaDB |
-| **Hybrid Retrieval** | BM25 (30%) + Semantic Vector (70%) |
+| **Hybrid Retrieval** | Intent-weighted Semantic + BM25 + HyDE with optional reranking |
 | **Reranking** | Sentence-Transformers cross-encoder |
 | **Session Storage** | Redis (permanent, no TTL) |
 | **PDF Extraction** | Gemini Vision (gemini-2.5-flash / gemini-2.5-pro fallback) |
