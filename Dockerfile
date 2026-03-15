@@ -34,16 +34,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create non-root user
+# Create non-root user and ensure data directory (ChromaDB + Redis volumes) is writable
 RUN useradd -m -u 1000 appuser && \
+    mkdir -p /app/data/vectordb && \
     chown -R appuser:appuser /app
 USER appuser
 
 # Expose port
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+# Health check — give extra start-period because ChromaDB + BM25 index warm-up takes time
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Run application

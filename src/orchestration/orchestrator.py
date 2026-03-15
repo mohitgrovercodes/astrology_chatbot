@@ -65,6 +65,8 @@ except ImportError:
 from src.orchestration.orchestrator_validation_helpers import (
     detect_query_type,
     determine_validation_tier,
+    determine_live_chat_rule_cap,
+    is_analysis_only_request,
     prepare_chart_for_validation,
     should_hard_halt,
     build_halt_response,
@@ -1653,7 +1655,12 @@ Provide a concise answer:"""
                     else:
                         # Determine tier (optimized for live chat)
                         tier = determine_validation_tier(state['query'])
-                        logger.info(f"[VALIDATION] Query: {query_type}, Tier: {tier}")
+                        live_rule_cap = determine_live_chat_rule_cap(tier, state.get('query', ''))
+                        include_yoga_live = tier > 1
+                        logger.info(
+                            f"[VALIDATION] Query: {query_type}, Tier: {tier}, "
+                            f"LiveCap: {live_rule_cap}, IncludeYoga: {include_yoga_live}"
+                        )
                         
                         # Get or create validation engine
                         if not hasattr(self, 'validation_engine'):
@@ -1691,6 +1698,8 @@ Provide a concise answer:"""
                                 tier=tier,
                                 stage=None,
                                 live_chat=True,
+                                live_chat_max_rules=live_rule_cap,
+                                include_yoga_rules_in_live_chat=include_yoga_live,
                                 timeout_sec=None
                             )
                             
@@ -4159,6 +4168,7 @@ EARLY CONVERSATION:
         # Use dynamic instruction builder — adapts to query content (timing, career, etc) and verbosity.
         # LLM-classified intent/domain/polarity are passed in via validation_result when available.
         _ia = (validation_result or {}).get('intent_analysis', {}) if validation_result else {}
+        analysis_only_mode = is_analysis_only_request(query, _ia.get('question_mode'))
         instructions = self._build_response_instructions(
             query=query,
             lang_name=lang_name,
@@ -4169,6 +4179,44 @@ EARLY CONVERSATION:
             question_mode=_ia.get('question_mode'),
             polarity=_ia.get('polarity'),
         )
+        # Keep answers grounded in structured analysis first (validation + synthesis),
+        # then use raw chart details only as supporting evidence.
+        analysis_priority_instruction = """
+
+ANALYSIS PRIORITY (MANDATORY):
+- Use VALIDATION RESULT and ENHANCED CHART ANALYSIS as the primary reasoning source whenever they are present.
+- Anchor your narrative first on: overall strength, can_proceed, critical_failures, chart strengths/challenges, key houses, and detected yogas.
+- Use raw planetary rows/dasha tables as supporting evidence, not as the primary source of truth.
+- If a claim is not supported by structured analysis or computed data in this prompt, do NOT assert it.
+"""
+        instructions += analysis_priority_instruction
+
+        if response_mode == 'detailed' or self._user_wants_detail(query):
+            instructions += (
+                "\nDETAILED-ANALYSIS REQUEST:\n"
+                "- The user asked for detailed/full analysis.\n"
+                "- You MUST explicitly use all relevant analysis sections: key houses, yogas, chart strengths, chart challenges, and validation outcomes.\n"
+                "- Keep the answer clearly analytical and evidence-linked (factor -> implication -> practical meaning).\n"
+            )
+
+        if analysis_only_mode:
+            instructions += (
+                "\nANALYSIS-ONLY MODE (NO PRIMARY TIMING FOCUS):\n"
+                "- The user is asking for analysis, not event timing.\n"
+                "- Focus mainly on strengths, challenges, key houses, yogas, and overall chart readiness.\n"
+                "- Mention timing only briefly as secondary context if needed; avoid date-heavy windows unless explicitly requested.\n"
+            )
+
+        if validation_result:
+            _strength = float(validation_result.get('overall_strength', 10.0))
+            _critical = validation_result.get('critical_failures', []) or []
+            if _strength < 6.0 or _critical:
+                instructions += (
+                    "\nWEAK-CHART / LIMITATION HANDLING:\n"
+                    "- Acknowledge limitations calmly and honestly (without fear language).\n"
+                    "- Keep the response constructive by prioritizing structured chart challenges and key houses.\n"
+                    "- If critical failures exist, mention the key limitation(s) in plain language and suggest practical next best steps.\n"
+                )
 
         # Domain-specific Pratyantar spotlight — injected into the dasha block so the LLM
         # knows which planet's Pratyantar window to prioritize for this exact query type.

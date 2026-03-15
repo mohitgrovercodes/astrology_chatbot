@@ -394,6 +394,8 @@ class VedicValidationEngineV2:
         tier:        int           = 1,
         stage:       Optional[str] = None,
         live_chat:   bool          = False,   # Fast mode: fewer rules, hard timeout
+        live_chat_max_rules: Optional[int] = None,
+        include_yoga_rules_in_live_chat: bool = False,
         timeout_sec: float         = 25.0,    # Max seconds before partial result
     ) -> ValidationResult:
         """
@@ -404,6 +406,8 @@ class VedicValidationEngineV2:
             query_type:  'marriage' | 'career' | 'finance' | 'health' | 'children'
             tier:        1=quick | 2=standard | 3=detailed
             stage:       'promise' | 'timing' | 'trigger' | None (all)
+            live_chat_max_rules: Optional cap override for live chat mode
+            include_yoga_rules_in_live_chat: keep yoga/combination rule names in live mode
 
         Returns:
             ValidationResult
@@ -455,19 +459,23 @@ class VedicValidationEngineV2:
             LIVE_SEVERITIES = {"critical", "high"}
 
             before = len(applicable)
-            applicable = [
-                r for r in applicable
-                if self._get_severity(r) in LIVE_SEVERITIES
-                and not any(
-                    kw in r.get("rule_name", "").lower()
-                    for kw in SKIP_IN_LIVE
-                )
-            ]
-            # Also cap at first 80 rules ordered by check_order
+            if include_yoga_rules_in_live_chat:
+                applicable = [r for r in applicable if self._get_severity(r) in LIVE_SEVERITIES]
+            else:
+                applicable = [
+                    r for r in applicable
+                    if self._get_severity(r) in LIVE_SEVERITIES
+                    and not any(
+                        kw in r.get("rule_name", "").lower()
+                        for kw in SKIP_IN_LIVE
+                    )
+                ]
+            # Cap ordered rules for latency/cost control; can be overridden by caller.
+            cap_rules = live_chat_max_rules if live_chat_max_rules is not None else 80
             applicable.sort(key=lambda r: r.get("check_order", 999))
-            applicable = applicable[:80]
+            applicable = applicable[:cap_rules]
             logger.debug(f"Live chat filter:           {before} -> {len(applicable)} rules "
-                  f"(critical+high, non-yoga, capped at 80)")
+                  f"(critical+high, {'with-yoga' if include_yoga_rules_in_live_chat else 'non-yoga'}, capped at {cap_rules})")
 
         # Effective batch size: larger batches = fewer API calls
         eff_batch = 15 if live_chat else self.batch_size

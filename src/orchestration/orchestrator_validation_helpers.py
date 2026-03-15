@@ -220,6 +220,55 @@ def determine_validation_tier(query: str, user_preferences: Optional[Dict] = Non
     return 1
 
 
+def determine_live_chat_rule_cap(tier: int, query: str = "") -> int:
+    """
+    Adaptive live-chat validation cap by tier.
+
+    Tier 1 stays fast (80 rules). Tier 2/3 allow deeper checks for
+    explicit detailed-analysis requests while keeping latency bounded.
+    """
+    # Baseline by tier
+    if tier >= 3:
+        cap = 150
+    elif tier == 2:
+        cap = 120
+    else:
+        cap = 80
+
+    # Small bump for explicit "full/detailed analysis" wording
+    q = (query or "").lower()
+    if any(k in q for k in ("detailed", "comprehensive", "full analysis", "in-depth")):
+        cap = max(cap, 150 if tier >= 2 else 100)
+
+    return cap
+
+
+def is_analysis_only_request(query: str, question_mode: Optional[str] = None) -> bool:
+    """
+    Detect analysis-focused requests that are not asking for timing.
+
+    Used to keep responses analytical (strengths/challenges/yogas/houses)
+    and avoid over-emphasizing windows/dates.
+    """
+    q = (query or "").lower()
+    if (question_mode or "").lower() == "timing":
+        return False
+
+    timing_markers = (
+        "when", "kab", "timing", "date", "month", "year", "window",
+        "period", "dasha", "antardasha", "pratyantar", "by when",
+    )
+    if any(m in q for m in timing_markers):
+        return False
+
+    analysis_markers = (
+        "analyze", "analyse", "analysis", "explain", "breakdown",
+        "strength", "weakness", "challenge", "overview", "assessment",
+        "detailed reading", "complete reading",
+    )
+    return any(m in q for m in analysis_markers)
+
+
 # ============================================================================
 # CHART DATA PREPARATION FOR VALIDATION
 # ============================================================================
