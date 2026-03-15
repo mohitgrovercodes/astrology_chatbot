@@ -5,7 +5,10 @@ AI components for NakshatraAI V2.
 """
 
 # Import the classifier
-from .intent_classifier import SimplifiedIntentClassifier
+from .intent_classifier import LLMIntentClassifier
+
+# Backward-compatible alias
+SimplifiedIntentClassifier = LLMIntentClassifier
 
 # Try to import other components
 try:

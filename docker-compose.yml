@@ -11,69 +11,97 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # API Configuration
+      # ── Server ────────────────────────────────────────────────────────────
       - DEBUG=false
       - HOST=0.0.0.0
       - PORT=8000
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
 
-      # Security
+      # ── Security ──────────────────────────────────────────────────────────
       - VALID_API_KEYS=${VALID_API_KEYS}
-      - INTERNAL_SERVICE_SECRET=${INTERNAL_SERVICE_SECRET}
+      - INTERNAL_SERVICE_SECRET=${INTERNAL_SERVICE_SECRET:-change-me}
 
-      # Redis Session Management
+      # ── CORS / Rate limiting ───────────────────────────────────────────────
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-["*"]}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-10}
+      - RATE_LIMIT_PER_HOUR=${RATE_LIMIT_PER_HOUR:-100}
+
+      # ── LLM Provider ──────────────────────────────────────────────────────
+      # "openai" for production; "free" for local Ollama
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
+      - FAST_LLM_PROVIDER=${FAST_LLM_PROVIDER:-openai}
+      - FAST_LLM_MODEL=${FAST_LLM_MODEL:-gpt-4o-mini}
+
+      # ── OpenAI (required when LLM_PROVIDER=openai) ────────────────────────
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL:-text-embedding-3-large}
+      - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS:-3072}
+
+      # ── Ollama (required when LLM_PROVIDER=free) ──────────────────────────
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}
+
+      # ── Redis Session Store ────────────────────────────────────────────────
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - SESSION_EXPIRY_HOURS=${SESSION_EXPIRY_HOURS:-0}
 
-      # CORS
-      - ALLOWED_ORIGINS=["*"]
+      # ── ChromaDB ──────────────────────────────────────────────────────────
+      - CHROMA_PERSIST_DIR=${CHROMA_PERSIST_DIR:-./data/vectordb}
 
-      # Rate Limiting
-      - RATE_LIMIT_PER_MINUTE=10
-
-      # LLM - OpenAI (Option 2)
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-
-      # LLM Provider Configuration
-      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
-      - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}
-      - FAST_LLM_PROVIDER=${FAST_LLM_PROVIDER:-openai}
-      - FAST_LLM_MODEL=${FAST_LLM_MODEL:-gpt-4o-mini}
-
-      # Orchestrator Settings
+      # ── Conversation Runtime ───────────────────────────────────────────────
+      - CONVERSATION_CONTEXT_WINDOW=${CONVERSATION_CONTEXT_WINDOW:-20}
+      - CONVERSATION_SUMMARY_THRESHOLD=${CONVERSATION_SUMMARY_THRESHOLD:-20}
+      - TRANSIT_REFRESH_HOURS=${TRANSIT_REFRESH_HOURS:-24}
+      - DASHA_REFRESH_DAYS=${DASHA_REFRESH_DAYS:-30}
       - ENABLE_CACHING=${ENABLE_CACHING:-true}
       - MAX_CONVERSATION_HISTORY=${MAX_CONVERSATION_HISTORY:-10}
+
+      # ── Response Style Validator ───────────────────────────────────────────
+      - STYLE_MIN_HUMAN_WARMTH_SCORE=${STYLE_MIN_HUMAN_WARMTH_SCORE:-7}
+      - STYLE_MIN_AUTHENTIC_ASTROLOGER_VOICE_SCORE=${STYLE_MIN_AUTHENTIC_ASTROLOGER_VOICE_SCORE:-7}
+      - STYLE_MAX_REPETITION_RISK_SCORE=${STYLE_MAX_REPETITION_RISK_SCORE:-4}
+
+      # ── HuggingFace / Reranker ────────────────────────────────────────────
+      - HF_OFFLINE_MODE=${HF_OFFLINE_MODE:-false}
+      - HF_TIMEOUT=${HF_TIMEOUT:-10}
+
     volumes:
+      # Persist ChromaDB vector store and Redis data between restarts
       - ./data:/app/data
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
     networks:
       - nakshatraai-network
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
 
   redis:
     image: redis:7-alpine
     container_name: nakshatraai-redis
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes ${REDIS_PASSWORD:+--requirepass ${REDIS_PASSWORD}}
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - nakshatraai-network
 
 volumes:
   redis-data:
-
 
 networks:
   nakshatraai-network:

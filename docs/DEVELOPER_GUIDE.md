@@ -240,27 +240,6 @@ Per-intent retrieval parameters are configured in `config/rag_config.py`:
 
 ---
 
-## Cost Tracking System
-
-NakshatraAI auto-logs all LLM and embedding costs to a SQLite database (`data/astro.db`).
-
-The `CostTrackingWrapper` in `src/utils/cost_tracking.py` transparently wraps all LLM calls. Costs are calculated from token counts using per-model pricing.
-
-**Generate cost reports:**
-
-```bash
-# Today's costs
-python -m src.utils.cost_report --today
-
-# Weekly breakdown by model
-python -m src.utils.cost_report --week --model gpt-4o-mini
-
-# Monthly export
-python -m src.utils.cost_report --month --export january_costs.csv
-```
-
----
-
 ## Running Tests
 
 ```bash

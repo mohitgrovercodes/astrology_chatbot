@@ -61,14 +61,6 @@ from .extraction_schemas import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Import cost tracking
-try:
-    from src.utils.cost_tracking import CostTrackingWrapper
-    COST_TRACKING_AVAILABLE = True
-except ImportError:
-    COST_TRACKING_AVAILABLE = False
-    logger.warning("Cost tracking not available")
-
 
 @dataclass
 class ExtractionConfig:
@@ -154,18 +146,6 @@ class VisionExtractor:
         # Request tracking for rate limiting
         self._last_request_time = 0
         self._request_count = 0
-        
-        # Cost tracking
-        if COST_TRACKING_AVAILABLE:
-            self.cost_tracker = CostTrackingWrapper(
-                model_name=self.config.primary_model,
-                model_type="vision"
-            )
-            # Log provider type
-            provider = "vertex_ai" if self.config.use_vertex_ai else "ai_studio"
-            logger.info(f"Cost logging authorized for provider: {provider}")
-        else:
-            self.cost_tracker = None
         
         logger.info(f"VisionExtractor initialized with model: {self.config.model_name}")
     
@@ -476,14 +456,6 @@ class VisionExtractor:
                 response = self.model.generate_content(
                     content,
                     request_options={"timeout": 120}  # 2 minute timeout
-                )
-            
-            # Track cost if available
-            if self.cost_tracker and hasattr(response, 'usage_metadata'):
-                self.cost_tracker.log_manual(
-                    input_tokens=response.usage_metadata.prompt_token_count,
-                    output_tokens=response.usage_metadata.candidates_token_count,
-                    operation="vision_extraction"
                 )
             
             # Check for block reasons (handling library differences)

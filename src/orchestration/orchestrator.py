@@ -65,6 +65,8 @@ except ImportError:
 from src.orchestration.orchestrator_validation_helpers import (
     detect_query_type,
     determine_validation_tier,
+    determine_live_chat_rule_cap,
+    is_analysis_only_request,
     prepare_chart_for_validation,
     should_hard_halt,
     build_halt_response,
@@ -129,6 +131,7 @@ class NakshatraState(TypedDict):
     validation_can_proceed: bool
     validation_query_type: Optional[str]
     validation_disclaimer: Optional[str]
+    validation_debug: Optional[Dict]
 
     # NEW: Context Management Fields
     conversation_summary: Optional[str]      # LLM-generated summary
@@ -444,7 +447,7 @@ class EnhancedLangGraphOrchestrator:
             # Promoting internal state keys (Priority injection)
             # NOTE: Do NOT do user_profile.update(session_data) — it pollutes user_profile
             # with chart_data, dasha_data, transit_data, summary, intent_analysis etc.
-            internal_keys = ['chart_data', 'dasha_data', 'transit_data', 'detected_language', 'persona_type']
+            internal_keys = ['chart_data', 'dasha_data', 'transit_data', 'detected_language', 'persona_type', 'voice_preferences']
             for key in internal_keys:
                 if key in session_data:
                     logger.info(f"[AUTH] [PRIORITY] Using injected context: {key}")
@@ -623,6 +626,36 @@ class EnhancedLangGraphOrchestrator:
                     # Use standard template
                     template_key = safety_result.get_template_key()
                     response = get_template(template_key) if template_key else "I cannot provide guidance on this query due to safety concerns."
+
+                # Language-aware rendering for safety responses: translate templates
+                # into the user's detected language/script where possible, so even
+                # soft blocks and warnings respect the user's language choice.
+                try:
+                    detected_lang = (state.get("session_data") or {}).get("detected_language") or "en"
+                    if detected_lang != "en":
+                        llm = getattr(self, "fast_llm", None)
+                        if llm is not None:
+                            from src.utils.localization import get_localization_manager
+                            loc = get_localization_manager()
+                            lang_name = loc.get_language_name(detected_lang)
+                            if "-lat" in detected_lang:
+                                script_instruction = f" Respond in {lang_name} using ROMAN ALPHABET only (no native script)."
+                            else:
+                                script_instruction = f" Respond entirely in {lang_name} (native script)."
+
+                            prompt = (
+                                "You are a professional Vedic astrologer translating a safety / disclaimer message for a user. "
+                                "Translate the following message accurately, keeping the same warm and respectful tone."
+                                f"{script_instruction}\n\n"
+                                f"Message:\n{response}\n\n"
+                                "Translation (ONLY output the exact translated message without quotes):"
+                            )
+                            _resp = llm.invoke(prompt)
+                            translated = (getattr(_resp, "content", str(_resp)) or "").strip()
+                            if translated and len(translated) > 10:
+                                response = translated
+                except Exception as _e:
+                    logger.info(f"[SAFETY] Translation of safety response failed or skipped: {_e}")
                 
                 state['answer'] = response
                 state['intent'] = 'BLOCKED'
@@ -1623,7 +1656,12 @@ Provide a concise answer:"""
                     else:
                         # Determine tier (optimized for live chat)
                         tier = determine_validation_tier(state['query'])
-                        logger.info(f"[VALIDATION] Query: {query_type}, Tier: {tier}")
+                        live_rule_cap = determine_live_chat_rule_cap(tier, state.get('query', ''))
+                        include_yoga_live = tier > 1
+                        logger.info(
+                            f"[VALIDATION] Query: {query_type}, Tier: {tier}, "
+                            f"LiveCap: {live_rule_cap}, IncludeYoga: {include_yoga_live}"
+                        )
                         
                         # Get or create validation engine
                         if not hasattr(self, 'validation_engine'):
@@ -1661,6 +1699,8 @@ Provide a concise answer:"""
                                 tier=tier,
                                 stage=None,
                                 live_chat=True,
+                                live_chat_max_rules=live_rule_cap,
+                                include_yoga_rules_in_live_chat=include_yoga_live,
                                 timeout_sec=None
                             )
                             
@@ -1670,6 +1710,10 @@ Provide a concise answer:"""
                                 'query_type': val_result.query_type,
                                 'overall_strength': val_result.overall_strength,
                                 'can_proceed': val_result.can_proceed,
+                                'rules_checked': val_result.rules_checked,
+                                'rules_passed': val_result.passed,
+                                'rules_failed': val_result.failed,
+                                'debug_stats': val_result.debug_stats or {},
                                 'critical_failures': [
                                     {
                                         'rule_id': f.rule_id,
@@ -1682,12 +1726,22 @@ Provide a concise answer:"""
                                 ],
                                 'intent_analysis': _ia,
                             }
+                            state['validation_debug'] = val_result.debug_stats or {}
                             
                             state['validation_strength'] = val_result.overall_strength
                             state['validation_can_proceed'] = val_result.can_proceed
                             
                             logger.info(f"[VALIDATION] [OK] Strength: {val_result.overall_strength:.1f}/10")
                             logger.info(f"[VALIDATION] Critical failures: {len(val_result.critical_failures)}")
+                            logger.info(
+                                "[VALIDATION][DEBUG] pool=%s filtered=%s checked=%s cap=%s include_yoga=%s index=%s",
+                                (val_result.debug_stats or {}).get('rules_initial_pool'),
+                                (val_result.debug_stats or {}).get('rules_after_live_filter'),
+                                val_result.rules_checked,
+                                (val_result.debug_stats or {}).get('live_cap'),
+                                (val_result.debug_stats or {}).get('include_yoga_live'),
+                                (val_result.debug_stats or {}).get('index_used'),
+                            )
                             
                             # HARD HALT CHECK (only for extreme cases)
                             if should_hard_halt(val_result.overall_strength, val_result.critical_failures):
@@ -1778,7 +1832,9 @@ Provide a concise answer:"""
                     query=retrieval_query,
                     intent="RAG_WITH_CALCULATION",
                     top_k=RAGConfig.get_top_k(content_type='interpretation'),
-                    language=state.get('detected_language', 'en')
+                    language=state.get('detected_language', 'en'),
+                    content_type='interpretation',
+                    user_id=state.get('user_id')
                 )
             elif not knowledge_chunks:
                 logger.info("[RAG_WITH_CALCULATION] No retriever - proceeding with zero knowledge")
@@ -1878,6 +1934,7 @@ Provide a concise answer:"""
                     synthesis=state.get('synthesis'),  # NEW
                     response_mode=_prompt_response_mode,
                     astro_evidence=state.get("astro_evidence"),
+                    voice_preferences=state.get("voice_preferences"),
                 )
             else:
                 # Chart calculation failed — do NOT hallucinate chart-specific details.
@@ -2078,8 +2135,9 @@ PROGRESSIVE DISCLOSURE -- DETAILED RESPONSE MODE (OVERRIDES word-limit instructi
 The user asked for more details. Give a comprehensive, insightful answer now.
 LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lang_for_phase}. Do NOT mix languages.
 1. TARGET LENGTH: 500-600 words. Be thorough without sounding repetitive.
-2. Explain AT LEAST 5 key astrological factors as numbered points — this is mandatory.
-   You MUST include a minimum of 5 numbered points. Choose from:
+2. Explain AT LEAST 5 key astrological factors as numbered points — this is mandatory, but NOT a hard cap.
+   You MUST include a minimum of 5 numbered points, and if more distinct factors are clearly available from the data above, include ALL of them as separate points (8 strong factors => 8+ points, not 5).
+   Cover as many of the following categories as actually appear in the chart, evidence and divisional analysis:
    (a) House-lord logic — name the relevant house lord, its sign, dignity, and what that means for the person's life
    (b) Dasha/Pratyantar timing — the active period with its specific window
    (c) Named yoga — if a relevant yoga is present in the YOGAS DETECTED section, NAME IT (e.g., "Gaj Kesari Yoga", "Raj Yoga") and explain in one sentence what it means for THIS person
@@ -2329,7 +2387,9 @@ Use these guidelines strictly, but write in natural human phrasing.
                     query=state['query'],
                     intent="RAG_ONLY",
                     top_k=RAGConfig.get_top_k(content_type='general'),  # Auto: 8 chunks
-                    language=state.get('detected_language', 'en')
+                    language=state.get('detected_language', 'en'),
+                    content_type='general',
+                    user_id=state.get('user_id')
                 )
             elif not knowledge_chunks:
                  logger.info("[RAG_ONLY] [WARN] No retriever provided and no chunks injected.")
@@ -3602,8 +3662,25 @@ Provide a concise, clear answer:"""
         synthesis: Optional[Dict] = None,  # NEW
         response_mode: str = "default",  # PROGRESSIVE DISCLOSURE: "initial" | "detailed" | "followup" | "default"
         astro_evidence: Optional[Dict] = None,
+        voice_preferences: Optional[Dict] = None,
     ) -> str:
-        
+        # Build USER PREFERENCES block for prompt (long-term consultation style memory)
+        user_preferences_block = ""
+        if voice_preferences and isinstance(voice_preferences, dict):
+            parts = []
+            if voice_preferences.get("detail_level"):
+                parts.append(f"• Detail: {voice_preferences['detail_level']} (brief / balanced / detailed)")
+            if voice_preferences.get("remedy_preference"):
+                parts.append(f"• Remedies: {voice_preferences['remedy_preference']} (include / avoid / neutral)")
+            if voice_preferences.get("tone"):
+                parts.append(f"• Tone: {voice_preferences['tone']} (cautious / balanced / encouraging)")
+            if parts:
+                user_preferences_block = (
+                    "\nUSER PREFERENCES (honor when possible — e.g. 'As you prefer, I'll keep this practical and short.'):\n"
+                    + "\n".join(parts)
+                    + "\n"
+                )
+
         context_parts = []
         for i, chunk in enumerate(knowledge_chunks[:3], 1):
             source = chunk.metadata.get('source_book', 'Unknown') if hasattr(chunk, 'metadata') else 'Unknown'
@@ -4106,6 +4183,7 @@ EARLY CONVERSATION:
         # Use dynamic instruction builder — adapts to query content (timing, career, etc) and verbosity.
         # LLM-classified intent/domain/polarity are passed in via validation_result when available.
         _ia = (validation_result or {}).get('intent_analysis', {}) if validation_result else {}
+        analysis_only_mode = is_analysis_only_request(query, _ia.get('question_mode'))
         instructions = self._build_response_instructions(
             query=query,
             lang_name=lang_name,
@@ -4116,6 +4194,44 @@ EARLY CONVERSATION:
             question_mode=_ia.get('question_mode'),
             polarity=_ia.get('polarity'),
         )
+        # Keep answers grounded in structured analysis first (validation + synthesis),
+        # then use raw chart details only as supporting evidence.
+        analysis_priority_instruction = """
+
+ANALYSIS PRIORITY (MANDATORY):
+- Use VALIDATION RESULT and ENHANCED CHART ANALYSIS as the primary reasoning source whenever they are present.
+- Anchor your narrative first on: overall strength, can_proceed, critical_failures, chart strengths/challenges, key houses, and detected yogas.
+- Use raw planetary rows/dasha tables as supporting evidence, not as the primary source of truth.
+- If a claim is not supported by structured analysis or computed data in this prompt, do NOT assert it.
+"""
+        instructions += analysis_priority_instruction
+
+        if response_mode == 'detailed' or self._user_wants_detail(query):
+            instructions += (
+                "\nDETAILED-ANALYSIS REQUEST:\n"
+                "- The user asked for detailed/full analysis.\n"
+                "- You MUST explicitly use all relevant analysis sections: key houses, yogas, chart strengths, chart challenges, and validation outcomes.\n"
+                "- Keep the answer clearly analytical and evidence-linked (factor -> implication -> practical meaning).\n"
+            )
+
+        if analysis_only_mode:
+            instructions += (
+                "\nANALYSIS-ONLY MODE (NO PRIMARY TIMING FOCUS):\n"
+                "- The user is asking for analysis, not event timing.\n"
+                "- Focus mainly on strengths, challenges, key houses, yogas, and overall chart readiness.\n"
+                "- Mention timing only briefly as secondary context if needed; avoid date-heavy windows unless explicitly requested.\n"
+            )
+
+        if validation_result:
+            _strength = float(validation_result.get('overall_strength', 10.0))
+            _critical = validation_result.get('critical_failures', []) or []
+            if _strength < 6.0 or _critical:
+                instructions += (
+                    "\nWEAK-CHART / LIMITATION HANDLING:\n"
+                    "- Acknowledge limitations calmly and honestly (without fear language).\n"
+                    "- Keep the response constructive by prioritizing structured chart challenges and key houses.\n"
+                    "- If critical failures exist, mention the key limitation(s) in plain language and suggest practical next best steps.\n"
+                )
 
         # Domain-specific Pratyantar spotlight — injected into the dasha block so the LLM
         # knows which planet's Pratyantar window to prioritize for this exact query type.
@@ -4127,14 +4243,15 @@ EARLY CONVERSATION:
         engine_usage_instruction = """
 
 ENGINE USAGE GUIDELINES (CRITICAL - USE THE DATA ABOVE):
-- Base your interpretation on ALL available computed signals, not just dashas and house lords. Use:
+- Base your interpretation on ALL available computed signals, not just dashas and house lords. Use EVERY relevant layer you see in the prompt:
   1) House lords — sign, dignity, and what that means for the person's life topic.
-  2) Yogas (from YOGAS DETECTED section) — in detailed responses, NAME relevant yogas explicitly (e.g., "Gaj Kesari Yoga strengthens..."). Do NOT invent yogas not in the data.
-  3) Divisional charts — use as evidence; name them classically (Navamsa, Dasamsa) in detailed responses. Never use D9/D10 numbers.
-  4) Active Dasha stack and Pratyantar timing windows (from ASTRO INTELLIGENCE LAYER).
-  5) Vimshopaka Bala — when a domain-key planet scores ≥14 (very strong) or ≤7 (weak), note it: "Jupiter is exceptionally strong across multiple charts here" or "Venus shows mixed strength in divisional charts, which may delay full results."
+  2) Yogas (from YOGAS DETECTED section) — in detailed responses, NAME each relevant yoga explicitly (e.g., "Gaj Kesari Yoga strengthens..."). Do NOT invent yogas not in the data.
+  3) Divisional charts — use D-charts as evidence; in detailed responses, explicitly reference the appropriate chart by its classical name (Navamsa for marriage, Dasamsa for career, etc.). Never use D9/D10 numbers.
+  4) Active Dasha stack and Pratyantar timing windows (from ASTRO INTELLIGENCE LAYER) — show how timing windows line up with life events.
+  5) Vimshopaka Bala — when a domain-key planet has a score in the Vimshopaka table, mention its strength (e.g., "Jupiter at 15.2/20 across divisional charts").
   6) Vargottama — when a relevant planet is listed in VARGOTTAMA PLANETS, SAY SO: "This planet is especially potent as it holds the same sign in both the birth chart and Navamsa, amplifying its dasha results."
   7) Gochara (transits) — when Jupiter or Saturn transit directly supports or opposes the timing, include a one-sentence Gochara crosscheck.
+  8) Long Saturn phases (e.g., Sade Sati) — when the domain hints or validation context mention Saturn pressure phases, explicitly name them and explain how they colour the period (pressure, responsibility, restructuring) rather than only repeating the dasha story.
 - Never invent graha positions, house placements or yogas not explicitly in the data above.
 - PLANETARY CONDITIONS — DO NOT HIDE THESE (name them, then explain):
   - When a key planet is RETROGRADE: say "X is retrograde in your chart" and describe the effect as themes becoming internalised, revisited, or delayed — not completely blocked.
@@ -4146,8 +4263,8 @@ ENGINE USAGE GUIDELINES (CRITICAL - USE THE DATA ABOVE):
   (a) First state what it does NOT mean: "Iska matlab yeh nahi ki..." / "This does not mean..."
   (b) Then explain what it actually means for THIS specific person: "Balki iska matlab hai ki..." / "Rather, it means..."
   Never use fatalistic or generic fear-mongering language. Ground every reframe in the actual chart data.
-- For domain-specific focus, use the appropriate divisional charts; in detailed reasoning briefly refer to them by classical Sanskrit names (Navamsa for marriage, Dasamsa for career).
-- When the user has asked for detailed reasoning, clearly expose AT LEAST 5 numbered astrological factors. These MUST go beyond just house lords and dasha — include at least one of: a named yoga, a planetary condition (retrograde/combust/stationary), a divisional chart insight, or a Gochara crosscheck.
+- For domain-specific focus, use the appropriate divisional charts; in detailed reasoning refer to them by classical Sanskrit names (Navamsa for marriage, Dasamsa for career, etc.) and do not omit them when they are available in the DIVISIONAL CHART ANALYSIS section.
+- When the user has asked for detailed reasoning, clearly expose AT LEAST 5 numbered astrological factors — but if more distinct, meaningful factors are available from the chart, divisional analysis, Vimshopaka Bala, Vargottama list, planetary conditions, Sade Sati / long Saturn phases, and Gochara, you MUST include ALL of those relevant factors as separate numbered points. Five is a minimum, not a cap.
 """
 
         # ════════════════════════════════════════════════════════════════════════
@@ -4288,6 +4405,8 @@ When you are done reasoning, write ONLY the polished answer for the user. Do NOT
 
 {enhanced_context}
 
+{divisional_context}
+
 {deterministic_evidence}
 
 {conversation_summary_section}
@@ -4299,7 +4418,7 @@ USER PROFILE:
 • Date of Birth: {user_profile.get('date_of_birth')}
 • Time of Birth: {user_profile.get('time_of_birth')}
 • Place of Birth: {user_profile.get('place_of_birth')}
-
+{user_preferences_block}
 ════════════════════════════════════════════════════════════════════════
 COMPUTED CHART DATA — Swiss Ephemeris (Sidereal/Lahiri)
 All values below are CALCULATED, not inferred. Use ONLY these values.
@@ -4526,6 +4645,7 @@ substituting a training-knowledge default.
             "validation_can_proceed": True,
             "validation_query_type": None,
             "validation_disclaimer": None,
+            "validation_debug": None,
 
             # Context management fields (populated externally by chat_stateless.py but
             # must be present in initial_state to satisfy TypedDict contract)
@@ -4594,6 +4714,7 @@ substituting a training-knowledge default.
             "validation_feedback": None,
             "is_safe": True,
             "astro_evidence": None,
+            "validation_debug": None,
         }
         
         # Run through graph (non-streaming for routing & preparation)

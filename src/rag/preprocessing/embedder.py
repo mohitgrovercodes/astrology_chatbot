@@ -5,7 +5,7 @@
 Phase 6: Embedding
 
 Production-ready embedding generation using OpenAI models.
-Includes exponential backoff retries, centralized logging, and cost tracking.
+Includes exponential backoff retries and centralized logging.
 """
 
 import os
@@ -23,7 +23,6 @@ load_dotenv()
 try:
     from src.utils.config import get_config
     from src.utils.logger import get_logger
-    from src.utils.cost_tracking import CostTrackingWrapper
     from .schemas import EnrichedChunk, EnrichedDocument
     logger = get_logger(__name__)
     CONFIG_AVAILABLE = True
@@ -47,7 +46,7 @@ except ImportError:
 
 class Embedder:
     """
-    Production-grade Embedder with robust error handling and cost tracking.
+    Production-grade Embedder with robust error handling.
     """
     
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
@@ -82,16 +81,6 @@ class Embedder:
         else:
             logger.warning("WARN: OPENAI_API_KEY not set. Embedding will yield zero-vectors.")
 
-        # Initialize cost tracking
-        try:
-            from src.utils.cost_tracking import CostTrackingWrapper
-            self.cost_tracker = CostTrackingWrapper(
-                model_name=self.model,
-                model_type="embedding"
-            )
-        except ImportError:
-            self.cost_tracker = None
-
     def embed_texts(self, texts: List[str], max_retries: int = 5) -> List[List[float]]:
         """
         Generate embeddings with exponential backoff retries.
@@ -118,11 +107,6 @@ class Embedder:
                     
                     batch_embeddings = [item.embedding for item in response.data]
                     all_embeddings.extend(batch_embeddings)
-                    
-                    # Track cost
-                    if self.cost_tracker:
-                        self.cost_tracker.log_from_response(response)
-                    
                     success = True
                     logger.info(f"OK: Embedded batch {i//current_batch_size + 1}/{(len(texts) + current_batch_size - 1)//current_batch_size}")
                     

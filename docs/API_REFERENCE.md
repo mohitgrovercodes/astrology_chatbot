@@ -15,7 +15,6 @@
    - [Chat — Initialize Session](#chat--initialize-session)
    - [Chat — Send Message](#chat--send-message)
    - [Chart Calculation](#chart-calculation)
-   - [User Management](#user-management)
 4. [Field Name Reference](#field-name-reference-critical--do-not-mix-up)
 5. [Rate Limiting](#rate-limiting)
 6. [Response Format](#response-format)
@@ -275,26 +274,6 @@ Content-Type: application/json
 | `system` | string | `vedic`, `western` | Astrology system |
 
 **Response:** Full chart data including houses, planetary positions, aspects, and dashas.
-
----
-
-### User Management
-
-```bash
-# Get user profile
-GET /api/v1/user/{user_id}
-X-API-Key: your-api-key
-
-# Create user
-POST /api/v1/user
-X-API-Key: your-api-key
-Body: { UserProfile }
-
-# Update user
-PUT /api/v1/user/{user_id}
-X-API-Key: your-api-key
-Body: { UserUpdate }
-```
 
 ---
 

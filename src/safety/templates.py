@@ -117,20 +117,19 @@ Astrology is best used for:
 
 If you're experiencing difficulties in a relationship, I can help you understand your own chart's patterns and what you might work on personally. Would that be helpful?"""
 
-SOFT_BLOCK_THIRD_PARTY_PREDICTION = """I appreciate your interest, but I can only provide astrological readings for you, based on your authenticated birth chart.
+SOFT_BLOCK_THIRD_PARTY_PREDICTION = """I appreciate your concern, but I can only provide astrological readings that stay centered on you and your own chart.
 
-**Why I cannot read for others:**
-- Astrological predictions require accurate birth details (date, time, place)
-- I'm configured to work only with verified user profiles for accuracy and privacy
-- Reading someone else's chart without their consent raises ethical concerns
+**Why I cannot give direct predictions for others:**
+- Meaningful astrological analysis needs accurate birth details (date, time, place)
+- Making specific predictions about someone else without their consent raises ethical concerns
+- Astrology is healthiest when it is used for self-understanding, personal growth, and better choices in your own life
 
-**What I can do instead:**
-- Analyze YOUR relationship prospects and timing
-- Discuss YOUR chart's indicators for family dynamics
-- Explain general astrological concepts related to your question
-- Suggest how they can get their own reading (if interested)
+**What I can help you with instead:**
+- Look at YOUR chart to understand how you tend to handle crisis, risk, or stressful phases (including accidents / health / travel sensitivity)
+- Highlight periods in YOUR life where it may be wise to be extra mindful and careful
+- Explain general astrological principles related to your question (for example, how Mars, Saturn, the 8th house and certain dashas can symbolically relate to accidents or sudden events)
 
-If they want a reading, they can create their own profile and consult me directly!
+If you’d like, we can explore your own chart to see how you can navigate such situations with more awareness and safety in your life.
 
 Is there something about YOUR chart I can help you with instead?"""
 

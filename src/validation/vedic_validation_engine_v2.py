@@ -38,11 +38,11 @@ load_dotenv()
 # ── LLM: via LLMFactory (OpenAI or Ollama) ──────────────────────────────────
 from langchain_core.prompts import ChatPromptTemplate
 try:
-    from src.llm.factory import LLMFactory
+    from src.llm.factory import LLMFactory, get_validation_llm
     LLMFACTORY_AVAILABLE = True
 except ImportError:
     try:
-        from llm.factory import LLMFactory
+        from llm.factory import LLMFactory, get_validation_llm
         LLMFACTORY_AVAILABLE = True
     except ImportError:
         LLMFACTORY_AVAILABLE = False
@@ -82,6 +82,7 @@ class ValidationResult:
     can_proceed:       bool  = True
     elapsed_seconds:   float = 0.0
     reasoning_summary: str   = ""
+    debug_stats:       Dict[str, Any] = field(default_factory=dict)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -149,15 +150,19 @@ class VedicValidationEngineV2:
         self._indexed_data = None   # loaded on first use
         self._api_lock     = threading.Semaphore(max_workers)
 
-        # Create LLM via factory (respects LLM_PROVIDER env var)
-        _llm = LLMFactory.create(
-            purpose="validation",
-            model=model,           # None -> factory picks default
-            temperature=0,
-            max_tokens=8192,
-            use_rate_limiting=True,
-            rate_limit_delay=2.0,
-        )
+        # Use dedicated validation constructor when no explicit model override is needed.
+        # This keeps tuning centralized in src.llm.factory.get_validation_llm().
+        if model is None:
+            _llm = get_validation_llm()
+        else:
+            _llm = LLMFactory.create(
+                purpose="validation",
+                model=model,
+                temperature=0,
+                max_tokens=8192,
+                use_rate_limiting=True,
+                rate_limit_delay=2.0,
+            )
         logger.info(f"[LLM] LLM Provider: {LLMFactory._determine_provider()}")
         logger.info(f"[LLM] Model:        {model or LLMFactory._select_model_for_provider(LLMFactory._determine_provider(), 'validation')}")
 
@@ -390,6 +395,8 @@ class VedicValidationEngineV2:
         tier:        int           = 1,
         stage:       Optional[str] = None,
         live_chat:   bool          = False,   # Fast mode: fewer rules, hard timeout
+        live_chat_max_rules: Optional[int] = None,
+        include_yoga_rules_in_live_chat: bool = False,
         timeout_sec: float         = 25.0,    # Max seconds before partial result
     ) -> ValidationResult:
         """
@@ -400,6 +407,8 @@ class VedicValidationEngineV2:
             query_type:  'marriage' | 'career' | 'finance' | 'health' | 'children'
             tier:        1=quick | 2=standard | 3=detailed
             stage:       'promise' | 'timing' | 'trigger' | None (all)
+            live_chat_max_rules: Optional cap override for live chat mode
+            include_yoga_rules_in_live_chat: keep yoga/combination rule names in live mode
 
         Returns:
             ValidationResult
@@ -438,8 +447,24 @@ class VedicValidationEngineV2:
             logger.warning("[VALIDATION] Common query types: marriage, career, finance, health, children")
             return ValidationResult(
                 query_type=query_type, tier_used=tier,
-                rules_checked=0, passed=0, failed=0
+                rules_checked=0, passed=0, failed=0,
+                debug_stats={
+                    "tier": tier,
+                    "index_used": bool(indexed_rules),
+                    "rules_initial_pool": 0,
+                    "rules_after_live_filter": 0,
+                    "live_chat": bool(live_chat),
+                    "live_cap": live_chat_max_rules if live_chat_max_rules is not None else 80,
+                    "include_yoga_live": bool(include_yoga_rules_in_live_chat),
+                    "batch_size_effective": 15 if live_chat else self.batch_size,
+                    "total_batches": 0,
+                },
             )
+
+        initial_pool_count = len(applicable)
+        index_used = bool(indexed_rules)
+        cap_rules = live_chat_max_rules if live_chat_max_rules is not None else 80
+        after_live_filter_count = initial_pool_count
 
         # ── Live chat mode: strip down to essential rules only ─────────────
         if live_chat:
@@ -451,19 +476,23 @@ class VedicValidationEngineV2:
             LIVE_SEVERITIES = {"critical", "high"}
 
             before = len(applicable)
-            applicable = [
-                r for r in applicable
-                if self._get_severity(r) in LIVE_SEVERITIES
-                and not any(
-                    kw in r.get("rule_name", "").lower()
-                    for kw in SKIP_IN_LIVE
-                )
-            ]
-            # Also cap at first 80 rules ordered by check_order
+            if include_yoga_rules_in_live_chat:
+                applicable = [r for r in applicable if self._get_severity(r) in LIVE_SEVERITIES]
+            else:
+                applicable = [
+                    r for r in applicable
+                    if self._get_severity(r) in LIVE_SEVERITIES
+                    and not any(
+                        kw in r.get("rule_name", "").lower()
+                        for kw in SKIP_IN_LIVE
+                    )
+                ]
+            # Cap ordered rules for latency/cost control; can be overridden by caller.
             applicable.sort(key=lambda r: r.get("check_order", 999))
-            applicable = applicable[:80]
+            applicable = applicable[:cap_rules]
+            after_live_filter_count = len(applicable)
             logger.debug(f"Live chat filter:           {before} -> {len(applicable)} rules "
-                  f"(critical+high, non-yoga, capped at 80)")
+                  f"(critical+high, {'with-yoga' if include_yoga_rules_in_live_chat else 'non-yoga'}, capped at {cap_rules})")
 
         # Effective batch size: larger batches = fewer API calls
         eff_batch = 15 if live_chat else self.batch_size
@@ -641,6 +670,19 @@ class VedicValidationEngineV2:
             can_proceed=can_proceed,
             elapsed_seconds=elapsed,
             reasoning_summary=summary,
+            debug_stats={
+                "tier": tier,
+                "index_used": index_used,
+                "rules_initial_pool": initial_pool_count,
+                "rules_after_live_filter": after_live_filter_count,
+                "live_chat": bool(live_chat),
+                "live_cap": cap_rules,
+                "include_yoga_live": bool(include_yoga_rules_in_live_chat),
+                "batch_size_effective": eff_batch,
+                "total_batches": total_batches,
+                "completed_batches": completed,
+                "timed_out": bool(timed_out),
+            },
         )
 
         self._print_summary(result)

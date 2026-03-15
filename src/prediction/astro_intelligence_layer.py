@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Any, Optional
 
 from src.prediction.timeline_reasoner import build_timeline_windows
+from src.engines.vedic.vedic_constants import RASHI_SANSKRIT_NAMES
 
 
 @dataclass
@@ -139,6 +140,54 @@ def build_astro_evidence(
             rationale="Jupiter/Saturn transits are high-impact timing modifiers.",
         ),
     ]
+
+    # ── Sade Sati status (Moon-sign based, not Lagna-house based) ─────────────
+    # We compute Sade Sati purely from Saturn's transit sign relative to the
+    # natal Moon sign, following the classical rule:
+    # Phase 1: Saturn in 12th from Moon, Phase 2: Saturn in Moon sign,
+    # Phase 3: Saturn in 2nd from Moon.
+    try:
+        moon_info = (chart_data or {}).get("planets", {}).get("MOON", {}) or {}
+        moon_sign_sanskrit = (moon_info.get("sign_sanskrit") or "").title()
+        saturn_sign_sanskrit = (saturn_sign or "").title()
+
+        if moon_sign_sanskrit in RASHI_SANSKRIT_NAMES and saturn_sign_sanskrit in RASHI_SANSKRIT_NAMES:
+            moon_idx = RASHI_SANSKRIT_NAMES.index(moon_sign_sanskrit)
+            sat_idx = RASHI_SANSKRIT_NAMES.index(saturn_sign_sanskrit)
+            offset = (sat_idx - moon_idx) % 12  # houses from Moon sign
+
+            sade_sati_active = offset in (11, 0, 1)
+            phase = None
+            if offset == 11:
+                phase = 1
+            elif offset == 0:
+                phase = 2
+            elif offset == 1:
+                phase = 3
+
+            if sade_sati_active:
+                phase_label = {1: "entry_phase", 2: "peak_phase", 3: "final_phase"}.get(phase, "active")
+                signals.append(
+                    AstroSignal(
+                        name="sade_sati_status",
+                        value=f"ACTIVE ({phase_label}) — Moon in {moon_sign_sanskrit}, Saturn transiting {saturn_sign_sanskrit}",
+                        confidence=0.9,
+                        rationale="Computed from Saturn transit relative to natal Moon sign (12th/1st/2nd from Moon).",
+                    )
+                )
+            else:
+                signals.append(
+                    AstroSignal(
+                        name="sade_sati_status",
+                        value=f"NOT_ACTIVE — Moon in {moon_sign_sanskrit}, Saturn transiting {saturn_sign_sanskrit}",
+                        confidence=0.9,
+                        rationale="Saturn is not in 12th, 1st or 2nd sign from natal Moon; Sade Sati not active.",
+                    )
+                )
+    except Exception:
+        # If anything goes wrong, silently skip Sade Sati signal — other signals
+        # still provide useful evidence.
+        pass
 
     # ── Dasha date signals ──────────────────────────────────────────────────
     md_start = (dasha_data or {}).get("mahadasha", {}).get("start")

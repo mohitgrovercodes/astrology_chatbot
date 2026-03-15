@@ -131,11 +131,12 @@ The RAG system prevents hallucinations on astrology philosophy, classical rules,
    - Stored in ChromaDB at `data/vectordb/`
    - Collection: `vedic_astrology_books_knowledge`
 
-5. **Retrieval** (`src/rag/retriever.py`)
-   - Hybrid: BM25 keyword (30%) + Semantic vector (70%)
-   - HyDE (Hypothetical Document Embeddings) for conceptual queries
-   - Cross-encoder reranking via Sentence-Transformers (`src/rag/reranker.py`)
-   - Per-intent top-k configuration (validation: 15; interpretation: 10)
+5. **Retrieval** (`src/ai/hybrid_retriever.py`)
+   - Hybrid fusion: semantic + BM25 + HyDE (intent-weighted RRF)
+   - Optional cross-encoder reranking (`src/rag/reranker.py`) for high-stakes/low-confidence queries
+   - Optional memory retrieval (`src/rag/memory_retriever.py`) blended for user-specific continuity
+   - Optional adjacent chunk expansion for contextual completeness
+   - Per-intent top-k and rerank/expand policies from `config/rag_config.py`
 
 ---
 
@@ -243,6 +244,6 @@ src/
 ├── validation/             750+ rule validation + age validator + synthesis
 ├── session/                Redis session lifecycle manager
 ├── routing/                Embedding-based semantic intent router
-├── utils/                  Cost tracking, logging, serializers, formatters
+├── utils/                  Logging, schemas, validators, serializers, localization
 └── locales/                EN, HI, TA, PA translation templates
 ```

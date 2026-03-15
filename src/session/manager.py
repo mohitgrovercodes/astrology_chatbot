@@ -355,6 +355,39 @@ class SessionManager:
         except Exception:
             return "en"
 
+    def get_voice_preferences(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve stored voice/consultation preferences (detail_level, remedy_preference, tone)."""
+        if not self.redis:
+            return None
+        try:
+            raw = self.redis.get(self._key(user_id, "preferences"))
+            if not raw:
+                return None
+            data = json.loads(raw)
+            return data if isinstance(data, dict) else None
+        except Exception as e:
+            logger.debug(f"[SESSION] get_voice_preferences error: {e}")
+            return None
+
+    def store_voice_preferences(self, user_id: str, preferences: Dict[str, Any]) -> None:
+        """Store voice/consultation preferences. Merges with existing."""
+        if not self.redis or not preferences:
+            return
+        try:
+            existing = self.get_voice_preferences(user_id) or {}
+            merged = {**existing, **{k: v for k, v in preferences.items() if v is not None}}
+            if not merged:
+                return
+            key = self._key(user_id, "preferences")
+            val = json.dumps(merged)
+            if settings.SESSION_EXPIRY_HOURS > 0:
+                self.redis.setex(key, settings.SESSION_EXPIRY_HOURS * 3600, val)
+            else:
+                self.redis.set(key, val)
+            logger.info(f"[SESSION] Stored voice_preferences for {user_id}: {list(merged.keys())}")
+        except Exception as e:
+            logger.error(f"[SESSION] store_voice_preferences error: {e}")
+
     def extend_session(self, user_id: str):
         """
         Compatibility no-op.
@@ -379,7 +412,9 @@ class SessionManager:
             self._key(user_id, "history"),
             self._key(user_id, "summary"),
             self._key(user_id, "metadata"),
-            self._key(user_id, "conv_phase")
+            self._key(user_id, "conv_phase"),
+            self._key(user_id, "lang"),
+            self._key(user_id, "preferences"),
         ]
         if clear_calculations:
             # Delete all calculation keys for this user

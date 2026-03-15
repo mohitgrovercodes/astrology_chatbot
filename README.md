@@ -38,7 +38,6 @@
 | **Smart Cache Refresh** | Transits refresh every 24h; Dashas refresh every 30 days |
 | **Multilingual Support** | English, Hindi, Tamil, Punjabi + Hinglish (Romanized) |
 | **Safety Guardrails** | 4-gate framework blocking harmful/unethical queries |
-| **Cost Tracking** | SQLite-backed token & embedding cost logging with reports |
 | **Age-Based Validation** | Age validator gates timing predictions appropriately |
 | **Progressive Disclosure UX** | Short first answer, rich detailed follow-up with 4-5 astrological factors |
 | **Astro Evidence Payload** | Optional deterministic evidence object returned with `/message` responses |
@@ -56,7 +55,7 @@
 | **Embeddings** | OpenAI text-embedding-3-large |
 | **Astro Calculations** | PySwissEph (Swiss Ephemeris) |
 | **Vector Store** | ChromaDB |
-| **Hybrid Retrieval** | BM25 (30%) + Semantic Vector (70%) |
+| **Hybrid Retrieval** | Intent-weighted Semantic + BM25 + HyDE with optional reranking |
 | **Reranking** | Sentence-Transformers cross-encoder |
 | **Session Storage** | Redis (permanent, no TTL) |
 | **PDF Extraction** | Gemini Vision (gemini-2.5-flash / gemini-2.5-pro fallback) |
@@ -96,6 +95,10 @@ cp .env.example .env
 # VALID_API_KEYS=your-key-here
 # INTERNAL_SERVICE_SECRET=your-secret-here
 # REDIS_HOST=localhost
+# Style validator thresholds (optional):
+# style_min_human_warmth_score=7
+# style_min_authentic_astrologer_voice_score=7
+# style_max_repetition_risk_score=4
 ```
 
 ### Docker Deployment
@@ -137,6 +140,8 @@ python interactive_chatbot.py
 - Progressive disclosure: first prediction response is concise; second-turn affirmative responses receive richer detailed analysis.
 - Language/script mirroring: replies follow the user's detected language/script for that turn (including romanized variants).
 - Validation + tone judge: semantic consistency and voice-quality checks run in a unified post-processing validator.
+- Configurable style guardrails: tune warmth/authenticity/repetition rewrite thresholds via `.env` without code changes.
+- **Long-term preference memory**: optional `voice_preferences` on `/initialize` (detail_level, remedy_preference, tone); preferences are also inferred from messages (e.g. "keep it short", "no remedies") and injected into prompts so the bot can say "As you prefer, I'll keep this practical and short."
 - Deterministic evidence support: `/message` can return an optional `evidence` object with domain, signals, and timing windows.
 
 ---
@@ -163,9 +168,15 @@ Content-Type: application/json
     "timezone": "Asia/Kolkata",
     "preferred_system": "vedic"
   },
-  "conversation_history": []
+  "conversation_history": [],
+  "voice_preferences": {
+    "detail_level": "brief",
+    "remedy_preference": "neutral",
+    "tone": "balanced"
+  }
 }
 ```
+Optional `voice_preferences`: `detail_level` (brief | balanced | detailed), `remedy_preference` (include | avoid | neutral), `tone` (cautious | balanced | encouraging). Omitted keys are left unchanged. Preferences can also be inferred from messages (e.g. "keep it short").
 
 **Step 2 — Send messages:**
 ```bash
@@ -243,21 +254,6 @@ pytest tests/ --cov=src --cov-report=html
 # Run specific test
 pytest tests/test_api.py -v
 pytest tests/test_safety.py -v
-```
-
----
-
-## Cost Tracking
-
-```bash
-# Today's costs
-python -m src.utils.cost_report --today
-
-# Weekly breakdown by model
-python -m src.utils.cost_report --week --model gpt-4o-mini
-
-# Export monthly report
-python -m src.utils.cost_report --month --export costs.csv
 ```
 
 ---
