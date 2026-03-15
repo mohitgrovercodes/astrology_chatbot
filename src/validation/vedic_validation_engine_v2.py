@@ -82,6 +82,7 @@ class ValidationResult:
     can_proceed:       bool  = True
     elapsed_seconds:   float = 0.0
     reasoning_summary: str   = ""
+    debug_stats:       Dict[str, Any] = field(default_factory=dict)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -446,8 +447,24 @@ class VedicValidationEngineV2:
             logger.warning("[VALIDATION] Common query types: marriage, career, finance, health, children")
             return ValidationResult(
                 query_type=query_type, tier_used=tier,
-                rules_checked=0, passed=0, failed=0
+                rules_checked=0, passed=0, failed=0,
+                debug_stats={
+                    "tier": tier,
+                    "index_used": bool(indexed_rules),
+                    "rules_initial_pool": 0,
+                    "rules_after_live_filter": 0,
+                    "live_chat": bool(live_chat),
+                    "live_cap": live_chat_max_rules if live_chat_max_rules is not None else 80,
+                    "include_yoga_live": bool(include_yoga_rules_in_live_chat),
+                    "batch_size_effective": 15 if live_chat else self.batch_size,
+                    "total_batches": 0,
+                },
             )
+
+        initial_pool_count = len(applicable)
+        index_used = bool(indexed_rules)
+        cap_rules = live_chat_max_rules if live_chat_max_rules is not None else 80
+        after_live_filter_count = initial_pool_count
 
         # ── Live chat mode: strip down to essential rules only ─────────────
         if live_chat:
@@ -471,9 +488,9 @@ class VedicValidationEngineV2:
                     )
                 ]
             # Cap ordered rules for latency/cost control; can be overridden by caller.
-            cap_rules = live_chat_max_rules if live_chat_max_rules is not None else 80
             applicable.sort(key=lambda r: r.get("check_order", 999))
             applicable = applicable[:cap_rules]
+            after_live_filter_count = len(applicable)
             logger.debug(f"Live chat filter:           {before} -> {len(applicable)} rules "
                   f"(critical+high, {'with-yoga' if include_yoga_rules_in_live_chat else 'non-yoga'}, capped at {cap_rules})")
 
@@ -653,6 +670,19 @@ class VedicValidationEngineV2:
             can_proceed=can_proceed,
             elapsed_seconds=elapsed,
             reasoning_summary=summary,
+            debug_stats={
+                "tier": tier,
+                "index_used": index_used,
+                "rules_initial_pool": initial_pool_count,
+                "rules_after_live_filter": after_live_filter_count,
+                "live_chat": bool(live_chat),
+                "live_cap": cap_rules,
+                "include_yoga_live": bool(include_yoga_rules_in_live_chat),
+                "batch_size_effective": eff_batch,
+                "total_batches": total_batches,
+                "completed_batches": completed,
+                "timed_out": bool(timed_out),
+            },
         )
 
         self._print_summary(result)

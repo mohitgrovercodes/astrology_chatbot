@@ -1673,6 +1673,7 @@ class SendMessageResponse(BaseModel):
     answer: str
     source: str = "openai"
     evidence: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 # ============================================================================
@@ -2400,6 +2401,23 @@ def send_message(request: SendMessageRequest):
         logger.debug(f"Orchestrator intent: {intent}")
         logger.debug(f"Response length: {len(answer)} characters")
         logger.debug(f"{'='*80}")
+
+        # API metadata payload for frontend diagnostics panels
+        response_metadata: Dict[str, Any] = {}
+        if isinstance(result, dict):
+            vr = result.get("validation_result") or {}
+            vdbg = result.get("validation_debug") or vr.get("debug_stats") or {}
+            if vr or vdbg:
+                response_metadata["validation_diagnostics"] = {
+                    "query_type": vr.get("query_type"),
+                    "overall_strength": vr.get("overall_strength"),
+                    "can_proceed": vr.get("can_proceed"),
+                    "rules_checked": vr.get("rules_checked"),
+                    "rules_passed": vr.get("rules_passed"),
+                    "rules_failed": vr.get("rules_failed"),
+                    "critical_failures_count": len(vr.get("critical_failures") or []),
+                    "debug_stats": vdbg,
+                }
         
         # Return response
         return SendMessageResponse(
@@ -2408,6 +2426,7 @@ def send_message(request: SendMessageRequest):
             answer=answer,
             source="openai",
             evidence=result.get("astro_evidence") if isinstance(result, dict) else None,
+            metadata=response_metadata or None,
         )
     
     except HTTPException:

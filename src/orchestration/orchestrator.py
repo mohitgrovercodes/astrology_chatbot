@@ -131,6 +131,7 @@ class NakshatraState(TypedDict):
     validation_can_proceed: bool
     validation_query_type: Optional[str]
     validation_disclaimer: Optional[str]
+    validation_debug: Optional[Dict]
 
     # NEW: Context Management Fields
     conversation_summary: Optional[str]      # LLM-generated summary
@@ -1709,6 +1710,10 @@ Provide a concise answer:"""
                                 'query_type': val_result.query_type,
                                 'overall_strength': val_result.overall_strength,
                                 'can_proceed': val_result.can_proceed,
+                                'rules_checked': val_result.rules_checked,
+                                'rules_passed': val_result.passed,
+                                'rules_failed': val_result.failed,
+                                'debug_stats': val_result.debug_stats or {},
                                 'critical_failures': [
                                     {
                                         'rule_id': f.rule_id,
@@ -1721,12 +1726,22 @@ Provide a concise answer:"""
                                 ],
                                 'intent_analysis': _ia,
                             }
+                            state['validation_debug'] = val_result.debug_stats or {}
                             
                             state['validation_strength'] = val_result.overall_strength
                             state['validation_can_proceed'] = val_result.can_proceed
                             
                             logger.info(f"[VALIDATION] [OK] Strength: {val_result.overall_strength:.1f}/10")
                             logger.info(f"[VALIDATION] Critical failures: {len(val_result.critical_failures)}")
+                            logger.info(
+                                "[VALIDATION][DEBUG] pool=%s filtered=%s checked=%s cap=%s include_yoga=%s index=%s",
+                                (val_result.debug_stats or {}).get('rules_initial_pool'),
+                                (val_result.debug_stats or {}).get('rules_after_live_filter'),
+                                val_result.rules_checked,
+                                (val_result.debug_stats or {}).get('live_cap'),
+                                (val_result.debug_stats or {}).get('include_yoga_live'),
+                                (val_result.debug_stats or {}).get('index_used'),
+                            )
                             
                             # HARD HALT CHECK (only for extreme cases)
                             if should_hard_halt(val_result.overall_strength, val_result.critical_failures):
@@ -4630,6 +4645,7 @@ substituting a training-knowledge default.
             "validation_can_proceed": True,
             "validation_query_type": None,
             "validation_disclaimer": None,
+            "validation_debug": None,
 
             # Context management fields (populated externally by chat_stateless.py but
             # must be present in initial_state to satisfy TypedDict contract)
@@ -4698,6 +4714,7 @@ substituting a training-knowledge default.
             "validation_feedback": None,
             "is_safe": True,
             "astro_evidence": None,
+            "validation_debug": None,
         }
         
         # Run through graph (non-streaming for routing & preparation)
