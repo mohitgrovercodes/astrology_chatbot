@@ -15,7 +15,6 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 import time
-import redis
 import json
 from datetime import datetime
 from src.llm.factory import LLMFactory
@@ -607,6 +606,7 @@ def validate_and_sanitize_response(
     recent_history: List[Dict[str, Any]],
     context_window: int = 20,
     min_numbered_points: int = 0,
+    detected_language: Optional[str] = None,
 ) -> str:
     """
     Use a small LLM to semantically validate and, if needed, rewrite the draft
@@ -616,6 +616,7 @@ def validate_and_sanitize_response(
     sentence-level understanding.
     """
     draft_answer = answer or ""
+    today_iso = datetime.utcnow().date().isoformat()
     q_lower = (question or "").lower()
     a_lower = draft_answer.lower()
     repetition_ctx = _build_repetition_guard_context(draft_answer, recent_history)
@@ -675,6 +676,235 @@ def validate_and_sanitize_response(
             return int(value)
         except Exception:
             return default
+
+    def _looks_like_meta_review(text: str) -> bool:
+        """
+        Guardrail: sometimes validator LLM returns critique text ("The draft answer...")
+        instead of a user-facing rewrite. Never surface that to end users.
+        """
+        t = (text or "").strip().lower()
+        if not t:
+            return False
+        meta_markers = (
+            "the draft answer",
+            "does not adequately",
+            "lacks",
+            "the user's inquiry",
+            "the response should",
+            "this draft",
+        )
+        return any(m in t for m in meta_markers)
+
+    def _add_months(base_date, months: int):
+        m = max(0, int(months))
+        y = base_date.year + (base_date.month - 1 + m) // 12
+        mm = (base_date.month - 1 + m) % 12 + 1
+        return base_date.replace(year=y, month=mm, day=1)
+
+    def _normalize_timeline_text(text: str) -> str:
+        """
+        Deterministic timeline hygiene:
+        1) Convert duration-only ranges (e.g., 6-18 months / 6-18 mahine) to month-year windows.
+        2) Fix past-year + future-verb mismatch (e.g., "2025 se shuru hoga").
+        3) Remove ended past month/year prediction ranges and replace with future-facing fallback.
+        """
+        if not text:
+            return text
+
+        now = datetime.utcnow().date().replace(day=1)
+        current_year = now.year
+
+        def _duration_repl(match):
+            a = int(match.group(1))
+            b = int(match.group(2))
+            unit = (match.group(3) or "").lower()
+            if b < a:
+                a, b = b, a
+            if b > 48:
+                return match.group(0)
+            s = _add_months(now, a)
+            e = _add_months(now, b)
+            if any(k in unit for k in ("mahine", "saal")):
+                return f"{s.strftime('%B %Y')} se {e.strftime('%B %Y')} tak"
+            return f"from {s.strftime('%B %Y')} to {e.strftime('%B %Y')}"
+
+        text = re.sub(
+            r"(?i)\b(\d{1,2})\s*-\s*(\d{1,2})\s*(months?|mahine|years?|saal)\b",
+            _duration_repl,
+            text,
+        )
+
+        def _past_future_repl(match):
+            year = int(match.group(1))
+            middle = match.group(2) or ""
+            verb = (match.group(3) or "").lower()
+            if year >= current_year:
+                return match.group(0)
+            if "will" in verb:
+                fixed_verb = "started and is currently active"
+            else:
+                fixed_verb = "shuru ho chuka hai aur abhi active hai"
+            return f"{year}{middle}{fixed_verb}"
+
+        text = re.sub(
+            r"(?i)\b((?:19|20)\d{2})([^.\n]{0,40}?)(shuru\s+hoga|shuru\s+hogi|shuru\s+honge|will\s+start|will\s+begin)\b",
+            _past_future_repl,
+            text,
+        )
+
+        month_re = (
+            r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+            r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+        )
+        range_re = re.compile(
+            rf"(?i)\b({month_re}\s+(?:19|20)\d{{2}})\s*(?:to|until|till|se|tak|→|-|–|—)\s*({month_re}\s+(?:19|20)\d{{2}})\b"
+        )
+        year_range_re = re.compile(
+            r"(?i)\b((?:19|20)\d{2})\s*(?:to|until|till|se|tak|-|–|—)\s*((?:19|20)\d{2})\b"
+        )
+
+        def _parse_my(val: str):
+            v = (val or "").strip()
+            for fmt in ("%B %Y", "%b %Y"):
+                try:
+                    return datetime.strptime(v, fmt).date().replace(day=1)
+                except Exception:
+                    continue
+            return None
+
+        predictive_markers = (
+            "favorable", "supportive", "opportunity", "chance", "hoga", "hogi", "milega",
+            "milegi", "shubh", "anukul", "sambhavna", "trip", "travel", "marriage", "shadi",
+            "career", "job", "finance",
+        )
+
+        sentences = re.split(r"(?<=[.!?।])\s+", text)
+        kept = []
+        removed = 0
+        for s in sentences:
+            st = s.strip()
+            if not st:
+                continue
+            lower = st.lower()
+            has_predictive = any(m in lower for m in predictive_markers)
+            drop = False
+
+            m = range_re.search(st)
+            if m and has_predictive:
+                end_d = _parse_my(m.group(2))
+                if end_d and end_d < now:
+                    drop = True
+
+            if not drop:
+                y = year_range_re.search(st)
+                if y and has_predictive:
+                    if int(y.group(2)) < now.year:
+                        drop = True
+
+            if drop:
+                removed += 1
+                continue
+            kept.append(st)
+
+        if removed > 0:
+            start = _add_months(now, 2)
+            end = _add_months(now, 8)
+            has_dev = any('\u0900' <= ch <= '\u097F' for ch in text)
+            is_hinglish = (not has_dev) and any(tok in text.lower() for tok in ["aap", "hai", "ke", "mein", "shadi", "samay"])
+            if has_dev:
+                fallback = (
+                    f"आगे के लिए अधिक व्यावहारिक और सहायक समय {start.strftime('%B %Y')} से {end.strftime('%B %Y')} के बीच दिखता है।"
+                )
+            elif is_hinglish:
+                fallback = (
+                    f"Aage ke liye practical supportive period {start.strftime('%B %Y')} se {end.strftime('%B %Y')} tak dikh raha hai."
+                )
+            else:
+                fallback = (
+                    f"A practical supportive future period appears between {start.strftime('%B %Y')} and {end.strftime('%B %Y')}."
+                )
+            kept.append(fallback)
+
+        text = " ".join(kept).strip()
+        return text
+
+    def _has_ended_past_timeline_reference(text: str) -> bool:
+        if not text:
+            return False
+        now = datetime.utcnow().date().replace(day=1)
+        month_re = (
+            r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+            r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+        )
+        range_re = re.compile(
+            rf"(?i)\b({month_re}\s+(?:19|20)\d{{2}})\s*(?:to|until|till|se|tak|→|-|–|—)\s*({month_re}\s+(?:19|20)\d{{2}})\b"
+        )
+        year_range_re = re.compile(
+            r"(?i)\b((?:19|20)\d{2})\s*(?:to|until|till|se|tak|-|–|—)\s*((?:19|20)\d{2})\b"
+        )
+
+        def _parse_my(val: str):
+            v = (val or "").strip()
+            for fmt in ("%B %Y", "%b %Y"):
+                try:
+                    return datetime.strptime(v, fmt).date().replace(day=1)
+                except Exception:
+                    continue
+            return None
+
+        for m in range_re.finditer(text):
+            end_d = _parse_my(m.group(2))
+            if end_d and end_d < now:
+                return True
+        for y in year_range_re.finditer(text):
+            if int(y.group(2)) < now.year:
+                return True
+        return False
+
+    def _is_mostly_english(text: str) -> bool:
+        if not text:
+            return False
+        words = re.findall(r"[A-Za-z]+", text.lower())
+        if not words:
+            return False
+        common = {
+            "the", "and", "for", "with", "your", "you", "this", "that", "will", "from",
+            "period", "future", "relationship", "marriage", "insight", "summary", "context",
+        }
+        hit = sum(1 for w in words if w in common)
+        return (hit / max(1, len(words))) > 0.08
+
+    def _has_hinglish_markers(text: str) -> bool:
+        t = (text or "").lower()
+        markers = ["aap", "hai", "hain", "ki", "ka", "ke", "mein", "se", "tak", "samay", "shadi", "kya"]
+        return sum(1 for m in markers if m in t) >= 3
+
+    def _language_or_script_violation(text: str, expected: Optional[str]) -> bool:
+        exp = (expected or "").strip().lower()
+        if not exp:
+            return False
+        dev_count = sum(1 for ch in (text or "") if '\u0900' <= ch <= '\u097F')
+
+        if exp == "hi":
+            return dev_count < 8
+        if exp == "hi-lat":
+            # Hinglish should be in Latin script and not plain generic English.
+            if dev_count > 0:
+                return True
+            return _is_mostly_english(text) and not _has_hinglish_markers(text)
+        if exp == "en":
+            return dev_count > 0
+        return False
+
+    def _has_robotic_heading_leak(text: str) -> bool:
+        if not text:
+            return False
+        heading_patterns = [
+            r"(?im)^\s*(?:\d+\.\s*)?\*?\*?(current dasha context|upcoming pratyantar period|future activation period|broader future period|long-term perspective)\*?\*?\s*:",
+            r"(?im)^\s*(?:\d+\.\s*)?\*?\*?(chart strengths and positive aspects|gochara insights|yogas and potential challenges)\*?\*?\s*:",
+            r"(?i)\blet'?s delve deeper\b",
+        ]
+        return any(re.search(p, text) for p in heading_patterns)
 
     try:
         conv_snippet: List[str] = []
@@ -742,6 +972,14 @@ You must pay special attention to these cases:
      cases, if the draft uses these technical terms in a brief timing answer, rewrite
      them into plain-life language (supportive phase, opportunity, pressure, etc.)
      while keeping the timing window and meaning intact.
+
+   - FUTURE-ONLY TIMING (NON-NEGOTIABLE):
+     • TODAY is {today_iso}.
+     • Do NOT output past timing windows as prediction windows.
+     • Any explicit month/year/date ranges in the revised answer must be active-now or future-facing.
+     • If a range has already passed, reframe it into future/supportive windows from TODAY onward.
+     • For user-facing timelines, prefer explicit month-year ranges ("Aug 2026 to Nov 2026")
+       and avoid duration-only phrases like "6-18 months" / "6-18 mahine" as final timing.
 
 4) LIFE-EVENT ORDERING (CRITICAL)
    - NEVER make the timeline of major life events obviously backwards relative to what
@@ -831,6 +1069,8 @@ IMPORTANT DECISION RULE:
 - Rewrite when there is a real contradiction, tone/voice mismatch, obvious generic AI phrasing,
   major coherence break, OR when the answer fails to provide the minimum number of numbered
   astrological reasoning points requested.
+- Your revised answer must be direct user-facing astrology guidance, NEVER a reviewer note,
+  audit explanation, or critique of the draft.
 
 STRUCTURE ENFORCEMENT (if requested):
 - When 'min_numbered_points' is > 0, you MUST ensure that the final answer contains AT LEAST
@@ -859,8 +1099,12 @@ Respond in STRICT JSON ONLY, no extra text, like this:
 
         final_answer = draft_answer
         if isinstance(data, dict) and data.get("needs_revision") and data.get("revised_answer"):
-            logger.info(f"[VALIDATOR] LLM revised answer: {data.get('reason', '')}")
-            final_answer = data["revised_answer"]
+            candidate = str(data.get("revised_answer", "")).strip()
+            if _looks_like_meta_review(candidate):
+                logger.warning("[VALIDATOR] Ignoring meta-review text returned as revised_answer; keeping draft.")
+            else:
+                logger.info(f"[VALIDATOR] LLM revised answer: {data.get('reason', '')}")
+                final_answer = candidate
 
         # Secondary style gate: enforce warmth/authenticity/repetition quality
         # even when the model marks the draft as coherent.
@@ -946,7 +1190,7 @@ ORIGINAL ANSWER:
 \"\"\"{final_answer}\"\"\""""
                 resp2 = llm.invoke(rewrite_prompt)
                 rewritten = getattr(resp2, "content", str(resp2)).strip()
-                if rewritten:
+                if rewritten and not _looks_like_meta_review(rewritten):
                     logger.info("[VALIDATOR] Applied forced numbered-structure rewrite")
                     final_answer = rewritten
 
@@ -974,6 +1218,68 @@ ORIGINAL ANSWER:
                             numbered_lines.append(line)
                     final_answer = "\n".join(numbered_lines)
 
+        final_answer = _normalize_timeline_text(final_answer)
+
+        # HARD FAIL-SAFE: never return ended past prediction ranges.
+        # 1) One forced rewrite pass.
+        # 2) If still present, deterministic cleanup via timeline normalizer.
+        if _has_ended_past_timeline_reference(final_answer):
+            logger.warning("[VALIDATOR] Ended past timeline detected post-normalization. Forcing one additional rewrite.")
+            hard_fix_prompt = f"""You are fixing timeline safety in an astrology answer.
+
+TODAY is {today_iso}.
+
+Rewrite the answer so that:
+- it keeps the SAME main astrological meaning and language/script
+- it removes any ended past prediction ranges
+- all prediction windows are ongoing/future-facing month-year ranges
+- no exact day-level dates
+
+Return ONLY the corrected answer text.
+
+ANSWER:
+\"\"\"{final_answer}\"\"\""""
+            hard_resp = llm.invoke(hard_fix_prompt)
+            hard_text = getattr(hard_resp, "content", str(hard_resp)).strip()
+            if hard_text and not _looks_like_meta_review(hard_text):
+                final_answer = _normalize_timeline_text(hard_text)
+
+        if _has_ended_past_timeline_reference(final_answer):
+            logger.warning("[VALIDATOR] Ended past timeline still present after forced rewrite. Applying deterministic final cleanup.")
+            final_answer = _normalize_timeline_text(final_answer)
+
+        # HARD FAIL-SAFE: keep language/script consistent and avoid robotic report headings.
+        if _language_or_script_violation(final_answer, detected_language) or _has_robotic_heading_leak(final_answer):
+            logger.warning(
+                "[VALIDATOR] Language/script or heading-style violation detected. Forcing one natural-voice rewrite."
+            )
+            _lang = (detected_language or "same as draft").strip()
+            style_fix_prompt = f"""You are fixing final response style for an astrology chatbot.
+
+Rewrite the answer so that:
+- it stays in { _lang } language/script (or same as draft if unknown),
+- it sounds like natural conversational astrologer guidance,
+- it does NOT use report-like headings such as:
+  "Current Dasha Context", "Upcoming Pratyantar Period", "Broader Future Period", "Long-term Perspective",
+- it does NOT use phrases like "Let's delve deeper",
+- it preserves the same factual meaning and timing windows.
+
+Return ONLY the corrected answer text.
+
+ANSWER:
+\"\"\"{final_answer}\"\"\""""
+            style_fix_resp = llm.invoke(style_fix_prompt)
+            style_fixed = getattr(style_fix_resp, "content", str(style_fix_resp)).strip()
+            if style_fixed and not _looks_like_meta_review(style_fixed):
+                final_answer = _normalize_timeline_text(style_fixed)
+                # deterministic phrase cleanup if model still leaked headings
+                final_answer = re.sub(
+                    r"(?im)^\s*(?:\d+\.\s*)?\*?\*?(current dasha context|upcoming pratyantar period|future activation period|broader future period|long-term perspective|chart strengths and positive aspects|gochara insights|yogas and potential challenges)\*?\*?\s*:\s*",
+                    "",
+                    final_answer,
+                )
+                final_answer = re.sub(r"(?i)\blet'?s delve deeper\b", "Chaliye detail mein samajhte hain", final_answer)
+
         return final_answer
     except Exception as e:
         logger.info(f"[VALIDATOR] Error in LLM response validator: {e}")
@@ -981,598 +1287,10 @@ ORIGINAL ANSWER:
 
 
 # ============================================================================
-# ENHANCED SESSION MANAGER with Conversation Summary
+# SESSION MANAGER — single source of truth is src/session/manager.py (SessionManager).
+# EnhancedSessionManager has been removed; the fallback below also uses SessionManager
+# so there is only ever one class in play, eliminating key-name and signature divergence.
 # ============================================================================
-
-class EnhancedSessionManager:
-    def __init__(self):
-        self.redis = None
-
-        redis_host = os.getenv("REDIS_HOST", "localhost")
-        redis_port = int(os.getenv("REDIS_PORT", 6379))
-        redis_password = os.getenv("REDIS_PASSWORD", None)
-
-        try:
-            self.redis = redis.Redis(
-                host=redis_host,
-                port=redis_port,
-                password=redis_password if redis_password else None,
-                db=0,
-                decode_responses=True,
-                socket_connect_timeout=5,
-            )
-            self.redis.ping()
-            logger.info(f"[SESSION] [OK] Redis connected on {redis_host}:{redis_port}")
-        except Exception as e:
-            logger.info(f"[SESSION] [FAIL] Redis connection failed: {e}")
-            self.redis = None
-    
-    def require_redis(self):
-        if not self.redis:
-            raise Exception("Redis connection is unavailable. Cannot process session data.")
-
-    def get_user_profile(self, user_id: str):
-        self.require_redis()
-        try:
-
-            data = self.redis.get(f"session:{user_id}:user_profile")
-            return json.loads(data) if data else None
-        except:
-            return None
-    
-    def get_conversation_history(self, user_id: str):
-        if not self.redis:
-            return []
-        try:
-            key = f"session:{user_id}:history"
-            data = self.redis.get(key)
-            return json.loads(data) if data else []
-        except:
-            return []
-    
-    def get_conversation_summary(self, user_id: str) -> Optional[str]:
-        """Get conversation summary from Redis."""
-        if not self.redis:
-            return None
-        try:
-            key = f"session:{user_id}:summary"
-            data = self.redis.get(key)
-            if data:
-                summary_data = json.loads(data)
-                return summary_data.get('summary')
-            return None
-        except:
-            return None
-    
-    def store_conversation_summary(self, user_id: str, summary: str):
-        """Store conversation summary in Redis permanently (no TTL)."""
-        if not self.redis:
-            return
-        try:
-            summary_data = {
-                "summary": summary,
-                "updated_at": datetime.utcnow().isoformat(),
-                "message_count": len(self.get_conversation_history(user_id))
-            }
-            key = f"session:{user_id}:summary"
-            self.redis.set(key, json.dumps(summary_data))
-            logger.info(f"[SUMMARY] Stored conversation summary permanently at key: {key}")
-        except Exception as e:
-            logger.info(f"[SUMMARY] Error storing summary: {e}")
-    
-    def get_chart_data(self, user_id: str):
-        if not self.redis:
-            return None
-        try:
-            key = f"session:{user_id}:chart"
-            logger.info(f"[REDIS] GET key={key}")
-            data = self.redis.get(key)
-            if data:
-                chart = json.loads(data)
-                # Schema version check: evict charts missing vargottama/divisional_charts_simple
-                # (computed in serializer v2) so they get recalculated with enriched data.
-                if 'divisional_charts_simple' not in chart or 'vargottama' not in chart:
-                    logger.info(f"[CHART] Schema v1 detected for {user_id} (missing divisional/vargottama) — evicting to upgrade.")
-                    self.redis.delete(key)
-                    return None
-                logger.info(f"[REDIS] Found chart in Redis")
-                return chart
-            else:
-                logger.info(f"[REDIS] No chart found at key: {key}")
-                return None
-        except Exception as e:
-            logger.info(f"[SESSION] ERROR: Failed to get chart data for {user_id}: {e}")
-            return None
-    
-    def get_dasha_data(self, user_id: str):
-        """
-        Fetch Dasha data from Redis.
-        The active Mahadasha/Antardasha period shifts over months, so we perform
-        an application-level staleness check: if cached data is older than
-        DASHA_REFRESH_DAYS (default 30 days), we evict it and return None so
-        the orchestrator recomputes the current Dasha state.
-        """
-        if not self.redis:
-            return None
-        try:
-            key = f"session:{user_id}:dasha"
-            logger.info(f"[REDIS] GET key={key}")
-            raw = self.redis.get(key)
-            if not raw:
-                logger.info(f"[REDIS] No dasha found at key: {key}")
-                return None
-
-            envelope = json.loads(raw)
-
-            # ── Staleness check ───────────────────────────────────────────────
-            # Support both new envelope format and legacy flat format.
-            stored_at_str = envelope.get("stored_at") if isinstance(envelope, dict) else None
-
-            if stored_at_str:
-                stored_at = datetime.fromisoformat(stored_at_str)
-                age_days = (datetime.utcnow() - stored_at).total_seconds() / 86400
-                refresh_threshold = settings.DASHA_REFRESH_DAYS
-
-                if age_days >= refresh_threshold:
-                    logger.info(f"[DASHA] STALE — cached {age_days:.1f} days ago (threshold: {refresh_threshold} days). Evicting and forcing recompute.")
-                    self.redis.delete(key)
-                    return None
-
-                data = envelope.get("data", {})
-                # Schema version check: evict old formats missing enriched fields.
-                # v1: missing upcoming_pratyantardashas entirely
-                # v2: has upcoming_pratyantardashas but entries lack "status" field
-                if data and "upcoming_pratyantardashas" not in data:
-                    logger.info(f"[DASHA] Schema v1 detected for {user_id} (missing pratyantar detail) — evicting to upgrade.")
-                    self.redis.delete(key)
-                    return None
-                pds = data.get("upcoming_pratyantardashas", [])
-                if pds and "status" not in pds[0]:
-                    logger.info(f"[DASHA] Schema v2 detected for {user_id} (missing status field) — evicting to upgrade.")
-                    self.redis.delete(key)
-                    return None
-                logger.info(f"[REDIS] Found dasha in Redis (age: {age_days:.1f} days, threshold: {refresh_threshold} days) — FRESH")
-                return data
-            else:
-                # Legacy flat format — evict to migrate to new envelope
-                logger.info(f"[DASHA] Legacy format detected for {user_id} — evicting and forcing recompute.")
-                self.redis.delete(key)
-                return None
-
-        except Exception as e:
-            logger.info(f"[SESSION] ERROR: Failed to get dasha data for {user_id}: {e}")
-            return None
-    
-    def get_transit_data(self, user_id: str):
-        """
-        Fetch transit data from Redis.
-        Transit positions change daily, so we perform an application-level
-        staleness check: if the cached data is older than TRANSIT_REFRESH_HOURS
-        (default 24h), we evict it and return None so the orchestrator recomputes
-        fresh planetary positions for this request.
-        """
-        if not self.redis:
-            return None
-        try:
-            key = f"session:{user_id}:transit"
-            logger.info(f"[REDIS] GET key={key}")
-            raw = self.redis.get(key)
-            if not raw:
-                logger.info(f"[REDIS] No transit found at key: {key}")
-                return None
-
-            envelope = json.loads(raw)
-
-            # ── Staleness check ───────────────────────────────────────────────
-            # We support both the new envelope format {"data": ..., "stored_at": ...}
-            # and the legacy flat format (no stored_at key) for backward compat.
-            stored_at_str = envelope.get("stored_at") if isinstance(envelope, dict) else None
-
-            if stored_at_str:
-                stored_at = datetime.fromisoformat(stored_at_str)
-                age_hours = (datetime.utcnow() - stored_at).total_seconds() / 3600
-                refresh_threshold = settings.TRANSIT_REFRESH_HOURS
-
-                if age_hours >= refresh_threshold:
-                    logger.info(f"[TRANSIT] STALE — cached {age_hours:.1f}h ago (threshold: {refresh_threshold}h). Evicting key and forcing recompute.")
-                    self.redis.delete(key)
-                    return None
-
-                logger.info(f"[REDIS] Found transit in Redis (age: {age_hours:.1f}h, threshold: {refresh_threshold}h) — FRESH")
-                return envelope.get("data")
-            else:
-                # Legacy flat format — treat as stale to migrate to new envelope
-                logger.info(f"[TRANSIT] Legacy format detected for {user_id} — evicting and forcing recompute.")
-                self.redis.delete(key)
-                return None
-
-        except Exception as e:
-            logger.info(f"[SESSION] ERROR: Failed to get transit data for {user_id}: {e}")
-            return None
-    
-    def session_exists(self, user_id: str):
-        if not self.redis:
-            return False
-        return self.redis.exists(f"session:{user_id}:metadata") > 0
-    
-    def initialize_session(self, user_id: str, user_profile: dict, conversation_history: list = None):
-        self.require_redis()
-        
-        try:
-            # Helper for session persistence — always permanent (no TTL)
-            def _set_data(key, val):
-                self.redis.set(key, json.dumps(val))
-
-            # ════════════════════════════════════════════════════════════════
-            # VALIDATE DOB — must happen BEFORE the first Redis store so the
-            # profile is always written with _dob_validation in a single atomic
-            # operation.  Writing twice (once without, once with) left a window
-            # where a concurrent read returned a profile missing _dob_validation,
-            # causing age_years to default to 0 in the orchestrator.
-            # ════════════════════════════════════════════════════════════════
-            from src.validation.age_validator import AgeValidator
-
-            dob = user_profile.get('date_of_birth')
-            if dob:
-                validation = AgeValidator.validate_dob(dob)
-
-                logger.info(f"[DOB_VALIDATION] Checking DOB: {dob}")
-                if not validation['valid']:
-                    logger.info(f"[DOB_VALIDATION] ⚠️  Invalid: {validation['issue']}")
-                    logger.debug(f"- Message: {validation['message']}")
-                else:
-                    logger.info(f"[DOB_VALIDATION] [OK] Valid - Age: {validation['age_years']} years, {validation['age_months']} months")
-
-                user_profile['_dob_validation'] = validation
-
-            # Store user profile (single write, always includes _dob_validation)
-            _set_data(f"session:{user_id}:user_profile", user_profile)
-
-            # Convert conversation history from external format to internal format
-            internal_conversation = []
-            if conversation_history:
-                for idx, msg in enumerate(conversation_history):
-                    # Extract timestamp (handle both MongoDB and ISO formats)
-                    timestamp = msg.get('timestamp')
-                    if isinstance(timestamp, dict) and '$date' in timestamp:
-                        timestamp = timestamp['$date']
-                    elif timestamp is None:
-                        timestamp = datetime.utcnow().isoformat()
-                    
-                    # Get question and answer
-                    question = msg.get('question', '').strip()
-                    answer = msg.get('answer', '').strip()
-                    
-                    # Add user message ONLY if question is non-empty
-                    if question:
-                        internal_conversation.append({
-                            "role": "user",
-                            "content": question,
-                            "timestamp": timestamp
-                        })
-                        logger.info(f"[CONVERSION] Message {idx+1}: Added USER message - '{question[:50]}...'")
-                    
-                    # Always add assistant message if answer exists
-                    if answer:
-                        internal_conversation.append({
-                            "role": "assistant",
-                            "content": answer,
-                            "timestamp": timestamp,
-                            "metadata": {
-                                "source": msg.get('source', 'external')
-                            }
-                        })
-                        logger.info(f"[CONVERSION] Message {idx+1}: Added ASSISTANT message - '{answer[:50]}...' (source: {msg.get('source', 'external')})")
-            
-            # Store conversation
-            _set_data(f"session:{user_id}:history", internal_conversation)
-            
-            # Verification logging
-            logger.debug(f"{'='*80}")
-            logger.info(f"[REDIS STORAGE] Session initialized for user: {user_id}")
-            logger.debug(f"{'='*80}")
-            logger.info(f"[REDIS] [OK] User profile stored:")
-            logger.debug(f"- Name: {user_profile.get('name', 'Unknown')}")
-            logger.debug(f"- DOB: {user_profile.get('date_of_birth', 'Unknown')}")
-            logger.info(f"[REDIS] [OK] Conversation history stored:")
-            logger.debug(f"- Total messages in Redis: {len(internal_conversation)}")
-            
-            if internal_conversation:
-                logger.info(f"[REDIS] First few messages in Redis:")
-                for i, msg in enumerate(internal_conversation[:4]):
-                    role = msg.get('role', 'unknown')
-                    content_preview = msg.get('content', '')[:60]
-                    source = msg.get('metadata', {}).get('source', 'N/A')
-                    logger.debug(f"{i+1}. [{role.upper()}] {content_preview}... (source: {source})")
-            logger.debug(f"{'='*80}")
-            
-            # Initialize empty summary
-            self.store_conversation_summary(user_id, "New conversation started.")
-            
-            # Store metadata
-            metadata = {
-                "user_id": user_id,
-                "created_at": datetime.utcnow().isoformat(),
-                "messages_imported": len(internal_conversation),
-                "last_summary_at": datetime.utcnow().isoformat()
-            }
-            _set_data(f"session:{user_id}:metadata", metadata)
-            
-            return {
-                "status": "success",
-                "user_id": user_id
-            }
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            logger.info(f"[SESSION] Error initializing: {e}")
-            return {
-                "status": "error",
-                "user_id": user_id,
-                "message": str(e)
-            }
-    
-    def add_message(self, session_id: str, role: str, content: str, metadata: dict = None):
-        if not self.redis:
-            return False
-        
-        try:
-            conversation = self.get_conversation_history(session_id)
-            message = {
-                "role": role,
-                "content": content,
-                "timestamp": datetime.utcnow().isoformat()
-            }
-            if metadata:
-                message["metadata"] = metadata
-            
-            conversation.append(message)
-            
-            # Keep last N messages (sliding window)
-            context_window = settings.CONVERSATION_CONTEXT_WINDOW
-            if len(conversation) > context_window:
-                conversation = conversation[-context_window:]
-            
-            key = f"session:{session_id}:history"
-            # Store permanently — no TTL
-            self.redis.set(key, json.dumps(conversation))
-            return True
-        except:
-            return False
-    
-    def should_update_summary(self, user_id: str) -> bool:
-        """Check if we should update the conversation summary (every 6 messages)."""
-        conversation = self.get_conversation_history(user_id)
-        
-        # Get last summary metadata
-        try:
-            summary_data_str = self.redis.get(f"session:{user_id}:summary")
-            if summary_data_str:
-                summary_data = json.loads(summary_data_str)
-                last_summary_count = summary_data.get('message_count', 0)
-            else:
-                last_summary_count = 0
-        except:
-            last_summary_count = 0
-        
-        # Update based on configured threshold
-        messages_since_summary = len(conversation) - last_summary_count
-        
-        return messages_since_summary >= settings.CONVERSATION_SUMMARY_THRESHOLD
-    
-    def store_chart_data(self, user_id: str, chart_data: dict):
-        if not self.redis:
-            return
-        try:
-            key = f"session:{user_id}:chart"
-            logger.info(f"[REDIS] STORE key={key}")
-            self.redis.set(key, json.dumps(chart_data))
-            logger.info(f"[CACHE] [OK] Chart stored permanently (no TTL)")
-        except Exception as e:
-            logger.info(f"[CACHE] Error storing chart: {e}")
-            pass
-    
-    def store_dasha_data(self, user_id: str, dasha_data: dict):
-        """
-        Store Dasha data with a timestamp envelope for staleness detection.
-        Data is stored permanently in Redis (no TTL); freshness is controlled
-        in get_dasha_data() via DASHA_REFRESH_DAYS.
-        """
-        if not self.redis:
-            return
-        try:
-            key = f"session:{user_id}:dasha"
-            logger.info(f"[REDIS] STORE key={key}")
-            envelope = {
-                "data": dasha_data,
-                "stored_at": datetime.utcnow().isoformat()  # For staleness check on read
-            }
-            self.redis.set(key, json.dumps(envelope))
-            logger.info(f"[CACHE] [OK] Dasha stored permanently with timestamp (refresh threshold: {settings.DASHA_REFRESH_DAYS} days)")
-        except Exception as e:
-            logger.info(f"[CACHE] Error storing dasha: {e}")
-            pass
-    
-    def store_transit_data(self, user_id: str, transit_data: dict):
-        """
-        Store transit data with a timestamp envelope for staleness detection.
-        Data is stored permanently in Redis (no TTL); freshness is controlled
-        in get_transit_data() via TRANSIT_REFRESH_HOURS.
-        """
-        if not self.redis:
-            return
-        try:
-            key = f"session:{user_id}:transit"
-            logger.info(f"[REDIS] STORE key={key}")
-            envelope = {
-                "data": transit_data,
-                "stored_at": datetime.utcnow().isoformat()  # For staleness check on read
-            }
-            self.redis.set(key, json.dumps(envelope))
-            logger.info(f"[CACHE] [OK] Transit stored permanently with timestamp (refresh threshold: {settings.TRANSIT_REFRESH_HOURS}h)")
-        except Exception as e:
-            logger.info(f"[CACHE] Error storing transit: {e}")
-            pass
-    
-    def update_user_profile(self, user_id: str, user_profile: dict):
-        """Overwrite the user profile in Redis for an existing session (permanent, no TTL)."""
-        if not self.redis:
-            return
-        try:
-            key = f"session:{user_id}:user_profile"
-            self.redis.set(key, json.dumps(user_profile))
-            logger.info(f"[REDIS] Profile updated permanently for {user_id}: DOB={user_profile.get('date_of_birth', 'N/A')}")
-        except Exception as e:
-            logger.info(f"[SESSION] Error updating profile for {user_id}: {e}")
-
-    def overwrite_conversation_history(self, user_id: str, conversation_history: list):
-        """Convert external conversation history and overwrite existing Redis history (permanent, no TTL)."""
-        if not self.redis:
-            return
-        try:
-            internal_conversation = []
-            for idx, msg in enumerate(conversation_history):
-                timestamp = msg.get('timestamp')
-                if isinstance(timestamp, dict) and '$date' in timestamp:
-                    timestamp = timestamp['$date']
-                elif timestamp is None:
-                    timestamp = datetime.utcnow().isoformat()
-
-                question = msg.get('question', '').strip()
-                answer = msg.get('answer', '').strip()
-
-                if question:
-                    internal_conversation.append({
-                        "role": "user",
-                        "content": question,
-                        "timestamp": timestamp
-                    })
-                if answer:
-                    internal_conversation.append({
-                        "role": "assistant",
-                        "content": answer,
-                        "timestamp": timestamp,
-                        "metadata": {"source": msg.get('source', 'external')}
-                    })
-
-            key = f"session:{user_id}:history"
-            # Store permanently — no TTL
-            self.redis.set(key, json.dumps(internal_conversation))
-            logger.info(f"[REDIS] History overwritten permanently for {user_id}: {len(internal_conversation)} messages")
-        except Exception as e:
-            logger.info(f"[SESSION] Error overwriting history for {user_id}: {e}")
-
-    def get_conversation_phase(self, user_id: str) -> dict:
-        """Get conversation phase for progressive disclosure."""
-        if not self.redis:
-            return {"phase": "INITIAL", "topic": None, "last_query": None, "followup_count": 0}
-        try:
-            data = self.redis.get(f"session:{user_id}:conv_phase")
-            if data:
-                return json.loads(data)
-        except:
-            pass
-        return {"phase": "INITIAL", "topic": None, "last_query": None, "followup_count": 0}
-
-    def set_conversation_phase(self, user_id: str, phase: str, topic: str = None,
-                                last_query: str = None, followup_count: int = 0):
-        """Store conversation phase for progressive disclosure."""
-        if not self.redis:
-            return
-        try:
-            data = {
-                "phase": phase,
-                "topic": topic,
-                "last_query": last_query,
-                "followup_count": followup_count,
-                "updated_at": datetime.utcnow().isoformat()
-            }
-            self.redis.set(f"session:{user_id}:conv_phase", json.dumps(data))
-        except Exception as e:
-            logger.info(f"[PHASE] Error storing phase: {e}")
-
-    def extend_session(self, user_id: str):
-        """No-op: all session data is stored permanently in Redis (no TTL to extend)."""
-        pass
-
-    def store_detected_language(self, user_id: str, lang_code: str) -> None:
-        """Persist the detected language for this session turn."""
-        if not self.redis or not lang_code:
-            return
-        try:
-            self.redis.set(f"session:{user_id}:lang", lang_code)
-        except Exception as e:
-            logger.info(f"[LANG] Error storing detected language: {e}")
-
-    def get_detected_language(self, user_id: str) -> str:
-        """Retrieve the previously detected language for this session (default 'en')."""
-        if not self.redis:
-            return "en"
-        try:
-            val = self.redis.get(f"session:{user_id}:lang")
-            return val.decode() if isinstance(val, bytes) else (val or "en")
-        except Exception:
-            return "en"
-
-    def get_voice_preferences(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieve stored voice/consultation preferences for this user (detail level, remedies, tone)."""
-        if not self.redis:
-            return None
-        try:
-            key = f"session:{user_id}:preferences"
-            raw = self.redis.get(key)
-            if not raw:
-                return None
-            data = json.loads(raw)
-            return data if isinstance(data, dict) else None
-        except Exception as e:
-            logger.debug(f"[PREFERENCES] Error reading preferences for {user_id}: {e}")
-            return None
-
-    def store_voice_preferences(self, user_id: str, preferences: Dict[str, Any]) -> None:
-        """Store voice/consultation preferences (detail_level, remedy_preference, tone). Merges with existing."""
-        if not self.redis or not preferences:
-            return
-        try:
-            key = f"session:{user_id}:preferences"
-            existing = self.get_voice_preferences(user_id) or {}
-            merged = {**existing, **{k: v for k, v in preferences.items() if v is not None}}
-            if not merged:
-                return
-            self.redis.set(key, json.dumps(merged))
-            logger.info(f"[PREFERENCES] Stored for {user_id}: {list(merged.keys())}")
-        except Exception as e:
-            logger.info(f"[PREFERENCES] Error storing for {user_id}: {e}")
-
-    def clear_session(self, session_id: str):
-        if not self.redis:
-            return False
-        try:
-            keys = [
-                f"session:{session_id}:user_profile",
-                f"session:{session_id}:history",
-                f"session:{session_id}:summary",
-                f"session:{session_id}:metadata",
-                f"session:{session_id}:chart",
-                f"session:{session_id}:dasha",
-                f"session:{session_id}:transit",
-                f"session:{session_id}:conv_phase",
-                f"session:{session_id}:lang",
-                f"session:{session_id}:preferences",
-            ]
-            self.redis.delete(*keys)
-            return True
-        except:
-            return False
-    
-    def get_active_sessions_count(self):
-        if not self.redis:
-            return 0
-        try:
-            keys = self.redis.keys("session:*:metadata")
-            return len(keys)
-        except:
-            return 0
 
 
 def _infer_voice_preferences_from_message(question: str) -> Optional[Dict[str, str]]:
@@ -1602,7 +1320,7 @@ def _infer_voice_preferences_from_message(question: str) -> Optional[Dict[str, s
     return out if out else None
 
 
-# Global session manager
+# Global session manager — always SessionManager from src/session/manager.py
 _session_manager = None
 
 def get_session_manager():
@@ -1611,7 +1329,9 @@ def get_session_manager():
         try:
             _session_manager = get_shared_session_manager()
         except Exception:
-            _session_manager = EnhancedSessionManager()
+            # Fallback: create a fresh SessionManager directly (same class, same keys)
+            from src.session.manager import SessionManager
+            _session_manager = SessionManager()
     return _session_manager
 
 
@@ -1722,13 +1442,7 @@ def initialize_session(request: InitializeSessionRequest):
                 logger.info(f"[REDIS] History refreshed: {len(conversation)} external messages imported.")
 
             # Evict stale calculated data — forces recompute on next /message
-            for stale_key in [
-                f"session:{user_id}:chart",
-                f"session:{user_id}:dasha",
-                f"session:{user_id}:transit",
-            ]:
-                if session_manager.redis:
-                    session_manager.redis.delete(stale_key)
+            session_manager.evict_calculated_data(user_id)
             logger.info(f"[REDIS] Stale chart/dasha/transit cache evicted for {user_id}.")
 
             if request.voice_preferences is not None:
@@ -1736,6 +1450,15 @@ def initialize_session(request: InitializeSessionRequest):
                 prefs_clean = {k: v for k, v in prefs.items() if v is not None}
                 if prefs_clean:
                     session_manager.store_voice_preferences(user_id, prefs_clean)
+
+            try:
+                _post_refresh_hist = session_manager.get_conversation_history(user_id) or []
+                logger.info(
+                    f"[REDIS][INIT_SANITY] post-refresh history count for {user_id}: {len(_post_refresh_hist)} "
+                    f"(input_history_count={len(conversation)})"
+                )
+            except Exception as _hist_e:
+                logger.info(f"[REDIS][INIT_SANITY] history check skipped for {user_id}: {_hist_e}")
 
             return InitializeSessionResponse(
                 user_id=user_id,
@@ -1755,6 +1478,23 @@ def initialize_session(request: InitializeSessionRequest):
                 session_manager.store_voice_preferences(user_id, prefs_clean)
 
         logger.info(f"[REDIS] Initialized NEW session for {user_id} - Status: {result['status']}")
+
+        try:
+            _post_init_hist = session_manager.get_conversation_history(user_id) or []
+            _input_hist_count = len(conversation)
+            logger.info(
+                f"[REDIS][INIT_SANITY] post-init history count for {user_id}: {len(_post_init_hist)} "
+                f"(input_history_count={_input_hist_count})"
+            )
+            # If caller started a clean session but history is unexpectedly long,
+            # surface a warning for reset semantics debugging.
+            if _input_hist_count == 0 and len(_post_init_hist) > 1:
+                logger.warning(
+                    f"[REDIS][INIT_SANITY] Unexpected non-empty history after clean initialize for {user_id} "
+                    f"(count={len(_post_init_hist)})."
+                )
+        except Exception as _hist_e:
+            logger.info(f"[REDIS][INIT_SANITY] history check skipped for {user_id}: {_hist_e}")
 
         return InitializeSessionResponse(
             user_id=result['user_id'],
@@ -2030,7 +1770,7 @@ def send_message(request: SendMessageRequest):
                     clarification_answer,
                     metadata={
                         "intent": "CLARIFICATION_REQUEST",
-                        "source": "openai",
+                        "source": "chatbot",
                         "ambiguity_score": resolution_result['ambiguity_score']
                     }
                 )
@@ -2114,6 +1854,14 @@ def send_message(request: SendMessageRequest):
             session_manager.store_voice_preferences(user_id, {**prefs, **inferred})
             prefs = session_manager.get_voice_preferences(user_id) or {}
 
+        # Pre-fetch cached validation result so the orchestrator can skip re-running
+        # the expensive LLM-based validation (saves ~34s per request for same query_type).
+        # The query_type is derived from intent_analysis domain when available.
+        _ia_domain = (intent_analysis.get('domain') or '').strip().lower() or None
+        if _ia_domain == 'foreign_travel':
+            _ia_domain = 'foreign'
+        _cached_validation = session_manager.get_validation_result(user_id, _ia_domain) if _ia_domain else None
+
         orchestrator_session_data = {
             "chart_data": cached_chart,
             "dasha_data": cached_dasha,
@@ -2126,6 +1874,7 @@ def send_message(request: SendMessageRequest):
             # use it as a fallback for short ambiguous queries (e.g. "Haan batao")
             "detected_language": session_manager.get_detected_language(user_id),
             "voice_preferences": prefs,
+            "cached_validation_result": _cached_validation,  # None if not cached yet
         }
         
         # Log what cached data is being passed to orchestrator
@@ -2217,16 +1966,16 @@ def send_message(request: SendMessageRequest):
 
         # Enforce word maximum for mobile (phase-aware)
         if result_phase == 'FOLLOWUP_LOOP' and conv_phase_data.get('phase') == 'AWAITING_DETAIL':
-            # User agreed to detailed reasoning → allow richer explanation (~600 words)
-            MAX_MOBILE_WORDS = 600
+            # User agreed to detailed reasoning → keep depth but avoid overly long blocks
+            MAX_MOBILE_WORDS = 560
         elif result_phase == 'FOLLOWUP_LOOP':
             # Follow-up loop responses (further questions) capped slightly lower
             MAX_MOBILE_WORDS = 500
         elif result_phase == 'AWAITING_DETAIL':
-            # Initial short response → hard cap at 200 words
-            MAX_MOBILE_WORDS = 200
+            # Initial short response → hard cap at 250 words
+            MAX_MOBILE_WORDS = 250
         else:
-            MAX_MOBILE_WORDS = 200  # Default fallback (also initial)
+            MAX_MOBILE_WORDS = 250  # Default fallback (also initial)
         word_count = len(answer.split())
 
         if word_count > MAX_MOBILE_WORDS:
@@ -2295,7 +2044,7 @@ def send_message(request: SendMessageRequest):
         
         # Run final semantic validator using a small conversation context window.
         # For detailed responses (second-step CONTINUATION/CLARIFICATION after an
-        # initial timing answer), require AT LEAST 5 numbered astrological reasoning
+        # initial timing answer), require AT LEAST 7 numbered astrological reasoning
         # points. We key this off the high-level intent returned by the orchestrator
         # plus the intent_type from the LLM intent analysis.
         min_points = 0
@@ -2312,7 +2061,7 @@ def send_message(request: SendMessageRequest):
             and _ia_type in ("CONTINUATION", "CLARIFICATION")
             and _is_detailed_step
         ):
-            min_points = 5
+            min_points = 7
 
         answer = validate_and_sanitize_response(
             question=question,
@@ -2320,6 +2069,7 @@ def send_message(request: SendMessageRequest):
             intent_analysis=intent_analysis,
             recent_history=recent_history,
             min_numbered_points=min_points,
+            detected_language=result.get('detected_language') or session_manager.get_detected_language(user_id),
         )
 
         # ── POST-VALIDATOR: enforce cross-domain follow-up question on AWAITING_DETAIL→FOLLOWUP_LOOP ──
@@ -2396,6 +2146,13 @@ def send_message(request: SendMessageRequest):
             logger.info(f"[REDIS CACHE] Storing NEW transit data to Redis...")
             session_manager.store_transit_data(user_id, result['transit_data'])
             logger.info(f"[REDIS CACHE] [OK] Transit stored in Redis")
+
+        # Cache validation result so the next request in this session skips re-validation
+        _result_val = result.get('validation_result')
+        _result_qt = result.get('validation_query_type') or ((_result_val or {}).get('query_type'))
+        if _result_val and _result_qt and _result_qt != 'general':
+            session_manager.store_validation_result(user_id, _result_qt, _result_val)
+            logger.info(f"[REDIS CACHE] [OK] Validation result cached for query_type={_result_qt}")
         
         # ====================================================================
         # STEP 8: UPDATE CONVERSATION HISTORY
@@ -2410,7 +2167,7 @@ def send_message(request: SendMessageRequest):
             metadata={
                 "intent": intent,
                 "confidence": confidence,
-                "source": "openai",
+                "source": "chatbot",   # "chatbot" = generated this session; "external"/"openai" = old imported history
                 "context_intent": intent_analysis['intent_type'],
                 "resolution_action": resolution_result['action'],
                 "ambiguity_score": resolution_result['ambiguity_score'],

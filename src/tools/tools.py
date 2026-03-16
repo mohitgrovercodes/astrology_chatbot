@@ -206,8 +206,8 @@ def calculate_current_dasha(
                 break
 
         if current_ad_index != -1:
-            # Scan current AD and next 9 ADs
-            ads_to_scan = all_ads[current_ad_index : current_ad_index + 10] 
+            # Scan current AD and next 17 ADs for richer 2-3 year horizon windows
+            ads_to_scan = all_ads[current_ad_index : current_ad_index + 18]
             for ad_period in ads_to_scan:
                 all_pds_in_ad = compute_pratyantardashas(ad_period)
                 for pd in all_pds_in_ad:
@@ -237,7 +237,7 @@ def calculate_current_dasha(
 
         # First pratyantardasha of each upcoming Antardasha (cross-level convergence timing)
         next_ad_first_pd = []
-        for ad in upcoming_ads[:3]:  # Only next 3 Antardashas to keep output manageable
+        for ad in upcoming_ads[:8]:  # Expand horizon for cross-year timing diversity
             # Re-fetch the DashaPeriod object for this upcoming AD
             for ad_obj in all_ads:
                 if ad_obj.lord.name == ad["planet"] and ad_obj.start_date.strftime("%Y-%m-%d") == ad["start"]:

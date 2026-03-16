@@ -169,18 +169,47 @@ class SessionManager:
     def initialize_session(self, user_id: str, user_profile: Dict, conversation_history: List = None):
         if not self.redis: return {"status": "error", "message": "Redis offline"}
         try:
-            # 1. Process History (Handle external backend formats)
+            # DOB validation — must happen before the first Redis write so the profile
+            # is always stored with _dob_validation in a single atomic operation.
+            dob = user_profile.get('date_of_birth')
+            if dob:
+                try:
+                    from src.validation.age_validator import AgeValidator
+                    validation = AgeValidator.validate_dob(dob)
+                    if not validation['valid']:
+                        logger.info(f"[DOB_VALIDATION] Invalid DOB for {user_id}: {validation.get('issue')}")
+                    else:
+                        logger.info(f"[DOB_VALIDATION] Valid — age: {validation['age_years']}y {validation['age_months']}m")
+                    user_profile['_dob_validation'] = validation
+                except Exception as e:
+                    logger.warning(f"[DOB_VALIDATION] Skipped (import error): {e}")
+
+            # Process History — support external backend formats including MongoDB $date timestamps
             internal_history = []
             if conversation_history:
                 for msg in conversation_history:
-                    # Support both standard role/content and backend question/answer formats
-                    if msg.get('question'):
-                        internal_history.append({"role": "user", "content": msg['question'], "timestamp": msg.get('timestamp')})
+                    # Normalise MongoDB Extended JSON timestamp: {"$date": "..."} → ISO string
+                    ts = msg.get('timestamp')
+                    if isinstance(ts, dict) and '$date' in ts:
+                        ts = ts['$date']
+                    elif ts is None:
+                        ts = datetime.utcnow().isoformat()
+
+                    question = (msg.get('question') or '').strip()
+                    answer = (msg.get('answer') or '').strip()
+
+                    if question:
+                        internal_history.append({"role": "user", "content": question, "timestamp": ts})
                     elif msg.get('role') == 'user':
                         internal_history.append(msg)
-                        
-                    if msg.get('answer'):
-                        internal_history.append({"role": "assistant", "content": msg['answer'], "timestamp": msg.get('timestamp')})
+
+                    if answer:
+                        internal_history.append({
+                            "role": "assistant",
+                            "content": answer,
+                            "timestamp": ts,
+                            "metadata": {"source": msg.get('source', 'external')}
+                        })
                     elif msg.get('role') == 'assistant':
                         internal_history.append(msg)
 
@@ -195,15 +224,16 @@ class SessionManager:
 
             _set_data("user_profile", user_profile)
             _set_data("history", internal_history)
-            
-            # 2. Store Metadata
+
+            # Store Metadata
             metadata = {
                 "user_id": user_id,
                 "created_at": datetime.utcnow().isoformat(),
                 "messages_imported": len(internal_history)
             }
             _set_data("metadata", metadata)
-            
+
+            logger.info(f"[SESSION] Initialized {user_id}: {len(internal_history)} messages imported")
             return {"status": "success", "user_id": user_id}
         except Exception as e:
             logger.error(f"[SESSION] Init error: {e}")
@@ -410,6 +440,45 @@ class SessionManager:
         Session expiry is already handled by key TTL policy.
         """
         return
+
+    def evict_calculated_data(self, user_id: str) -> None:
+        """Delete cached chart, dasha, and transit data for a user, forcing recompute on next request."""
+        if not self.redis:
+            return
+        try:
+            keys_to_delete = [
+                self._key(user_id, "calculations", "d1_chart"),
+                self._key(user_id, "calculations", "dasha_data"),
+                self._key(user_id, "transits", "current"),
+            ]
+            # Also evict any divisional chart cache entries
+            calc_keys = self.redis.keys(f"session:{user_id}:calculations:*")
+            transit_keys = self.redis.keys(f"session:{user_id}:transits:*")
+            all_keys = list(set(keys_to_delete) | set(calc_keys) | set(transit_keys))
+            if all_keys:
+                self.redis.delete(*all_keys)
+            logger.info(f"[SESSION] Evicted {len(all_keys)} calculated data key(s) for {user_id}")
+        except Exception as e:
+            logger.error(f"[SESSION] evict_calculated_data error: {e}")
+
+    # --- Validation Result Caching ---
+
+    def get_validation_result(self, user_id: str, query_type: str) -> Optional[dict]:
+        """Return cached validation result for this user + query_type, or None if stale/missing."""
+        if not self.redis:
+            return None
+        key = f"session:{user_id}:validation:{query_type}"
+        raw = self.redis.get(key)
+        if raw:
+            return json.loads(raw)
+        return None
+
+    def store_validation_result(self, user_id: str, query_type: str, validation_result: dict):
+        """Cache validation result for this user + query_type with a 24-hour TTL."""
+        if not self.redis:
+            return
+        key = f"session:{user_id}:validation:{query_type}"
+        self.redis.setex(key, 86400, json.dumps(validation_result))
 
     def get_active_sessions_count(self) -> int:
         if not self.redis:
