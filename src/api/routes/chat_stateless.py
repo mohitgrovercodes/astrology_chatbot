@@ -2201,9 +2201,10 @@ def send_message(request: SendMessageRequest):
                 logger.info("[POST_PROCESS] Removed standalone 'Next Favorable Window' section from detailed response")
 
             _offer_more_patterns = [
-                r"[^.!?\n]*(agar aap chah|agar chahein).{0,80}(detail|vistar|samjha|elaborate)[^.!?\n]*[.!?]?\s*",
+                r"[^.!?\n]*(agar aap chah|agar chahein).{0,80}(detail|vistar|samjha|elaborate|vyakhya|bata)[^.!?\n]*[.!?]?\s*",
                 r"[^.!?\n]*(aur (bhi )?detail mein samjha|aur jaanna hai|aur detail chahiye|aur bhi (batana|samjhana))[^.!?\n]*[.!?]?\s*",
-                r"[^.!?\n]*\b(main aapko|I can).{0,50}(aur (bata|samjha|detail)|more detail|elaborate|explain further)[^.!?\n]*[.!?]?\s*",
+                r"[^.!?\n]*\b(main aapko|main aap).{0,50}(aur (bata|samjha|detail|vyakhya)|more detail|elaborate|explain further)[^.!?\n]*[.!?]?\s*",
+                r"[^.!?\n]*\b(iske peeche|iske piche).{0,60}(vyakhya|samjha|bata|detail|karanon)[^.!?\n]*[.!?]?\s*",
                 r"[^.!?\n]*\b(if you.{0,20}(would like|want|wish)|would you like me to).{0,60}(more detail|elaborate|explain (further|more)|go deeper)[^.!?\n]*[.!?]?\s*",
             ]
             _detail_original = answer
@@ -2319,20 +2320,48 @@ def send_message(request: SendMessageRequest):
         # append the pre-generated cross-domain follow-up question if it is missing.
         if conv_phase_data.get('phase') == 'AWAITING_DETAIL' and result_phase == 'FOLLOWUP_LOOP':
             _offer_more_patterns_post = [
-                r"[^.!?\n]*(agar aap chah|agar chahein).{0,80}(detail|vistar|samjha|elaborate)[^.!?\n]*[.!?]?\s*",
+                # Generic Hindi "if you want more details" patterns
+                r"[^.!?\n]*(agar aap chah|agar chahein).{0,80}(detail|vistar|samjha|elaborate|vyakhya|bata)[^.!?\n]*[.!?]?\s*",
                 r"[^.!?\n]*(aur (bhi )?detail mein samjha|aur jaanna hai|aur detail chahiye|aur bhi (batana|samjhana))[^.!?\n]*[.!?]?\s*",
-                r"[^.!?\n]*\b(main aapko|I can).{0,50}(aur (bata|samjha|detail)|more detail|elaborate|explain further)[^.!?\n]*[.!?]?\s*",
+                r"[^.!?\n]*\b(main aapko|main aap).{0,50}(aur (bata|samjha|detail|vyakhya)|more detail|elaborate|explain further)[^.!?\n]*[.!?]?\s*",
+                r"[^.!?\n]*\b(iske peeche|iske piche).{0,60}(vyakhya|samjha|bata|detail|karanon)[^.!?\n]*[.!?]?\s*",
                 r"[^.!?\n]*\b(if you.{0,20}(would like|want|wish)|would you like me to).{0,60}(more detail|elaborate|explain (further|more)|go deeper)[^.!?\n]*[.!?]?\s*",
+                # Remove awkward same-topic "opportunity" questions (e.g., marriage)
+                r"[^.!?\n]*(aapko|tumhe).{0,40}(shadi|shaadi|marriage).{0,40}(kaise).{0,40}(avsar|mauke?|opportunit(?:y|ies))[^.!?\n]*\?\s*",
             ]
             for _pat in _offer_more_patterns_post:
                 answer = re.sub(_pat, " ", answer, flags=re.IGNORECASE)
             answer = re.sub(r"\n{3,}", "\n\n", answer)
             answer = re.sub(r"  +", " ", answer).strip()
-            # Append the cross-domain follow-up question if the validated response lost it
-            _last_200 = answer[-200:] if len(answer) > 200 else answer
-            if '?' not in _last_200:
-                _fup = result.get('_detailed_followup', '')
-                if _fup:
+            # If the detailed answer still ends with a question about the same topic we just
+            # covered, remove that trailing same-domain question and keep only the pivot.
+            _topic_now = (conv_phase_data.get('topic') or '').lower()
+            _same_topic_keywords = {
+                'marriage': ['shadi', 'shaadi', 'marriage', 'vivah', 'rishta', 'partner', 'spouse'],
+                'career': ['career', 'job', 'naukri', 'kaam', 'profession', 'business', 'rojgar'],
+                'finance': ['finance', 'money', 'paisa', 'dhan', 'wealth', 'arthik'],
+                'health': ['health', 'sehat', 'swasthya', 'bimari', 'illness'],
+                'children': ['child', 'children', 'bacche', 'santaan', 'aulad'],
+                'foreign': ['foreign', 'videsh', 'abroad', 'overseas', 'travel', 'settlement'],
+            }.get(_topic_now, [])
+            if _same_topic_keywords:
+                _question_sentences = re.findall(r'[^.!?\n]*\?+', answer)
+                _same_topic_q = [
+                    _q for _q in _question_sentences
+                    if any(_kw in _q.lower() for _kw in _same_topic_keywords)
+                ]
+                for _q in _same_topic_q:
+                    answer = answer.replace(_q, " ")
+                answer = re.sub(r"\n{3,}", "\n\n", answer)
+                answer = re.sub(r"  +", " ", answer).strip()
+            # Always append the cross-domain follow-up question if the validated response
+            # lost it. Check the last 150 chars for the start of the follow-up text so we
+            # don't double-append if the LLM already included it correctly.
+            _fup = result.get('_detailed_followup', '') or ''
+            if _fup:
+                _last_150 = answer[-150:] if len(answer) > 150 else answer
+                _fup_start = _fup[:30].lower()  # First 30 chars as fingerprint
+                if _fup_start not in _last_150.lower():
                     answer = answer.rstrip() + "\n\n" + _fup
                     logger.info(f"[POST_PROCESS] Appended cross-domain follow-up question after validator rewrite")
 

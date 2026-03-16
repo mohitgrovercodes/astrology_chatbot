@@ -166,22 +166,35 @@ NakshatraAI uses LangGraph to construct a deterministic state machine for all co
 
 ### Runtime Behavior (Current)
 
-- **Progressive disclosure phases:** `INITIAL` -> `AWAITING_DETAIL` -> `FOLLOWUP_LOOP`
-  - Initial turn stays concise and asks whether the user wants deeper astrological reasoning.
-  - Detailed turn provides richer explanation with explicit factors (house-lord logic, dasha windows, yogas, divisional support).
+- **Progressive disclosure — 3-phase conversation cycle:**
+
+  | Phase | Trigger | Bot behaviour | Next phase |
+  |---|---|---|---|
+  | `INITIAL` | New topic / fresh question | Short answer (~200 words, no jargon). Ends with "Kya aap details jaanna chahoge?" | → `AWAITING_DETAIL` |
+  | `AWAITING_DETAIL` | User affirms (`yes`, `haan`, `batao`) | Detailed numbered analysis (5+ points, house lords, dasha windows, yogas). Ends with a cross-domain follow-up question from the follow-up bank. | → `FOLLOWUP_LOOP` |
+  | `FOLLOWUP_LOOP` | User affirms the follow-up | Treated as a new topic: short answer (~200 words). Ends with "Kya aap details chahoge?". Follow-up cycle restarts. | → `AWAITING_DETAIL` |
+
+  **Negative responses** (`no`, `nahi`, `mat batao`) are handled gracefully at every phase — the bot offers an alternative topic from the follow-up bank and stays in `FOLLOWUP_LOOP`.
+
 - **Language/script mirroring:** response language is enforced from the user's original text per turn (native script vs romanized).
-- **Validation + Judge merge:** post-processing validator performs semantic coherence checks and tone/voice quality checks in one LLM pass.
+- **Validation + Judge merge:** post-processing validator performs semantic coherence checks and tone/voice quality checks in one LLM pass. Enforces that `AWAITING_DETAIL` responses always end with a follow-up question and that `INITIAL` responses always end with the detail-offer closing line.
 - **Domain unification:** `intent_analysis.domain` is used as hint for `query_type` selection to reduce double-classification drift.
 - **Divisional chart plumbing:** Vedic vargas are exposed via `divisional_charts_simple`; Navamsa is mirrored into validation payload as both `D9` and `navamsa`.
 
 ### Validation Engine (`src/validation/vedic_validation_engine_v2.py`)
 
-- **750+ rules** organized in JSON across 3 tiers:
-  - **Tier 1** (critical): Birth time required, chart integrity checks
-  - **Tier 2** (standard): 7th lord position, D9 chart, Dasha strength, house occupancy
-  - **Tier 3** (enhancement): Yoga combinations, special conditions
+- **16,500+ rules** organized in JSON across 4 tiers; at most **80 rules** evaluated per live-chat request (critical + high severity, capped by `check_order`):
+  - **Tier 1** (~750 rules): fast path — critical integrity, house lords, dasha diagnostics
+  - **Tier 2** (~2,500 rules): standard — 7th lord, D9 chart, house occupancy, timing
+  - **Tier 3** (~8,000 rules): enhancement — yoga combinations, special conditions
+  - **Tier 4** (~6,000 rules): reserved for offline batch analysis
+- **Yoga rules are always included** (`include_yoga_live = True`) — they enrich predictions but are severity-demoted so their absence never blocks an answer.
+- **Severity override rules** prevent false-positive blocks:
+  - `category == "yoga"` / combo rule failures: demoted from `critical` → `high`
+  - `category == "table_based_rules"` (house lord lookups, sign lordship tables, Sarvashtakavarga values): demoted from `critical` → `high`, `halt_on_failure` cleared — these are conditional identification facts, not chart quality checks
+  - Infrastructure/tooling rules (Navamsa chart not provided, etc.): never block
+  - **Hard-halt** is reserved exclusively for `category == "data_integrity"` / `"astronomical_constraint"` (e.g., Sun cannot be retrograde, impossible elongation)
 - Returns a **strength score (0–10)** for each prediction domain
-- **Hard-halt** on invalid data (missing birth time, incomplete profile)
 - **Age validator** (`src/validation/age_validator.py`) gates timing predictions based on the user's current age
 
 ---

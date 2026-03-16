@@ -196,19 +196,34 @@ chart_data = tools['vedic_birth_chart'].invoke({
 
 ### Validation Rules Format
 
-Rules live in `data/optimized/tiered_rules.json`. Each rule:
+Rules live in `optimized/tiered_rules.json` under `all_rules` (16,500+) and partitioned under `tiers.tier1/2/3/4`. Actual schema:
+
 ```json
 {
-  "rule_id": "marriage_7th_lord_001",
-  "tier": 2,
-  "domain": "marriage",
-  "condition": "7th_lord_debilitated",
-  "weight": -15,
-  "description": "7th lord in debilitation indicates delay or difficulty"
+  "rule_id": "VR15327",
+  "rule_name": "as 10th House Lord (Parameterized by Planet)",
+  "category": "table_based_rules",
+  "severity": "critical",
+  "halt_on_failure": true,
+  "check_order": 5,
+  "applies_to_queries": ["career", "finance", "status", "all"],
+  "prediction_stage": "promise",
+  "check_logic": {
+    "condition": "If the 10th house is Taurus or Libra.",
+    "calculation": "Venus (Śukra) is the lord of the 10th house.",
+    "threshold": null,
+    "comparison": null
+  },
+  "tier": 1
 }
 ```
 
-Tier 1 = critical (hard-halt on failure), Tier 2 = standard, Tier 3 = enhancement.
+**Key fields:**
+- `severity`: `"critical"`, `"high"`, `"medium"`, or `"low"` — affects strength score and `can_proceed`
+- `halt_on_failure`: `true` only for `data_integrity` / `astronomical_constraint` categories (e.g. Sun cannot be retrograde). **Ignored** (overridden) for `table_based_rules`, yoga/combination rules, and infra/tooling rules.
+- `category`: The engine applies automatic severity overrides: `table_based_rules` (pure lookup tables) are demoted from `critical` → `high` even if `halt_on_failure` is `true`.
+- `applies_to_queries`: filters which domain queries trigger this rule.
+- `tier`: 1 = fast path (80-rule cap), 2 = standard, 3 = enhancement.
 
 ---
 

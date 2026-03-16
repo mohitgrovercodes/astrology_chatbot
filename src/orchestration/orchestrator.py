@@ -141,6 +141,7 @@ class NakshatraState(TypedDict):
     # Progressive Disclosure Phase
     conversation_phase: Optional[Dict]       # Phase data for progressive disclosure
     astro_evidence: Optional[Dict]           # Deterministic evidence payload
+    _detailed_followup: Optional[str]        # Pre-generated cross-domain follow-up question for AWAITING_DETAIL→FOLLOWUP_LOOP
 
 class EnhancedLangGraphOrchestrator:
     """
@@ -1883,17 +1884,16 @@ Provide a concise answer:"""
                 )
 
             # Choose effective query for prompt domain-hint generation:
-            # - Short pure affirmatives ("Haan", "batao", "ok") → use last_query so that
-            #   marriage/career keywords still fire for the topic being discussed.
-            # - Long direct questions ("Mujhe batao kya qualities hongi partner mein?") →
-            #   use state['query'] so domain hints match what the user ACTUALLY asked.
-            #   Without this, a 7-word question about partner qualities would still
-            #   generate marriage-timing hints (from last_query "Meri shadi kab hogi?"),
-            #   causing the LLM to answer timing instead of qualities.
+            # - In AWAITING_DETAIL, short pure affirmatives ("Haan", "batao", "ok")
+            #   should use last_query so domain hints stay on the same topic.
+            # - In FOLLOWUP_LOOP, an affirmative means "yes to the pivot question", so
+            #   we must NOT force last_query (old topic), otherwise the model drifts
+            #   back to the previous domain (e.g., marriage instead of career).
+            # - Long direct questions use state['query'] so hints match what user asked.
             _last_q = _pre_phase_data.get('last_query', '')
             _is_short_affirmative = len(_pre_orig_q.strip().split()) <= 5
             _is_continuation_affirmative = (
-                _pre_phase in (_PAD, _PFL)
+                _pre_phase == _PAD
                 and _pre_resp == 'AFFIRMATIVE'
                 and _last_q
                 and _is_short_affirmative  # Only redirect for short pure affirmatives
@@ -4683,6 +4683,7 @@ substituting a training-knowledge default.
             # Progressive Disclosure Phase (set by rag_with_calculation node)
             "conversation_phase": None,
             "astro_evidence": None,
+            "_detailed_followup": None,
         }
 
         
