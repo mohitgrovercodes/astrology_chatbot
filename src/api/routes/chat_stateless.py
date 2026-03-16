@@ -2301,9 +2301,17 @@ def send_message(request: SendMessageRequest):
         min_points = 0
         _ia = intent_analysis or {}
         _ia_type = _ia.get("intent_type")
-        # Only enforce numbered astro reasoning when we're in the astro prediction
-        # flow and the message is a continuation/clarification (second step).
-        if intent == "RAG_WITH_CALCULATION" and _ia_type in ("CONTINUATION", "CLARIFICATION"):
+        # Only enforce numbered astro reasoning for the specific detailed-answer step:
+        # input phase AWAITING_DETAIL -> result phase FOLLOWUP_LOOP.
+        # Do NOT enforce it for FOLLOWUP_LOOP -> AWAITING_DETAIL (new pivot topic short
+        # answer), otherwise validator rewrites can drag the answer back to old topic.
+        _input_phase = conv_phase_data.get('phase', 'INITIAL')
+        _is_detailed_step = (_input_phase == 'AWAITING_DETAIL' and result_phase == 'FOLLOWUP_LOOP')
+        if (
+            intent == "RAG_WITH_CALCULATION"
+            and _ia_type in ("CONTINUATION", "CLARIFICATION")
+            and _is_detailed_step
+        ):
             min_points = 5
 
         answer = validate_and_sanitize_response(
@@ -2420,9 +2428,14 @@ def send_message(request: SendMessageRequest):
                 phase=new_phase.get('phase', 'INITIAL'),
                 topic=new_phase.get('topic'),
                 last_query=new_phase.get('last_query'),
-                followup_count=new_phase.get('followup_count', 0)
+                followup_count=new_phase.get('followup_count', 0),
+                visited_domains=new_phase.get('visited_domains'),
             )
-            logger.info(f"[PHASE] Updated to: {new_phase.get('phase')} | topic: {new_phase.get('topic')}")
+            logger.info(
+                f"[PHASE] Updated to: {new_phase.get('phase')} | "
+                f"topic: {new_phase.get('topic')} | "
+                f"visited: {new_phase.get('visited_domains')}"
+            )
 
         # Persist the detected language for the next turn's session-prior fallback
         _new_detected_lang = result.get('detected_language', 'en')

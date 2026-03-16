@@ -1643,6 +1643,55 @@ Provide a concise answer:"""
                     # intent domain from the ContextManager (if available).
                     _ia = (state.get('session_data') or {}).get('intent_analysis') or {}
                     _intent_domain = (_ia.get('domain') or '').strip().lower() or None
+                    # If user is affirming a cross-domain follow-up offer, override the
+                    # semantic domain BEFORE validation/synthesis so all downstream logic
+                    # (query_type, dasha filtering, synthesis) aligns to the pivot topic.
+                    try:
+                        from src.ai.context_manager import (
+                            detect_user_response_type as _resp_detect,
+                            PHASE_AWAITING_DETAIL as _PAD_PREVAL,
+                            PHASE_FOLLOWUP_LOOP as _PFL_PREVAL,
+                        )
+                        _phase_data_preval = (state.get('session_data') or {}).get('conversation_phase', {})
+                        _phase_now_preval = _phase_data_preval.get('phase', 'INITIAL')
+                        _topic_now_preval = (_phase_data_preval.get('topic') or '').lower()
+                        _orig_q_preval = (state.get('session_data') or {}).get('original_user_question') or state.get('query', '')
+                        _resp_now_preval = _resp_detect(_orig_q_preval)
+                        if _phase_now_preval in (_PAD_PREVAL, _PFL_PREVAL) and _resp_now_preval == 'AFFIRMATIVE':
+                            _last_bot_preval = next(
+                                (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
+                                 if m.get('role') == 'assistant'),
+                                ''
+                            )
+                            _pivot_topic_preval = None
+                            if _last_bot_preval:
+                                import re as _re_preval
+                                _sentences_preval = _re_preval.split(r'(?<=[.!?।])\s+', _last_bot_preval.strip())
+                                _q_sentences_preval = [s.strip() for s in _sentences_preval if '?' in s]
+                                _last_q_preval = _q_sentences_preval[-1].lower() if _q_sentences_preval else ''
+                                _domain_kws_preval = {
+                                    'marriage': ['shadi', 'shaadi', 'vivah', 'marriage', 'partner', 'spouse', 'love', 'rishta', 'relationship'],
+                                    'career': ['career', 'job', 'naukri', 'kaam', 'vyavsay', 'profession', 'business', 'rojgar'],
+                                    'finance': ['finance', 'money', 'paisa', 'dhan', 'wealth', 'arthik', 'investment'],
+                                    'health': ['health', 'sehat', 'swasthya', 'bimari', 'illness', 'disease'],
+                                    'children': ['child', 'children', 'bacche', 'santaan', 'aulad', 'beta', 'beti'],
+                                    'foreign': ['foreign', 'videsh', 'abroad', 'overseas', 'travel', 'settlement'],
+                                }
+                                for _d_preval, _kws_preval in _domain_kws_preval.items():
+                                    if any(_kw in _last_q_preval for _kw in _kws_preval):
+                                        _pivot_topic_preval = _d_preval
+                                        break
+                            if _pivot_topic_preval and (
+                                _phase_now_preval == _PFL_PREVAL or _pivot_topic_preval != _topic_now_preval
+                            ):
+                                _intent_domain = _pivot_topic_preval
+                                _ia = {**_ia, "domain": _pivot_topic_preval}
+                                logger.info(
+                                    f"[VALIDATION] Pivot-aware domain override: "
+                                    f"{_topic_now_preval or 'none'} -> {_pivot_topic_preval}"
+                                )
+                    except Exception:
+                        pass
                     query_type = detect_query_type(
                         state['query'],
                         llm=self.fast_llm if hasattr(self, 'fast_llm') else None,
@@ -1857,6 +1906,32 @@ Provide a concise answer:"""
             _pre_orig_q = (state.get('session_data') or {}).get('original_user_question') or state['query']
             _pre_resp = _durt(_pre_orig_q)
             _pre_intent_info = (state.get('session_data') or {}).get('intent_analysis', {})
+            _pre_current_topic = (_pre_phase_data.get('topic') or '').lower()
+
+            def _extract_followup_target_from_last_bot(last_bot_msg: str) -> Tuple[str, Optional[str]]:
+                """Extract final offered follow-up question and its domain from last assistant message."""
+                import re as _re
+                _q = ""
+                if last_bot_msg:
+                    _sentences = _re.split(r'(?<=[.!?।])\s+', last_bot_msg.strip())
+                    _q_sentences = [s.strip() for s in _sentences if '?' in s]
+                    if _q_sentences:
+                        _q = _q_sentences[-1]
+                if not _q:
+                    return "", None
+                _q_lower = _q.lower()
+                _domain_keywords = {
+                    'marriage': ['shadi', 'shaadi', 'vivah', 'marriage', 'partner', 'spouse', 'love', 'rishta', 'byah', 'relationship'],
+                    'career': ['career', 'job', 'naukri', 'kaam', 'vyavsay', 'profession', 'business', 'rojgar'],
+                    'finance': ['finance', 'money', 'paisa', 'dhan', 'wealth', 'invest', 'gold', 'property', 'arthik'],
+                    'health': ['health', 'swasthya', 'sehat', 'bimari', 'disease', 'illness'],
+                    'children': ['child', 'bacche', 'santaan', 'son', 'daughter', 'beta', 'beti', 'aulad'],
+                    'foreign': ['foreign', 'videsh', 'abroad', 'travel', 'settlement', 'overseas'],
+                }
+                for _d, _kws in _domain_keywords.items():
+                    if any(_kw in _q_lower for _kw in _kws):
+                        return _q, _d
+                return _q, None
 
             # BUG FIX #2: Short CONTINUATION in AWAITING_DETAIL or FOLLOWUP_LOOP
             # Both phases accept short CONTINUATION queries as AFFIRMATIVE.
@@ -1892,17 +1967,34 @@ Provide a concise answer:"""
             # - Long direct questions use state['query'] so hints match what user asked.
             _last_q = _pre_phase_data.get('last_query', '')
             _is_short_affirmative = len(_pre_orig_q.strip().split()) <= 5
+            _last_bot_s3 = next(
+                (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
+                 if m.get('role') == 'assistant'), ''
+            )
+            _pivot_q_pre, _pivot_topic_pre = _extract_followup_target_from_last_bot(_last_bot_s3)
+            _is_affirmative_pivot_pre = (
+                _pre_resp == 'AFFIRMATIVE'
+                and _pre_phase in (_PAD, _PFL)
+                and bool(_pivot_topic_pre)
+                and (_pre_phase == _PFL or _pivot_topic_pre != _pre_current_topic)
+            )
             _is_continuation_affirmative = (
                 _pre_phase == _PAD
                 and _pre_resp == 'AFFIRMATIVE'
                 and _last_q
                 and _is_short_affirmative  # Only redirect for short pure affirmatives
+                and not _is_affirmative_pivot_pre
             )
-            _effective_query = _last_q if _is_continuation_affirmative else state['query']
+            if _is_affirmative_pivot_pre and _pivot_q_pre:
+                _effective_query = _pivot_q_pre
+            else:
+                _effective_query = _last_q if _is_continuation_affirmative else state['query']
 
             # Determine prompt response mode — must agree with STEP 3.5's phase_instruction
             # so that timing-window suppression and word-limits are consistent.
-            if _pre_phase == _PAD and _pre_resp == 'AFFIRMATIVE':
+            if _is_affirmative_pivot_pre:
+                _prompt_response_mode = 'followup'
+            elif _pre_phase == _PAD and _pre_resp == 'AFFIRMATIVE':
                 _prompt_response_mode = 'detailed'
             elif _pre_phase == _PFL and _pre_resp == 'AFFIRMATIVE':
                 _prompt_response_mode = 'followup'
@@ -2016,11 +2108,36 @@ Provide a concise answer:"""
                     logger.info(f"[PHASE] LLM fallback classified: {user_response_type}")
             logger.info(f"[PHASE] user_response_type={user_response_type} (from original: '{_orig_q[:40]}')")
 
+            # Robust pivot guard:
+            # If the last assistant turn ended with a cross-domain follow-up question and
+            # user now gives an affirmative, force handling as "yes to pivot question" even
+            # when stored phase is stale/misaligned.
+            _last_bot_for_phase = next(
+                (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
+                 if m.get('role') == 'assistant'), ''
+            )
+            _pivot_question, _pivot_topic = _extract_followup_target_from_last_bot(_last_bot_for_phase)
+            _current_topic_norm = (current_topic or '').lower()
+            _is_affirmative_to_pivot = (
+                user_response_type == 'AFFIRMATIVE'
+                and current_phase in (PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP)
+                and bool(_pivot_topic)
+                and (current_phase == PHASE_FOLLOWUP_LOOP or _pivot_topic != _current_topic_norm)
+            )
+            if _is_affirmative_to_pivot:
+                logger.info(
+                    f"[PHASE] Affirmative mapped to prior follow-up offer "
+                    f"(phase={current_phase}, current_topic={_current_topic_norm}, pivot_topic={_pivot_topic})"
+                )
+                current_phase = PHASE_FOLLOWUP_LOOP
+
             # Detect the query domain for follow-up question selection
             # For AWAITING_DETAIL/FOLLOWUP_LOOP affirmatives, validation ran on "Haan karo"
             # (detected as 'general') — preserve the stored topic from the conversation phase.
             _val_qt = state.get('validation_query_type')
-            if _is_continuation_affirmative and current_topic and (_val_qt in (None, 'general')):
+            if _is_affirmative_to_pivot and _pivot_topic:
+                _topic = _pivot_topic
+            elif _is_continuation_affirmative and current_topic and (_val_qt in (None, 'general')):
                 _topic = current_topic
             else:
                 _topic = _val_qt or current_topic or 'general'
@@ -2194,36 +2311,35 @@ LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lan
                 # User said YES to the cross-domain follow-up question.
                 # Treat this as a new INITIAL topic: give a short answer about the new topic
                 # and end with an offer to explain in detail (same pattern as INITIAL phase).
-                # Extract the exact question the bot asked so we can tell the LLM what to answer.
-                _hist = state.get('conversation_history') or []
-                _last_bot_msg = next(
-                    (m.get('content', '') for m in reversed(_hist) if m.get('role') == 'assistant'),
-                    ''
-                )
-                _last_question = ''
-                if _last_bot_msg:
-                    import re as _re
-                    _sentences = _re.split(r'(?<=[.!?।])\s+', _last_bot_msg.strip())
-                    _q_sentences = [s for s in _sentences if '?' in s]
-                    if _q_sentences:
-                        _last_question = _q_sentences[-1].strip()
+                # Extract the exact follow-up question the bot asked so we can answer it.
+                _last_question = _pivot_question
+                _new_topic = _pivot_topic or 'general'
+                if not _last_question:
+                    _hist = state.get('conversation_history') or []
+                    _last_bot_msg = next(
+                        (m.get('content', '') for m in reversed(_hist) if m.get('role') == 'assistant'),
+                        ''
+                    )
+                    _last_question, _fallback_topic = _extract_followup_target_from_last_bot(_last_bot_msg)
+                    if _fallback_topic:
+                        _new_topic = _fallback_topic
                 logger.info(f"[PHASE] New topic question: {_last_question[:80]}")
 
                 # Detect the new domain from the follow-up question text
-                _new_topic = 'general'
-                _fq_lower = _last_question.lower()
-                _domain_keywords = {
-                    'marriage':  ['shadi', 'vivah', 'marriage', 'partner', 'spouse', 'love', 'rishta', 'byah'],
-                    'career':    ['career', 'job', 'naukri', 'kaam', 'vyavsay', 'profession', 'business', 'rojgar'],
-                    'finance':   ['finance', 'money', 'paisa', 'dhan', 'wealth', 'invest', 'gold', 'property', 'arthik'],
-                    'health':    ['health', 'swasthya', 'sehat', 'bimari', 'disease', 'illness', 'tansundari'],
-                    'children':  ['child', 'bacche', 'santaan', 'son', 'daughter', 'beta', 'beti', 'aulad'],
-                    'foreign':   ['foreign', 'videsh', 'abroad', 'travel', 'settlement', 'overseas'],
-                }
-                for _d, _kws in _domain_keywords.items():
-                    if any(_kw in _fq_lower for _kw in _kws):
-                        _new_topic = _d
-                        break
+                if _new_topic == 'general' and _last_question:
+                    _fq_lower = _last_question.lower()
+                    _domain_keywords = {
+                        'marriage':  ['shadi', 'vivah', 'marriage', 'partner', 'spouse', 'love', 'rishta', 'byah', 'relationship'],
+                        'career':    ['career', 'job', 'naukri', 'kaam', 'vyavsay', 'profession', 'business', 'rojgar'],
+                        'finance':   ['finance', 'money', 'paisa', 'dhan', 'wealth', 'invest', 'gold', 'property', 'arthik'],
+                        'health':    ['health', 'swasthya', 'sehat', 'bimari', 'disease', 'illness'],
+                        'children':  ['child', 'bacche', 'santaan', 'son', 'daughter', 'beta', 'beti', 'aulad'],
+                        'foreign':   ['foreign', 'videsh', 'abroad', 'travel', 'settlement', 'overseas'],
+                    }
+                    for _d, _kws in _domain_keywords.items():
+                        if any(_kw in _fq_lower for _kw in _kws):
+                            _new_topic = _d
+                            break
 
                 _lang_now = state.get('detected_language', 'en')
                 _closing_q = pick_initial_closing(
