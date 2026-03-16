@@ -938,6 +938,7 @@ Guidelines:
   (house lord, dasha/pratyantar, yoga, planetary condition, divisional chart insight, etc.)
   and directly states what it means for this person's life.
 - You may keep a short 1–2 sentence introduction BEFORE the numbered list.
+- CRITICAL: If the original answer ends with a question about a DIFFERENT life area (e.g. career, health, marriage, children, finances), you MUST preserve that exact question at the very end of your rewrite. Do NOT replace it with an offer for more detail or further explanation.
 
 Return ONLY the rewritten answer text, no JSON, no explanation.
 
@@ -2265,27 +2266,31 @@ def send_message(request: SendMessageRequest):
             
             logger.info(f"[MOBILE] Truncated: {word_count} → {len(answer.split())} words")
 
-        # ── FINAL ENFORCEMENT: ensure initial short response ends with offer-for-detail question ──
-        # This runs *after* any truncation so the closing question cannot be accidentally cut off.
-        # The orchestrator injects a closing via pick_initial_closing(); only append if it got
-        # truncated away — detected by absence of any question mark near the end of the answer.
+        # ── FINAL ENFORCEMENT: ensure INITIAL/new-topic short responses end with offer-for-detail question ──
+        # Covers two cases:
+        #   1. INITIAL → AWAITING_DETAIL  (fresh user question)
+        #   2. FOLLOWUP_LOOP → AWAITING_DETAIL  (user said yes to cross-domain follow-up → new topic cycle)
+        # Runs *after* any truncation so the closing question cannot be accidentally cut off.
         if result_phase == 'AWAITING_DETAIL':
-            last_200 = answer[-200:] if len(answer) > 200 else answer
-            already_has_closing = '?' in last_200
-            if not already_has_closing:
-                _detected_lang = result.get('detected_language') or session_manager.get_detected_language(user_id) or 'en'
-                _closing_q_map = {
-                    'en': 'Would you like me to explain the detailed astrological reasoning behind this?',
-                    'hi': 'Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?',
-                    'hi-lat': 'Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?',
-                    'ta': 'Itharku pinnaal ullaa jothida karanam theriya virumbukireerga?',
-                    'ta-lat': 'Itharku pin ullana jothida karanam theriya virumbukireerga?',
-                    'pa': 'Ki tusi is de pichhe di jyotish wajah jaanna chahunde ho?',
-                    'pa-lat': 'Ki tusi is de pichhe di jyotish wajah jaanna chahunde ho?',
-                }
-                _closing_q = _closing_q_map.get(_detected_lang, _closing_q_map['en'])
-                answer = (answer.rstrip() + "\n\n" + _closing_q).strip()
-                logger.info(f"[POST_PROCESS] Appended offer-for-detail question (closing was truncated)")
+            _input_phase = conv_phase_data.get('phase', 'INITIAL')
+            _is_new_topic_cycle = _input_phase in ('INITIAL', 'FOLLOWUP_LOOP')
+            if _is_new_topic_cycle:
+                last_200 = answer[-200:] if len(answer) > 200 else answer
+                already_has_closing = '?' in last_200
+                if not already_has_closing:
+                    _detected_lang = result.get('detected_language') or session_manager.get_detected_language(user_id) or 'en'
+                    _closing_q_map = {
+                        'en': 'Would you like me to explain the detailed astrological reasoning behind this?',
+                        'hi': 'Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?',
+                        'hi-lat': 'Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?',
+                        'ta': 'Itharku pinnaal ullaa jothida karanam theriya virumbukireerga?',
+                        'ta-lat': 'Itharku pin ullana jothida karanam theriya virumbukireerga?',
+                        'pa': 'Ki tusi is de pichhe di jyotish wajah jaanna chahunde ho?',
+                        'pa-lat': 'Ki tusi is de pichhe di jyotish wajah jaanna chahunde ho?',
+                    }
+                    _closing_q = _closing_q_map.get(_detected_lang, _closing_q_map['en'])
+                    answer = (answer.rstrip() + "\n\n" + _closing_q).strip()
+                    logger.info(f"[POST_PROCESS] Appended offer-for-detail question (closing was truncated)")
         
         # Run final semantic validator using a small conversation context window.
         # For detailed responses (second-step CONTINUATION/CLARIFICATION after an
@@ -2307,6 +2312,29 @@ def send_message(request: SendMessageRequest):
             recent_history=recent_history,
             min_numbered_points=min_points,
         )
+
+        # ── POST-VALIDATOR: enforce cross-domain follow-up question on AWAITING_DETAIL→FOLLOWUP_LOOP ──
+        # The numbered-points rewrite can lose the follow-up question injected by the orchestrator.
+        # Re-strip any "offer more details" sentences the rewriter may have added, then
+        # append the pre-generated cross-domain follow-up question if it is missing.
+        if conv_phase_data.get('phase') == 'AWAITING_DETAIL' and result_phase == 'FOLLOWUP_LOOP':
+            _offer_more_patterns_post = [
+                r"[^.!?\n]*(agar aap chah|agar chahein).{0,80}(detail|vistar|samjha|elaborate)[^.!?\n]*[.!?]?\s*",
+                r"[^.!?\n]*(aur (bhi )?detail mein samjha|aur jaanna hai|aur detail chahiye|aur bhi (batana|samjhana))[^.!?\n]*[.!?]?\s*",
+                r"[^.!?\n]*\b(main aapko|I can).{0,50}(aur (bata|samjha|detail)|more detail|elaborate|explain further)[^.!?\n]*[.!?]?\s*",
+                r"[^.!?\n]*\b(if you.{0,20}(would like|want|wish)|would you like me to).{0,60}(more detail|elaborate|explain (further|more)|go deeper)[^.!?\n]*[.!?]?\s*",
+            ]
+            for _pat in _offer_more_patterns_post:
+                answer = re.sub(_pat, " ", answer, flags=re.IGNORECASE)
+            answer = re.sub(r"\n{3,}", "\n\n", answer)
+            answer = re.sub(r"  +", " ", answer).strip()
+            # Append the cross-domain follow-up question if the validated response lost it
+            _last_200 = answer[-200:] if len(answer) > 200 else answer
+            if '?' not in _last_200:
+                _fup = result.get('_detailed_followup', '')
+                if _fup:
+                    answer = answer.rstrip() + "\n\n" + _fup
+                    logger.info(f"[POST_PROCESS] Appended cross-domain follow-up question after validator rewrite")
 
         logger.info(f"[ORCHESTRATOR RESULT]")
         logger.debug(f"Intent: {intent}")

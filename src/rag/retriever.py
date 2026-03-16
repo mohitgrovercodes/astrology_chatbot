@@ -81,10 +81,14 @@ class AstrologyRetriever:
             self.collection_name = collection_name or "vedic_astrology_books_knowledge"
             self.db_path = Path(db_path or "data/vectordb")
         
-        # Initialize ChromaDB
+        # Initialize ChromaDB — disable telemetry via env var before import
+        # (Settings flag alone doesn't suppress it in newer ChromaDB versions)
+        import os as _os
+        _os.environ["ANONYMIZED_TELEMETRY"] = "false"
+        _os.environ["CHROMA_TELEMETRY"] = "false"
         import chromadb
         from chromadb.config import Settings
-        
+
         self.client = chromadb.PersistentClient(
             path=str(self.db_path),
             settings=Settings(anonymized_telemetry=False)

@@ -12,6 +12,10 @@ import json
 import argparse
 from pathlib import Path
 from typing import Optional, Dict, Any, List
+
+# Disable ChromaDB telemetry before import to suppress capture() errors
+os.environ["ANONYMIZED_TELEMETRY"] = "false"
+os.environ["CHROMA_TELEMETRY"] = "false"
 import chromadb
 from chromadb.config import Settings
 

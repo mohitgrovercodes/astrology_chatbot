@@ -1657,7 +1657,7 @@ Provide a concise answer:"""
                         # Determine tier (optimized for live chat)
                         tier = determine_validation_tier(state['query'])
                         live_rule_cap = determine_live_chat_rule_cap(tier, state.get('query', ''))
-                        include_yoga_live = tier > 1
+                        include_yoga_live = True  # always include yoga rules for richer analysis
                         logger.info(
                             f"[VALIDATION] Query: {query_type}, Tier: {tier}, "
                             f"LiveCap: {live_rule_cap}, IncludeYoga: {include_yoga_live}"
@@ -2090,17 +2090,24 @@ Provide a concise answer:"""
                         _chart_ctx = '\n'.join(_ctx_lines)
                 except Exception:
                     pass
-            logger.info(f"[PHASE] Generating follow-up question (topic={_topic}, lang={_fq_language}, timeout=4s)...")
-            _suggested_followup = generate_followup_question(
-                topic=_topic,
-                last_answer=_last_bot_msg_for_fq,
-                language=_fq_language,
-                fast_llm=getattr(self, 'fast_llm', None),
-                fallback=_static_followup,
-                chart_context=_chart_ctx,
-                timeout=4.0
-            )
-            logger.info(f"[PHASE] Follow-up question ready: {_suggested_followup[:80]}")
+            # Only generate a cross-domain follow-up question for phases that actually use it.
+            # INITIAL phase no longer shows a follow-up question, so skip the LLM call.
+            _needs_followup_question = current_phase != PHASE_INITIAL
+            if _needs_followup_question:
+                logger.info(f"[PHASE] Generating follow-up question (topic={_topic}, lang={_fq_language}, timeout=4s)...")
+                _suggested_followup = generate_followup_question(
+                    topic=_topic,
+                    last_answer=_last_bot_msg_for_fq,
+                    language=_fq_language,
+                    fast_llm=getattr(self, 'fast_llm', None),
+                    fallback=_static_followup,
+                    chart_context=_chart_ctx,
+                    timeout=4.0
+                )
+                logger.info(f"[PHASE] Follow-up question ready: {_suggested_followup[:80]}")
+            else:
+                _suggested_followup = _static_followup
+                logger.info(f"[PHASE] Skipping follow-up question generation (INITIAL phase)")
 
             phase_instruction = ""
             new_phase_data = {}  # Will be set on state for chat_stateless to persist
@@ -2183,15 +2190,16 @@ LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lan
 
             elif current_phase == PHASE_FOLLOWUP_LOOP and user_response_type == 'AFFIRMATIVE':
                 # ── User agreed to a follow-up question → Answer it, then STOP asking ──
-                logger.info(f"[PHASE] FOLLOWUP_LOOP + AFFIRMATIVE → answering follow-up (no further questions)")
-                # Extract the exact question the bot asked in its last message so we
-                # can inject it explicitly — the LLM often ignores "look at last message"
+                logger.info(f"[PHASE] FOLLOWUP_LOOP + AFFIRMATIVE → new topic cycle (short answer + offer detail)")
+                # User said YES to the cross-domain follow-up question.
+                # Treat this as a new INITIAL topic: give a short answer about the new topic
+                # and end with an offer to explain in detail (same pattern as INITIAL phase).
+                # Extract the exact question the bot asked so we can tell the LLM what to answer.
                 _hist = state.get('conversation_history') or []
                 _last_bot_msg = next(
                     (m.get('content', '') for m in reversed(_hist) if m.get('role') == 'assistant'),
                     ''
                 )
-                # Pull out the trailing question (after last '—' or '?' sentence boundary)
                 _last_question = ''
                 if _last_bot_msg:
                     import re as _re
@@ -2199,35 +2207,54 @@ LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lan
                     _q_sentences = [s for s in _sentences if '?' in s]
                     if _q_sentences:
                         _last_question = _q_sentences[-1].strip()
-                _answer_topic = f'"{_last_question}"' if _last_question else "the specific question in your previous message"
-                _lang_for_phase = state.get('detected_language', 'en')
-                logger.info(f"[PHASE] Follow-up topic to answer: {_last_question[:80]}")
+                logger.info(f"[PHASE] New topic question: {_last_question[:80]}")
+
+                # Detect the new domain from the follow-up question text
+                _new_topic = 'general'
+                _fq_lower = _last_question.lower()
+                _domain_keywords = {
+                    'marriage':  ['shadi', 'vivah', 'marriage', 'partner', 'spouse', 'love', 'rishta', 'byah'],
+                    'career':    ['career', 'job', 'naukri', 'kaam', 'vyavsay', 'profession', 'business', 'rojgar'],
+                    'finance':   ['finance', 'money', 'paisa', 'dhan', 'wealth', 'invest', 'gold', 'property', 'arthik'],
+                    'health':    ['health', 'swasthya', 'sehat', 'bimari', 'disease', 'illness', 'tansundari'],
+                    'children':  ['child', 'bacche', 'santaan', 'son', 'daughter', 'beta', 'beti', 'aulad'],
+                    'foreign':   ['foreign', 'videsh', 'abroad', 'travel', 'settlement', 'overseas'],
+                }
+                for _d, _kws in _domain_keywords.items():
+                    if any(_kw in _fq_lower for _kw in _kws):
+                        _new_topic = _d
+                        break
+
+                _lang_now = state.get('detected_language', 'en')
+                _closing_q = pick_initial_closing(
+                    rng=random.Random(_last_question or state.get('query', '')),
+                    language=_lang_now,
+                    domain=_new_topic,
+                )
+                _voice_charter = get_voice_charter(_lang_now)
+                _flow_policy = get_response_structure_policy()
+                _answer_topic = f'"{_last_question}"' if _last_question else "the follow-up topic in your previous message"
                 phase_instruction = f"""
-PROGRESSIVE DISCLOSURE -- FOLLOW-UP ANSWER MODE (THIS OVERRIDES ALL OTHER INSTRUCTIONS):
+PROGRESSIVE DISCLOSURE -- NEW TOPIC SHORT RESPONSE (OVERRIDES ALL OTHER FORMAT INSTRUCTIONS):
+The user said YES to your follow-up question. This starts a fresh topic cycle. Give a short initial answer about the new topic.
 
-LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lang_for_phase}. Do NOT mix languages.
+ANSWER THIS SPECIFIC QUESTION: {_answer_topic}
 
-YOU MUST ANSWER THIS SPECIFIC QUESTION (extracted from your previous message):
-  {_answer_topic}
-
-The user just said YES to that question. Answer ONLY that specific topic.
-DO NOT repeat marriage timing, Venus Pratyantar, or Next Favorable Window -- those were already covered.
-
-RULES:
-1. WORD LIMIT: 150-200 words maximum. Stay focused and do not exceed 200 words.
-2. Use chart data to answer {_answer_topic} directly -- cite 2-3 specific planetary factors.
-3. Be personalized and specific -- NOT a summary of what was already said.
-4. NEVER use H1, H2, H3 etc. -- always write 1st house, 2nd house, 3rd house.
-5. NEVER include Next Favorable Window -- this is a follow-up, not a timing response.
-6. END your response naturally after answering. Do NOT ask any follow-up question.
-   The user has already engaged deeply -- let the conversation breathe.
+1. TARGET LENGTH: 150-200 words.
+2. ZERO ASTROLOGICAL JARGON. Do NOT use house numbers, planet names, dasha terms, or any Sanskrit technical terms. Plain everyday language only.
+3. Give a concrete prediction or time window about the new topic.
+4. Do NOT repeat anything already covered in earlier responses.
+5. Write the ENTIRE response in {_lang_now}.
+6. End with EXACTLY this closing line — do not rephrase it:
+   "{_closing_q}"
+7. {_voice_charter}
+8. {_flow_policy}
 """
-                # Phase resets to INITIAL — the topic cycle is complete.
-                # The user can now ask a new question freely.
+                # Start a fresh AWAITING_DETAIL cycle for the new topic.
                 new_phase_data = {
-                    "phase": PHASE_INITIAL,
-                    "topic": None,
-                    "last_query": conv_phase_data.get('last_query', state['query']),
+                    "phase": PHASE_AWAITING_DETAIL,
+                    "topic": _new_topic,
+                    "last_query": _last_question or conv_phase_data.get('last_query', state['query']),
                     "followup_count": 0
                 }
 
