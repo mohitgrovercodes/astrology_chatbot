@@ -3180,10 +3180,11 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         )
         if _is_timing_mode:
             domain_hints.append(
-                "TIMING PRECISION: Use the Pratyantar Dasha windows (listed above under 'Upcoming Pratyantardashas') "
-                "combined with the Gochara factors to narrow timing to a specific 1-4 week window. "
-                "Do NOT just repeat the Antardasha range — that is a multi-month bracket, not a specific date. "
-                "State the specific Pratyantar that aligns with the relevant Gochara factor as the PEAK timing."
+                "TIMING WINDOW: Use the Pratyantar Dasha windows (listed above under 'Upcoming Pratyantardashas') "
+                "combined with the Gochara factors to identify the most supportive phase, but express timing as an APPROXIMATE window of several months "
+                "(for example, 'from mid 2026 to early 2027' or 'between late 2026 and mid 2027'). "
+                "Do NOT narrow the answer down to specific weeks or exact days; avoid phrases like 'second week of March' or 'last week of the year'. "
+                "Always speak in terms of broader month+year ranges that feel natural in conversation."
             )
 
         # ── Marriage / relationship / divorce ───────────────────────────────────
