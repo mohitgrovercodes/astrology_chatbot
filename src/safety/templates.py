@@ -556,6 +556,69 @@ def get_disclaimer(disclaimer_type: str, language: str = 'en', llm=None) -> str:
     key = f"DISCLAIMER_{disclaimer_type.upper()}"
     text = get_template(key)
 
+    # Deterministic localized fallbacks so disclaimers stay in user's language/script
+    # even if LLM translation is unavailable or fails.
+    _LOCALIZED_DISCLAIMERS = {
+        "hi-lat": {
+            "DISCLAIMER_HEALTH": (
+                "[HEALTH] **Mahatvapurn Suchna**: Jo health-related astrological insights diye ja rahe hain, "
+                "wo sirf educational aur self-reflection ke liye hain. Astrology tendencies dikhata hai, diagnosis nahi. "
+                "Kisi bhi health concern, diagnosis ya treatment ke liye qualified doctor se zaroor salah lein."
+            ),
+            "DISCLAIMER_FINANCIAL": (
+                "[FINANCIAL] **Mahatvapurn Suchna**: Finance aur career ke astrological insights guidance aur timing awareness ke liye hain. "
+                "Bade financial decisions ke liye inhe akela base mat banaiye. Practical assessment aur financial advisor ki salah zaroor lein."
+            ),
+            "DISCLAIMER_RELATIONSHIP": (
+                "[RELATIONSHIP] **Mahatvapurn Yaad**: Relationship compatibility mein astrology ek factor hai, lekin communication, mutual respect, "
+                "shared values aur effort zyada maayne rakhte hain. In insights ko samajhne ka tool samjhein, final verdict nahi."
+            ),
+            "DISCLAIMER_CHILDREN": (
+                "[CHILDREN] **Mahatvapurn Note**: Bacchon aur fertility se jude sawal bahut personal hote hain. Astrology favorable periods dikha sakta hai, "
+                "lekin exact outcomes predict nahi karta. Fertility ya family planning ke liye medical consultation zaroori hai."
+            ),
+            "DISCLAIMER_CAREER": (
+                "[CAREER] **Mahatvapurn Yaad**: Career decisions practical factors par hone chahiye - skills, market conditions, financial stability aur personal circumstances. "
+                "Astrological timing ek input hai, poora decision system nahi."
+            ),
+            "DISCLAIMER_GENERAL": (
+                "[ASTROLOGY] **Mahatvapurn Yaad**: Astrological insights self-reflection aur timing awareness ke liye hain. "
+                "Ye fixed destiny nahi, tendencies aur possibilities dikhate hain. Aapki choices, effort aur circumstances final result banate hain."
+            ),
+        },
+        "hi": {
+            "DISCLAIMER_HEALTH": (
+                "[HEALTH] **महत्वपूर्ण सूचना**: स्वास्थ्य से जुड़ी ज्योतिषीय जानकारी केवल शैक्षिक और आत्म-चिंतन के लिए है। "
+                "ज्योतिष प्रवृत्तियां बताता है, मेडिकल डायग्नोसिस नहीं। स्वास्थ्य संबंधी किसी भी निर्णय के लिए योग्य डॉक्टर से सलाह लें।"
+            ),
+            "DISCLAIMER_FINANCIAL": (
+                "[FINANCIAL] **महत्वपूर्ण सूचना**: वित्त और करियर संबंधी ज्योतिषीय संकेत केवल मार्गदर्शन और समय-जागरूकता के लिए हैं। "
+                "बड़े आर्थिक निर्णयों का एकमात्र आधार इन्हें न बनाएं। व्यावहारिक आकलन और वित्तीय सलाहकार की सलाह लें।"
+            ),
+            "DISCLAIMER_RELATIONSHIP": (
+                "[RELATIONSHIP] **महत्वपूर्ण याद**: रिश्तों में ज्योतिष एक कारक है, लेकिन संवाद, परस्पर सम्मान, साझा मूल्य और प्रयास अधिक महत्वपूर्ण हैं। "
+                "इन संकेतों को समझने का उपकरण मानें, अंतिम फैसला नहीं।"
+            ),
+            "DISCLAIMER_CHILDREN": (
+                "[CHILDREN] **महत्वपूर्ण नोट**: बच्चों और प्रजनन से जुड़े प्रश्न बहुत व्यक्तिगत होते हैं। "
+                "ज्योतिष अनुकूल समय दिखा सकता है, लेकिन निश्चित परिणाम नहीं बताता। परिवार नियोजन के लिए मेडिकल सलाह आवश्यक है।"
+            ),
+            "DISCLAIMER_CAREER": (
+                "[CAREER] **महत्वपूर्ण याद**: करियर निर्णय व्यावहारिक कारकों पर आधारित होने चाहिए - कौशल, बाजार स्थिति, आर्थिक स्थिरता और व्यक्तिगत परिस्थितियां। "
+                "ज्योतिषीय समय एक इनपुट है, पूरा निर्णय नहीं।"
+            ),
+            "DISCLAIMER_GENERAL": (
+                "[ASTROLOGY] **महत्वपूर्ण याद**: ज्योतिषीय संकेत आत्म-चिंतन और समय-जागरूकता के लिए हैं। "
+                "ये निश्चित भाग्य नहीं, बल्कि संभावनाएं और प्रवृत्तियां दिखाते हैं। अंतिम परिणाम आपके चुनाव, प्रयास और परिस्थितियों से तय होता है।"
+            ),
+        },
+    }
+
+    normalized_language = (language or "en").lower().strip()
+    localized_pool = _LOCALIZED_DISCLAIMERS.get(normalized_language)
+    if localized_pool and key in localized_pool:
+        return localized_pool[key]
+
     if language != 'en' and llm is not None:
         try:
             from src.utils.localization import get_localization_manager

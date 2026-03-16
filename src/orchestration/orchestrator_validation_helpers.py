@@ -51,6 +51,13 @@ def detect_query_type_patterns(query: str) -> tuple[str, float]:
             'strong': ['child', 'children', 'son', 'daughter', 'santan', 'baccha', 'bachche', 'beta', 'beti', 'ladka', 'ladki'],
             'medium': ['pregnancy', 'putra', 'offspring', 'garbh', 'prasav'],
             'weak': ['progeny', 'kids', 'aulad']
+        },
+        'foreign': {
+            'strong': ['foreign', 'abroad', 'videsh', 'overseas', 'immigration', 'visa', 'settlement abroad',
+                       'foreign trip', 'foreign travel', 'foreign yatra', 'videsh yatra', 'bahar jaana',
+                       'foreign land', 'settle abroad', 'job abroad'],
+            'medium': ['travel', 'yatra', 'trip', 'bahar', 'safar', 'journey', 'relocation', 'migrate'],
+            'weak': ['tour', 'visit abroad', 'go abroad', 'foreign country']
         }
     }
     
@@ -115,6 +122,7 @@ CATEGORIES:
 - finance: Questions about money, wealth, income, prosperity
 - health: Questions about health, disease, medical issues
 - children: Questions about children, pregnancy, offspring
+- foreign: Questions about foreign travel, abroad, videsh, overseas, visa, immigration, settlement
 - general: Theoretical questions, concepts, or unclear intent
 
 QUERY: "{query}"
@@ -124,14 +132,14 @@ PATTERN DETECTED: {pattern_type}
 Respond with ONLY the category name (one word). If the pattern detection looks wrong, correct it.
 
 ANSWER:"""
-    
+
     try:
         response = llm.invoke(prompt)
         content = response.content if hasattr(response, 'content') else str(response)
         confirmed_type = content.strip().lower()
-        
+
         # Validate response
-        valid_types = {'marriage', 'career', 'finance', 'health', 'children', 'general'}
+        valid_types = {'marriage', 'career', 'finance', 'health', 'children', 'foreign', 'general'}
         if confirmed_type in valid_types:
             return confirmed_type
         else:
@@ -158,13 +166,16 @@ def detect_query_type(
         use_llm_confirmation: Whether to use LLM when confidence is low
         
     Returns:
-        Query type: 'marriage' | 'career' | 'finance' | 'health' | 'children' | 'general'
+        Query type: 'marriage' | 'career' | 'finance' | 'health' | 'children' | 'foreign' | 'general'
     """
     # Step 0: If we already have a trusted semantic domain from the intent
     # analyzer, use it directly when it maps cleanly to our query_type set.
     if intent_domain_hint:
         _hint = intent_domain_hint.strip().lower()
-        _allowed = {'marriage', 'career', 'finance', 'health', 'children', 'general'}
+        # Normalise 'foreign_travel' -> 'foreign'
+        if _hint == 'foreign_travel':
+            _hint = 'foreign'
+        _allowed = {'marriage', 'career', 'finance', 'health', 'children', 'foreign', 'general'}
         if _hint in _allowed:
             logger.info(f"[QUERY_TYPE] Using intent_domain_hint='{_hint}' as query_type")
             return _hint
@@ -174,8 +185,9 @@ def detect_query_type(
     
     logger.info(f"[QUERY_TYPE] Pattern detection: {pattern_type} (confidence: {confidence:.2f})")
     
-    # Step 2: LLM confirmation if confidence is low
-    if use_llm_confirmation and llm and confidence < 0.7 and pattern_type != 'general':
+    # Step 2: LLM confirmation if confidence is low, or if pattern returned 'general'
+    # (LLM can catch domain-specific queries that pattern missed, e.g. "foreign trip")
+    if use_llm_confirmation and llm and (confidence < 0.7 or pattern_type == 'general'):
         logger.info(f"[QUERY_TYPE] Low confidence, confirming with LLM...")
         confirmed_type = confirm_query_type_with_llm(query, pattern_type, llm)
         

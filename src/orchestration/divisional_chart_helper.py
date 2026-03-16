@@ -90,6 +90,19 @@ DIVISIONAL_CHART_MAP = {
         'key_planets': ['Mars', 'Mercury'],
         'analysis_focus': 'brothers, sisters, courage, communication'
     },
+    # Foreign travel / settlement — D9 (long journeys, dharma, distant lands) + D12 (foreign residence, losses, moksha)
+    'foreign': {
+        'primary': ['D9', 'D12'],
+        'secondary': ['D3'],
+        'key_planets': ['Rahu', 'Venus', 'Moon', 'Jupiter'],
+        'analysis_focus': 'foreign travel, settlement abroad, long journeys, immigration, residence in distant lands'
+    },
+    'foreign_travel': {
+        'primary': ['D9', 'D12'],
+        'secondary': ['D3'],
+        'key_planets': ['Rahu', 'Venus', 'Moon', 'Jupiter'],
+        'analysis_focus': 'foreign travel, settlement abroad, long journeys, immigration, residence in distant lands'
+    },
 }
 
 
