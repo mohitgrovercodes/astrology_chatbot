@@ -141,6 +141,7 @@ class NakshatraState(TypedDict):
     # Progressive Disclosure Phase
     conversation_phase: Optional[Dict]       # Phase data for progressive disclosure
     astro_evidence: Optional[Dict]           # Deterministic evidence payload
+    _detailed_followup: Optional[str]        # Pre-generated cross-domain follow-up question for AWAITING_DETAIL→FOLLOWUP_LOOP
 
 class EnhancedLangGraphOrchestrator:
     """
@@ -1642,6 +1643,55 @@ Provide a concise answer:"""
                     # intent domain from the ContextManager (if available).
                     _ia = (state.get('session_data') or {}).get('intent_analysis') or {}
                     _intent_domain = (_ia.get('domain') or '').strip().lower() or None
+                    # If user is affirming a cross-domain follow-up offer, override the
+                    # semantic domain BEFORE validation/synthesis so all downstream logic
+                    # (query_type, dasha filtering, synthesis) aligns to the pivot topic.
+                    try:
+                        from src.ai.context_manager import (
+                            detect_user_response_type as _resp_detect,
+                            PHASE_AWAITING_DETAIL as _PAD_PREVAL,
+                            PHASE_FOLLOWUP_LOOP as _PFL_PREVAL,
+                        )
+                        _phase_data_preval = (state.get('session_data') or {}).get('conversation_phase', {})
+                        _phase_now_preval = _phase_data_preval.get('phase', 'INITIAL')
+                        _topic_now_preval = (_phase_data_preval.get('topic') or '').lower()
+                        _orig_q_preval = (state.get('session_data') or {}).get('original_user_question') or state.get('query', '')
+                        _resp_now_preval = _resp_detect(_orig_q_preval)
+                        if _phase_now_preval in (_PAD_PREVAL, _PFL_PREVAL) and _resp_now_preval == 'AFFIRMATIVE':
+                            _last_bot_preval = next(
+                                (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
+                                 if m.get('role') == 'assistant'),
+                                ''
+                            )
+                            _pivot_topic_preval = None
+                            if _last_bot_preval:
+                                import re as _re_preval
+                                _sentences_preval = _re_preval.split(r'(?<=[.!?।])\s+', _last_bot_preval.strip())
+                                _q_sentences_preval = [s.strip() for s in _sentences_preval if '?' in s]
+                                _last_q_preval = _q_sentences_preval[-1].lower() if _q_sentences_preval else ''
+                                _domain_kws_preval = {
+                                    'marriage': ['shadi', 'shaadi', 'vivah', 'marriage', 'partner', 'spouse', 'love', 'rishta', 'relationship'],
+                                    'career': ['career', 'job', 'naukri', 'kaam', 'vyavsay', 'profession', 'business', 'rojgar'],
+                                    'finance': ['finance', 'money', 'paisa', 'dhan', 'wealth', 'arthik', 'investment'],
+                                    'health': ['health', 'sehat', 'swasthya', 'bimari', 'illness', 'disease'],
+                                    'children': ['child', 'children', 'bacche', 'santaan', 'aulad', 'beta', 'beti'],
+                                    'foreign': ['foreign', 'videsh', 'abroad', 'overseas', 'travel', 'settlement'],
+                                }
+                                for _d_preval, _kws_preval in _domain_kws_preval.items():
+                                    if any(_kw in _last_q_preval for _kw in _kws_preval):
+                                        _pivot_topic_preval = _d_preval
+                                        break
+                            if _pivot_topic_preval and (
+                                _phase_now_preval == _PFL_PREVAL or _pivot_topic_preval != _topic_now_preval
+                            ):
+                                _intent_domain = _pivot_topic_preval
+                                _ia = {**_ia, "domain": _pivot_topic_preval}
+                                logger.info(
+                                    f"[VALIDATION] Pivot-aware domain override: "
+                                    f"{_topic_now_preval or 'none'} -> {_pivot_topic_preval}"
+                                )
+                    except Exception:
+                        pass
                     query_type = detect_query_type(
                         state['query'],
                         llm=self.fast_llm if hasattr(self, 'fast_llm') else None,
@@ -1657,7 +1707,7 @@ Provide a concise answer:"""
                         # Determine tier (optimized for live chat)
                         tier = determine_validation_tier(state['query'])
                         live_rule_cap = determine_live_chat_rule_cap(tier, state.get('query', ''))
-                        include_yoga_live = tier > 1
+                        include_yoga_live = True  # always include yoga rules for richer analysis
                         logger.info(
                             f"[VALIDATION] Query: {query_type}, Tier: {tier}, "
                             f"LiveCap: {live_rule_cap}, IncludeYoga: {include_yoga_live}"
@@ -1856,6 +1906,32 @@ Provide a concise answer:"""
             _pre_orig_q = (state.get('session_data') or {}).get('original_user_question') or state['query']
             _pre_resp = _durt(_pre_orig_q)
             _pre_intent_info = (state.get('session_data') or {}).get('intent_analysis', {})
+            _pre_current_topic = (_pre_phase_data.get('topic') or '').lower()
+
+            def _extract_followup_target_from_last_bot(last_bot_msg: str) -> Tuple[str, Optional[str]]:
+                """Extract final offered follow-up question and its domain from last assistant message."""
+                import re as _re
+                _q = ""
+                if last_bot_msg:
+                    _sentences = _re.split(r'(?<=[.!?।])\s+', last_bot_msg.strip())
+                    _q_sentences = [s.strip() for s in _sentences if '?' in s]
+                    if _q_sentences:
+                        _q = _q_sentences[-1]
+                if not _q:
+                    return "", None
+                _q_lower = _q.lower()
+                _domain_keywords = {
+                    'marriage': ['shadi', 'shaadi', 'vivah', 'marriage', 'partner', 'spouse', 'love', 'rishta', 'byah', 'relationship'],
+                    'career': ['career', 'job', 'naukri', 'kaam', 'vyavsay', 'profession', 'business', 'rojgar'],
+                    'finance': ['finance', 'money', 'paisa', 'dhan', 'wealth', 'invest', 'gold', 'property', 'arthik'],
+                    'health': ['health', 'swasthya', 'sehat', 'bimari', 'disease', 'illness'],
+                    'children': ['child', 'bacche', 'santaan', 'son', 'daughter', 'beta', 'beti', 'aulad'],
+                    'foreign': ['foreign', 'videsh', 'abroad', 'travel', 'settlement', 'overseas'],
+                }
+                for _d, _kws in _domain_keywords.items():
+                    if any(_kw in _q_lower for _kw in _kws):
+                        return _q, _d
+                return _q, None
 
             # BUG FIX #2: Short CONTINUATION in AWAITING_DETAIL or FOLLOWUP_LOOP
             # Both phases accept short CONTINUATION queries as AFFIRMATIVE.
@@ -1883,26 +1959,42 @@ Provide a concise answer:"""
                 )
 
             # Choose effective query for prompt domain-hint generation:
-            # - Short pure affirmatives ("Haan", "batao", "ok") → use last_query so that
-            #   marriage/career keywords still fire for the topic being discussed.
-            # - Long direct questions ("Mujhe batao kya qualities hongi partner mein?") →
-            #   use state['query'] so domain hints match what the user ACTUALLY asked.
-            #   Without this, a 7-word question about partner qualities would still
-            #   generate marriage-timing hints (from last_query "Meri shadi kab hogi?"),
-            #   causing the LLM to answer timing instead of qualities.
+            # - In AWAITING_DETAIL, short pure affirmatives ("Haan", "batao", "ok")
+            #   should use last_query so domain hints stay on the same topic.
+            # - In FOLLOWUP_LOOP, an affirmative means "yes to the pivot question", so
+            #   we must NOT force last_query (old topic), otherwise the model drifts
+            #   back to the previous domain (e.g., marriage instead of career).
+            # - Long direct questions use state['query'] so hints match what user asked.
             _last_q = _pre_phase_data.get('last_query', '')
             _is_short_affirmative = len(_pre_orig_q.strip().split()) <= 5
+            _last_bot_s3 = next(
+                (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
+                 if m.get('role') == 'assistant'), ''
+            )
+            _pivot_q_pre, _pivot_topic_pre = _extract_followup_target_from_last_bot(_last_bot_s3)
+            _is_affirmative_pivot_pre = (
+                _pre_resp == 'AFFIRMATIVE'
+                and _pre_phase in (_PAD, _PFL)
+                and bool(_pivot_topic_pre)
+                and (_pre_phase == _PFL or _pivot_topic_pre != _pre_current_topic)
+            )
             _is_continuation_affirmative = (
-                _pre_phase in (_PAD, _PFL)
+                _pre_phase == _PAD
                 and _pre_resp == 'AFFIRMATIVE'
                 and _last_q
                 and _is_short_affirmative  # Only redirect for short pure affirmatives
+                and not _is_affirmative_pivot_pre
             )
-            _effective_query = _last_q if _is_continuation_affirmative else state['query']
+            if _is_affirmative_pivot_pre and _pivot_q_pre:
+                _effective_query = _pivot_q_pre
+            else:
+                _effective_query = _last_q if _is_continuation_affirmative else state['query']
 
             # Determine prompt response mode — must agree with STEP 3.5's phase_instruction
             # so that timing-window suppression and word-limits are consistent.
-            if _pre_phase == _PAD and _pre_resp == 'AFFIRMATIVE':
+            if _is_affirmative_pivot_pre:
+                _prompt_response_mode = 'followup'
+            elif _pre_phase == _PAD and _pre_resp == 'AFFIRMATIVE':
                 _prompt_response_mode = 'detailed'
             elif _pre_phase == _PFL and _pre_resp == 'AFFIRMATIVE':
                 _prompt_response_mode = 'followup'
@@ -2016,11 +2108,36 @@ Provide a concise answer:"""
                     logger.info(f"[PHASE] LLM fallback classified: {user_response_type}")
             logger.info(f"[PHASE] user_response_type={user_response_type} (from original: '{_orig_q[:40]}')")
 
+            # Robust pivot guard:
+            # If the last assistant turn ended with a cross-domain follow-up question and
+            # user now gives an affirmative, force handling as "yes to pivot question" even
+            # when stored phase is stale/misaligned.
+            _last_bot_for_phase = next(
+                (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
+                 if m.get('role') == 'assistant'), ''
+            )
+            _pivot_question, _pivot_topic = _extract_followup_target_from_last_bot(_last_bot_for_phase)
+            _current_topic_norm = (current_topic or '').lower()
+            _is_affirmative_to_pivot = (
+                user_response_type == 'AFFIRMATIVE'
+                and current_phase in (PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP)
+                and bool(_pivot_topic)
+                and (current_phase == PHASE_FOLLOWUP_LOOP or _pivot_topic != _current_topic_norm)
+            )
+            if _is_affirmative_to_pivot:
+                logger.info(
+                    f"[PHASE] Affirmative mapped to prior follow-up offer "
+                    f"(phase={current_phase}, current_topic={_current_topic_norm}, pivot_topic={_pivot_topic})"
+                )
+                current_phase = PHASE_FOLLOWUP_LOOP
+
             # Detect the query domain for follow-up question selection
             # For AWAITING_DETAIL/FOLLOWUP_LOOP affirmatives, validation ran on "Haan karo"
             # (detected as 'general') — preserve the stored topic from the conversation phase.
             _val_qt = state.get('validation_query_type')
-            if _is_continuation_affirmative and current_topic and (_val_qt in (None, 'general')):
+            if _is_affirmative_to_pivot and _pivot_topic:
+                _topic = _pivot_topic
+            elif _is_continuation_affirmative and current_topic and (_val_qt in (None, 'general')):
                 _topic = current_topic
             else:
                 _topic = _val_qt or current_topic or 'general'
@@ -2090,17 +2207,24 @@ Provide a concise answer:"""
                         _chart_ctx = '\n'.join(_ctx_lines)
                 except Exception:
                     pass
-            logger.info(f"[PHASE] Generating follow-up question (topic={_topic}, lang={_fq_language}, timeout=4s)...")
-            _suggested_followup = generate_followup_question(
-                topic=_topic,
-                last_answer=_last_bot_msg_for_fq,
-                language=_fq_language,
-                fast_llm=getattr(self, 'fast_llm', None),
-                fallback=_static_followup,
-                chart_context=_chart_ctx,
-                timeout=4.0
-            )
-            logger.info(f"[PHASE] Follow-up question ready: {_suggested_followup[:80]}")
+            # Only generate a cross-domain follow-up question for phases that actually use it.
+            # INITIAL phase no longer shows a follow-up question, so skip the LLM call.
+            _needs_followup_question = current_phase != PHASE_INITIAL
+            if _needs_followup_question:
+                logger.info(f"[PHASE] Generating follow-up question (topic={_topic}, lang={_fq_language}, timeout=4s)...")
+                _suggested_followup = generate_followup_question(
+                    topic=_topic,
+                    last_answer=_last_bot_msg_for_fq,
+                    language=_fq_language,
+                    fast_llm=getattr(self, 'fast_llm', None),
+                    fallback=_static_followup,
+                    chart_context=_chart_ctx,
+                    timeout=4.0
+                )
+                logger.info(f"[PHASE] Follow-up question ready: {_suggested_followup[:80]}")
+            else:
+                _suggested_followup = _static_followup
+                logger.info(f"[PHASE] Skipping follow-up question generation (INITIAL phase)")
 
             phase_instruction = ""
             new_phase_data = {}  # Will be set on state for chat_stateless to persist
@@ -2183,51 +2307,70 @@ LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lan
 
             elif current_phase == PHASE_FOLLOWUP_LOOP and user_response_type == 'AFFIRMATIVE':
                 # ── User agreed to a follow-up question → Answer it, then STOP asking ──
-                logger.info(f"[PHASE] FOLLOWUP_LOOP + AFFIRMATIVE → answering follow-up (no further questions)")
-                # Extract the exact question the bot asked in its last message so we
-                # can inject it explicitly — the LLM often ignores "look at last message"
-                _hist = state.get('conversation_history') or []
-                _last_bot_msg = next(
-                    (m.get('content', '') for m in reversed(_hist) if m.get('role') == 'assistant'),
-                    ''
+                logger.info(f"[PHASE] FOLLOWUP_LOOP + AFFIRMATIVE → new topic cycle (short answer + offer detail)")
+                # User said YES to the cross-domain follow-up question.
+                # Treat this as a new INITIAL topic: give a short answer about the new topic
+                # and end with an offer to explain in detail (same pattern as INITIAL phase).
+                # Extract the exact follow-up question the bot asked so we can answer it.
+                _last_question = _pivot_question
+                _new_topic = _pivot_topic or 'general'
+                if not _last_question:
+                    _hist = state.get('conversation_history') or []
+                    _last_bot_msg = next(
+                        (m.get('content', '') for m in reversed(_hist) if m.get('role') == 'assistant'),
+                        ''
+                    )
+                    _last_question, _fallback_topic = _extract_followup_target_from_last_bot(_last_bot_msg)
+                    if _fallback_topic:
+                        _new_topic = _fallback_topic
+                logger.info(f"[PHASE] New topic question: {_last_question[:80]}")
+
+                # Detect the new domain from the follow-up question text
+                if _new_topic == 'general' and _last_question:
+                    _fq_lower = _last_question.lower()
+                    _domain_keywords = {
+                        'marriage':  ['shadi', 'vivah', 'marriage', 'partner', 'spouse', 'love', 'rishta', 'byah', 'relationship'],
+                        'career':    ['career', 'job', 'naukri', 'kaam', 'vyavsay', 'profession', 'business', 'rojgar'],
+                        'finance':   ['finance', 'money', 'paisa', 'dhan', 'wealth', 'invest', 'gold', 'property', 'arthik'],
+                        'health':    ['health', 'swasthya', 'sehat', 'bimari', 'disease', 'illness'],
+                        'children':  ['child', 'bacche', 'santaan', 'son', 'daughter', 'beta', 'beti', 'aulad'],
+                        'foreign':   ['foreign', 'videsh', 'abroad', 'travel', 'settlement', 'overseas'],
+                    }
+                    for _d, _kws in _domain_keywords.items():
+                        if any(_kw in _fq_lower for _kw in _kws):
+                            _new_topic = _d
+                            break
+
+                _lang_now = state.get('detected_language', 'en')
+                _closing_q = pick_initial_closing(
+                    rng=random.Random(_last_question or state.get('query', '')),
+                    language=_lang_now,
+                    domain=_new_topic,
                 )
-                # Pull out the trailing question (after last '—' or '?' sentence boundary)
-                _last_question = ''
-                if _last_bot_msg:
-                    import re as _re
-                    _sentences = _re.split(r'(?<=[.!?।])\s+', _last_bot_msg.strip())
-                    _q_sentences = [s for s in _sentences if '?' in s]
-                    if _q_sentences:
-                        _last_question = _q_sentences[-1].strip()
-                _answer_topic = f'"{_last_question}"' if _last_question else "the specific question in your previous message"
-                _lang_for_phase = state.get('detected_language', 'en')
-                logger.info(f"[PHASE] Follow-up topic to answer: {_last_question[:80]}")
+                _voice_charter = get_voice_charter(_lang_now)
+                _flow_policy = get_response_structure_policy()
+                _answer_topic = f'"{_last_question}"' if _last_question else "the follow-up topic in your previous message"
                 phase_instruction = f"""
-PROGRESSIVE DISCLOSURE -- FOLLOW-UP ANSWER MODE (THIS OVERRIDES ALL OTHER INSTRUCTIONS):
+PROGRESSIVE DISCLOSURE -- NEW TOPIC SHORT RESPONSE (OVERRIDES ALL OTHER FORMAT INSTRUCTIONS):
+The user said YES to your follow-up question. This starts a fresh topic cycle. Give a short initial answer about the new topic.
 
-LANGUAGE: Respond entirely in {_lang_for_phase}. Every sentence must be in {_lang_for_phase}. Do NOT mix languages.
+ANSWER THIS SPECIFIC QUESTION: {_answer_topic}
 
-YOU MUST ANSWER THIS SPECIFIC QUESTION (extracted from your previous message):
-  {_answer_topic}
-
-The user just said YES to that question. Answer ONLY that specific topic.
-DO NOT repeat marriage timing, Venus Pratyantar, or Next Favorable Window -- those were already covered.
-
-RULES:
-1. WORD LIMIT: 150-200 words maximum. Stay focused and do not exceed 200 words.
-2. Use chart data to answer {_answer_topic} directly -- cite 2-3 specific planetary factors.
-3. Be personalized and specific -- NOT a summary of what was already said.
-4. NEVER use H1, H2, H3 etc. -- always write 1st house, 2nd house, 3rd house.
-5. NEVER include Next Favorable Window -- this is a follow-up, not a timing response.
-6. END your response naturally after answering. Do NOT ask any follow-up question.
-   The user has already engaged deeply -- let the conversation breathe.
+1. TARGET LENGTH: 150-200 words.
+2. ZERO ASTROLOGICAL JARGON. Do NOT use house numbers, planet names, dasha terms, or any Sanskrit technical terms. Plain everyday language only.
+3. Give a concrete prediction or time window about the new topic.
+4. Do NOT repeat anything already covered in earlier responses.
+5. Write the ENTIRE response in {_lang_now}.
+6. End with EXACTLY this closing line — do not rephrase it:
+   "{_closing_q}"
+7. {_voice_charter}
+8. {_flow_policy}
 """
-                # Phase resets to INITIAL — the topic cycle is complete.
-                # The user can now ask a new question freely.
+                # Start a fresh AWAITING_DETAIL cycle for the new topic.
                 new_phase_data = {
-                    "phase": PHASE_INITIAL,
-                    "topic": None,
-                    "last_query": conv_phase_data.get('last_query', state['query']),
+                    "phase": PHASE_AWAITING_DETAIL,
+                    "topic": _new_topic,
+                    "last_query": _last_question or conv_phase_data.get('last_query', state['query']),
                     "followup_count": 0
                 }
 
@@ -4656,6 +4799,7 @@ substituting a training-knowledge default.
             # Progressive Disclosure Phase (set by rag_with_calculation node)
             "conversation_phase": None,
             "astro_evidence": None,
+            "_detailed_followup": None,
         }
 
         

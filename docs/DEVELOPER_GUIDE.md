@@ -148,7 +148,7 @@ Pass previous messages in `conversation_history` when resuming an existing conve
 }
 ```
 
-The `user_id` must exactly match the one used in `/initialize`. All state (chart, transits, dashas, conversation history) is handled automatically from Redis.
+The `user_id` must exactly match the one used in `/initialize`. All state (chart, transits, dashas, conversation history, progressive-disclosure phase, and visited domains) is handled automatically from Redis.
 
 ---
 
@@ -158,12 +158,12 @@ The orchestrator (`src/orchestration/orchestrator.py`) aggregates chart data, tr
 
 ### Current Prediction Stack (Recommended Mental Model)
 
-1. **Intent + domain inference** (LLM + deterministic guards)
+1. **Intent + domain inference** (LLM + deterministic guards, including marriage vs divorce and follow-up continuation vs new topic)
 2. **Deterministic astro evidence build** (`Astro Intelligence Layer`)
 3. **Validation rules** (tiered, domain-aware score + critical failure analysis)
 4. **Prompt assembly** (voice charter + response policy + divisional context + evidence)
 5. **LLM synthesis**
-6. **Post-processing validator/judge** (coherence + tone/style + consistency checks)
+6. **Post-processing validator/judge** (coherence + tone/style + consistency checks; enforces progressive-disclosure rules and stable cross-domain follow-up behaviour)
 
 This is the active production flow and should be preserved when extending features.
 
@@ -175,7 +175,9 @@ To add structured deterministic reasoning for a specific topic (e.g., career, fi
 2. **Apply classical rules**: Query the validation engine or create new rules in `data/optimized/tiered_rules.json`.
 3. **Weight conflicting indicators**: Consider whether active Dasha overrides natal weakness.
 4. **Register in orchestrator**: Add the domain's rule tier to the validation pipeline.
-5. **Synthesize**: The weighted logic gets passed alongside the RAG context to the LLM.
+5. **Synthesize**: The weighted logic gets passed alongside the RAG context to the LLM. The new domain should also be:
+   - added to the `FOLLOWUP_QUESTION_BANK` in `src/ai/context_manager.py` (for safe pivot questions), and
+   - considered in the **visited domains** / `avoid_domains` logic so the bot does not repeatedly offer it as a follow-up once it has already been a primary topic in the session.
 
 ### Accessing Calculation Tools
 
@@ -196,19 +198,34 @@ chart_data = tools['vedic_birth_chart'].invoke({
 
 ### Validation Rules Format
 
-Rules live in `data/optimized/tiered_rules.json`. Each rule:
+Rules live in `optimized/tiered_rules.json` under `all_rules` (16,500+) and partitioned under `tiers.tier1/2/3/4`. Actual schema:
+
 ```json
 {
-  "rule_id": "marriage_7th_lord_001",
-  "tier": 2,
-  "domain": "marriage",
-  "condition": "7th_lord_debilitated",
-  "weight": -15,
-  "description": "7th lord in debilitation indicates delay or difficulty"
+  "rule_id": "VR15327",
+  "rule_name": "as 10th House Lord (Parameterized by Planet)",
+  "category": "table_based_rules",
+  "severity": "critical",
+  "halt_on_failure": true,
+  "check_order": 5,
+  "applies_to_queries": ["career", "finance", "status", "all"],
+  "prediction_stage": "promise",
+  "check_logic": {
+    "condition": "If the 10th house is Taurus or Libra.",
+    "calculation": "Venus (Śukra) is the lord of the 10th house.",
+    "threshold": null,
+    "comparison": null
+  },
+  "tier": 1
 }
 ```
 
-Tier 1 = critical (hard-halt on failure), Tier 2 = standard, Tier 3 = enhancement.
+**Key fields:**
+- `severity`: `"critical"`, `"high"`, `"medium"`, or `"low"` — affects strength score and `can_proceed`
+- `halt_on_failure`: `true` only for `data_integrity` / `astronomical_constraint` categories (e.g. Sun cannot be retrograde). **Ignored** (overridden) for `table_based_rules`, yoga/combination rules, and infra/tooling rules.
+- `category`: The engine applies automatic severity overrides: `table_based_rules` (pure lookup tables) are demoted from `critical` → `high` even if `halt_on_failure` is `true`.
+- `applies_to_queries`: filters which domain queries trigger this rule.
+- `tier`: 1 = fast path (80-rule cap), 2 = standard, 3 = enhancement.
 
 ---
 

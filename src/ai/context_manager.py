@@ -101,11 +101,11 @@ def detect_user_response_type(query: str) -> str:
 # on the same topic just covered. The LLM uses these as the suggested pivot topic.
 FOLLOWUP_QUESTION_BANK = {
     'marriage': [
-        "Now that we've covered marriage timing, your career chart for this same period shows something interesting — shall I explore that?",
-        "Finances often shift around the same time as major life events like marriage — would you like to see what your chart says about that period financially?",
+        "Now that we've covered marriage timing, your finances for this same period show something interesting — would you like to see what your chart says about that phase financially?",
         "Children timing is closely linked to this marriage window in your chart — shall I look at what the 5th house shows?",
         "Your health indicators for this period also deserve a look — shall I explain what to be mindful of physically during this phase?",
         "Foreign travel or relocation sometimes connects to marriage windows — your 12th house has something specific here — want me to explore?",
+        "Spiritual growth and inner stability during this marriage phase also stand out in your chart — shall I explain what that means for you?",
     ],
     'career': [
         "Your financial picture for this career period is closely connected — shall I look at what the 2nd and 11th houses show?",
@@ -216,7 +216,8 @@ def generate_followup_question(
     fast_llm,
     fallback: str = "",
     timeout: float = 4.0,
-    chart_context: Optional[str] = None
+    chart_context: Optional[str] = None,
+    avoid_domains: Optional[List[str]] = None,
 ) -> str:
     """Generate a personalized, chart-specific follow-up question using the fast LLM.
 
@@ -251,6 +252,15 @@ def generate_followup_question(
     }.get(language, 'match the exact language and script of the last answer')
 
     chart_block = f"USER'S ACTUAL CHART PLACEMENTS:\n{chart_context}" if chart_context else "No chart data available."
+    avoid_list = [d.strip().lower() for d in (avoid_domains or []) if d]
+    if avoid_list:
+        avoid_str = ", ".join(sorted(set(avoid_list)))
+        avoid_clause = (
+            f"\nIMPORTANT: Do NOT choose any follow-up topic from these domains, "
+            f"even if they appear in the chart or answer: {avoid_str}."
+        )
+    else:
+        avoid_clause = ""
 
     prompt = f"""You are a perceptive Vedic astrologer delivering a personalised reading.
 
@@ -259,13 +269,13 @@ def generate_followup_question(
 Topic just discussed: {topic}
 Last answer (do NOT repeat anything from here): "{last_answer[:200]}"
 
-TASK: Write ONE follow-up line that PIVOTS to a DIFFERENT life area than '{topic}' and invites the user to explore it.
+TASK: Write ONE follow-up line that PIVOTS to a DIFFERENT life area than '{topic}' and invites the user to explore it.{avoid_clause}
 
 CRITICAL RULE — DO NOT OFFER MORE DETAIL ON '{topic}'. The detailed answer on that topic is now complete.
 Instead, find a natural bridge to a DIFFERENT area: career, finances, health, children, marriage, foreign travel, or similar.
 
 HOW TO BUILD IT:
-  1. Choose a life area that is DIFFERENT from '{topic}' and naturally connected to the user's current life stage.
+  1. Choose a life area that is DIFFERENT from '{topic}' and naturally connected to the user's current life stage. If avoid-domains are listed above, you MUST NOT select any of those domains.
   2. Identify ONE specific planet or house placement in the chart above that is relevant to that different area.
   3. Tease what is interesting or revealing about it — without giving the answer. Close with a formal invitation.
 

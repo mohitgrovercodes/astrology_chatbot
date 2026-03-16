@@ -575,6 +575,16 @@ class VedicValidationEngineV2:
                 if not passed and is_yoga_rule and severity == "critical":
                     severity = "high"
 
+                # ── table_based_rules are pure lookup/reference tables ────────
+                # (house lords, sign lordships, Sarvashtakavarga values, etc.)
+                # They are conditional identification facts, NOT chart quality
+                # checks. An LLM evaluation mismatch on these must never block
+                # a prediction or trigger a halt.
+                if not passed and category == "table_based_rules":
+                    if severity == "critical":
+                        severity = "high"
+                    raw_halt = False
+
                 # Non-blocking infrastructure / tooling recommendations (e.g. "Generate Navamsa
                 # (D9) Chart", "chart not provided for analysis") should NOT block predictions
                 # in live chat. Treat these as high-severity hints, not critical failures.

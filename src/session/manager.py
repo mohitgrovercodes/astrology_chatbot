@@ -311,22 +311,38 @@ class SessionManager:
             last_query: The original question that started the current topic
             followup_count: Number of follow-up exchanges in current loop
         """
+        base = {"phase": "INITIAL", "topic": None, "last_query": None, "followup_count": 0, "visited_domains": []}
         if not self.redis:
-            return {"phase": "INITIAL", "topic": None, "last_query": None, "followup_count": 0}
+            return base
         data = self.redis.get(self._key(user_id, "conv_phase"))
         if data:
-            return json.loads(data)
-        return {"phase": "INITIAL", "topic": None, "last_query": None, "followup_count": 0}
+            try:
+                stored = json.loads(data)
+                # Backward compatible: ensure visited_domains always present
+                if "visited_domains" not in stored:
+                    stored["visited_domains"] = []
+                return stored
+            except Exception:
+                return base
+        return base
 
     def set_conversation_phase(self, user_id: str, phase: str, topic: str = None,
-                                last_query: str = None, followup_count: int = 0):
+                               last_query: str = None, followup_count: int = 0,
+                               visited_domains: Optional[List[str]] = None):
         """Store conversation phase for progressive disclosure."""
         if not self.redis: return
+        existing = self.get_conversation_phase(user_id) if self.redis else {}
+        # Merge visited_domains with any existing to preserve history
+        _existing_visited = existing.get("visited_domains", []) if isinstance(existing, dict) else []
+        _new_visited = visited_domains if visited_domains is not None else _existing_visited
+        # Normalize and de-duplicate domains
+        norm_visited = sorted({(d or "").strip().lower() for d in _new_visited if d})
         data = {
             "phase": phase,
             "topic": topic,
             "last_query": last_query,
             "followup_count": followup_count,
+            "visited_domains": norm_visited,
             "updated_at": datetime.utcnow().isoformat()
         }
         key = self._key(user_id, "conv_phase")

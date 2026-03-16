@@ -55,10 +55,23 @@ For a given request the engine does **not** evaluate all rules in the tier. It f
 When the orchestrator calls the validation engine it uses **`live_chat=True`**. Then:
 
 - Only **critical** and **high** severity rules are kept.
-- Rules whose name/category suggest “yoga”, “combination”, “longevity”, “raja yoga”, “dhana yoga”, etc. are **dropped** so that “no yoga present” does not block the answer.
+- **Yoga/combination rules are always included** (`include_yoga_live = True`). They are evaluated but their failures are severity-demoted (`critical` → `high`) so “yoga absent” never blocks a prediction.
 - The list is **capped at 80 rules** (after sorting by `check_order`).
 
 So **per query, at most 80 rules are evaluated** in the current live-chat path, even if the tier + index would return more.
+
+#### Severity override safeguards (post-evaluation)
+
+The engine applies three layered overrides **after** the LLM returns verdicts, before computing `can_proceed`:
+
+| Category / Pattern | Override applied |
+|---|---|
+| `yoga`, `combination`, `raja yoga`, `dhana yoga`, … (rule name keywords) | `critical` → `high`; never blocks |
+| `category == “table_based_rules”` (house lord lookups, sign lordship tables, Sarvashtakavarga) | `critical` → `high`, `halt_on_failure` cleared |
+| “generate navamsa”, “chart not provided”, … (infra/tooling keywords) | `critical` → `high`, `halt_on_failure` cleared |
+| `category == “data_integrity”` / `”astronomical_constraint”` | Hard-halt preserved (these are genuine impossibilities) |
+
+This ensures that lookup/reference table rules (4,958 rules, 1,721 of which were tagged `critical+halt`) never cause a false BLOCKED result when the LLM misinterprets a conditional fact as a chart flaw.
 
 ### 1.5 Rule evaluation (what “checked” means)
 
@@ -93,11 +106,12 @@ This synthesis is what gets formatted in **`_format_enhanced_analysis`** in the 
 | Tier selection | Query → tier 1 / 2 / 3 | 1 tier per request |
 | Rule pool (tier) | tier1 ≈ 750, tier2 ≈ 2500, tier3 ≈ 8000 | Depends on tier |
 | After index + query_type | Only rules for that query_type (and stage) in that tier | Often 50–300+ |
-| After live_chat filter | Severity critical+high, no yoga-name rules, cap 80 | **At most 80** |
+| After live_chat filter | Severity critical+high, **yoga rules included**, cap 80 | **At most 80** |
 | Batches to LLM | 15 rules per batch | 80 ÷ 15 ≈ 6 batches |
+| Severity overrides (post-eval) | yoga/table_based/infra rules demoted; data_integrity rules halt | Applied per rule |
 | Synthesis (separate) | Indexed rules, then 50 rules pattern-evaluated | 50 rules (no LLM) |
 
-So in the **current live-chat path**, the number of rules that are **actually checked (evaluated by the LLM)** is **at most 80** per request, and often fewer if the index returns fewer than 80 for that query type and tier.
+So in the **current live-chat path**, the number of rules **evaluated by the LLM** is **at most 80** per request. Yoga rules are now always evaluated (improving prediction richness). Table-based lookup rules are evaluated but can never block predictions even if the LLM marks them as failed.
 
 ---
 
@@ -134,7 +148,8 @@ So in the **current live-chat path**, the number of rules that are **actually ch
 
 - **Cap:** change `applicable = applicable[:80]` to another limit (e.g. 120) for more checks at the cost of latency and API cost.
 - **Severity:** change `LIVE_SEVERITIES = {"critical", "high"}` to include `"medium"` if you want more rules evaluated.
-- **Skip list:** add/remove keywords in `SKIP_IN_LIVE` to include or exclude certain rule names/categories (e.g. allow some yoga rules).
+- **Yoga inclusion:** `include_yoga_live = True` in the orchestrator — yoga rules are now always included. To revert to the old behaviour (skip yoga rules), change this to `tier > 1` in `orchestrator.py`.
+- **table_based_rules protection:** these rules are evaluated but their failures are demoted before `can_proceed` is calculated. Do not add `"table_based_rules"` to `SKIP_IN_LIVE` as they provide useful scoring signal.
 
 ### 3.5 Batch size and timeout
 
