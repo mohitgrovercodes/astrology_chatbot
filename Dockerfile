@@ -34,7 +34,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create non-root user and ensure data directory (ChromaDB + Redis volumes) is writable
+# Create non-root user and ensure data directory (ChromaDB volume) is writable
 RUN useradd -m -u 1000 appuser && \
     mkdir -p /app/data/vectordb && \
     chown -R appuser:appuser /app

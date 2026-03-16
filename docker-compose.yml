@@ -13,9 +13,10 @@ services:
     environment:
       # ── Server ────────────────────────────────────────────────────────────
       - DEBUG=false
-      - HOST=0.0.0.0
-      - PORT=8000
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FILE=${LOG_FILE:-}
 
       # ── Security ──────────────────────────────────────────────────────────
       - VALID_API_KEYS=${VALID_API_KEYS}
@@ -27,7 +28,6 @@ services:
       - RATE_LIMIT_PER_HOUR=${RATE_LIMIT_PER_HOUR:-100}
 
       # ── LLM Provider ──────────────────────────────────────────────────────
-      # "openai" for production; "free" for local Ollama
       - LLM_PROVIDER=${LLM_PROVIDER:-openai}
       - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
       - FAST_LLM_PROVIDER=${FAST_LLM_PROVIDER:-openai}
@@ -45,10 +45,12 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=${REDIS_DB:-0}
       - SESSION_EXPIRY_HOURS=${SESSION_EXPIRY_HOURS:-0}
 
       # ── ChromaDB ──────────────────────────────────────────────────────────
       - CHROMA_PERSIST_DIR=${CHROMA_PERSIST_DIR:-./data/vectordb}
+      - CHROMA_COLLECTION_NAME=${CHROMA_COLLECTION_NAME:-vedic_astrology_books_knowledge}
 
       # ── Conversation Runtime ───────────────────────────────────────────────
       - CONVERSATION_CONTEXT_WINDOW=${CONVERSATION_CONTEXT_WINDOW:-20}
@@ -63,12 +65,38 @@ services:
       - STYLE_MIN_AUTHENTIC_ASTROLOGER_VOICE_SCORE=${STYLE_MIN_AUTHENTIC_ASTROLOGER_VOICE_SCORE:-7}
       - STYLE_MAX_REPETITION_RISK_SCORE=${STYLE_MAX_REPETITION_RISK_SCORE:-4}
 
+      # ── Validation Engine ─────────────────────────────────────────────────
+      - ENABLE_VALIDATION_ENGINE=${ENABLE_VALIDATION_ENGINE:-true}
+      - VALIDATION_RULES_PATH=${VALIDATION_RULES_PATH:-optimized/tiered_rules.json}
+      - VALIDATION_INDEX_PATH=${VALIDATION_INDEX_PATH:-optimized/indexed_rules.json}
+      - DEFAULT_VALIDATION_TIER=${DEFAULT_VALIDATION_TIER:-2}
+      - VALIDATION_TIMEOUT_SEC=${VALIDATION_TIMEOUT_SEC:-30.0}
+      - ENABLE_VALIDATION_CACHE=${ENABLE_VALIDATION_CACHE:-false}
+
       # ── HuggingFace / Reranker ────────────────────────────────────────────
       - HF_OFFLINE_MODE=${HF_OFFLINE_MODE:-false}
       - HF_TIMEOUT=${HF_TIMEOUT:-10}
 
+      # ── Feature Flags ─────────────────────────────────────────────────────
+      - ENABLE_MULTILINGUAL=${ENABLE_MULTILINGUAL:-true}
+      - ENABLE_SAFETY_CHECKS=${ENABLE_SAFETY_CHECKS:-true}
+      - ENABLE_CONSTITUTION_CRITIC=${ENABLE_CONSTITUTION_CRITIC:-true}
+      - ENABLE_WEB_SEARCH=${ENABLE_WEB_SEARCH:-false}
+      - ENABLE_RERANKING=${ENABLE_RERANKING:-true}
+      - ENABLE_CONTEXT_EXPANSION=${ENABLE_CONTEXT_EXPANSION:-true}
+
+      # ── Localization ──────────────────────────────────────────────────────
+      - DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE:-en}
+      - SUPPORTED_LANGUAGES=${SUPPORTED_LANGUAGES:-en,hi,ta,te,ml,mr,pa,hi-lat,ta-lat,te-lat,ml-lat,mr-lat,pa-lat}
+
+      # ── Performance ───────────────────────────────────────────────────────
+      - LLM_RATE_LIMIT_DELAY=${LLM_RATE_LIMIT_DELAY:-1.5}
+      - LLM_MAX_RETRIES=${LLM_MAX_RETRIES:-3}
+      - LLM_RETRY_BACKOFF=${LLM_RETRY_BACKOFF:-4.0}
+      - MAX_CONCURRENT_VALIDATIONS=${MAX_CONCURRENT_VALIDATIONS:-3}
+      - MAX_CONCURRENT_RAG_QUERIES=${MAX_CONCURRENT_RAG_QUERIES:-5}
+
     volumes:
-      # Persist ChromaDB vector store and Redis data between restarts
       - ./data:/app/data
     restart: unless-stopped
     healthcheck:

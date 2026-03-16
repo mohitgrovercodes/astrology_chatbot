@@ -1,13 +1,11 @@
 # src/services/__init__.py
-# src\services\__init__.py
 """
 Services Module
 
-Production services for astrology data management.
+Adapter for receiving pre-fetched astrology data from the backend
+and preparing it for RAG consumption.
 """
 
-from .astrology_service import AstrologyDataService
-from .cache_manager import CacheManager, CacheConfig
 from .backend_data_adapter import (
     BackendDataAdapter,
     BackendAstroData,
@@ -16,12 +14,6 @@ from .backend_data_adapter import (
 )
 
 __all__ = [
-    # Backend services (for backend team)
-    "AstrologyDataService",
-    "CacheManager",
-    "CacheConfig",
-    
-    # Chatbot services (for chatbot)
     "BackendDataAdapter",
     "BackendAstroData",
     "RAGContextFormatter",

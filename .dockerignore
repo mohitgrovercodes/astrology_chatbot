@@ -59,3 +59,15 @@ docs/
 
 # Tests
 tests/
+
+# Offline data-pipeline scripts (not needed at runtime)
+scripts/
+
+# Example / dev files (not needed at runtime)
+examples/
+interactive_chatbot.py
+test_dasha_dates.py
+test_orchestrator_fix.py
+
+# Large raw rules source file — only the compiled optimized/ files are needed at runtime
+consolidated_final.json
