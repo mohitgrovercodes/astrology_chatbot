@@ -148,7 +148,7 @@ Pass previous messages in `conversation_history` when resuming an existing conve
 }
 ```
 
-The `user_id` must exactly match the one used in `/initialize`. All state (chart, transits, dashas, conversation history) is handled automatically from Redis.
+The `user_id` must exactly match the one used in `/initialize`. All state (chart, transits, dashas, conversation history, progressive-disclosure phase, and visited domains) is handled automatically from Redis.
 
 ---
 
@@ -158,12 +158,12 @@ The orchestrator (`src/orchestration/orchestrator.py`) aggregates chart data, tr
 
 ### Current Prediction Stack (Recommended Mental Model)
 
-1. **Intent + domain inference** (LLM + deterministic guards)
+1. **Intent + domain inference** (LLM + deterministic guards, including marriage vs divorce and follow-up continuation vs new topic)
 2. **Deterministic astro evidence build** (`Astro Intelligence Layer`)
 3. **Validation rules** (tiered, domain-aware score + critical failure analysis)
 4. **Prompt assembly** (voice charter + response policy + divisional context + evidence)
 5. **LLM synthesis**
-6. **Post-processing validator/judge** (coherence + tone/style + consistency checks)
+6. **Post-processing validator/judge** (coherence + tone/style + consistency checks; enforces progressive-disclosure rules and stable cross-domain follow-up behaviour)
 
 This is the active production flow and should be preserved when extending features.
 
@@ -175,7 +175,9 @@ To add structured deterministic reasoning for a specific topic (e.g., career, fi
 2. **Apply classical rules**: Query the validation engine or create new rules in `data/optimized/tiered_rules.json`.
 3. **Weight conflicting indicators**: Consider whether active Dasha overrides natal weakness.
 4. **Register in orchestrator**: Add the domain's rule tier to the validation pipeline.
-5. **Synthesize**: The weighted logic gets passed alongside the RAG context to the LLM.
+5. **Synthesize**: The weighted logic gets passed alongside the RAG context to the LLM. The new domain should also be:
+   - added to the `FOLLOWUP_QUESTION_BANK` in `src/ai/context_manager.py` (for safe pivot questions), and
+   - considered in the **visited domains** / `avoid_domains` logic so the bot does not repeatedly offer it as a follow-up once it has already been a primary topic in the session.
 
 ### Accessing Calculation Tools
 

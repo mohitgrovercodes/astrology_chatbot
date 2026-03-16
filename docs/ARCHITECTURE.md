@@ -166,19 +166,19 @@ NakshatraAI uses LangGraph to construct a deterministic state machine for all co
 
 ### Runtime Behavior (Current)
 
-- **Progressive disclosure — 3-phase conversation cycle:**
+- **Progressive disclosure — 3-phase conversation cycle (with domain tracking):**
 
   | Phase | Trigger | Bot behaviour | Next phase |
   |---|---|---|---|
-  | `INITIAL` | New topic / fresh question | Short answer (~200 words, no jargon). Ends with "Kya aap details jaanna chahoge?" | → `AWAITING_DETAIL` |
-  | `AWAITING_DETAIL` | User affirms (`yes`, `haan`, `batao`) | Detailed numbered analysis (5+ points, house lords, dasha windows, yogas). Ends with a cross-domain follow-up question from the follow-up bank. | → `FOLLOWUP_LOOP` |
-  | `FOLLOWUP_LOOP` | User affirms the follow-up | Treated as a new topic: short answer (~200 words). Ends with "Kya aap details chahoge?". Follow-up cycle restarts. | → `AWAITING_DETAIL` |
+  | `INITIAL` | New topic / fresh question | Short answer (~150–200 words, no jargon). Ends with a standard detail-offer closing line (language-matched). | → `AWAITING_DETAIL` |
+  | `AWAITING_DETAIL` | User affirms (`yes`, `haan`, `batao`) | Detailed numbered analysis (5+ points, house lords, dasha windows, yogas). Ends with a **cross-domain follow-up question** whose domain is different from the current topic and not in the session’s `visited_domains`. | → `FOLLOWUP_LOOP` |
+  | `FOLLOWUP_LOOP` | User affirms the follow-up | Treated as a new topic: short answer (~150–200 words) answering exactly the offered follow-up question. Phase resets to a fresh `AWAITING_DETAIL` cycle for that new topic. | → `AWAITING_DETAIL` |
 
   **Negative responses** (`no`, `nahi`, `mat batao`) are handled gracefully at every phase — the bot offers an alternative topic from the follow-up bank and stays in `FOLLOWUP_LOOP`.
 
 - **Language/script mirroring:** response language is enforced from the user's original text per turn (native script vs romanized).
-- **Validation + Judge merge:** post-processing validator performs semantic coherence checks and tone/voice quality checks in one LLM pass. Enforces that `AWAITING_DETAIL` responses always end with a follow-up question and that `INITIAL` responses always end with the detail-offer closing line.
-- **Domain unification:** `intent_analysis.domain` is used as hint for `query_type` selection to reduce double-classification drift.
+- **Validation + Judge merge:** post-processing validator performs semantic coherence checks and tone/voice quality checks in one LLM pass. Enforces that the detailed (`AWAITING_DETAIL → FOLLOWUP_LOOP`) response ends with a single cross-domain follow-up and that `INITIAL`/new-topic short responses end with the standard detail-offer closing line.
+- **Domain unification & history:** `intent_analysis.domain` is used as hint for `query_type` selection, and the orchestrator maintains a per-session `visited_domains` list (e.g., `["career", "marriage"]`). Automatic follow-up questions are generated with this list passed as `avoid_domains` so the bot never **offers** a follow-up in a life area that has already been a primary topic in the current session (the user can still ask explicitly).
 - **Divisional chart plumbing:** Vedic vargas are exposed via `divisional_charts_simple`; Navamsa is mirrored into validation payload as both `D9` and `navamsa`.
 
 ### Validation Engine (`src/validation/vedic_validation_engine_v2.py`)
@@ -226,6 +226,7 @@ All data defaults to **permanent storage** in Redis (no TTL). This ensures users
 | User Profile | `redis.set()` | Permanent (no TTL) |
 | Birth Chart | `redis.set()` | Permanent — birth geometry never changes |
 | Conversation History | `redis.set()` | Permanent — sliding window of last 10 messages |
+| Conversation Phase | `redis.set()` | Permanent — stores `phase`, `topic`, `last_query`, `followup_count`, and `visited_domains` for progressive disclosure and domain-aware follow-ups |
 | Transits Data | `redis.set()` | Application-level refresh when `stored_at` is > `TRANSIT_REFRESH_HOURS=24` |
 | Dasha Data | `redis.set()` | Application-level refresh when `stored_at` is > `DASHA_REFRESH_DAYS=30` |
 
