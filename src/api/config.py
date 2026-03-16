@@ -136,10 +136,6 @@ class Settings(BaseSettings):
     FAST_LLM_PROVIDER: str = Field(default="openai", validation_alias="fast_llm_provider")
     FAST_LLM_MODEL: str = Field(default="gpt-4o-mini", validation_alias="fast_llm_model")
     
-    # Legacy Authentication
-    ASTRO_USERNAME: str = Field(default="", validation_alias="astro_username")
-    ASTRO_PASSWORD: str = Field(default="", validation_alias="astro_password")
-    
     # Hugging Face Settings
     HF_OFFLINE_MODE: bool = Field(default=False, validation_alias="hf_offline_mode")
     HF_TIMEOUT: int = Field(default=10, validation_alias="hf_timeout")
