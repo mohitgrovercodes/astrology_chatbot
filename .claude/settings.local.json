@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /d/AI/IMGProjects/astro_chatbot/astroChatbot/astro_chatbot diff src/api/routes/chat_stateless.py)",
+      "Bash(git -C /d/AI/IMGProjects/astro_chatbot/astroChatbot/astro_chatbot diff src/orchestration/orchestrator.py)"
+    ]
+  }
+}

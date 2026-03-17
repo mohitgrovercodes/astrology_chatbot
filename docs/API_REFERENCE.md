@@ -2,7 +2,8 @@
 # NakshatraAI — API Reference
 
 > **Last Updated:** March 2026
-> **Base URL:** `http://localhost:8000` (local) or your deployed host
+> **Base URL:** `http://localhost:8000` (default) or your deployed host
+> **Note:** The default port is `8000`. The `.env` variable `API_PORT` overrides this (the project's own `.env` uses `6262`).
 
 ---
 
@@ -347,8 +348,11 @@ On exceeding the limit, the server returns `HTTP 429 Too Many Requests`.
 ## Conversation Behavior Notes
 
 - **Progressive disclosure:** For prediction queries, the first response is concise. If the user affirms (e.g., "Haan"), the next turn is detailed with richer astrological factors.
+- **Fresh question detection:** If the user sends a fresh question (4+ words, contains `?` or a question-word such as *kab*, *kya*, *kaise*, *when*, *what*, *how*) while the bot is waiting for an affirmative (`AWAITING_DETAIL` phase), the phase resets and the question is answered as a new concise short-answer cycle. Users never have to say "yes" or "no" before pivoting to a new topic.
 - **Language/script lock:** Responses mirror the user's language/script per turn (for example, Hinglish in Roman script stays Romanized).
 - **Detailed responses:** Detailed follow-up responses are designed to include multiple astrological factors (house/lord logic, dasha windows, yogas, and divisional support) and avoid repeating the same timing label as a separate heading.
+- **Future-only timing windows:** All timing windows in responses must start after today's date. Active-now windows are reframed to future-starting windows. Unless the user explicitly requests urgent/immediate timing, the system prefers windows that begin at least ~2 months in the future.
+- **Timeline diversity:** Short-answer (INITIAL) responses always include two distinct timing windows from different horizons (near/mid/broad) to avoid repetitive pratyantar-only slices across consecutive queries.
 
 ---
 

@@ -176,8 +176,16 @@ NakshatraAI uses LangGraph to construct a deterministic state machine for all co
 
   **Negative responses** (`no`, `nahi`, `mat batao`) are handled gracefully at every phase — the bot offers an alternative topic from the follow-up bank and stays in `FOLLOWUP_LOOP`.
 
-- **Language/script mirroring:** response language is enforced from the user's original text per turn (native script vs romanized).
-- **Validation + Judge merge:** post-processing validator performs semantic coherence checks and tone/voice quality checks in one LLM pass. Enforces that the detailed (`AWAITING_DETAIL → FOLLOWUP_LOOP`) response ends with a single cross-domain follow-up and that `INITIAL`/new-topic short responses end with the standard detail-offer closing line.
+  **Fresh question override:** If the user sends a fresh question (4+ tokens, contains `?` or question-words such as `kab`, `kya`, `kaise`, `when`, `what`, `how`) while in `AWAITING_DETAIL`, the phase is reset to `INITIAL` and the question is answered as a new short-response cycle. This prevents phase/mode desync when users skip the affirmative step and jump straight to a new topic.
+
+- **Horizon hint system (INITIAL responses):** For each new-topic (`INITIAL`) answer the orchestrator selects a pair of timing horizons — `NEAR` (pratyantar-level), `MID` (antardasha-level), or `BROAD` (transit/macro layer) — from a topic-specific family table (career, finance, health, marriage, children, foreign, general). The horizon pair is seeded deterministically (user ID + topic + query) and injected as a prompt instruction so that consecutive answers naturally vary between short, medium, and long windows instead of always defaulting to the same pratyantar slice.
+
+- **Window reuse prevention:** After each turn the orchestrator inspects conversation history for recently-used month-year windows across all topics. A "avoid these recently-used windows" hint is injected into the next INITIAL prompt. If LLM rewrites still produce insufficient window diversity, a deterministic fallback (`_inject_deterministic_initial_timeline_diversity`) appends distinct future dasha windows to satisfy quality checks.
+
+- **Future-only timing:** All timing windows in LLM-generated and validator-revised answers must begin in the future (after `TODAY`). Active-now windows are reframed as future-starting windows. Unless the user explicitly requests immediate timing, windows starting within the same or next month are avoided; the validator prefers a lead-time of at least ~2 months.
+
+- **Language/script mirroring:** response language is enforced from the user’s original text per turn (native script vs romanized).
+- **Validation + Judge merge:** post-processing validator performs semantic coherence checks and tone/voice quality checks in one LLM pass. Enforces that the detailed (`AWAITING_DETAIL → FOLLOWUP_LOOP`) response ends with a single cross-domain follow-up and that `INITIAL`/new-topic short responses end with the standard detail-offer closing line. A final hard guard reverts the answer to the unmodified draft if the validator’s revision looks like reviewer/meta text.
 - **Domain unification & history:** `intent_analysis.domain` is used as hint for `query_type` selection, and the orchestrator maintains a per-session `visited_domains` list (e.g., `["career", "marriage"]`). Automatic follow-up questions are generated with this list passed as `avoid_domains` so the bot never **offers** a follow-up in a life area that has already been a primary topic in the current session (the user can still ask explicitly).
 - **Divisional chart plumbing:** Vedic vargas are exposed via `divisional_charts_simple`; Navamsa is mirrored into validation payload as both `D9` and `navamsa`.
 
@@ -196,6 +204,15 @@ NakshatraAI uses LangGraph to construct a deterministic state machine for all co
   - **Hard-halt** is reserved exclusively for `category == "data_integrity"` / `"astronomical_constraint"` (e.g., Sun cannot be retrograde, impossible elongation)
 - Returns a **strength score (0–10)** for each prediction domain
 - **Age validator** (`src/validation/age_validator.py`) gates timing predictions based on the user's current age
+- **INITIAL response quality checks** — the post-processing validator evaluates short-answer timeline quality with these additional issue codes:
+  - `short_answer_too_brief_for_rich_timeline` — answer lacks enough content to support meaningful windows
+  - `insufficient_explicit_month_year_windows_in_short_answer` — fewer than 2 explicit month-year ranges present
+  - `insufficient_distinct_month_year_windows_in_short_answer` — windows are not clearly different time periods
+  - `timeline_windows_lack_duration_variation_in_short_answer` — both windows are the same duration band (e.g., both 2-month pratayantar slices)
+  - `timeline_windows_start_too_close_in_short_answer` — both windows start within weeks of each other
+  - `reused_cross_topic_timeline_window_despite_available_alternatives` — window already used in a different-topic answer in this session
+  - `contains_past_year_timeline_reference` — a prediction window references a date that has already passed
+  - `duration_only_timeline_without_explicit_month_year_ranges` — timing expressed only as "6 months" without explicit month-year labels
 
 ---
 

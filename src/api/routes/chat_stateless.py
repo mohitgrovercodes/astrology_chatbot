@@ -976,8 +976,9 @@ You must pay special attention to these cases:
    - FUTURE-ONLY TIMING (NON-NEGOTIABLE):
      • TODAY is {today_iso}.
      • Do NOT output past timing windows as prediction windows.
-     • Any explicit month/year/date ranges in the revised answer must be active-now or future-facing.
-     • If a range has already passed, reframe it into future/supportive windows from TODAY onward.
+    • Any explicit month/year/date ranges in the revised answer must start in the future (after TODAY), not active-now.
+    • If a range has already started (ongoing) or has passed, reframe it into future/supportive windows from TODAY onward.
+    • Unless user explicitly asks for urgent/immediate timing, avoid ultra-near windows and prefer windows starting at least ~2 months ahead.
      • For user-facing timelines, prefer explicit month-year ranges ("Aug 2026 to Nov 2026")
        and avoid duration-only phrases like "6-18 months" / "6-18 mahine" as final timing.
 
@@ -1103,7 +1104,7 @@ Respond in STRICT JSON ONLY, no extra text, like this:
             if _looks_like_meta_review(candidate):
                 logger.warning("[VALIDATOR] Ignoring meta-review text returned as revised_answer; keeping draft.")
             else:
-                logger.info(f"[VALIDATOR] LLM revised answer: {data.get('reason', '')}")
+                logger.info("[VALIDATOR] Accepted revised answer from validator.")
                 final_answer = candidate
 
         # Secondary style gate: enforce warmth/authenticity/repetition quality
@@ -1232,7 +1233,8 @@ TODAY is {today_iso}.
 Rewrite the answer so that:
 - it keeps the SAME main astrological meaning and language/script
 - it removes any ended past prediction ranges
-- all prediction windows are ongoing/future-facing month-year ranges
+- all prediction windows are strictly future-starting month-year ranges (not already started)
+- unless user explicitly asked immediate timing, avoid windows that begin in the same/next month
 - no exact day-level dates
 
 Return ONLY the corrected answer text.
@@ -1279,6 +1281,11 @@ ANSWER:
                     final_answer,
                 )
                 final_answer = re.sub(r"(?i)\blet'?s delve deeper\b", "Chaliye detail mein samajhte hain", final_answer)
+
+        # Final hard guard: never return reviewer/meta text to end users.
+        if _looks_like_meta_review(final_answer):
+            logger.warning("[VALIDATOR] Final answer looked like meta-review text; reverting to draft answer.")
+            final_answer = draft_answer
 
         return final_answer
     except Exception as e:

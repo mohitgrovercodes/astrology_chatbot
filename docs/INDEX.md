@@ -49,7 +49,7 @@ Welcome to the NakshatraAI documentation. This index links to all project docs.
 
 | Metric | Value |
 |---|---|
-| Python source files | 113 |
+| Python source files | 103 (src/) · 148 total (incl. tests & scripts) |
 | Orchestrator size | 3,100+ lines |
 | Validation rules | 750+ |
 | RAG knowledge chunks | 14,000+ |
