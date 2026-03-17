@@ -33,7 +33,11 @@ def get_session_manager():
     global _session_manager_instance
     if _session_manager_instance is None:
         from src.session.manager import SessionManager
-        _session_manager_instance = SessionManager()
+        _session_manager_instance = SessionManager(
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
+            password=settings.REDIS_PASSWORD,
+        )
     return _session_manager_instance
 
 
