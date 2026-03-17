@@ -912,6 +912,18 @@ class EnhancedLangGraphOrchestrator:
         
         # Import greeting functions
         from src.ai.personas import get_contextual_greeting, get_greeting
+
+        # Deterministic profile-query fast-path:
+        # profile detail questions should never rely on semantic threshold/LLM fallback.
+        if self._is_personal_profile_query(query):
+            logger.info("[CHITCHAT] [PROFILE] Deterministic profile-query detection hit")
+            state['answer'] = self._answer_personal_profile_query(
+                query=query,
+                user_profile=state['user_profile'],
+                language=lang,
+                chart_data=state.get('chart_data')
+            )
+            return state
         
         # SEMANTIC ROUTING: Detect chitchat type using semantic similarity
         # First, check if the intent node already determined the subtype via keyword match.
@@ -1120,6 +1132,22 @@ class EnhancedLangGraphOrchestrator:
 
         return state
 
+
+    # ------------------------------------------------------------------
+    # PERSONAL PROFILE QUERY DETECTION
+    # ------------------------------------------------------------------
+    def _is_personal_profile_query(self, query: str) -> bool:
+        """Return True when query asks for user's initialized profile details."""
+        q = (query or "").lower().strip()
+        triggers = [
+            "mera naam", "mera name", "what is my name", "what's my name", "do you know my name",
+            "meri dob", "date of birth", "birth date", "janam kab", "janm tithi",
+            "place of birth", "birthplace", "birth place", "where was i born", "kahan paida",
+            "janam sthan", "janmsthan", "birth city",
+            "mera sign", "meri rashi", "mera lagna", "moon sign", "sun sign", "ascendant",
+            "mere baare", "what do you know about me", "tell me my details",
+        ]
+        return any(t in q for t in triggers)
 
     # ------------------------------------------------------------------
     # PERSONAL PROFILE QUERY HELPER
