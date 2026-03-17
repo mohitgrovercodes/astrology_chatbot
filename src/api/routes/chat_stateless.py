@@ -1331,7 +1331,12 @@ def get_session_manager():
         except Exception:
             # Fallback: create a fresh SessionManager directly (same class, same keys)
             from src.session.manager import SessionManager
-            _session_manager = SessionManager()
+            from src.api.config import settings
+            _session_manager = SessionManager(
+                host=settings.REDIS_HOST,
+                port=settings.REDIS_PORT,
+                password=settings.REDIS_PASSWORD,
+            )
     return _session_manager
 
 
@@ -1479,6 +1484,12 @@ def initialize_session(request: InitializeSessionRequest):
 
         logger.info(f"[REDIS] Initialized NEW session for {user_id} - Status: {result['status']}")
 
+        if result['status'] == 'error':
+            raise HTTPException(
+                status_code=503,
+                detail=result.get('message', 'Session initialization failed')
+            )
+
         try:
             _post_init_hist = session_manager.get_conversation_history(user_id) or []
             _input_hist_count = len(conversation)
@@ -1496,9 +1507,13 @@ def initialize_session(request: InitializeSessionRequest):
         except Exception as _hist_e:
             logger.info(f"[REDIS][INIT_SANITY] history check skipped for {user_id}: {_hist_e}")
 
+        # return InitializeSessionResponse(
+        #     user_id=result['user_id'],
+        #     status=result['status']
+        # )
         return InitializeSessionResponse(
-            user_id=result['user_id'],
-            status=result['status']
+            user_id=user_id,
+            status=result.get('status', 'initialized')
         )
 
     except Exception as e:
