@@ -1522,7 +1522,41 @@ Provide a concise answer:"""
             # Store chart data for potential follow-up questions
             state['chart_data'] = chart_data
 
-            # Calculate current dasha if missing
+            # Calculate current dasha if missing/stale
+            _today_dt = datetime.utcnow().date()
+            _dasha_existing = state.get('dasha_data') or {}
+
+            def _parse_iso_date_for_staleness(value: Any):
+                if value is None:
+                    return None
+                if hasattr(value, "date") and not isinstance(value, str):
+                    try:
+                        return value.date()
+                    except Exception:
+                        return None
+                if isinstance(value, str):
+                    v = value.split("T")[0].strip()
+                    try:
+                        return datetime.strptime(v, "%Y-%m-%d").date()
+                    except Exception:
+                        return None
+                return None
+
+            _ad_end_raw = (_dasha_existing.get('antardasha') or {}).get('end')
+            _pd_end_raw = (_dasha_existing.get('pratyantardasha') or {}).get('end')
+            _ad_end_dt = _parse_iso_date_for_staleness(_ad_end_raw)
+            _pd_end_dt = _parse_iso_date_for_staleness(_pd_end_raw)
+            _dasha_stale = (
+                (_ad_end_dt is not None and _ad_end_dt < _today_dt)
+                or (_pd_end_dt is not None and _pd_end_dt < _today_dt)
+            )
+            if _dasha_stale:
+                logger.info(
+                    f"[DASHA STALE] Clearing cached dasha_data (calculation_only): "
+                    f"antardasha_end={_ad_end_raw!r} pratyantardasha_end={_pd_end_raw!r} < TODAY."
+                )
+                state['dasha_data'] = None
+
             if not state.get('dasha_data'):
                 try:
                     logger.info("[CALCULATION_ONLY] Calculating dasha...")
@@ -1602,6 +1636,42 @@ Provide a concise answer:"""
                         logger.info(f"[RAG_WITH_CALCULATION] Chart calculation error: {e}")
 
                 # Calculate current dasha (UN-NESTED from chart check)
+                # If cached dasha_data is internally stale (e.g., Antardasha end already
+                # passed), do a fresh recalc so Step 2 doesn't leak past-month ranges.
+                _today_dt = datetime.utcnow().date()
+                _dasha_existing = state.get('dasha_data') or {}
+
+                def _parse_iso_date_for_staleness(value: Any):
+                    if value is None:
+                        return None
+                    if hasattr(value, "date") and not isinstance(value, str):
+                        try:
+                            return value.date()
+                        except Exception:
+                            return None
+                    if isinstance(value, str):
+                        v = value.split("T")[0].strip()
+                        try:
+                            return datetime.strptime(v, "%Y-%m-%d").date()
+                        except Exception:
+                            return None
+                    return None
+
+                _ad_end_raw = (_dasha_existing.get('antardasha') or {}).get('end')
+                _pd_end_raw = (_dasha_existing.get('pratyantardasha') or {}).get('end')
+                _ad_end_dt = _parse_iso_date_for_staleness(_ad_end_raw)
+                _pd_end_dt = _parse_iso_date_for_staleness(_pd_end_raw)
+                _dasha_stale = (
+                    (_ad_end_dt is not None and _ad_end_dt < _today_dt)
+                    or (_pd_end_dt is not None and _pd_end_dt < _today_dt)
+                )
+                if _dasha_stale:
+                    logger.info(
+                        f"[DASHA STALE] Clearing cached dasha_data: "
+                        f"antardasha_end={_ad_end_raw!r} pratyantardasha_end={_pd_end_raw!r} < TODAY."
+                    )
+                    state['dasha_data'] = None
+
                 if not state.get('dasha_data'):
                     try:
                         logger.info("[RAG_WITH_CALCULATION] Calculating dasha...")
@@ -6074,6 +6144,31 @@ Provide a concise, clear answer:"""
         _pd_end_raw = dasha_data.get('pratyantardasha', {}).get('end', 'Unknown')
         pd_end_disp = _month_year_label(_pd_end_raw)
 
+        # Defense-in-depth:
+        # If an upstream bug still causes Step 2 to include a dasha end-date
+        # that is already < TODAY, suppress month-year ranges entirely so the
+        # model cannot leak past timelines in the final answer.
+        _today_date_obj = _parse_iso_date(_today_str)
+
+        def _is_end_in_past(end_raw: Any) -> bool:
+            end_dt = _parse_iso_date(str(end_raw)) if end_raw is not None else None
+            return bool(end_dt and _today_date_obj and end_dt < _today_date_obj)
+
+        _md_end_raw = dasha_data.get('mahadasha', {}).get('end', 'Unknown')
+        _ad_end_raw = dasha_data.get('antardasha', {}).get('end', 'Unknown')
+        _md_ended = _is_end_in_past(_md_end_raw)
+        _ad_ended = _is_end_in_past(_ad_end_raw)
+        _pd_ended = _is_end_in_past(_pd_end_raw)
+
+        if _md_ended or _ad_ended or _pd_ended:
+            logger.info(
+                f"[DASHA PROMPT SUPPRESS] md_ended={_md_ended} ad_ended={_ad_ended} pd_ended={_pd_ended} "
+                f"(today={_today_str})."
+            )
+
+        md_range_disp = "(ended - date hidden)" if _md_ended else f"({md_start_disp} to {md_end_disp})"
+        ad_range_disp = "(ended - date hidden)" if _ad_ended else f"({ad_start_disp} to {ad_end_disp})"
+
         # For INITIAL responses, hide all Pratyantardasha dates from Step 2.
         # Even "Mercury (Feb 2026 to ongoing)" gives GPT-4o enough to compute
         # that Venus starts April 2026. Show only the active planet name; direct
@@ -6081,7 +6176,10 @@ Provide a concise, clear answer:"""
         if response_mode == "initial":
             _praty_step2_line = f"• Pratyantardasha: {praty_planet} (active — timing windows in Step 3.5 below)"
         else:
-            _praty_step2_line = f"• Pratyantardasha: {praty_planet} ({pd_start_disp} to {pd_end_disp})"
+            if _pd_ended:
+                _praty_step2_line = f"• Pratyantardasha: {praty_planet} (ended - date hidden)"
+            else:
+                _praty_step2_line = f"• Pratyantardasha: {praty_planet} ({pd_start_disp} to {pd_end_disp})"
 
         if _raw_sequence:
             _seq_parts = [_display_planet_name(p.strip()) for p in str(_raw_sequence).split("/") if p.strip()]
@@ -7411,8 +7509,8 @@ Step 1 - Moon's Position at Birth:
 • Balance of First Dasha at Birth: {dasha_data.get('calculation_details', {}).get('balance_at_birth_years', 'Not available')} years
 
 Step 2 - Current Dasha Periods (Calculated from Moon Nakshatra):
-• Mahadasha: {maha_planet} ({md_start_disp} to {md_end_disp})
-• Antardasha: {antar_planet} ({ad_start_disp} to {ad_end_disp})
+  • Mahadasha: {maha_planet} {md_range_disp}
+  • Antardasha: {antar_planet} {ad_range_disp}
 {_praty_step2_line}
 • Dasha Sequence: {dasha_sequence}
 {upcoming_pds_str}{sookshma_str}{broader_window_str}{next_ad_fp_str}{ranked_windows_str}{upcoming_ads_str}{domain_spotlight}
