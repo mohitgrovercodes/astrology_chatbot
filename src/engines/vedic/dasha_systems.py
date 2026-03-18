@@ -341,8 +341,50 @@ def compute_pratyantardashas(antardasha: DashaPeriod) -> List[DashaPeriod]:
         ))
         
         current_date = end_date
-    
+
     return pratyantars
+
+
+def compute_sookshmadashas(pratyantardasha: DashaPeriod) -> List[DashaPeriod]:
+    """
+    Compute Sookshma dashas (4th-level sub-periods) within a Pratyantardasha.
+
+    Uses the same proportional logic as Antardashas and Pratyantardashas:
+      sookshma_duration = pratyantar_duration * (sookshma_lord_years / VIMSHOTTARI_TOTAL_YEARS)
+
+    Args:
+        pratyantardasha: The parent Pratyantardasha period.
+
+    Returns:
+        List of 9 DashaPeriod objects representing the Sookshma sub-periods,
+        with level = "sookshma".
+    """
+    sookshmas: List[DashaPeriod] = []
+    current_date = pratyantardasha.start_date
+    pd_lord = pratyantardasha.lord
+    start_index = VIMSHOTTARI_SEQUENCE.index(pd_lord)
+
+    for i in range(9):
+        sequence_index = (start_index + i) % 9
+        sd_lord = VIMSHOTTARI_SEQUENCE[sequence_index]
+        sd_lord_years = VIMSHOTTARI_PERIODS[sd_lord]
+
+        # Proportional duration within the pratyantar
+        actual_years = sd_lord_years * pratyantardasha.duration_years / VIMSHOTTARI_TOTAL_YEARS
+        days = actual_years * 365.25
+        end_date = current_date + timedelta(days=days)
+
+        sookshmas.append(DashaPeriod(
+            lord=sd_lord,
+            start_date=current_date,
+            end_date=end_date,
+            duration_years=actual_years,
+            level="sookshma",
+            parent_lord=pratyantardasha.lord,
+        ))
+        current_date = end_date
+
+    return sookshmas
 
 
 def compute_vimshottari_dasha(

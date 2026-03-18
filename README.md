@@ -37,9 +37,9 @@
 | **Permanent Session Persistence** | Redis-backed, lifetime context with no TTL for user data |
 | **Smart Cache Refresh** | Transits refresh every 24h; Dashas refresh every 30 days |
 | **Multilingual Support** | English, Hindi, Tamil, Punjabi + Hinglish (Romanized) |
-| **Safety Guardrails** | 4-gate framework blocking harmful/unethical queries |
+| **Safety Guardrails** | 3-gate LLM-based classifier (keyword → LLM vulgarity → unified LLM classification) |
 | **Age-Based Validation** | Age validator gates timing predictions appropriately |
-| **Progressive Disclosure UX** | Short first answer, rich detailed follow-up with 4-5 astrological factors |
+| **Progressive Disclosure UX** | Concise first answer (~100-130 words, single timing window), rich detailed follow-up |
 | **Astro Evidence Payload** | Optional deterministic evidence object returned with `/message` responses |
 | **Language + Script Locking** | Replies mirror user language/script (native/romanized) per turn |
 
@@ -51,7 +51,8 @@
 |---|---|
 | **API Framework** | FastAPI + Uvicorn (ASGI) |
 | **Orchestration** | LangGraph state machine |
-| **LLM (primary)** | OpenAI GPT-4o-mini |
+| **LLM (primary)** | OpenAI GPT-4o |
+| **LLM (fast)** | OpenAI GPT-4o-mini (classification, safety, follow-up) |
 | **Embeddings** | OpenAI text-embedding-3-large |
 | **Astro Calculations** | PySwissEph (Swiss Ephemeris) |
 | **Vector Store** | ChromaDB |
@@ -111,7 +112,7 @@ docker-compose up -d
 docker-compose logs -f api
 
 # Health check
-curl http://localhost:8000/health
+curl http://localhost:6262/health
 ```
 
 ---
@@ -123,11 +124,11 @@ curl http://localhost:8000/health
 redis-server
 
 # Terminal 2 — Start FastAPI server
-uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn src.api.main:app --host 0.0.0.0 --port 6262 --reload
 
 # API docs available at:
-# http://localhost:8000/api/docs     (Swagger UI)
-# http://localhost:8000/api/redoc    (ReDoc)
+# http://localhost:6262/api/docs     (Swagger UI)
+# http://localhost:6262/api/redoc    (ReDoc)
 
 # Optional: CLI interactive interface
 python interactive_chatbot.py
@@ -137,9 +138,12 @@ python interactive_chatbot.py
 
 ## Latest Runtime Behavior
 
-- Progressive disclosure: first prediction response is concise; second-turn affirmative responses receive richer detailed analysis.
+- Progressive disclosure: first prediction response is concise (~100-130 words, one timing window, no emoji, no disclaimer appended); second-turn affirmative responses receive richer detailed analysis.
+- **Fresh question detection**: if the user sends a substantive question (4+ words, includes `?` or question-words like *kab*, *kya*, *when*, *what*) while in `AWAITING_DETAIL` phase, the bot resets to a new short-answer cycle rather than waiting for an explicit "yes/no". Users can freely pivot without saying "haan".
 - Language/script mirroring: replies follow the user's detected language/script for that turn (including romanized variants).
-- Validation + tone judge: semantic consistency and voice-quality checks run in a unified post-processing validator.
+- Validation + tone judge: semantic consistency and voice-quality checks run in a unified post-processing validator. A hard guard prevents meta-review/reviewer text from leaking into the final answer.
+- **Future-only timing**: all timing windows begin after today's date; active-now windows are reframed. Windows starting within the same or next month are avoided unless the user asks for immediate timing.
+- **Horizon diversity**: INITIAL responses use a per-topic horizon-combo system (NEAR/MID/BROAD) seeded deterministically to vary between short, medium, and long windows across consecutive queries. A deterministic fallback injects distinct dasha windows if LLM rewrites still fail diversity checks.
 - Configurable style guardrails: tune warmth/authenticity/repetition rewrite thresholds via `.env` without code changes.
 - **Long-term preference memory**: optional `voice_preferences` on `/initialize` (detail_level, remedy_preference, tone); preferences are also inferred from messages (e.g. "keep it short", "no remedies") and injected into prompts so the bot can say "As you prefer, I'll keep this practical and short."
 - Deterministic evidence support: `/message` can return an optional `evidence` object with domain, signals, and timing windows.

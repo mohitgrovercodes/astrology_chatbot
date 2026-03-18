@@ -7,11 +7,35 @@ summarization, and progressive disclosure conversation phase tracking.
 """
 
 import json
+import re
 import logging
 from typing import Dict, List, Optional, Any
 from src.llm.factory import LLMFactory
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_llm_json(raw: Any) -> Dict[str, Any]:
+    """
+    Robustly parse JSON from an LLM response content.
+    Handles markdown code fences and stray backticks.
+    """
+    content = raw.content if hasattr(raw, "content") else str(raw)
+    text = (content or "").strip()
+    if not text:
+        raise ValueError("Empty LLM response")
+
+    if "```json" in text:
+        m = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
+        if m:
+            text = m.group(1).strip()
+    elif "```" in text:
+        m = re.search(r"```\s*(.*?)\s*```", text, re.DOTALL)
+        if m:
+            text = m.group(1).strip()
+
+    text = text.strip("`").strip()
+    return json.loads(text)
 
 
 # ── Conversation Phase Constants ──────────────────────────────────────────────
@@ -430,7 +454,7 @@ Respond in STRICT JSON format, no extra text:
 """
         try:
             response = self.fast_llm.invoke(analysis_prompt)
-            result = json.loads(response.content)
+            result = _parse_llm_json(response)
             # Basic robustness: fill missing keys with safe defaults
             result.setdefault("intent_type", "NEW_TOPIC")
             result.setdefault("domain", "general")
@@ -503,18 +527,47 @@ Respond in STRICT JSON format, no extra text:
                 "explanation": "Clear query"
             }
 
-        # Heuristic pre-check for common follow-up patterns
-        FOLLOWUP_PHRASES = ['tell me more', 'what else', 'go on', 'expand', 'explain']
-        query_lower = current_query.lower()
-        referenced_topic = intent_analysis.get('referenced_topic', 'the previous topic')
-        
-        if any(phrase in query_lower for phrase in FOLLOWUP_PHRASES) and len(query_lower.split()) < 5:
+        # Deterministic pre-check: avoid under-resolving crystal-clear follow-ups.
+        query_lower = (current_query or "").lower().strip()
+        referenced_topic = intent_analysis.get("referenced_topic", "the previous topic")
+        single_topic_context = len(conversation_history or []) <= 4  # ≤2 exchanges
+
+        clear_followup_phrases = [
+            "tell me more about it",
+            "more about it",
+            "what else about it",
+            "tell me more",
+            "what else",
+            "say more",
+            "expand on that",
+            "elaborate",
+            "go on",
+            "continue",
+        ]
+        pronouns = ["it", "this", "that", "these", "those"]
+        is_clear_followup = any(p in query_lower for p in clear_followup_phrases)
+        tokens = query_lower.split()
+        has_pronoun = any(p in tokens for p in pronouns)
+        is_short_followup = len(tokens) <= 6 and (
+            query_lower.startswith("why")
+            or query_lower.startswith("how")
+            or query_lower.startswith("when")
+            or query_lower.startswith("what")
+        )
+
+        if is_clear_followup or (single_topic_context and (has_pronoun or is_short_followup)):
+            expanded = current_query
+            for p in pronouns:
+                if f" {p} " in f" {query_lower} ":
+                    expanded = current_query.replace(p, str(referenced_topic))
+                    expanded = expanded.replace(p.capitalize(), str(referenced_topic).capitalize())
+                    break
             return {
                 "action": "EXPAND",
-                "processed_query": f"{current_query} about {referenced_topic}",
-                "ambiguity_score": 0.9,
+                "processed_query": expanded,
+                "ambiguity_score": 0.95,
                 "clarification_needed": False,
-                "explanation": "Pattern-based expansion"
+                "explanation": "Single-topic follow-up: deterministically expanded",
             }
 
         # LLM-based semantic interpretation
@@ -537,7 +590,7 @@ Respond in JSON:
 """
         try:
             response = self.fast_llm.invoke(resolution_prompt)
-            result = json.loads(response.content)
+            result = _parse_llm_json(response)
             
             score = result.get('ambiguity_score', 0.5)
             if score > 0.6 and result.get('can_resolve_safely'):

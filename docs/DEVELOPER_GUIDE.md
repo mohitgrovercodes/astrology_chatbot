@@ -49,12 +49,12 @@
 4. **Launch Application**
    ```bash
    redis-server                                          # Terminal 1
-   uvicorn src.api.main:app --host 0.0.0.0 --port 8000  # Terminal 2
+   uvicorn src.api.main:app --host 0.0.0.0 --port 6262  # Terminal 2
    ```
 
    API documentation available at:
-   - Swagger UI: `http://localhost:8000/api/docs`
-   - ReDoc: `http://localhost:8000/api/redoc`
+   - Swagger UI: `http://localhost:6262/api/docs`
+   - ReDoc: `http://localhost:6262/api/redoc`
 
 ---
 
@@ -85,7 +85,8 @@ The `docker-compose.yml` spins up:
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `LLM_PROVIDER` | Yes | `openai` | `openai` or `ollama` |
-| `LLM_MODEL` | No | `gpt-4o-mini` | LLM model name |
+| `LLM_MODEL` | No | `gpt-4o` | Primary LLM (synthesis, validation, rewrites) |
+| `FAST_LLM_MODEL` | No | `gpt-4o-mini` | Fast LLM (classification, safety, follow-up, YES/NO checks) |
 | `OPENAI_API_KEY` | Yes | — | OpenAI API key (LLM + embeddings) |
 | `VALID_API_KEYS` | Yes | — | Comma-separated public API keys |
 | `INTERNAL_SERVICE_SECRET` | Yes | — | Backend-to-backend shared secret |
@@ -100,7 +101,7 @@ The `docker-compose.yml` spins up:
 | `ALLOWED_ORIGINS` | No | `*` | CORS origins (restrict in production) |
 | `DEBUG` | No | `false` | Enable debug logging |
 | `HOST` | No | `0.0.0.0` | Server bind address |
-| `PORT` | No | `8000` | Server port |
+| `PORT` | No | `6262` | Server port |
 | `COST_TRACKING_ENABLED` | No | `true` | Enable SQLite cost tracking |
 | `GOOGLE_CREDENTIALS_PATH` | No | — | Service account JSON for Gemini Vision |
 | `GOOGLE_PROJECT_ID` | No | — | Google Cloud project ID |

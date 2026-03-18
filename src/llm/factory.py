@@ -266,12 +266,27 @@ class LLMFactory:
         Select appropriate model based on provider and purpose.
 
         Model Selection Strategy:
-        - OpenAI: gpt-4o-mini for all purposes (cost-effective + good quality)
+        - OpenAI: LLM_MODEL env var for general/prediction/rag/validation purposes;
+                  FAST_LLM_MODEL for classification/chitchat purposes (speed-sensitive)
         - Free: llama3.2:3b (decent quality, runs locally)
         """
         if provider == "openai":
-            # gpt-4o-mini: cost-effective and capable for all purposes
-            return "gpt-4o-mini"
+            # Read from pydantic settings (which correctly loads .env).
+            # os.getenv() won't work here because pydantic-settings does NOT
+            # write .env values back into os.environ.
+            _fast_purposes = {"classification", "chitchat"}
+            try:
+                from src.api.config import settings as _settings
+                if purpose in _fast_purposes:
+                    return _settings.FAST_LLM_MODEL or "gpt-4o-mini"
+                else:
+                    return _settings.LLM_MODEL or "gpt-4o-mini"
+            except Exception:
+                # Fallback if config not available (e.g., standalone factory usage)
+                if purpose in _fast_purposes:
+                    return os.getenv("FAST_LLM_MODEL", "gpt-4o-mini")
+                else:
+                    return os.getenv("LLM_MODEL", "gpt-4o-mini")
 
         elif provider == "free":
             # Ollama local models
@@ -410,7 +425,7 @@ def create_llm(
         llm = create_llm(provider="free")
 
         # Use specific model
-        llm = create_llm(provider="openai", model="gpt-4o")
+        llm = create_llm(provider="openai", model="gpt-4o-mini")
 
         # Fast LLM for classification
         fast_llm = create_llm(purpose="classification")
