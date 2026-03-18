@@ -52,11 +52,11 @@ class Settings(BaseSettings):
     # LLM Provider and Model
     LLM_PROVIDER: str = Field(
         default="openai",
-        validation_alias="default_llm_provider"
+        validation_alias="llm_provider"
     )
     LLM_MODEL: str = Field(
         default="gpt-4o-mini",
-        validation_alias="default_llm_model"
+        validation_alias="llm_model"
     )
     
     # Embeddings

@@ -631,38 +631,36 @@ Would you like to explore any of these alternative perspectives?"""
 
 
 def build_validation_disclaimer(validation_strength: float, query_type: str, critical_failures: List) -> str:
-    """Build disclaimer text for weak charts (soft warnings)."""
-    
+    """
+    Build a soft inline disclaimer for weak charts.
+    Returned as a natural prose sentence — NOT as a bold markdown block — so it
+    can be woven into the LLM response without breaking conversational flow.
+    The orchestrator injects this into the prompt so the LLM can incorporate it
+    naturally rather than appending it as a separate section.
+    """
     if validation_strength >= 6.0:
         return ""  # No disclaimer needed
-    
+
     if validation_strength >= 4.0:
-        # Moderate disclaimer
-        disclaimer = f"\n\n**Astrological Note:** Your chart shows moderate indicators for {query_type} "
-        disclaimer += f"(validation strength: {validation_strength:.1f}/10). "
-        disclaimer += "This prediction should be interpreted as tendencies rather than certainties. "
-        disclaimer += "Outcomes depend heavily on free will and personal effort."
-        return disclaimer
-    
-    # Strong disclaimer for 2.0-3.9
-    disclaimer = f"\n\n**Important Caveat:** Your chart shows relatively weak support for {query_type} "
-    disclaimer += f"(validation strength: {validation_strength:.1f}/10). "
-    
+        # Moderate — guide the LLM to acknowledge uncertainty naturally
+        return (
+            f"[CONTEXT FOR LLM: Chart indicators for {query_type} are moderate. "
+            "Weave in one honest caveat — these are tendencies, not certainties, "
+            "and outcomes depend on free will and effort. Do NOT add a separate bold 'Astrological Note' section.]"
+        )
+
+    # Weak chart (2.0-3.9) — include one specific reason if available
+    reason_hint = ""
     if critical_failures:
-        disclaimer += "Classical rules indicate:\n"
-        for f in critical_failures[:2]:
-            # Handle both dict and RuleResult object
-            if isinstance(f, dict):
-                rule_name = f.get('rule_name', 'Unknown rule')
-                reason = f.get('reason', '')
-            else:
-                # RuleResult dataclass - use attributes
-                rule_name = getattr(f, 'rule_name', 'Unknown rule')
-                reason = getattr(f, 'reason', '')
-            disclaimer += f"- {rule_name}: {reason}\n"
-    
-    disclaimer += "\nThis prediction is exploratory. Consider focusing on areas where your chart shows stronger potential."
-    return disclaimer
+        f0 = critical_failures[0]
+        reason = f0.get('reason', '') if isinstance(f0, dict) else getattr(f0, 'reason', '')
+        if reason:
+            reason_hint = f" ({reason})"
+    return (
+        f"[CONTEXT FOR LLM: Chart shows relatively limited classical support for {query_type}{reason_hint}. "
+        "Acknowledge this honestly but gently — frame it as 'possibilities' rather than certainties, "
+        "and encourage consistent effort. Do NOT add a bold header or separate caveat section.]"
+    )
 
 
 # ============================================================================

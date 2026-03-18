@@ -63,6 +63,7 @@ except ImportError:
     logger.info("[ENHANCED_ANALYSIS] chart_analyzer/synthesis_engine not found - using basic analysis")
     ENHANCED_ANALYSIS_AVAILABLE = False
 
+from src.prompts.few_shot_selector import get_few_shot_block
 from src.orchestration.orchestrator_validation_helpers import (
     detect_query_type,
     determine_validation_tier,
@@ -2114,6 +2115,7 @@ Provide a concise answer:"""
                     response_mode=_prompt_response_mode,
                     astro_evidence=state.get("astro_evidence"),
                     voice_preferences=state.get("voice_preferences"),
+                    validation_disclaimer=state.get("validation_disclaimer"),
                 )
             else:
                 # Chart calculation failed — do NOT hallucinate chart-specific details.
@@ -2379,32 +2381,26 @@ Provide a concise answer:"""
 
                 phase_instruction = f"""
 PROGRESSIVE DISCLOSURE -- DETAILED RESPONSE MODE:
-Respond ONLY with a valid JSON object — no markdown, no preamble, nothing outside the JSON.
-LANGUAGE: Every value must be written entirely in {_lang_for_phase}.
+Write a flowing prose response — no JSON, no numbered lists, no markdown headers.
+LANGUAGE: Write entirely in {_lang_for_phase}.
 
-Return exactly this JSON structure (all 11 fields required):
-{{
-  "point_1": "1-2 concise sentences: {_sh['house']} lord — name the ruling planet, sign/dignity, practical meaning for {_topic or 'this topic'}",
-  "point_2": "1-2 concise sentences: {_sh['planet']} placement — sign/house/condition, practical effect on {_topic or 'this topic'}",
-  "point_3": "1-2 concise sentences: current Mahadasha/Antardasha — name both lords, why this combination supports or challenges {_topic or 'this topic'}",
-  "point_4": "1-2 concise sentences: near-term Pratyantar — upcoming lord, month-year range, practical expectation",
-  "point_5": "1-2 concise sentences: yoga or strength modifier — relevant yoga OR Vargottama/planetary war/vimshopaka with real-life effect",
-  "point_6": "1-2 concise sentences: gochara (transit) — what Jupiter/Saturn is doing relative to key houses and whether it supports or delays {_topic or 'this topic'}",
-  "point_7": "1-2 concise sentences: {_sh['divisional']} chart — begin with '{_sh['divisional']} mein...' and what it shows about {_sh['div_focus']}",
-  "point_8": "1-2 concise sentences: broader future window — next Antardasha-level period with month-year range and practical effect",
-  "point_9": "1-2 concise sentences: one additional factor — second house-lord, dispositor chain, aspect, or occupancy pattern",
-  "convergence": "one sentence naming 2-3 independent factors from THIS chart all pointing to the same conclusion (natural phrasing, do not use the phrase 'converge on')",
-  "followup_question": "one question opening a completely different life area — use this pivot: {_suggested_followup}"
-}}
+Study the STYLE EXAMPLES above. For a detailed response, expand the 5-part structure:
+1. Brief acknowledgment of the short answer — "chaliye aur gehrai mein dekhte hain" or similar (1 sentence)
+2. House lord + dignity — {_sh['house']} lord, its sign/condition, what it means practically (2 sentences)
+3. Planet placement — {_sh['planet']}: sign, house, practical effect on {_topic or 'this topic'} (2 sentences)
+4. Dasha combination — current Mahadasha + Antardasha, why this supports or challenges {_topic or 'this topic'} (2 sentences)
+5. Timing window — upcoming Pratyantar with explicit month-year range and practical expectation (2 sentences)
+6. Supporting factors — yoga OR transit (Jupiter/Saturn gochara) relevant to {_topic or 'this topic'} (2 sentences)
+7. {_sh['divisional']} chart — what it shows about {_sh['div_focus']} (1-2 sentences)
+8. One honest nuance — challenge or caveat framed constructively (1 sentence)
+9. Close with: {_suggested_followup}
 
-Rules for every field value:
-- Each value should be concise and practical (prefer 1-2 complete sentences, max 3).
+Rules:
 - Show reason chain: astrological factor → interpretation → practical outcome.
-- Use explicit month-year ranges — never duration-only like '6 months'.
-- Do NOT use labels like 'short trigger window', 'maturation horizon', etc.
-- Do NOT repeat what was said in the initial short answer — deepen it.
-- Timing must stay consistent with the main window given in the initial answer.
-- Do NOT add any text before or after the JSON object.
+- Use explicit month-year ranges from the dasha data — never duration-only like "6 months".
+- Do NOT repeat the initial short answer word-for-word — add genuine depth.
+- Timing must stay consistent with the window given in the initial answer.
+- Target length: 300-400 words.
 { _voice_charter }
 """
                 new_phase_data = {
@@ -2558,7 +2554,8 @@ ANSWER THIS SPECIFIC QUESTION: {_answer_topic}
                     ],
                 }
                 _orig_for_seed = (state.get('session_data') or {}).get('original_user_question') or state.get('query', '')
-                _combo_rng = random.Random(f"{state.get('user_id','')}|{_topic_norm}|{_orig_for_seed}")
+                _conv_turn_count = len(state.get('conversation_history') or [])
+                _combo_rng = random.Random(f"{state.get('user_id','')}|{_topic_norm}|{_orig_for_seed}|{_conv_turn_count}")
                 _combo_families = _initial_horizon_combo_families_by_topic.get(
                     _topic_norm,
                     _initial_horizon_combo_families_by_topic["general"]
@@ -2573,12 +2570,11 @@ ANSWER THIS SPECIFIC QUESTION: {_answer_topic}
                 _primary_horizon, _secondary_horizon = _primary_combo_pool[_combo_rng.randrange(len(_primary_combo_pool))]
                 _alt_primary_horizon, _alt_secondary_horizon = _alternate_combo_pool[_combo_rng.randrange(len(_alternate_combo_pool))]
                 _horizon_hint = (
-                    f"For this answer, prefer a PRIMARY { _primary_horizon.upper() } horizon and a SECONDARY "
-                    f"{ _secondary_horizon.upper() } horizon. "
-                    "Horizon guide: NEAR=pratyantar-like short activation, MID=antardasha-level medium runway, "
-                    "BROAD=larger supportive phase from antardasha/transit convergence. "
-                    f"If an alternative draft/regeneration is needed, DO NOT reuse this same combo pool; switch to an alternate family "
-                    f"with PRIMARY { _alt_primary_horizon.upper() } and SECONDARY { _alt_secondary_horizon.upper() }."
+                    f"For the timing window in this answer, prefer a { _primary_horizon.upper() } horizon. "
+                    "Horizon guide: NEAR=pratyantar-like short activation (2-4 months), "
+                    "MID=antardasha-level medium runway (3-8 months), "
+                    "BROAD=larger supportive phase from antardasha/transit convergence (6-18 months). "
+                    "Pick ONE clear window from the dasha data that fits this horizon — do not list multiple windows."
                 )
                 _recent_window_hint = self._collect_recent_cross_topic_window_keys(
                     state.get("conversation_history", []),
@@ -2590,6 +2586,18 @@ ANSWER THIS SPECIFIC QUESTION: {_answer_topic}
                     if _recent_samples else
                     "Prefer a distinct timing expression from the most recently used one when alternatives exist."
                 )
+                _recent_planets = self._collect_recent_planet_factors(
+                    state.get("conversation_history", [])
+                )
+                _planet_variety_hint = (
+                    f"Recently emphasized planets: {', '.join(_recent_planets)}. "
+                    "For variety, lead with a different planetary factor or yoga if the chart supports it."
+                    if _recent_planets else ""
+                )
+                _coherence_hint = self._build_coherence_hint(
+                    state.get("conversation_history", []),
+                    _topic_norm,
+                )
                 _closing_q = pick_initial_closing(
                     rng=random.Random(state.get('query', '')),
                     language=_lang_now,
@@ -2597,47 +2605,65 @@ ANSWER THIS SPECIFIC QUESTION: {_answer_topic}
                 )
                 _voice_charter = get_voice_charter(_lang_now)
                 _flow_policy = get_response_structure_policy()
+
+                # Compute the earliest allowed pratyantar start month for INITIAL responses.
+                # Matches the 2-month deferral in _build_prediction_prompt so the LLM can't
+                # cite an earlier month derived from Vimshottari sequence math.
+                _min_timing_month_hint = ""
+                try:
+                    _today_iso = datetime.utcnow().date().isoformat()
+                    _min_lead = 2  # months — must match _min_lead_months_initial in _build_prediction_prompt
+                    _all_pds = (state.get('dasha_data') or {}).get('upcoming_pratyantardashas', []) or []
+                    _eligible_starts = []
+                    for _pd in _all_pds:
+                        _s = _pd.get('start', '9999')
+                        if _s <= _today_iso:
+                            continue
+                        try:
+                            _s_dt = datetime.strptime(_s.strip(), "%Y-%m-%d").date()
+                            _t_dt = datetime.strptime(_today_iso, "%Y-%m-%d").date()
+                            _lead = max(0, (_s_dt.year - _t_dt.year) * 12 + (_s_dt.month - _t_dt.month))
+                            if _lead >= _min_lead:
+                                _eligible_starts.append(_s_dt)
+                        except Exception:
+                            continue
+                    if _eligible_starts:
+                        _earliest = min(_eligible_starts)
+                        _min_timing_month_hint = (
+                            f"TIMING FLOOR (MANDATORY): Do NOT cite any month before "
+                            f"{_earliest.strftime('%B %Y')} as a timing window. "
+                            f"Earlier months are deferred for follow-up responses. "
+                            f"Use ONLY windows from Step 3.5/3.8 in the dasha data."
+                        )
+                except Exception:
+                    pass
+
                 phase_instruction = f"""
 PROGRESSIVE DISCLOSURE -- INITIAL SHORT RESPONSE:
-Respond ONLY with a valid JSON object — no markdown, no explanation outside the JSON.
-LANGUAGE: Every value must be written entirely in {_lang_now}.
+Write a single flowing prose response — no JSON, no numbered lists, no markdown headers or labels.
+LANGUAGE: Write entirely in {_lang_now}.
 
-Return exactly this JSON structure (all 5 fields are required):
-{{
-  "current_context": "Start with 1 warm headline sentence in plain language (answer-first, reassuring, engaging), then 1 sentence linking that headline to current chart period",
-  "key_factor": "the single most important chart factor for this topic explained in simple practical language (avoid heavy jargon)",
-  "near_term_window": "PRIMARY timing layer for this answer (may be near OR mid horizon as instructed), with explicit month-year range and practical reason",
-  "broader_window": "SECONDARY timing layer from a different horizon than primary (mid OR broad), with explicit month-year range and practical reason",
-  "closing": "one warm sentence inviting the user to learn the full astrological reasoning in detail"
-}}
+Study the STYLE EXAMPLES above for tone and flow only — their chart facts are for DIFFERENT users and must NEVER be copied. Structure your response as:
+1. Personal opener — address the user by name with ONE sentence that is specific and grounded. If the question implies impatience ("kab hogi?") acknowledge the wait warmly and tie it to a concrete chart signal ("Venus ka period shuru ho raha hai"). If hopeful, match that energy with something specific from the chart. If anxious or under pressure, reflect that context lightly. BANNED openers (these will be rejected): any variant of "samay favorable hai", "achhe samay ki nishaniyan hain", "great news", "bahut achha time aa raha hai", "chart mein positive indicators hain" — these are hollow and feel like a template. The opener must reference ONE specific thing from this user's chart or life context. Example of good openers: "Kartikeya, intezaar zyada nahi — Venus ka sub-period jaldi shuru ho raha hai aur ye period exactly rishton ke liye bana hai." or "Kartikeya, chart dekh ke keh sakta hoon ki ye wait meaningful hai — ek khaas window aa rahi hai."
+2. Two to three astrological factors directly relevant to the user's question. BANNED: parenthetical labels after house numbers like "7th house (Marriage & Partnership)" or "2nd house (Wealth & Family)" — a real astrologer does not explain what the 7th house means to every client. Just say "7th house" or "7th lord". BANNED: vague claims like "Navamsa mein Venus ki position positive hai" — if you mention a divisional chart, say WHY it matters for this user specifically (e.g., what sign Venus is in, or what its dignity is there). BANNED: claiming a transit aspect (e.g., "Jupiter 7th house ko support karega") unless the TRANSITS section above explicitly shows Jupiter aspecting the 7th house. Relevant factors by domain: marriage → 7th lord, Venus dasha/antardasha, D9 (Navamsa) chart, Jupiter transit to 7th house (only if shown in transit data); foreign → 12th house lord, Rahu/Ketu axis, 9th house, relevant dasha; career → 10th lord, Saturn dasha/transit, D10. For each factor, say what it means for THIS person's specific situation. (3-4 sentences)
+3. ONE specific timing window — explicit month-year range derived from the dasha/transit data above, with a practical reason why that window is good. (1-2 sentences)
+4. One honest nuance — reference a SPECIFIC planet or yoga by name, balanced, never doom-saying. (1 sentence)
+5. Close with ONE question that offers to go DEEPER into the astrological analysis. The question must be about chart depth — e.g., "Chahein toh main D9 chart aur exact dasha timings aur detail mein bataun?" or "Would you like me to walk through the D12/D10 chart factors and their exact dates?" NEVER ask the user about their preferences, goals, or what kind of opportunity they want — that is not astrology. The closing question is always an OFFER OF MORE CHART ANALYSIS.
 
-Rules for every field value:
-- Write 2-4 complete sentences per field (not one-liners).
-- Ground every claim in the chart/dasha/transit data provided above.
-- Use explicit month-year ranges — no duration-only phrases like "6 mahine".
-- near_term_window and broader_window must reference DIFFERENT time periods.
-- Keep the tone warm, natural, and human-like (consultative, not mechanical).
-- Use smooth conversational transitions between ideas (for example: "dekhiye", "timing ki baat karein to", "is dauran").
-- Avoid robotic/over-technical phrasing, template-like headings, or repeating the same sentence pattern.
-- Explain factors in practical language (what it means for the person), not just raw labels.
-- Keep confidence balanced and realistic; do not overpromise certainty.
-- Vary sentence openings naturally; avoid starting multiple lines with the same opener (especially repeated "Is dauran...").
-- When chart shows both support and challenge, acknowledge both in one smooth human way (e.g., "support hai, lekin effort consistent rakhna hoga"), not as hard contradiction.
-- Keep each field conversationally readable: 2-3 medium sentences are preferred over long dense lines.
-- Closing should feel personal and fresh; avoid formulaic repeated wording across answers.
-- Do NOT start the response with raw technical terms like "Mahadasha", "10th house lord", or "Pratyantar". First line should be a natural human headline about the outcome.
-- Use fewer technical astrology terms overall; prefer plain Hinglish wording. If a technical term is used, explain it immediately in practical language.
-- Match emotional tone to the user's question sentiment:
-  - hopeful/excited question -> warm encouraging opener
-  - anxious/uncertain question -> calm reassuring opener
-  - neutral/direct question -> simple confident opener
-- Use conversational style dynamically. Do NOT hardcode or repeatedly reuse the same opener phrase across responses.
-- Treat sample phrases only as inspiration for tone, never as mandatory templates.
-- Vary wording and sentence rhythm naturally across answers so openings feel fresh and human.
+Rules:
+- Use explicit month-year ranges from Step 3.5/3.8 dasha data above. NEVER compute or infer pratyantar dates yourself — only use the exact windows listed.
+- TIMING CONSISTENCY: If you mention a period in the opener (e.g. "Venus pratyantar [month] se"), use the SAME dates in the timing section. Do NOT introduce a different month-year range for the same period later in the response.
+- Ground every claim in the chart/dasha/transit data above — no training-knowledge defaults.
+- DIGNITY LANGUAGE: Use the exact term from the chart data. A planet is EITHER exalted OR in own sign — never both. "apne hi sign mein exalted" is contradictory and must never be written. If the chart says "exalted", write "exalted" (or "uccha"). If it says "own sign", write "apne hi sign mein". Never combine.
+- Do NOT start with technical terms like "Mahadasha", "10th house lord". Start with a human outcome sentence.
+- Explain any technical term immediately in plain language — but NEVER add parenthetical labels after house numbers like "7th house (Marriage & Partnership)" or planet names "Venus (love planet)". An astrologer speaks to a client who knows basics, not a student who needs a textbook glossary.
+- Warm, direct, consultative tone — not mechanical or formulaic.
+- Target length: 150-200 words.
 - {_horizon_hint}
 - {_window_reuse_hint}
-- Avoid over-relying on only pratyantar-sized (2-3 month) windows in every NEW_TOPIC answer; diversify horizons naturally.
-- Do NOT add any text before or after the JSON object.
+{("- " + _min_timing_month_hint) if _min_timing_month_hint else ""}
+{("- " + _planet_variety_hint) if _planet_variety_hint else ""}
+{_coherence_hint}
 { _voice_charter }
 """
                 # BUG FIX #4: Store the true original question (pre-semantic-expansion)
@@ -2715,7 +2741,7 @@ Rules for every field value:
             # ================================================================
             logger.info(f"[LLM] Sending {len(messages)} messages to LLM (phase={current_phase})")
 
-            _use_json_mode = _prompt_response_mode in ('initial', 'detailed')
+            _use_json_mode = False  # Prose mode: few-shot examples teach structure better than JSON fields
             _json_llm = self._get_json_llm() if _use_json_mode else None
 
             if _json_llm and _use_json_mode:
@@ -2735,6 +2761,17 @@ Rules for every field value:
             else:
                 response = self.llm.invoke(messages)
                 state['answer'] = response.content if hasattr(response, 'content') else str(response)
+
+            # Strip triple-quote delimiters that smaller models echo from the prompt template.
+            def _strip_llm_wrapper(text: str) -> str:
+                t = (text or "").strip()
+                if t.startswith('"""') and t.endswith('"""') and len(t) > 6:
+                    t = t[3:-3].strip()
+                elif t.startswith("'''") and t.endswith("'''") and len(t) > 6:
+                    t = t[3:-3].strip()
+                return t
+            state['answer'] = _strip_llm_wrapper(state.get('answer', ''))
+
             # Runtime quality gate for initial short responses:
             # enforce practical timeline diversity (present + short + long).
             _detected_lang = state.get('detected_language', 'en')
@@ -2744,6 +2781,10 @@ Rules for every field value:
                 _current_qt,
             )
             _recent_cross_topic_keys = set(_novelty_recent.get("keys") or set())
+            # Also track cross-topic start months (YYYY-MM) for partial-overlap detection.
+            _recent_cross_topic_start_months_qa: set[str] = {
+                k.split("|")[0] for k in _recent_cross_topic_keys if "|" in k
+            }
             _candidate_keys = self._collect_future_candidate_window_keys(state.get("dasha_data", {}))
             _novelty_alternatives_exist = bool(_candidate_keys - _recent_cross_topic_keys)
 
@@ -2756,17 +2797,25 @@ Rules for every field value:
                     today_ym=_today_ym,
                 )
                 _recent_keys_live = self._filter_non_ended_range_keys(set(_recent_cross_topic_keys), today_ym=_today_ym)
+                # Exact key reuse
                 _reused = sorted(_answer_keys.intersection(_recent_keys_live))
-                if _reused:
+                # Same-start-month reuse (different end date but same opening month)
+                _answer_start_months = {k.split("|")[0] for k in _answer_keys if "|" in k}
+                _reused_start_months = sorted(
+                    _answer_start_months.intersection(_recent_cross_topic_start_months_qa)
+                )
+                if _reused or _reused_start_months:
                     _issues = list(_quality.get("issues", []) or [])
                     _issue_id = "reused_cross_topic_timeline_window_despite_available_alternatives"
                     if _issue_id not in _issues:
                         _issues.append(_issue_id)
                     _quality["issues"] = _issues
-                    _quality["reused_cross_topic_windows"] = _reused[:4]
+                    _quality["reused_cross_topic_windows"] = (_reused or _reused_start_months)[:4]
                     logger.info(
                         "[TIMELINE_NOVELTY] Cross-topic timeline reuse detected in answer "
-                        f"(query_type={_current_qt}, reused={_reused[:3]}, alternatives={len(_candidate_keys - _recent_keys_live)})."
+                        f"(query_type={_current_qt}, reused={(_reused or _reused_start_months)[:3]}, "
+                        f"start_month_overlap={_reused_start_months[:3]}, "
+                        f"alternatives={len(_candidate_keys - _recent_keys_live)})."
                     )
                 return (len(_quality.get("issues", []) or []) == 0), _quality
 
@@ -2804,15 +2853,12 @@ Rules for every field value:
                         f"timeline_expr={(_quality_init.get('timeline_layers') or {}).get('timeline_expression_count')}). "
                         f"Issues: {_issues_init}. Regenerating once."
                     )
+                    # Only the issues that still exist in _assess_initial_timeline_quality are critical.
+                    # Two-window / dual-horizon checks have been removed — golden style uses ONE window.
                     _critical_init_issues = {
-                        "missing_short_trigger_window_in_short_answer",
-                        "missing_long_supportive_window_in_short_answer",
                         "missing_future_favorable_reason_in_short_answer",
-                        "short_answer_too_brief_for_rich_timeline",
                         "insufficient_explicit_month_year_windows_in_short_answer",
                         "insufficient_distinct_month_year_windows_in_short_answer",
-                        "timeline_windows_lack_duration_variation_in_short_answer",
-                        "timeline_windows_start_too_close_in_short_answer",
                         "contains_past_year_timeline_reference",
                         "duration_only_timeline_without_explicit_month_year_ranges",
                         "reused_cross_topic_timeline_window_despite_available_alternatives",
@@ -2840,7 +2886,7 @@ Rules for every field value:
                         )
                         try:
                             revised_init = self.llm.invoke(rewrite_prompt)
-                            revised_init_text = revised_init.content if hasattr(revised_init, 'content') else str(revised_init)
+                            revised_init_text = _strip_llm_wrapper(revised_init.content if hasattr(revised_init, 'content') else str(revised_init))
                             _ok_init2, _quality_init2 = self._assess_initial_timeline_quality(revised_init_text, language=_detected_lang)
                             _ok_init2, _quality_init2 = _apply_cross_topic_novelty_issue(revised_init_text, _quality_init2)
                             if _ok_init2:
@@ -2883,7 +2929,7 @@ Rules for every field value:
                                         quality=_quality_init3,
                                     )
                                     strict_resp = self.llm.invoke(strict_prompt)
-                                    strict_text = strict_resp.content if hasattr(strict_resp, 'content') else str(strict_resp)
+                                    strict_text = _strip_llm_wrapper(strict_resp.content if hasattr(strict_resp, 'content') else str(strict_resp))
                                     _ok_init4, _quality_init4 = self._assess_initial_timeline_quality(strict_text, language=_detected_lang)
                                     _ok_init4, _quality_init4 = _apply_cross_topic_novelty_issue(strict_text, _quality_init4)
                                     _chosen_score = _issue_score(_quality_init3)
@@ -2975,7 +3021,9 @@ Rules for every field value:
                         # data constraint, not a quality failure.  The rewrite prompt still guides the LLM
                         # to mention antardasha-level cross-year context when this is detected.
                         "missing_future_favorable_timeline_reason",
-                        "fewer_than_7_numbered_points",
+                        # fewer_than_7_numbered_points REMOVED — numbered structure is NOT required.
+                        # The DETAILED instruction uses flowing prose. Forcing 7 numbered points produces
+                        # bold markdown headers (1. **Mars ki Position**) which breaks prose style.
                         "structural_label_style_leak_in_user_facing_text",
                         "reused_cross_topic_timeline_window_despite_available_alternatives",
                     }
@@ -2986,12 +3034,13 @@ Rules for every field value:
                         return (_critical_count, len(_issues_local))
 
                     _orig_score = _detailed_issue_score(_quality)
-                    _has_structural_gap = int(_quality.get("numbered_points") or 0) < 7
-                    _should_attempt_rewrite = (_orig_score[0] > 0) or _has_structural_gap
+                    # _has_structural_gap removed — prose responses don't need 7 numbered points.
+                    # Rewrite only when there are genuine critical issues (wrong dates, missing timing reasons, etc.)
+                    _should_attempt_rewrite = _orig_score[0] > 0
 
                     if not _should_attempt_rewrite:
                         logger.info(
-                            "[DETAILED_QA] Skipping rewrite: no critical issues and numbered structure already complete "
+                            "[DETAILED_QA] Skipping rewrite: no critical issues "
                             f"(points={_quality.get('numbered_points')}, issues={', '.join(_quality.get('issues', []))})."
                         )
                         _current_issues = set(_quality.get("issues", []) or [])
@@ -3000,7 +3049,7 @@ Rules for every field value:
                         # genuinely too short, not merely because it could be longer.
                         _should_enrich = (
                             "answer_too_short_for_detailed_mode" in _current_issues
-                            and _orig_words < 340
+                            and _orig_words < 260
                         )
                         if _should_enrich:
                             logger.info(
@@ -3017,17 +3066,17 @@ Current answer:
 \"\"\"{state.get('answer', '')}\"\"\"
 
 Requirements:
-1) Keep the same numbered structure and same planet/dasha/timing facts already stated.
-2) Add concise depth so the answer feels fuller (typically +40 to +80 words).
+1) Keep ALL existing planet names, dasha/timing facts, and prose structure. Do NOT add numbered lists or bold headers.
+2) Add concise depth so the answer feels fuller (typically +40 to +80 words), woven naturally into the prose.
 3) If timeline variety is narrow, add one natural secondary future window (month-year phrasing) with reason,
-   but do NOT contradict existing windows.
-4) Maintain warm, natural astrologer tone (no structural labels like "Cross-Year Window").
+   but do NOT contradict or change existing windows.
+4) Maintain warm, natural astrologer tone — no structural labels like "Cross-Year Window", no markdown.
 5) Keep it practical and user-facing.
 
 Return ONLY the improved answer text."""
                             try:
                                 _enriched = self.llm.invoke(_enrich_prompt)
-                                _enriched_text = _enriched.content if hasattr(_enriched, 'content') else str(_enriched)
+                                _enriched_text = _strip_llm_wrapper(_enriched.content if hasattr(_enriched, 'content') else str(_enriched))
                                 _ok_en, _quality_en = self._assess_detailed_answer_quality(
                                     _enriched_text,
                                     factor_profile=_factor_profile,
@@ -3036,13 +3085,12 @@ Return ONLY the improved answer text."""
                                 _ok_en, _quality_en = _apply_cross_topic_novelty_issue(_enriched_text, _quality_en)
                                 _en_score = _detailed_issue_score(_quality_en)
                                 _en_words = int(_quality_en.get("word_count") or 0)
-                                _en_has_min_points = int(_quality_en.get("numbered_points") or 0) >= 7
+                                # Accept enriched if: passes QA, or improves score, or meaningfully longer (prose mode — no point count check)
                                 _accept_enriched = (
                                     _ok_en
                                     or (_en_score < _orig_score)
                                     or (
                                         _en_score[0] == _orig_score[0] == 0
-                                        and _en_has_min_points
                                         and _en_words >= (_orig_words + 35)
                                         and _en_words <= 520
                                     )
@@ -3070,7 +3118,7 @@ Return ONLY the improved answer text."""
                         )
                         try:
                             revised = self.llm.invoke(rewrite_prompt)
-                            revised_text = revised.content if hasattr(revised, 'content') else str(revised)
+                            revised_text = _strip_llm_wrapper(revised.content if hasattr(revised, 'content') else str(revised))
                             _ok2, _quality2 = self._assess_detailed_answer_quality(
                                 revised_text,
                                 factor_profile=_factor_profile,
@@ -3122,7 +3170,7 @@ Return ONLY the improved answer text."""
                                         factor_profile=_factor_profile,
                                     )
                                     strict_resp = self.llm.invoke(strict_prompt)
-                                    strict_text = strict_resp.content if hasattr(strict_resp, 'content') else str(strict_resp)
+                                    strict_text = _strip_llm_wrapper(strict_resp.content if hasattr(strict_resp, 'content') else str(strict_resp))
                                     _ok4, _quality4 = self._assess_detailed_answer_quality(
                                         strict_text,
                                         factor_profile=_factor_profile,
@@ -3196,7 +3244,7 @@ Mandatory improvements:
 
 Return ONLY the improved answer text."""
                         _yd_resp = self.llm.invoke(_yd_prompt)
-                        _yd_text = _yd_resp.content if hasattr(_yd_resp, "content") else str(_yd_resp)
+                        _yd_text = _strip_llm_wrapper(_yd_resp.content if hasattr(_yd_resp, "content") else str(_yd_resp))
                         if _yd_text and _yd_text.strip():
                             state["answer"] = _yd_text.strip()
             except Exception as _yd_e:
@@ -3692,11 +3740,12 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                 disclaimer_text = get_disclaimer(disclaimer_type, language=detected_lang, llm=self.fast_llm)
                 final_response = f"{final_response}\n\n{disclaimer_text}"
             
-            # PHASE 12: Validation Disclaimer Injection
-            validation_disclaimer = state.get('validation_disclaimer')
-            if validation_disclaimer:
-                final_response = f"{final_response}{validation_disclaimer}"
-                logger.info("[FORMATTING] Added validation disclaimer")
+            # PHASE 12: Validation Disclaimer — injected into prompt context, NOT appended to final response.
+            # build_validation_disclaimer() now returns a [CONTEXT FOR LLM: ...] instruction block.
+            # The prompt builder picks it up from state['validation_disclaimer'] via the
+            # validation_context section. We do NOT append it here — that would expose raw
+            # instruction text to the user.
+            # (No-op in the formatting phase — disclaimer already in prompt via _build_synthesis_prompt.)
 
             # PHASE 10.5: Reframe Intro Injection
             if state.get('is_reframed', False):
@@ -3849,7 +3898,8 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                 "Answer only YES or NO — nothing else.\n\n"
                 f"Response:\n\"\"\"\n{text[:1500]}\n\"\"\""
             )
-            result = self.llm.invoke(prompt)
+            _qa_llm = getattr(self, "fast_llm", self.llm)
+            result = _qa_llm.invoke(prompt)
             answer = (result.content if hasattr(result, "content") else str(result)).strip().upper()
             verdict = answer.startswith("Y")
             logger.info(f"[LLM_QA] future_favorable check: {verdict} (raw='{answer[:10]}')")
@@ -3920,8 +3970,8 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         # than English — more information per word — so apply lower word-count minimums
         # to avoid perpetual rewrite loops.  English ("en") keeps full thresholds;
         # everything else gets the reduced threshold.
-        _min_detail_words = 360
-        _max_detail_words = 560
+        _min_detail_words = 280   # gpt-4o writes dense prose; 360 was too aggressive
+        _max_detail_words = 520
 
         issues: List[str] = []
         if _style_leak_detected:
@@ -3930,8 +3980,7 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             issues.append("answer_too_short_for_detailed_mode")
         if word_count > _max_detail_words:
             issues.append("answer_too_long_for_detailed_mode")
-        if numbered_points < 7:
-            issues.append("fewer_than_7_numbered_points")
+        # fewer_than_7_numbered_points REMOVED — prose mode always has 0 numbered points.
         if year_mentions < 3:
             issues.append("too_few_year_mentions_for_long_short_timelines")
         if timing_range_markers < 2 and month_year_mentions < 4:
@@ -4345,6 +4394,11 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                     preceding_user = m2.get("content") or ""
                     break
             topic = self._infer_topic_from_text(preceding_user)
+            # If user text is ambiguous (e.g. "Yes, go ahead" or "visit grandma
+            # in San Francisco"), fall back to inferring topic from the assistant
+            # response itself — it usually names the domain explicitly.
+            if topic == "general":
+                topic = self._infer_topic_from_text(assistant_text)
             if topic in ("general", (current_query_type or "general")):
                 continue
             extracted = self._extract_month_year_range_keys(assistant_text)
@@ -4362,6 +4416,90 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                     if len(samples) >= 4:
                         break
         return {"keys": keys, "samples": samples}
+
+    def _collect_recent_planet_factors(
+        self,
+        conversation_history: Optional[List[Dict[str, Any]]],
+        max_turns: int = 3,
+    ) -> List[str]:
+        """
+        Extract planet names that appeared as primary reasoning factors in recent
+        assistant turns. Used to encourage factor variety across turns.
+        """
+        _all_planets = [
+            "Venus", "Jupiter", "Saturn", "Mars", "Mercury", "Sun", "Moon", "Rahu", "Ketu",
+            "Shukra", "Brihaspati", "Shani", "Mangal", "Budh", "Surya", "Chandra",
+        ]
+        history = conversation_history or []
+        recent: list[str] = []
+        seen = 0
+        for i in range(len(history) - 1, -1, -1):
+            msg = history[i] or {}
+            if (msg.get("role") or "").lower() != "assistant":
+                continue
+            seen += 1
+            if seen > max_turns:
+                break
+            content = msg.get("content") or ""
+            for planet in _all_planets:
+                if planet.lower() in content.lower() and planet not in recent:
+                    recent.append(planet)
+        return recent[:4]
+
+    def _build_coherence_hint(
+        self,
+        conversation_history: Optional[List[Dict[str, Any]]],
+        current_topic: str,
+    ) -> str:
+        """
+        Build logical coherence constraints from conversation context.
+        Prevents the LLM from placing logically impossible timelines
+        (e.g., children before marriage, career before education graduation).
+        """
+        import re as _re
+        hints: list[str] = []
+        history = conversation_history or []
+
+        if current_topic in ("children",):
+            # Look for a marriage answer in conversation history and extract year
+            marriage_year: Optional[str] = None
+            for i in range(len(history) - 1, -1, -1):
+                msg = history[i] or {}
+                if (msg.get("role") or "").lower() != "assistant":
+                    continue
+                preceding_user = ""
+                for j in range(i - 1, -1, -1):
+                    m2 = history[j] or {}
+                    if (m2.get("role") or "").lower() == "user":
+                        preceding_user = m2.get("content") or ""
+                        break
+                _marriage_kws = {"shadi", "shaadi", "marriage", "vivah", "rishta", "wedding"}
+                if any(k in preceding_user.lower() for k in _marriage_kws):
+                    years = _re.findall(r"20[23456]\d", msg.get("content") or "")
+                    if years:
+                        marriage_year = years[0]
+                    break
+            if marriage_year:
+                hints.append(
+                    f"COHERENCE CONSTRAINT: Marriage timing was discussed as around {marriage_year}. "
+                    f"Children/santaan timing MUST come after {marriage_year} — never suggest children before marriage."
+                )
+            else:
+                hints.append(
+                    "COHERENCE CONSTRAINT: The user may not yet be married. If suggesting children timing, "
+                    "place it at least 1-2 years after a reasonable marriage window, and acknowledge this naturally."
+                )
+
+        elif current_topic == "career" and any(
+            any(k in (m.get("content") or "").lower() for k in ("exam", "study", "college", "degree", "padhai", "education"))
+            for m in history[-6:] if (m.get("role") or "") == "user"
+        ):
+            hints.append(
+                "COHERENCE CONSTRAINT: The user appears to be a student. Career/job timing should be placed "
+                "after a plausible graduation date — do not suggest promotions or business milestones before the user has finished education."
+            )
+
+        return "\n".join(hints) if hints else ""
 
     def _collect_future_candidate_window_keys(self, dasha_data: Optional[Dict[str, Any]]) -> set[str]:
         """Collect candidate month-range keys from future dasha windows."""
@@ -4545,14 +4683,21 @@ Retain the astrological data but remove the violating content (e.g., remove deat
 
         # If novelty failed due to reused ranges already present in answer, remove those
         # sentence fragments before adding fresh windows.
-        if reused_in_text and preferred:
+        # Also strip standalone month mentions that share a start month with cross-topic windows.
+        _cross_topic_start_months: set[str] = set()
+        for _rk in recent_keys:
+            if "|" in _rk:
+                _cross_topic_start_months.add(_rk.split("|")[0])
+
+        _needs_text_cleanup = bool(reused_in_text) or bool(_cross_topic_start_months)
+        if _needs_text_cleanup and preferred:
             cleaned = text
+            # 1. Remove range sentences matching exact cross-topic keys
             for _rk in reused_in_text:
                 try:
                     _s_ym, _e_ym = _rk.split("|")
                     _s_lbl = _to_month_label(_s_ym)
                     _e_lbl = _to_month_label(_e_ym)
-                    # Remove common timeline clauses carrying the reused range.
                     cleaned = re.sub(
                         rf"(?is)\b[^.!?\n]*{re.escape(_s_lbl)}[^.!?\n]*(?:to|se|tak|until|till|→|-|–|—)\s*{re.escape(_e_lbl)}[^.!?\n]*[.!?]?",
                         " ",
@@ -4565,8 +4710,21 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                     )
                 except Exception:
                     continue
+            # 2. Remove sentences containing standalone cross-topic start month mentions
+            #    e.g. "Venus ka pratyantar April 2026 se shuru ho raha hai."
+            for _sm in _cross_topic_start_months:
+                try:
+                    _sm_lbl = _to_month_label(_sm)
+                    # Strip any sentence that mentions this month-year
+                    cleaned = re.sub(
+                        rf"(?is)[^.!?\n]*\b{re.escape(_sm_lbl)}\b[^.!?\n]*[.!?]?",
+                        " ",
+                        cleaned,
+                    )
+                except Exception:
+                    continue
             cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
-            if cleaned:
+            if cleaned and len(cleaned) > 50:
                 text = cleaned
 
         _is_hi = (language or "").lower().startswith("hi")
@@ -4666,22 +4824,15 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             issues.append("short_answer_too_brief_for_rich_timeline")
         if not timeline_layers.get("has_present_layer"):
             issues.append("missing_present_context_in_short_answer")
-        if not timeline_layers.get("has_short_trigger_layer"):
-            issues.append("missing_short_trigger_window_in_short_answer")
-        if not timeline_layers.get("has_long_supportive_layer"):
-            issues.append("missing_long_supportive_window_in_short_answer")
+        # Require at least one future timing window with a reason — golden style uses one clear window
         if not timeline_layers.get("has_future_favorable_with_reason"):
             # Regex missed it — use LLM as language-agnostic fallback before flagging
             if not self._llm_check_future_favorable(text):
                 issues.append("missing_future_favorable_reason_in_short_answer")
-        if timeline_layers.get("timeline_expression_count", 0) < 2:
-            issues.append("insufficient_timeline_variety_in_short_answer")
-        if month_year_mentions < 2:
+        if month_year_mentions < 1:
             issues.append("insufficient_explicit_month_year_windows_in_short_answer")
-        if len(_distinct_range_keys) < 2:
+        if len(_distinct_range_keys) < 1:
             issues.append("insufficient_distinct_month_year_windows_in_short_answer")
-        if len(_distinct_range_keys) >= 2 and len(_duration_bands) < 2:
-            issues.append("timeline_windows_lack_duration_variation_in_short_answer")
         if len(_start_indices) >= 2 and (_start_indices[-1] - _start_indices[0]) < 3:
             issues.append("timeline_windows_start_too_close_in_short_answer")
         if duration_only_mentions > 0 and month_year_mentions < 2:
@@ -4847,19 +4998,15 @@ Categories missing in current draft: {missing_text}
 
 Rewrite requirements (MANDATORY):
 1) Keep the SAME language/script style as the current answer.
-2) Target {_word_target}.
-3) Include at least 7 numbered points (1., 2., 3. ...).
-4) Include layered timing with reasoning:
-   - current/near-term context,
-   - one near-term activation period from relevant pratyantar,
+2) Write in flowing prose — NO numbered lists, NO bold markdown headers. The response must read like a natural astrologer speaking, not a report.
+3) Target {_word_target}.
+4) Cover at least 5 distinct astrological factors naturally woven into paragraphs. For each factor, use reason chain: astrological factor → interpretation → practical implication.
+5) Include layered timing with reasoning:
+   - one near-term activation period from relevant pratyantar (explicit month-year range),
    - one broader future period that may cross years,
-   - optional later consolidation period when data supports it.
-   - For every major prediction claim, include at least one future favorable/supportive timeline and why it is favorable.
-   - Vary timeline phrasing naturally: include both relative windows and month/year windows.
-5) For each numbered point, use reason chain:
-   astrological factor -> interpretation -> practical implication.
-6) Use broad coverage from available computed categories above. Include at least 5 available categories in the rewritten answer.
-7) Include at least 2 underutilized categories when they are available (e.g., gochara/transits, yogas, divisional confirmation, vargottama, vimshopaka, planetary conditions, planetary wars, house occupancy, aspects).
+   - for every major prediction claim, include at least one future favorable/supportive timeline and why it is favorable.
+6) Use broad coverage from available computed categories above — include at least 5 available categories.
+7) Include at least 2 underutilized categories when available (e.g., gochara/transits, yogas, divisional confirmation, vargottama, planetary conditions, house occupancy, aspects).
 8) Keep tone warm, expert, and empathetic.
 9) Do NOT write framework labels in user-facing text (e.g., "short trigger window",
    "long supportive phase", "maturation horizon", "timeline ladder", "Cross-Year Window",
@@ -5453,10 +5600,11 @@ Provide a concise, clear answer:"""
         return formatted
 
     def _format_enhanced_analysis(
-        self, 
-        enhanced: Dict, 
+        self,
+        enhanced: Dict,
         synthesis: Dict,
-        query_type: str
+        query_type: str,
+        chart_data: Optional[Dict] = None,
     ) -> str:
         """
         Format enhanced analysis and synthesis for LLM consumption.
@@ -5546,7 +5694,22 @@ Provide a concise, clear answer:"""
         if vargottama:
             lines.append(f"VARGOTTAMA (D1=D9 rashi): {', '.join(vargottama)} — highly potent, amplified results in their Dasha periods")
             lines.append("")
-        
+
+        # Vimshopaka Bala — varga-based overall planetary strength (0-20 scale, Saptavarga)
+        # Higher score = planet's results are more reliable and amplified across all life areas.
+        # Typical interpretation: 15-20 = very strong, 10-14 = moderate, 5-9 = weak, <5 = very weak.
+        vimshopaka = (chart_data or {}).get('vimshopaka', {})
+        if vimshopaka:
+            lines.append("VIMSHOPAKA BALA (planetary strength across varga charts, 0-20 scale):")
+            _planet_order = ['JUPITER', 'VENUS', 'MERCURY', 'MOON', 'SUN', 'SATURN', 'MARS', 'RAHU', 'KETU']
+            for _p in _planet_order:
+                _score = vimshopaka.get(_p) or vimshopaka.get(_p.capitalize())
+                if _score is not None:
+                    _label = "STRONG" if _score >= 15 else "MODERATE" if _score >= 10 else "WEAK" if _score >= 5 else "VERY WEAK"
+                    lines.append(f"  • {_p:10} {_score:4.1f}/20  ({_label})")
+            lines.append("  → Use these scores when discussing a planet's dasha: a planet with score ≥15 delivers strong, reliable results.")
+            lines.append("")
+
         return "\n".join(lines)
 
     def _get_house_lords(self, chart_data: Dict) -> Dict[str, str]:
@@ -5680,6 +5843,7 @@ Provide a concise, clear answer:"""
         response_mode: str = "default",  # PROGRESSIVE DISCLOSURE: "initial" | "detailed" | "followup" | "default"
         astro_evidence: Optional[Dict] = None,
         voice_preferences: Optional[Dict] = None,
+        validation_disclaimer: Optional[str] = None,
     ) -> str:
         # Build USER PREFERENCES block for prompt (long-term consultation style memory)
         user_preferences_block = ""
@@ -5801,7 +5965,18 @@ Provide a concise, clear answer:"""
                 dasha_data.get('pratyantardasha', {}).get('end', 'Unknown'),
             )
         )
-        pd_end_disp = _month_year_label(dasha_data.get('pratyantardasha', {}).get('end', 'Unknown'))
+        _pd_end_raw = dasha_data.get('pratyantardasha', {}).get('end', 'Unknown')
+        pd_end_disp = _month_year_label(_pd_end_raw)
+
+        # For INITIAL responses, hide all Pratyantardasha dates from Step 2.
+        # Even "Mercury (Feb 2026 to ongoing)" gives GPT-4o enough to compute
+        # that Venus starts April 2026. Show only the active planet name; direct
+        # the LLM to Step 3.5 for permitted timing windows.
+        if response_mode == "initial":
+            _praty_step2_line = f"• Pratyantardasha: {praty_planet} (active — timing windows in Step 3.5 below)"
+        else:
+            _praty_step2_line = f"• Pratyantardasha: {praty_planet} ({pd_start_disp} to {pd_end_disp})"
+
         if _raw_sequence:
             _seq_parts = [_display_planet_name(p.strip()) for p in str(_raw_sequence).split("/") if p.strip()]
             dasha_sequence = "/".join(_seq_parts) if _seq_parts else f"{maha_planet}/{antar_planet}"
@@ -5943,7 +6118,9 @@ Provide a concise, clear answer:"""
                 _lead = _months_until_for_filter(_pd.get("start"))
                 if _lead is not None and _lead >= _min_lead_months_initial:
                     _future_distinct.append(_pd)
-            if _future_distinct:
+            # Only defer if at least 2 windows survive — otherwise the LLM
+            # has no variety and the response cites a single timeline.
+            if len(_future_distinct) >= 2:
                 skipped_near = len(upcoming_pds_filtered) - len(_future_distinct)
                 upcoming_pds_filtered = _future_distinct
                 if skipped_near > 0:
@@ -5951,6 +6128,17 @@ Provide a concise, clear answer:"""
                         f"[DASHA FILTER] Deferred {skipped_near} immediate pratyantar window(s) "
                         f"(lead < {_min_lead_months_initial} months) for INITIAL response diversity."
                     )
+            elif _future_distinct:
+                # Only 1 distant window — keep 1 nearest non-deferred to give LLM 2 options
+                _nearest_non_deferred = [
+                    pd for pd in upcoming_pds_filtered if pd not in _future_distinct
+                ]
+                _nearest_non_deferred.sort(key=lambda p: p.get("start", "9999"))
+                upcoming_pds_filtered = _future_distinct + _nearest_non_deferred[:1]
+                logger.info(
+                    f"[DASHA FILTER] Kept 1 near-term window (would have deferred) "
+                    f"to ensure at least 2 options for INITIAL."
+                )
         skipped_past_pds = len(upcoming_pds) - len(upcoming_pds_filtered)
         if skipped_past_pds > 0:
             logger.info(f"[DASHA FILTER] Removed {skipped_past_pds} non-future pratyantar(s) from prompt "
@@ -5982,6 +6170,90 @@ Provide a concise, clear answer:"""
               f"{len(upcoming_pds_filtered)} after past-date filter")
         for _pd in upcoming_pds_filtered:
             logger.debug(f"  Pratyantar: {_pd.get('planet'):10} {_pd.get('start')} -> {_pd.get('end')} [{_pd.get('status')}]")
+
+        # ── SOOKSHMA DASHA (4th-level sub-periods for precise timing) ───────────
+        # Only inject for DETAILED/FOLLOWUP phases. For INITIAL responses, sookshma
+        # near-term windows (days-to-weeks) confuse the LLM into mixing current Mercury
+        # pratyantar sub-windows with the upcoming domain-relevant pratyantar dates.
+        sookshma_str = ""
+        if response_mode not in ('initial', 'default'):
+            try:
+                from src.engines.vedic.dasha_systems import compute_sookshmadashas, DashaPeriod as _DP
+                from datetime import datetime as _dt_cls
+
+                # Find the current active pratyantar (started ≤ today, ends > today)
+                # or the first upcoming one if none is currently active.
+                _active_pd_raw = None
+                _all_pds_raw = upcoming_pds  # before future-date filter
+                for _raw_pd in _all_pds_raw:
+                    _s = _raw_pd.get('start', '9999')
+                    _e = _raw_pd.get('end', '9999')
+                    if _s <= _today_str <= _e:
+                        _active_pd_raw = _raw_pd
+                        break
+                if _active_pd_raw is None and upcoming_pds_filtered:
+                    _active_pd_raw = upcoming_pds_filtered[0]
+
+                if _active_pd_raw:
+                    # Reconstruct a minimal DashaPeriod-compatible object
+                    from src.engines.core.celestial_bodies import CelestialBody as _CB
+
+                    def _pd_name_to_body(name: str) -> Optional[_CB]:
+                        for body in _CB:
+                            if body.name == name.upper():
+                                return body
+                        return None
+
+                    _pd_lord_body = _pd_name_to_body(_active_pd_raw.get('planet', ''))
+                    _pd_start_raw = _parse_iso_date(_active_pd_raw.get('start', _today_str))
+                    _pd_end_raw = _parse_iso_date(_active_pd_raw.get('end', _today_str))
+                    # DashaPeriod requires datetime, not date
+                    from datetime import time as _time_cls
+                    _pd_start_dt = datetime.combine(_pd_start_raw, _time_cls.min) if _pd_start_raw else None
+                    _pd_end_dt = datetime.combine(_pd_end_raw, _time_cls.min) if _pd_end_raw else None
+
+                    if _pd_lord_body and _pd_start_dt and _pd_end_dt:
+                        _duration_days = (_pd_end_dt - _pd_start_dt).days
+                        _duration_years = _duration_days / 365.25
+
+                        _mock_pd = _DP(
+                            lord=_pd_lord_body,
+                            start_date=_pd_start_dt,
+                            end_date=_pd_end_dt,
+                            duration_years=_duration_years,
+                            level="pratyantardasha",
+                            parent_lord=None,
+                        )
+                        _sookshmas = compute_sookshmadashas(_mock_pd)
+
+                        # Filter to future sookshmas only, show next 5
+                        _today_dt = _parse_iso_date(_today_str)  # returns date object
+                        _future_sookshmas = [
+                            s for s in _sookshmas
+                            if (s.end_date.date() if hasattr(s.end_date, 'date') else s.end_date) > _today_dt
+                        ][:5]
+
+                        if _future_sookshmas:
+                            _pd_display = _display_planet_name(_active_pd_raw.get('planet', ''))
+                            sookshma_str = (
+                                f"\nStep 3.4 - Sookshma Dasha within {_pd_display} Pratyantar "
+                                f"(precise sub-windows, use for very specific event timing):\n"
+                            )
+                            for _s in _future_sookshmas:
+                                _s_start = _s.start_date.strftime("%b %Y")
+                                _s_end = _s.end_date.strftime("%b %Y")
+                                _s_days = (_s.end_date - _s.start_date).days
+                                _s_planet = _display_planet_name(_s.lord.name)
+                                sookshma_str += (
+                                    f"  • {_s_planet:10} {_s_start} → {_s_end}  ({_s_days} days)\n"
+                                )
+                            sookshma_str += (
+                                "  → When the pratyantar aligns with a favorable sookshma lord, "
+                                "that 2-4 week window is the sharpest activation point.\n"
+                            )
+                            logger.info(f"[SOOKSHMA] Added {len(_future_sookshmas)} sookshma windows for {_pd_display} pratyantar")
+            except Exception as _sk_err:
+                logger.debug(f"[SOOKSHMA] Skipped sookshma computation: {_sk_err}")
 
         # ── BROAD SUPPORTIVE WINDOW (for longer, but accurate timeframes) ───────
         # Compute a mathematically correct broader window summarizing when the
@@ -6157,6 +6429,7 @@ Provide a concise, clear answer:"""
 
         _recent_cross_topic_window_keys: set[str] = set()
         _recent_cross_topic_years: set[int] = set()
+        _recent_cross_topic_start_months: set[str] = set()  # "YYYY-MM" start month keys
         _recent_cross_topic_samples: List[str] = []
         if conversation_history:
             # Scan latest assistant replies and map each to its preceding user query topic.
@@ -6176,6 +6449,10 @@ Provide a concise, clear answer:"""
                         _preceding_user = _m2.get("content") or ""
                         break
                 _msg_topic = _infer_topic_from_text(_preceding_user)
+                # Fallback: if user text is ambiguous ("Yes, go ahead"),
+                # infer topic from the assistant response itself.
+                if _msg_topic == "general":
+                    _msg_topic = _infer_topic_from_text(_assistant_text)
                 if _msg_topic in ("general", query_type):
                     continue
                 _keys = _extract_range_keys(_assistant_text)
@@ -6183,9 +6460,11 @@ Provide a concise, clear answer:"""
                     continue
                 _recent_cross_topic_window_keys.update(_keys)
                 for _k in _keys:
-                    _year_token = _k.split("|")[0].split("-")[0]
+                    _start_token = _k.split("|")[0]  # "YYYY-MM"
+                    _year_token = _start_token.split("-")[0]
                     if _year_token.isdigit():
                         _recent_cross_topic_years.add(int(_year_token))
+                    _recent_cross_topic_start_months.add(_start_token)
                 if len(_recent_cross_topic_samples) < 3:
                     _recent_cross_topic_samples.extend(list(_keys)[: (3 - len(_recent_cross_topic_samples))])
 
@@ -6268,21 +6547,31 @@ Provide a concise, clear answer:"""
             if _c.get("source") == "antardasha_window" and response_mode == "initial":
                 _score += 1.1
 
-            # Novelty guard: penalize exact reuse of a recent cross-topic range.
+            # Novelty guard: penalize reuse of a recent cross-topic range or start month.
             _ckey = _candidate_key(_c.get("start"), _c.get("end"))
             _is_reused = bool(_ckey and _ckey in _recent_cross_topic_window_keys)
+            _c_start_dt = _parse_iso_date(_c.get("start"))
+            _c_start_month = (
+                f"{_c_start_dt.year:04d}-{_c_start_dt.month:02d}" if _c_start_dt else ""
+            )
+            _is_same_start_month = bool(
+                _c_start_month and _c_start_month in _recent_cross_topic_start_months
+            )
             if _is_reused:
                 _score -= 4.5
+            elif _is_same_start_month:
+                # Different end date but same start month as a cross-topic window — still feels
+                # repetitive to the user ("April 2026" appeared in marriage, now in foreign).
+                _score -= 3.0
             else:
-                _s = _parse_iso_date(_c.get("start"))
-                if _s and _s.year not in _recent_cross_topic_years:
+                if _c_start_dt and _c_start_dt.year not in _recent_cross_topic_years:
                     _score += 0.8
 
             _c["lead_months"] = _lead
             _c["duration_months"] = _dur_m
             _c["duration_band"] = _dur_band
             _c["range_key"] = _ckey
-            _c["reused_recent_cross_topic_window"] = _is_reused
+            _c["reused_recent_cross_topic_window"] = _is_reused or _is_same_start_month
             _c["score"] = round(_score, 2)
             _scored_candidates.append(_c)
 
@@ -6371,6 +6660,17 @@ Provide a concise, clear answer:"""
                 "  In INITIAL short answers, ensure primary and secondary windows differ in duration profile (short/medium/long) and are not near-identical start timing when alternatives exist.\n"
                 "  Prefer a rank that is not marked as a reused cross-topic window when two choices are astrologically comparable.\n"
             )
+            # Explicitly name months the LLM must avoid (already appeared in a different topic answer).
+            # The LLM can infer these months from Step 2 dasha data — we must tell it explicitly NOT to use them.
+            if _recent_cross_topic_start_months:
+                _avoid_labels = sorted(
+                    {_month_year_label(f"{ym}-01") for ym in _recent_cross_topic_start_months}
+                )
+                ranked_windows_str += (
+                    f"  ⚠ AVOID THESE START MONTHS (already cited for a different topic this session): "
+                    f"{', '.join(_avoid_labels)}. "
+                    "Even if these months appear in Step 2/3.5 dasha data, DO NOT use them as the primary timing window for this answer — pick a later ranked window instead.\n"
+                )
         
         # Extract transit info safely
         transit_planets_raw = transit_data.get('transits', {})
@@ -6647,6 +6947,10 @@ EARLY CONVERSATION:
                 validation_context = format_validation_for_prompt(validation_result)
             except Exception as e:
                 logger.info(f"[VALIDATION] Error formatting validation: {e}")
+        # Append disclaimer hint so LLM can weave uncertainty naturally into prose
+        _vdisc = validation_disclaimer or ''
+        if _vdisc:
+            validation_context = (validation_context + "\n\n" + _vdisc).strip()
 
         divisional_context = ""
         if validation_result:
@@ -6831,7 +7135,9 @@ When user uses "it", "this", "that" or asks "why", "how" -> connect to conversat
         enhanced_context = ""
         if enhanced_analysis and synthesis:
             enhanced_context = self._format_enhanced_analysis(
-                enhanced_analysis, synthesis, query_type=validation_result.get('query_type', 'general') if validation_result else 'general'
+                enhanced_analysis, synthesis,
+                query_type=validation_result.get('query_type', 'general') if validation_result else 'general',
+                chart_data=chart_data,
             )
         deterministic_evidence = format_evidence_for_prompt(astro_evidence or {})
 
@@ -6894,8 +7200,46 @@ When you are done reasoning, write ONLY the polished answer for the user. Do NOT
         #   3. Classical text knowledge (RAG) and deterministic evidence
         #   4. Response instructions + conversation context
         #   5. Hidden reasoning scratchpad instructions
-        #   6. User query LAST — so LLM reads all ground truth before the question
+        #   6. Few-shot quality examples (closest to query = strongest signal)
+        #   7. User query LAST — so LLM reads all ground truth before the question
         # ════════════════════════════════════════════════════════════════════════
+
+        # Select 2 golden examples matching domain/language/mode
+        few_shot_block = get_few_shot_block(
+            query=query,
+            language_code=language,
+            domain=_ia.get("domain"),
+            response_mode=response_mode,
+            n=2,
+        )
+        logger.info(f"[FEW_SHOT] block_length={len(few_shot_block)} domain={_ia.get('domain')} lang={language} mode={response_mode}")
+
+        # Redact specific month-year dates from few-shot examples so the LLM
+        # cannot anchor on them when generating the real user's response.
+        # Covers: "April 2026", "April to August 2026", "(2026-04 to 2026-08)"
+        import re as _re_fs
+        _MONTHS_EN = (
+            "January|February|March|April|May|June|"
+            "July|August|September|October|November|December"
+        )
+        # 1. ISO ranges in chart_context: "(2026-04 to 2026-08)" → "(YYYY-MM to YYYY-MM)"
+        few_shot_block = _re_fs.sub(
+            r"\b(20\d\d-\d{2})\s+to\s+(20\d\d-\d{2})\b",
+            "YYYY-MM to YYYY-MM",
+            few_shot_block,
+        )
+        # 2. "Month to Month YYYY" or "Month - Month YYYY"
+        few_shot_block = _re_fs.sub(
+            rf"(?:{_MONTHS_EN})\s+(?:to|-)\s+(?:{_MONTHS_EN})\s+20\d\d",
+            "[Month to Month Year]",
+            few_shot_block,
+        )
+        # 3. standalone "Month YYYY"
+        few_shot_block = _re_fs.sub(
+            rf"(?:{_MONTHS_EN})\s+20\d\d",
+            "[Month Year]",
+            few_shot_block,
+        )
 
         prompt = f"""{system_prompt}
 
@@ -6961,9 +7305,9 @@ Step 1 - Moon's Position at Birth:
 Step 2 - Current Dasha Periods (Calculated from Moon Nakshatra):
 • Mahadasha: {maha_planet} ({md_start_disp} to {md_end_disp})
 • Antardasha: {antar_planet} ({ad_start_disp} to {ad_end_disp})
-• Pratyantardasha: {praty_planet} ({pd_start_disp} to {pd_end_disp})
+{_praty_step2_line}
 • Dasha Sequence: {dasha_sequence}
-{upcoming_pds_str}{broader_window_str}{next_ad_fp_str}{ranked_windows_str}{upcoming_ads_str}{domain_spotlight}
+{upcoming_pds_str}{sookshma_str}{broader_window_str}{next_ad_fp_str}{ranked_windows_str}{upcoming_ads_str}{domain_spotlight}
 TODAY'S DATE: {today_date}
 
 ⚠ PAST DATE RULE (MANDATORY): NEVER cite a date range as a prediction if it has already ended (end date < {today_date}).
@@ -7066,6 +7410,7 @@ substituting a training-knowledge default.
 
 {instructions}
 
+{few_shot_block}
 ====USER_QUERY_MARKER====
 "{query}"
 """

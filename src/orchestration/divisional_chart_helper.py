@@ -169,28 +169,62 @@ def get_divisional_chart_context(
         
         context += f"Lagna: {chart_info.get('lagna', 'Unknown')}\n"
         context += "\nPlanetary Positions:\n"
-        
+
+        # Classical dignity lookup for quick strength assessment in varga
+        _EXALT = {
+            'Sun': 'Mesha', 'Moon': 'Vrishabha', 'Mars': 'Makara', 'Mercury': 'Kanya',
+            'Jupiter': 'Karka', 'Venus': 'Meena', 'Saturn': 'Tula',
+        }
+        _OWN = {
+            'Sun': ['Simha'], 'Moon': ['Karka'], 'Mars': ['Mesha', 'Vrischika'],
+            'Mercury': ['Mithuna', 'Kanya'], 'Jupiter': ['Dhanu', 'Meena'],
+            'Venus': ['Vrishabha', 'Tula'], 'Saturn': ['Makara', 'Kumbha'],
+        }
+        _DEBIL = {
+            'Sun': 'Tula', 'Moon': 'Vrischika', 'Mars': 'Karka', 'Mercury': 'Meena',
+            'Jupiter': 'Makara', 'Venus': 'Kanya', 'Saturn': 'Mesha',
+        }
+
+        def _varga_dignity(planet: str, rashi: str) -> str:
+            r = rashi.strip().title()
+            if _EXALT.get(planet, '') == r:
+                return 'exalted'
+            if r in _OWN.get(planet, []):
+                return 'own sign'
+            if _DEBIL.get(planet, '') == r:
+                return 'debilitated'
+            return ''
+
         # Show key planets first
         key_planets = mapping['key_planets']
         other_planets = []
-        
+
         for planet, rashi in chart_info.get('planets', {}).items():
+            dignity_note = _varga_dignity(planet, rashi)
+            dignity_str = f" [{dignity_note}]" if dignity_note else ""
             if planet in key_planets:
-                context += f"  • {planet:10} -> {rashi:15} * (Key for {query_type})\n"
+                context += f"  • {planet:10} -> {rashi:15}{dignity_str}  * (Key for {query_type})\n"
             else:
-                other_planets.append((planet, rashi))
-        
+                other_planets.append((planet, rashi, dignity_str))
+
         # Show other planets
         if verbose and other_planets:
             context += "\nOther Planets:\n"
-            for planet, rashi in other_planets:
-                context += f"  • {planet:10} -> {rashi}\n"
-        
+            for planet, rashi, dignity_str in other_planets:
+                context += f"  • {planet:10} -> {rashi}{dignity_str}\n"
+
         context += "\n"
     
     if verbose:
-        context += f"Analysis guidance: Use {charts_to_include[0]} as primary reference for {query_type} analysis.\n"
-    
+        primary_chart = charts_to_include[0]
+        primary_name = CHART_MEANINGS.get(primary_chart, primary_chart)
+        context += (
+            f"Analysis guidance: Use {primary_chart} ({primary_name}) as the primary reference for {query_type} analysis.\n"
+            f"When citing this chart in your response, use its classical name ({primary_name.split(' - ')[0].strip()}) "
+            f"rather than the code '{primary_chart}'. "
+            f"For example: 'In the Navamsa chart...' rather than 'In D9...'\n"
+        )
+
     return context
 
 

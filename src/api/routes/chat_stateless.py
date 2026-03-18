@@ -18,6 +18,7 @@ import time
 import json
 from datetime import datetime
 from src.llm.factory import LLMFactory
+from src.ai.voice_charter import pick_initial_closing
 from config.logger import get_logger
 
 logger = get_logger("chat_stateless")
@@ -1116,11 +1117,10 @@ Respond in STRICT JSON ONLY, no extra text, like this:
             min_warmth = max(1, min(10, int(getattr(settings, "STYLE_MIN_HUMAN_WARMTH_SCORE", 7))))
             min_auth = max(1, min(10, int(getattr(settings, "STYLE_MIN_AUTHENTIC_ASTROLOGER_VOICE_SCORE", 7))))
             max_repeat = max(1, min(10, int(getattr(settings, "STYLE_MAX_REPETITION_RISK_SCORE", 4))))
-            needs_style_rewrite = (
-                (warmth < min_warmth)
-                or (authenticity < min_auth)
-                or (repetition_risk > max_repeat)
-            )
+            # Style rewrite disabled — few-shot examples handle warmth and tone.
+            # Previously caused a second LLM call that added latency and could override
+            # the natural prose written by the model following the golden examples.
+            needs_style_rewrite = False
 
             if needs_style_rewrite and not (data.get("needs_revision") and data.get("revised_answer")):
                 logger.info(
@@ -1945,12 +1945,25 @@ def send_message(request: SendMessageRequest):
         original_answer = answer
         for pattern in thank_you_patterns:
             answer = re.sub(pattern, "", answer, flags=re.IGNORECASE)
-        
+
         # Remove orphaned sentence starters after removal
         answer = re.sub(r"^\s*(Now|Ab|So|Toh)[,.]?\s*", "", answer, flags=re.IGNORECASE)
-        
+
         if answer != original_answer:
             logger.info(f"[POST_PROCESS] Removed 'thank you' pattern")
+
+        # ── STRIP HOUSE PARENTHETICAL LABELS ──────────────────────────────────
+        # LLM adds educational glosses like "7th house (Marriage & Partnership)"
+        # or "2nd house (Wealth & Family)". These sound robotic. Strip them.
+        _before_labels = answer
+        answer = re.sub(
+            r'\b(house|lord|bhava)\s*\((?!D\d)[^)]{3,50}\)',
+            lambda m: m.group(0).split('(')[0].rstrip(),
+            answer,
+            flags=re.IGNORECASE,
+        )
+        if answer != _before_labels:
+            logger.info("[POST_PROCESS] Stripped house parenthetical label(s)")
 
         # Use the RESULT phase (what the orchestrator decided) not the INPUT phase
         result_phase = (result.get('conversation_phase') or {}).get('phase', conv_phase_data.get('phase', 'INITIAL'))
@@ -2038,32 +2051,79 @@ def send_message(request: SendMessageRequest):
             
             logger.info(f"[MOBILE] Truncated: {word_count} → {len(answer.split())} words")
 
-        # ── FINAL ENFORCEMENT: ensure INITIAL/new-topic short responses end with offer-for-detail question ──
-        # Covers two cases:
-        #   1. INITIAL → AWAITING_DETAIL  (fresh user question)
-        #   2. FOLLOWUP_LOOP → AWAITING_DETAIL  (user said yes to cross-domain follow-up → new topic cycle)
-        # Runs *after* any truncation so the closing question cannot be accidentally cut off.
+        # ── CLOSING CHECK: trust the LLM's own follow-up offer ──
+        # The new prose instruction tells the LLM to write a natural follow-up offer itself.
+        # Only append a fallback closing if the answer has NO sentence-ending punctuation at all
+        # (edge case: very truncated answer with no period, question mark, or exclamation).
         if result_phase == 'AWAITING_DETAIL':
             _input_phase = conv_phase_data.get('phase', 'INITIAL')
             _is_new_topic_cycle = _input_phase in ('INITIAL', 'FOLLOWUP_LOOP')
             if _is_new_topic_cycle:
-                last_200 = answer[-200:] if len(answer) > 200 else answer
-                already_has_closing = '?' in last_200
+                # Check last 300 chars for any sentence-ending punctuation — LLM always writes one
+                last_300 = answer[-300:] if len(answer) > 300 else answer
+                already_has_closing = any(c in last_300 for c in ('?', '!', '।'))
                 if not already_has_closing:
                     _detected_lang = result.get('detected_language') or session_manager.get_detected_language(user_id) or 'en'
                     _closing_q_map = {
-                        'en': 'Would you like me to explain the detailed astrological reasoning behind this?',
-                        'hi': 'Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?',
-                        'hi-lat': 'Kya aap iske peeche ki vistarit jyotishiya wajah jaanna chahenge?',
-                        'ta': 'Itharku pinnaal ullaa jothida karanam theriya virumbukireerga?',
+                        'en': 'Would you like me to go deeper into the astrological reasoning?',
+                        'hi': 'Kya aap aur detail mein jaanna chahenge?',
+                        'hi-lat': 'Kya aap aur detail mein jaanna chahenge?',
+                        'ta': 'Itharku pin ullana jothida karanam theriya virumbukireerga?',
                         'ta-lat': 'Itharku pin ullana jothida karanam theriya virumbukireerga?',
                         'pa': 'Ki tusi is de pichhe di jyotish wajah jaanna chahunde ho?',
                         'pa-lat': 'Ki tusi is de pichhe di jyotish wajah jaanna chahunde ho?',
                     }
                     _closing_q = _closing_q_map.get(_detected_lang, _closing_q_map['en'])
                     answer = (answer.rstrip() + "\n\n" + _closing_q).strip()
-                    logger.info(f"[POST_PROCESS] Appended offer-for-detail question (closing was truncated)")
-        
+                    logger.info(f"[POST_PROCESS] Appended fallback closing (answer had no sentence-ending punctuation)")
+
+        # ── DUPLICATE CLOSING CLEANUP ──
+        # The LLM sometimes writes a non-question "offer" sentence immediately before the
+        # closing question, creating a redundant double ending:
+        #   "Agar aap chahein, toh main aur bata sakta hoon.\n\nKya aap jaanna chahenge?"
+        # If the answer ends with "?" we check if the sentence just before the final question
+        # is itself a generic "offer more detail" statement, and if so remove it.
+        if answer.rstrip().endswith('?'):
+            _sentences = re.split(r'(?<=[.!?])\s+', answer.strip())
+            if len(_sentences) >= 2:
+                _penultimate = _sentences[-2]
+                _offer_markers = [
+                    r'agar aap chah', r'agar chahein',
+                    r'if you.{0,10}like', r'would you like me to',
+                    r'main aapko.*bata sakta', r'aur detail (mein|chahiye)',
+                    r'astrological reasoning.*detail', r'gehri jyotish',
+                ]
+                if any(re.search(p, _penultimate, re.IGNORECASE) for p in _offer_markers):
+                    answer = (' '.join(_sentences[:-2]) + '\n\n' + _sentences[-1]).strip()
+                    logger.info("[POST_PROCESS] Stripped redundant non-question offer sentence before closing question")
+
+        # ── NON-ASTROLOGICAL CLOSING QUESTION GUARD ──
+        # Replace closing questions that ask about user preferences/goals (not astrological)
+        # with a proper canned astrological closing from pick_initial_closing().
+        # Detects patterns like "kis tarah ki X chahiye?", "what kind of X are you looking for?"
+        if result_phase == 'AWAITING_DETAIL' and answer.rstrip().endswith('?'):
+            _last_q_match = re.search(r'[^.!?\n]*\?+\s*$', answer)
+            if _last_q_match:
+                _last_q = _last_q_match.group(0)
+                _non_astro_patterns = [
+                    r'kis tarah ki.{0,60}\?',
+                    r'kya type.{0,60}\?',
+                    r'what (kind|type) of.{0,60}(looking|want|seeking|interest)',
+                    r'(talash|dhundh|chahte|chahiye).{0,40}\?$',
+                    r'kahan.{0,40}(jaana|settle|rehna).{0,30}\?',
+                    r'aapke (liye|goals|plans|expectations).{0,40}\?',
+                ]
+                if any(re.search(p, _last_q, re.IGNORECASE) for p in _non_astro_patterns):
+                    _detected_lang = result.get('detected_language') or session_manager.get_detected_language(user_id) or 'en'
+                    _ia_domain = (intent_analysis or {}).get('domain') or conv_phase_data.get('topic') or 'general'
+                    _replacement_q = pick_initial_closing(
+                        rng=__import__('random').Random(answer[:40]),
+                        language=_detected_lang,
+                        domain=_ia_domain,
+                    )
+                    answer = answer[:_last_q_match.start()].rstrip() + '\n\n' + _replacement_q
+                    logger.info(f"[POST_PROCESS] Replaced non-astrological closing question with: {_replacement_q}")
+
         # Run final semantic validator using a small conversation context window.
         # For detailed responses (second-step CONTINUATION/CLARIFICATION after an
         # initial timing answer), require AT LEAST 7 numbered astrological reasoning
@@ -2078,12 +2138,9 @@ def send_message(request: SendMessageRequest):
         # answer), otherwise validator rewrites can drag the answer back to old topic.
         _input_phase = conv_phase_data.get('phase', 'INITIAL')
         _is_detailed_step = (_input_phase == 'AWAITING_DETAIL' and result_phase == 'FOLLOWUP_LOOP')
-        if (
-            intent == "RAG_WITH_CALCULATION"
-            and _ia_type in ("CONTINUATION", "CLARIFICATION")
-            and _is_detailed_step
-        ):
-            min_points = 7
+        # Numbered points enforcement disabled — few-shot examples teach structure
+        # through prose style, not numbered lists.
+        # min_points = 7 was forcing the validator to rewrite prose into numbered structure.
 
         answer = validate_and_sanitize_response(
             question=question,
@@ -2095,19 +2152,15 @@ def send_message(request: SendMessageRequest):
         )
 
         # ── POST-VALIDATOR: enforce cross-domain follow-up question on AWAITING_DETAIL→FOLLOWUP_LOOP ──
-        # The numbered-points rewrite can lose the follow-up question injected by the orchestrator.
-        # Re-strip any "offer more details" sentences the rewriter may have added, then
-        # append the pre-generated cross-domain follow-up question if it is missing.
+        # The detailed instruction now tells the LLM to end with _suggested_followup directly.
+        # We only strip truly generic "offer more details on same topic" endings that would
+        # conflict with the cross-domain pivot question. Natural prose closings are preserved.
         if conv_phase_data.get('phase') == 'AWAITING_DETAIL' and result_phase == 'FOLLOWUP_LOOP':
             _offer_more_patterns_post = [
-                # Generic Hindi "if you want more details" patterns
+                # Only strip explicit same-topic "do you want more detail" (not natural closings)
                 r"[^.!?\n]*(agar aap chah|agar chahein).{0,80}(detail|vistar|samjha|elaborate|vyakhya|bata)[^.!?\n]*[.!?]?\s*",
-                r"[^.!?\n]*(aur (bhi )?detail mein samjha|aur jaanna hai|aur detail chahiye|aur bhi (batana|samjhana))[^.!?\n]*[.!?]?\s*",
-                r"[^.!?\n]*\b(main aapko|main aap).{0,50}(aur (bata|samjha|detail|vyakhya)|more detail|elaborate|explain further)[^.!?\n]*[.!?]?\s*",
-                r"[^.!?\n]*\b(iske peeche|iske piche).{0,60}(vyakhya|samjha|bata|detail|karanon)[^.!?\n]*[.!?]?\s*",
-                r"[^.!?\n]*\b(if you.{0,20}(would like|want|wish)|would you like me to).{0,60}(more detail|elaborate|explain (further|more)|go deeper)[^.!?\n]*[.!?]?\s*",
-                # Remove awkward same-topic "opportunity" questions (e.g., marriage)
-                r"[^.!?\n]*(aapko|tumhe).{0,40}(shadi|shaadi|marriage).{0,40}(kaise).{0,40}(avsar|mauke?|opportunit(?:y|ies))[^.!?\n]*\?\s*",
+                r"[^.!?\n]*(aur (bhi )?detail mein samjha|aur detail chahiye)[^.!?\n]*[.!?]?\s*",
+                r"[^.!?\n]*\b(would you like me to).{0,60}(more detail|elaborate|explain (further|more)|go deeper)[^.!?\n]*[.!?]?\s*",
             ]
             for _pat in _offer_more_patterns_post:
                 answer = re.sub(_pat, " ", answer, flags=re.IGNORECASE)
@@ -2135,13 +2188,12 @@ def send_message(request: SendMessageRequest):
                 answer = re.sub(r"\n{3,}", "\n\n", answer)
                 answer = re.sub(r"  +", " ", answer).strip()
             # Always append the cross-domain follow-up question if the validated response
-            # lost it. Check the last 150 chars for the start of the follow-up text so we
-            # don't double-append if the LLM already included it correctly.
+            # lost it. Search the FULL answer so we don't double-append if the LLM already
+            # included the question anywhere (not just in the last 150 chars).
             _fup = result.get('_detailed_followup', '') or ''
             if _fup:
-                _last_150 = answer[-150:] if len(answer) > 150 else answer
-                _fup_start = _fup[:30].lower()  # First 30 chars as fingerprint
-                if _fup_start not in _last_150.lower():
+                _fup_start = _fup[:40].lower()  # First 40 chars as fingerprint
+                if _fup_start not in answer.lower():
                     answer = answer.rstrip() + "\n\n" + _fup
                     logger.info(f"[POST_PROCESS] Appended cross-domain follow-up question after validator rewrite")
 
