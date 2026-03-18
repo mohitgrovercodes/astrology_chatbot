@@ -1066,10 +1066,10 @@ class EnhancedLangGraphOrchestrator:
             else:
                 script_instruction = f"Respond entirely in {lang_name} (NATIVE SCRIPT ONLY)."
             
-            # PHASE 6: Tiered History Support
+            # PHASE 6: Tiered History Support — use full CONVERSATION_CONTEXT_WINDOW (10 messages)
             history_context = ""
             if state.get('conversation_history'):
-                history_turns = state['conversation_history'][-3:]
+                history_turns = state['conversation_history'][-10:]
                 from src.ai.prompt_builder import PromptBuilder
                 builder = PromptBuilder()
                 formatted_history = builder._format_conversation(history_turns)
@@ -2334,6 +2334,12 @@ Provide a concise answer:"""
             phase_instruction = ""
             new_phase_data = {}  # Will be set on state for chat_stateless to persist
 
+            # ── Query context modifier — LLM reads query + history to detect intent shifts ──
+            _query_context_note = self._analyze_query_context(
+                query=state.get('query') or '',
+                conversation_history=state.get('conversation_history') or [],
+            )
+
             if current_phase == PHASE_AWAITING_DETAIL and user_response_type == 'NEGATIVE':
                 # ── User declined details → Ask an alternative follow-up question ──
                 logger.info(f"[PHASE] AWAITING_DETAIL + NEGATIVE → generating alternative follow-up")
@@ -2392,16 +2398,17 @@ Study the STYLE EXAMPLES above. For a detailed response, expand the 5-part struc
 5. Timing window — upcoming Pratyantar with explicit month-year range and practical expectation (2 sentences)
 6. Supporting factors — yoga OR transit (Jupiter/Saturn gochara) relevant to {_topic or 'this topic'} (2 sentences)
 7. {_sh['divisional']} chart — what it shows about {_sh['div_focus']} (1-2 sentences)
-8. One honest nuance — challenge or caveat framed constructively (1 sentence)
+8. A natural, woven-in nuance — acknowledge a real challenge (debilitation, weak planet, timing uncertainty) but frame it as something to navigate through, not a label or warning. (1 sentence)
 9. Close with: {_suggested_followup}
 
-Rules:
+{(_query_context_note + chr(10)) if _query_context_note else ""}Rules:
 - Show reason chain: astrological factor → interpretation → practical outcome.
 - Use explicit month-year ranges from the dasha data — never duration-only like "6 months".
 - Do NOT repeat the initial short answer word-for-word — add genuine depth.
 - Timing must stay consistent with the window given in the initial answer.
 - Target length: 300-400 words.
 { _voice_charter }
+{ self._build_coherence_hint(state.get("conversation_history", []), (_topic or "general").lower(), current_query=state.get('query', '')) }
 """
                 new_phase_data = {
                     "phase": PHASE_FOLLOWUP_LOOP,
@@ -2597,6 +2604,7 @@ ANSWER THIS SPECIFIC QUESTION: {_answer_topic}
                 _coherence_hint = self._build_coherence_hint(
                     state.get("conversation_history", []),
                     _topic_norm,
+                    current_query=state.get('query', ''),
                 )
                 _closing_q = pick_initial_closing(
                     rng=random.Random(state.get('query', '')),
@@ -2645,12 +2653,12 @@ LANGUAGE: Write entirely in {_lang_now}.
 
 Study the STYLE EXAMPLES above for tone and flow only — their chart facts are for DIFFERENT users and must NEVER be copied. Structure your response as:
 1. Personal opener — address the user by name with ONE sentence that is specific and grounded. If the question implies impatience ("kab hogi?") acknowledge the wait warmly and tie it to a concrete chart signal ("Venus ka period shuru ho raha hai"). If hopeful, match that energy with something specific from the chart. If anxious or under pressure, reflect that context lightly. BANNED openers (these will be rejected): any variant of "samay favorable hai", "achhe samay ki nishaniyan hain", "great news", "bahut achha time aa raha hai", "chart mein positive indicators hain" — these are hollow and feel like a template. The opener must reference ONE specific thing from this user's chart or life context. Example of good openers: "Kartikeya, intezaar zyada nahi — Venus ka sub-period jaldi shuru ho raha hai aur ye period exactly rishton ke liye bana hai." or "Kartikeya, chart dekh ke keh sakta hoon ki ye wait meaningful hai — ek khaas window aa rahi hai."
-2. Two to three astrological factors directly relevant to the user's question. BANNED: parenthetical labels after house numbers like "7th house (Marriage & Partnership)" or "2nd house (Wealth & Family)" — a real astrologer does not explain what the 7th house means to every client. Just say "7th house" or "7th lord". BANNED: vague claims like "Navamsa mein Venus ki position positive hai" — if you mention a divisional chart, say WHY it matters for this user specifically (e.g., what sign Venus is in, or what its dignity is there). BANNED: claiming a transit aspect (e.g., "Jupiter 7th house ko support karega") unless the TRANSITS section above explicitly shows Jupiter aspecting the 7th house. Relevant factors by domain: marriage → 7th lord, Venus dasha/antardasha, D9 (Navamsa) chart, Jupiter transit to 7th house (only if shown in transit data); foreign → 12th house lord, Rahu/Ketu axis, 9th house, relevant dasha; career → 10th lord, Saturn dasha/transit, D10. For each factor, say what it means for THIS person's specific situation. (3-4 sentences)
-3. ONE specific timing window — explicit month-year range derived from the dasha/transit data above, with a practical reason why that window is good. (1-2 sentences)
-4. One honest nuance — reference a SPECIFIC planet or yoga by name, balanced, never doom-saying. (1 sentence)
+2. Two to three astrological factors directly relevant to the user's question. BANNED: parenthetical labels after house numbers like "7th house (Marriage & Partnership)" or "2nd house (Wealth & Family)" — a real astrologer does not explain what the 7th house means to every client. Just say "7th house" or "7th lord". BANNED: vague claims like "Navamsa mein Venus ki position positive hai" — if you mention a divisional chart, say WHY it matters for this user specifically (e.g., what sign Venus is in, or what its dignity is there). BANNED: claiming a transit aspect (e.g., "Jupiter 7th house ko support karega") unless the TRANSITS section above explicitly shows Jupiter aspecting the 7th house. Relevant factors by domain: marriage → 7th lord, Venus dasha/antardasha, D9 (Navamsa) chart, Jupiter transit to 7th house (only if shown in transit data); foreign → 12th house lord, Rahu/Ketu axis, 9th house, relevant dasha; career → 10th lord, Saturn dasha/transit, D10. For each factor, say what it means for THIS person's specific situation. (2-3 sentences total)
+3. ONE specific timing window — explicit month-year range derived from the dasha/transit data above, with a practical reason why that window is good. (1-2 sentences) STRICT: Give exactly ONE timing window. Do NOT list a second or backup window. Do NOT say "or" between two date ranges. Secondary windows belong in the DETAILED response only.
+4. A natural, woven-in nuance — name a SPECIFIC planet or yoga and what it means practically; acknowledge a real challenge without labeling it or making it sound like a disclaimer. (1 sentence)
 5. Close with ONE question that offers to go DEEPER into the astrological analysis. The question must be about chart depth — e.g., "Chahein toh main D9 chart aur exact dasha timings aur detail mein bataun?" or "Would you like me to walk through the D12/D10 chart factors and their exact dates?" NEVER ask the user about their preferences, goals, or what kind of opportunity they want — that is not astrology. The closing question is always an OFFER OF MORE CHART ANALYSIS.
 
-Rules:
+{(_query_context_note + chr(10)) if _query_context_note else ""}Rules:
 - Use explicit month-year ranges from Step 3.5/3.8 dasha data above. NEVER compute or infer pratyantar dates yourself — only use the exact windows listed.
 - TIMING CONSISTENCY: If you mention a period in the opener (e.g. "Venus pratyantar [month] se"), use the SAME dates in the timing section. Do NOT introduce a different month-year range for the same period later in the response.
 - Ground every claim in the chart/dasha/transit data above — no training-knowledge defaults.
@@ -2658,7 +2666,8 @@ Rules:
 - Do NOT start with technical terms like "Mahadasha", "10th house lord". Start with a human outcome sentence.
 - Explain any technical term immediately in plain language — but NEVER add parenthetical labels after house numbers like "7th house (Marriage & Partnership)" or planet names "Venus (love planet)". An astrologer speaks to a client who knows basics, not a student who needs a textbook glossary.
 - Warm, direct, consultative tone — not mechanical or formulaic.
-- Target length: 150-200 words.
+- Target length: 100-130 words. Be concise. Every sentence must earn its place.
+- ABSOLUTELY NO EMOJIS. Not a single emoji character anywhere in the response.
 - {_horizon_hint}
 - {_window_reuse_hint}
 {("- " + _min_timing_month_hint) if _min_timing_month_hint else ""}
@@ -2675,6 +2684,7 @@ Rules:
                     "last_query": _orig_user_q,
                     "followup_count": 0
                 }
+                state['_was_initial_response'] = True
 
             state['conversation_phase'] = new_phase_data
 
@@ -2727,7 +2737,6 @@ Rules:
             if conversation_history:
                 formatted_history = self._format_conversation_for_llm(conversation_history)
                 messages.extend(formatted_history)
-                logger.info(f"[RAG_WITH_CALCULATION] Including {len(formatted_history)} previous messages")
 
             # Add current query with chart context
             user_prompt = "USER_QUERY:" + prompt.split("====USER_QUERY_MARKER====")[1]
@@ -2845,23 +2854,20 @@ Rules:
                 _ok_init, _quality_init = self._assess_initial_timeline_quality(state.get('answer', ''), language=_detected_lang)
                 _ok_init, _quality_init = _apply_cross_topic_novelty_issue(state.get('answer', ''), _quality_init)
                 if not _ok_init:
-                    _initial_original_answer = state.get('answer', '')
                     _issues_init = ", ".join(_quality_init.get("issues", [])) or "insufficient timeline structure"
                     logger.info(
                         f"[INITIAL_QA] Quality gate failed "
                         f"(words={_quality_init.get('word_count')}, "
                         f"timeline_expr={(_quality_init.get('timeline_layers') or {}).get('timeline_expression_count')}). "
-                        f"Issues: {_issues_init}. Regenerating once."
+                        f"Issues: {_issues_init}."
                     )
-                    # Only the issues that still exist in _assess_initial_timeline_quality are critical.
-                    # Two-window / dual-horizon checks have been removed — golden style uses ONE window.
+
+                    # Middle path: only a missing *reasoning* sentence triggers an LLM rewrite
+                    # (one pass only — no second strict pass). All other issues (missing dates,
+                    # duration-only phrasing, cross-topic reuse) are handled cheaply by the
+                    # deterministic injection below, without additional LLM calls.
                     _critical_init_issues = {
                         "missing_future_favorable_reason_in_short_answer",
-                        "insufficient_explicit_month_year_windows_in_short_answer",
-                        "insufficient_distinct_month_year_windows_in_short_answer",
-                        "contains_past_year_timeline_reference",
-                        "duration_only_timeline_without_explicit_month_year_ranges",
-                        "reused_cross_topic_timeline_window_despite_available_alternatives",
                     }
 
                     def _issue_score(_q: Dict[str, Any]) -> Tuple[int, int]:
@@ -2870,14 +2876,9 @@ Rules:
                         return (_critical_count, len(_issues))
 
                     _orig_score = _issue_score(_quality_init)
-                    _should_attempt_rewrite = _orig_score[0] > 0
 
-                    if not _should_attempt_rewrite:
-                        logger.info(
-                            "[INITIAL_QA] Skipping rewrite: no critical issues remain "
-                            f"(issues={', '.join(_quality_init.get('issues', []))})."
-                        )
-                    else:
+                    if _orig_score[0] > 0:
+                        # Single LLM rewrite pass — only for missing timing reasoning.
                         rewrite_prompt = self._build_initial_timeline_rewrite_prompt(
                             query=_effective_query,
                             draft_answer=state.get('answer', ''),
@@ -2889,107 +2890,60 @@ Rules:
                             revised_init_text = _strip_llm_wrapper(revised_init.content if hasattr(revised_init, 'content') else str(revised_init))
                             _ok_init2, _quality_init2 = self._assess_initial_timeline_quality(revised_init_text, language=_detected_lang)
                             _ok_init2, _quality_init2 = _apply_cross_topic_novelty_issue(revised_init_text, _quality_init2)
-                            if _ok_init2:
+                            _rev_score = _issue_score(_quality_init2)
+                            if _ok_init2 or _rev_score < _orig_score:
                                 state['answer'] = revised_init_text
                                 logger.info(
-                                    f"[INITIAL_QA] Regeneration passed "
-                                    f"(words={_quality_init2.get('word_count')}, "
-                                    f"timeline_expr={(_quality_init2.get('timeline_layers') or {}).get('timeline_expression_count')})."
+                                    f"[INITIAL_QA] LLM rewrite accepted "
+                                    f"(critical/issues {_orig_score} -> {_rev_score})."
                                 )
                             else:
-                                _rev_score = _issue_score(_quality_init2)
-                                if _rev_score < _orig_score:
-                                    state['answer'] = revised_init_text
-                                    logger.info(
-                                        f"[INITIAL_QA] Regeneration improved but not fully passing "
-                                        f"(critical/issues {_orig_score} -> {_rev_score})."
-                                    )
-                                else:
-                                    state['answer'] = _initial_original_answer
-                                    logger.info(
-                                        f"[INITIAL_QA] Regeneration did not improve critical quality "
-                                        f"(critical/issues {_orig_score} -> {_rev_score}). Keeping safer original draft."
-                                    )
-
-                                _chosen_text = state.get('answer', '')
-                                _ok_init3, _quality_init3 = self._assess_initial_timeline_quality(_chosen_text, language=_detected_lang)
-                                _ok_init3, _quality_init3 = _apply_cross_topic_novelty_issue(_chosen_text, _quality_init3)
-                                _critical_remaining = any(
-                                    _x in _critical_init_issues for _x in (_quality_init3.get("issues", []) or [])
-                                )
-                                if _critical_remaining:
-                                    logger.info(
-                                        "[INITIAL_QA] Critical timeline issues remain after first rewrite. "
-                                        "Applying one strict corrective pass."
-                                    )
-                                    strict_prompt = self._build_initial_timeline_rewrite_prompt(
-                                        query=_effective_query,
-                                        draft_answer=_chosen_text,
-                                        language=state.get('detected_language', 'en'),
-                                        quality=_quality_init3,
-                                    )
-                                    strict_resp = self.llm.invoke(strict_prompt)
-                                    strict_text = _strip_llm_wrapper(strict_resp.content if hasattr(strict_resp, 'content') else str(strict_resp))
-                                    _ok_init4, _quality_init4 = self._assess_initial_timeline_quality(strict_text, language=_detected_lang)
-                                    _ok_init4, _quality_init4 = _apply_cross_topic_novelty_issue(strict_text, _quality_init4)
-                                    _chosen_score = _issue_score(_quality_init3)
-                                    _strict_score = _issue_score(_quality_init4)
-                                    # Only accept strict pass when critical count decreases or fully passes.
-                                    # A reduction in non-critical issues only (same critical count) is not
-                                    # sufficient to replace the draft — factual drift risk outweighs minor gains.
-                                    if _ok_init4 or _strict_score[0] < _chosen_score[0]:
-                                        state['answer'] = strict_text
-                                        logger.info(
-                                            f"[INITIAL_QA] Strict corrective pass accepted "
-                                            f"(critical/issues {_chosen_score} -> {_strict_score})."
-                                        )
-                                    else:
-                                        logger.info(
-                                            f"[INITIAL_QA] Strict corrective pass did not reduce critical issues "
-                                            f"(critical/issues {_chosen_score} -> {_strict_score}). Retaining safer draft."
-                                        )
-
-                                # Deterministic last-mile fallback:
-                                # if LLM rewrites still fail timeline diversity, inject distinct future windows
-                                # from computed dasha windows so INITIAL answers never collapse to one tiny window.
-                                _final_text = state.get('answer', '')
-                                _ok_init5, _quality_init5 = self._assess_initial_timeline_quality(_final_text, language=_detected_lang)
-                                _ok_init5, _quality_init5 = _apply_cross_topic_novelty_issue(_final_text, _quality_init5)
-                                _final_issues = set(_quality_init5.get("issues", []) or [])
-                                _needs_det_fallback = bool(_final_issues.intersection({
-                                    "insufficient_explicit_month_year_windows_in_short_answer",
-                                    "insufficient_distinct_month_year_windows_in_short_answer",
-                                    "timeline_windows_lack_duration_variation_in_short_answer",
-                                    "timeline_windows_start_too_close_in_short_answer",
-                                    "reused_cross_topic_timeline_window_despite_available_alternatives",
-                                }))
-                                if _needs_det_fallback:
-                                    _patched = self._inject_deterministic_initial_timeline_diversity(
-                                        answer=_final_text,
-                                        dasha_data=state.get("dasha_data", {}),
-                                        language=_detected_lang,
-                                        recent_cross_topic_keys=_recent_cross_topic_keys,
-                                        min_lead_months=2,
-                                    )
-                                    if _patched != _final_text:
-                                        _ok_init6, _quality_init6 = self._assess_initial_timeline_quality(_patched, language=_detected_lang)
-                                        _ok_init6, _quality_init6 = _apply_cross_topic_novelty_issue(_patched, _quality_init6)
-                                        _final_score = _issue_score(_quality_init5)
-                                        _patched_score = _issue_score(_quality_init6)
-                                        if _ok_init6 or _patched_score < _final_score:
-                                            state['answer'] = _patched
-                                            _quality_init3 = _quality_init6
-                                            logger.info(
-                                                f"[INITIAL_QA] Deterministic timeline fallback accepted "
-                                                f"(critical/issues {_final_score} -> {_patched_score})."
-                                            )
-
                                 logger.info(
-                                    f"[INITIAL_QA] Final post-regeneration quality "
-                                    f"(issues={', '.join((_quality_init3 or {}).get('issues', []))})."
+                                    f"[INITIAL_QA] LLM rewrite did not improve; keeping original "
+                                    f"(critical/issues {_orig_score} -> {_rev_score})."
                                 )
                         except Exception as _re:
-                            logger.info(f"[INITIAL_QA] Regeneration skipped due to error: {_re}")
+                            logger.info(f"[INITIAL_QA] LLM rewrite skipped due to error: {_re}")
+                    else:
+                        logger.info(
+                            "[INITIAL_QA] Skipping LLM rewrite: no reasoning issues "
+                            f"(issues={', '.join(_quality_init.get('issues', []))})."
+                        )
+
+                    # Deterministic injection: always runs after the (optional) LLM pass.
+                    # Fixes remaining date/window/reuse issues without an extra LLM call.
+                    _det_text = state.get('answer', '')
+                    _ok_det, _quality_det = self._assess_initial_timeline_quality(_det_text, language=_detected_lang)
+                    _ok_det, _quality_det = _apply_cross_topic_novelty_issue(_det_text, _quality_det)
+                    _det_trigger_issues = {
+                        "insufficient_explicit_month_year_windows_in_short_answer",
+                        "duration_only_timeline_without_explicit_month_year_ranges",
+                        "reused_cross_topic_timeline_window_despite_available_alternatives",
+                    }
+                    if not _ok_det and bool(set(_quality_det.get("issues", [])).intersection(_det_trigger_issues)):
+                        _patched = self._inject_deterministic_initial_timeline_diversity(
+                            answer=_det_text,
+                            dasha_data=state.get("dasha_data", {}),
+                            language=_detected_lang,
+                            recent_cross_topic_keys=_recent_cross_topic_keys,
+                            min_lead_months=2,
+                        )
+                        if _patched != _det_text:
+                            _ok_p, _quality_p = self._assess_initial_timeline_quality(_patched, language=_detected_lang)
+                            _ok_p, _quality_p = _apply_cross_topic_novelty_issue(_patched, _quality_p)
+                            _det_before = _issue_score(_quality_det)
+                            _det_after = _issue_score(_quality_p)
+                            if _ok_p or _det_after < _det_before:
+                                state['answer'] = _patched
+                                logger.info(
+                                    f"[INITIAL_QA] Deterministic injection accepted "
+                                    f"(critical/issues {_det_before} -> {_det_after})."
+                                )
+
+                    _final_issues_log = ", ".join(
+                        self._assess_initial_timeline_quality(state.get('answer', ''), language=_detected_lang)[1].get("issues", [])
+                    ) or "none"
+                    logger.info(f"[INITIAL_QA] Final issues: {_final_issues_log}.")
             # Runtime quality gate for detailed responses:
             # enforce depth + timeline richness with one auto-regeneration pass.
             if _prompt_response_mode == 'detailed':
@@ -3360,7 +3314,6 @@ I prefer to say "I don't know" rather than provide information not grounded in c
             if conversation_history:
                 formatted_history = self._format_conversation_for_llm(conversation_history)
                 messages.extend(formatted_history)
-                logger.info(f"[RAG_ONLY] Including {len(formatted_history)} previous messages")
 
             # Current query
             user_prompt = "USER_QUERY:" + prompt.split("====USER_QUERY_MARKER====")[1]
@@ -3734,8 +3687,9 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             final_response = state.get('answer', '')
             
             # PHASE 10.5: Disclaimer Injection
+            # Skip for INITIAL responses — they are short teasers; disclaimer belongs in DETAILED.
             disclaimer_type = state.get('disclaimer_type')
-            if disclaimer_type:
+            if disclaimer_type and not state.get('_was_initial_response'):
                 detected_lang = state.get('detected_language', 'en')
                 disclaimer_text = get_disclaimer(disclaimer_type, language=detected_lang, llm=self.fast_llm)
                 final_response = f"{final_response}\n\n{disclaimer_text}"
@@ -4357,7 +4311,7 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             return "finance"
         if any(w in q for w in ["health", "sehat", "swasthya", "illness", "disease", "bimari"]):
             return "health"
-        if any(w in q for w in ["children", "child", "santaan", "bacche", "fertility"]):
+        if any(w in q for w in ["children", "child", "santaan", "bacche", "baccha", "baby", "birth", "pregnancy", "pregnant", "garbh", "prasav", "fertility"]):
             return "children"
         if any(w in q for w in ["property", "ghar", "home", "house", "flat", "plot", "real estate", "zameen", "land"]):
             return "property"
@@ -4374,11 +4328,25 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         """
         Collect month-range keys used by recent assistant replies for topics other
         than current_query_type. Used to enforce cross-topic timeline novelty.
+
+        Topic and timing windows are read from message metadata when available
+        (set at response-generation time). Regex extraction of response text is
+        used only as a backward-compatibility fallback for older messages.
         """
         history = conversation_history or []
         keys: set[str] = set()
         samples: List[str] = []
         seen_assistant = 0
+
+        _domain_topics = {"marriage", "children", "career", "finance", "health", "property", "foreign"}
+
+        # Resolve effective current domain topic for skip check
+        _current_domain = (
+            current_query_type
+            if current_query_type in _domain_topics
+            else None  # will skip "general == general" check below
+        )
+
         for idx in range(len(history) - 1, -1, -1):
             msg = history[idx] or {}
             if (msg.get("role") or "").lower() != "assistant":
@@ -4386,35 +4354,54 @@ Retain the astrological data but remove the violating content (e.g., remove deat
             seen_assistant += 1
             if seen_assistant > max_assistant_turns:
                 break
-            assistant_text = msg.get("content") or ""
-            preceding_user = ""
-            for j in range(idx - 1, -1, -1):
-                m2 = history[j] or {}
-                if (m2.get("role") or "").lower() == "user":
-                    preceding_user = m2.get("content") or ""
-                    break
-            topic = self._infer_topic_from_text(preceding_user)
-            # If user text is ambiguous (e.g. "Yes, go ahead" or "visit grandma
-            # in San Francisco"), fall back to inferring topic from the assistant
-            # response itself — it usually names the domain explicitly.
-            if topic == "general":
-                topic = self._infer_topic_from_text(assistant_text)
-            if topic in ("general", (current_query_type or "general")):
+
+            metadata = msg.get("metadata") or {}
+
+            # ── Determine topic for this assistant turn ──────────────────────
+            # Priority: metadata.topic > infer from user text > infer from assistant text
+            topic = (metadata.get("topic") or "").lower().strip()
+            if topic not in _domain_topics:
+                # Fall back to text inference
+                preceding_user = ""
+                assistant_text = msg.get("content") or ""
+                for j in range(idx - 1, -1, -1):
+                    m2 = history[j] or {}
+                    if (m2.get("role") or "").lower() == "user":
+                        preceding_user = m2.get("content") or ""
+                        break
+                topic = self._infer_topic_from_text(preceding_user)
+                if topic == "general":
+                    topic = self._infer_topic_from_text(assistant_text)
+
+            # Skip same-topic or unclassifiable turns
+            if topic == "general" or topic == (_current_domain or current_query_type or "general"):
                 continue
-            extracted = self._extract_month_year_range_keys(assistant_text)
+
+            # ── Get timing windows ────────────────────────────────────────────
+            # Priority: metadata.timing_windows > regex on response text
+            raw_windows: list[str] = metadata.get("timing_windows") or []
+            if raw_windows:
+                extracted = set(raw_windows)
+            else:
+                # Backward-compat: regex-parse the response text
+                extracted = self._extract_month_year_range_keys(msg.get("content") or "")
+
             if not extracted:
                 continue
-            # Novelty memory should track only non-ended windows.
+
+            # Keep only non-ended windows
             extracted = self._filter_non_ended_range_keys(extracted)
             if not extracted:
                 continue
+
             keys.update(extracted)
             if len(samples) < 4:
-                for k in extracted:
+                for k in sorted(extracted):
                     if k not in samples:
                         samples.append(k)
                     if len(samples) >= 4:
                         break
+
         return {"keys": keys, "samples": samples}
 
     def _collect_recent_planet_factors(
@@ -4446,10 +4433,81 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                     recent.append(planet)
         return recent[:4]
 
+    def _analyze_query_context(
+        self,
+        query: str,
+        conversation_history: Optional[List[Dict[str, Any]]],
+    ) -> str:
+        """
+        Use fast_llm to detect query context modifiers from the current query
+        and recent conversation history.
+
+        Returns a context note string to inject into the phase prompt,
+        or "" if no special framing is needed.
+
+        This replaces all keyword/pattern-matching for query variants like
+        "second marriage", "remarriage", "doosri shadi", etc. — the LLM
+        reads conversation history and figures out what the user actually means.
+        """
+        try:
+            history = conversation_history or []
+            # Build a compact conversation snippet (last 4 messages, skip welcome)
+            snippet_parts = []
+            for msg in history[-4:]:
+                role = (msg.get("role") or "").lower()
+                content = (msg.get("content") or "").strip()
+                if not content or content.startswith("Welcome"):
+                    continue
+                if role == "user":
+                    snippet_parts.append(f"User: {content[:200]}")
+                elif role == "assistant":
+                    snippet_parts.append(f"Astrologer: {content[:300]}")
+            snippet = "\n".join(snippet_parts)
+
+            prompt = (
+                "You are a Vedic astrology assistant helping an AI astrologer understand "
+                "the precise intent of a user's query.\n\n"
+                f"Recent conversation:\n{snippet}\n\n"
+                f"Current query: {query}\n\n"
+                "Task: Does the current query have a SPECIFIC CONTEXT that requires "
+                "different astrological indicators than the default for its topic?\n\n"
+                "Examples of context shifts:\n"
+                "- 'Meri doosri shadi kab hogi?' after a first-marriage answer → second marriage "
+                "(9th house lord, Rahu, 2nd house — NOT 7th house which was already discussed)\n"
+                "- 'Mera doosra bachha kab hoga?' after a first-child answer → second child "
+                "(3rd from 5th = 7th house for second child)\n"
+                "- 'Foreign job kab milega?' after a general career answer → foreign work "
+                "(12th house, 9th house, Rahu — not just 10th house)\n"
+                "- 'Mere career mein promotion kab hoga?' → specific career sub-topic\n\n"
+                "If no special context is needed, return exactly: NONE\n\n"
+                "If a context shift is detected, return a brief 2-4 sentence instruction "
+                "for the astrologer in this format:\n"
+                "CONTEXT: <plain English instruction — which houses/planets to use, "
+                "what NOT to repeat from prior answer, what to address directly>\n\n"
+                "Return ONLY 'NONE' or 'CONTEXT: ...' — nothing else."
+            )
+
+            _qa_llm = getattr(self, "fast_llm", self.llm)
+            result = _qa_llm.invoke(prompt)
+            raw = (getattr(result, "content", None) or str(result) or "").strip()
+
+            if not raw or raw.upper().startswith("NONE"):
+                return ""
+
+            if raw.upper().startswith("CONTEXT:"):
+                note = raw[len("CONTEXT:"):].strip()
+                return f"QUERY CONTEXT NOTE (from conversation analysis):\n{note}"
+
+            return ""
+
+        except Exception:
+            return ""
+
     def _build_coherence_hint(
         self,
         conversation_history: Optional[List[Dict[str, Any]]],
         current_topic: str,
+        current_query: str = "",
     ) -> str:
         """
         Build logical coherence constraints from conversation context.
@@ -4460,37 +4518,79 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         hints: list[str] = []
         history = conversation_history or []
 
-        if current_topic in ("children",):
-            # Look for a marriage answer in conversation history and extract year
-            marriage_year: Optional[str] = None
+        # Resolve effective topic — current_topic may be an intent string like
+        # "RAG_WITH_CALCULATION" rather than a domain label.  Fall back to
+        # inferring from the raw query text.
+        _domain_topics = {"marriage", "children", "career", "finance", "health", "property", "foreign"}
+        effective_topic = current_topic if current_topic in _domain_topics else self._infer_topic_from_text(current_query)
+
+        if effective_topic == "children":
+            # Look for a prior marriage response and find its earliest window end month.
+            # Topic and window data are read from metadata (stored at generation time).
+            # Regex text-parsing is used only as a backward-compat fallback.
+            _marriage_kws = {"shadi", "shaadi", "marriage", "vivah", "rishta", "wedding"}
+            marriage_window_end: Optional[str] = None  # "YYYY-MM"
             for i in range(len(history) - 1, -1, -1):
                 msg = history[i] or {}
                 if (msg.get("role") or "").lower() != "assistant":
                     continue
-                preceding_user = ""
-                for j in range(i - 1, -1, -1):
-                    m2 = history[j] or {}
-                    if (m2.get("role") or "").lower() == "user":
-                        preceding_user = m2.get("content") or ""
-                        break
-                _marriage_kws = {"shadi", "shaadi", "marriage", "vivah", "rishta", "wedding"}
-                if any(k in preceding_user.lower() for k in _marriage_kws):
-                    years = _re.findall(r"20[23456]\d", msg.get("content") or "")
-                    if years:
-                        marriage_year = years[0]
-                    break
-            if marriage_year:
-                hints.append(
-                    f"COHERENCE CONSTRAINT: Marriage timing was discussed as around {marriage_year}. "
-                    f"Children/santaan timing MUST come after {marriage_year} — never suggest children before marriage."
-                )
+                meta = msg.get("metadata") or {}
+
+                # Determine if this turn was a marriage response
+                is_marriage_turn = (meta.get("topic") or "").lower() == "marriage"
+                if not is_marriage_turn:
+                    # Fallback: check preceding user message keywords
+                    for j in range(i - 1, -1, -1):
+                        m2 = history[j] or {}
+                        if (m2.get("role") or "").lower() == "user":
+                            if any(k in (m2.get("content") or "").lower() for k in _marriage_kws):
+                                is_marriage_turn = True
+                            break
+
+                if not is_marriage_turn:
+                    continue
+
+                # Get windows from metadata; fall back to regex
+                raw_windows: list[str] = meta.get("timing_windows") or []
+                if raw_windows:
+                    marriage_keys = set(raw_windows)
+                else:
+                    marriage_keys = self._extract_month_year_range_keys(msg.get("content") or "")
+
+                if marriage_keys:
+                    # Use the earliest end month as the marriage constraint baseline.
+                    # (We don't know which specific window the LLM cited, but we
+                    #  know the user's marriage can't end before the earliest window.)
+                    end_months = sorted(k.split("|")[1] for k in marriage_keys if "|" in k)
+                    if end_months:
+                        marriage_window_end = end_months[0]  # earliest end
+                break
+
+            if marriage_window_end:
+                # Add at least 12 months for marriage + gestation buffer
+                from datetime import datetime as _dt
+                try:
+                    _mwe_dt = _dt.strptime(marriage_window_end, "%Y-%m")
+                    _child_earliest_year = _mwe_dt.year + 1
+                    _child_earliest_month_str = f"{_mwe_dt.strftime('%B')} {_child_earliest_year}"
+                    hints.append(
+                        f"COHERENCE CONSTRAINT: Marriage timing was discussed as ending around {marriage_window_end}. "
+                        f"Children/santaan timing MUST NOT overlap with or precede the marriage window. "
+                        f"The earliest possible child timing is {_child_earliest_month_str} (at least 12 months after marriage). "
+                        f"A timing window that overlaps with the marriage window is logically impossible — discard it even if the dasha data shows it."
+                    )
+                except Exception:
+                    hints.append(
+                        f"COHERENCE CONSTRAINT: Marriage timing was already discussed. "
+                        f"Children/santaan timing MUST come at least 12-18 months AFTER the marriage window ends — never suggest children in the same period as marriage."
+                    )
             else:
                 hints.append(
                     "COHERENCE CONSTRAINT: The user may not yet be married. If suggesting children timing, "
                     "place it at least 1-2 years after a reasonable marriage window, and acknowledge this naturally."
                 )
 
-        elif current_topic == "career" and any(
+        elif effective_topic == "career" and any(
             any(k in (m.get("content") or "").lower() for k in ("exam", "study", "college", "degree", "padhai", "education"))
             for m in history[-6:] if (m.get("role") or "") == "user"
         ):
@@ -4816,9 +4916,9 @@ Retain the astrological data but remove the violating content (e.g., remove deat
 
         _duration_bands = {_duration_band(m[1]) for m in _window_metrics}
 
-        # Non-English responses are denser than English — apply a lower minimum.
-        # English ("en") keeps the full threshold; everything else gets reduced.
-        _min_initial_words = 150
+        # Target word count is 100-130 words for INITIAL responses.
+        # Set the floor at 80 to allow for natural variation without triggering regeneration.
+        _min_initial_words = 80
 
         if word_count < _min_initial_words:
             issues.append("short_answer_too_brief_for_rich_timeline")
@@ -4831,11 +4931,12 @@ Retain the astrological data but remove the violating content (e.g., remove deat
                 issues.append("missing_future_favorable_reason_in_short_answer")
         if month_year_mentions < 1:
             issues.append("insufficient_explicit_month_year_windows_in_short_answer")
+        # ONE-window policy: a single month-year mention is valid; a full range is ideal but not required.
+        # The check below logs the issue for awareness but it is NOT in _critical_init_issues.
         if len(_distinct_range_keys) < 1:
             issues.append("insufficient_distinct_month_year_windows_in_short_answer")
-        if len(_start_indices) >= 2 and (_start_indices[-1] - _start_indices[0]) < 3:
-            issues.append("timeline_windows_start_too_close_in_short_answer")
-        if duration_only_mentions > 0 and month_year_mentions < 2:
+        # Multi-window proximity / duration checks removed — INITIAL gives exactly ONE window.
+        if duration_only_mentions > 0 and month_year_mentions < 1:
             issues.append("duration_only_timeline_without_explicit_month_year_ranges")
         if past_year_mentions > 0:
             issues.append("contains_past_year_timeline_reference")
@@ -5536,67 +5637,72 @@ Provide a concise, clear answer:"""
 
     def _format_conversation_for_llm(
         self,
-        conversation_history: List[Dict]
+        conversation_history: List[Dict],
+        max_messages: int = 10,
     ) -> List[Dict[str, str]]:
         """
-        Format conversation history for LLM.
+        Format conversation history for LLM, enforcing CONVERSATION_CONTEXT_WINDOW.
 
-        Skips any leading assistant-only messages (e.g. app-generated welcome/greeting
-        messages that have no corresponding user turn). These cause the LLM to see a
-        conversation that starts with the bot talking to itself, which produces
-        inconsistent and off-topic responses — especially visible in the mobile app
-        which seeds history with 1-2 app-generated messages at session init.
+        - Caps history at `max_messages` (default 10 = CONVERSATION_CONTEXT_WINDOW).
+          chat_stateless.py pre-slices before calling the orchestrator, but this
+          ensures the cap is respected even if the orchestrator is called directly.
+        - Skips leading assistant-only messages (e.g. app welcome/greeting preamble).
+        - Drops assistant messages sourced from the old system ("external"/"openai")
+          to prevent hallucinated house lords from polluting the new LLM's context.
 
         Args:
-            conversation_history: List of {role, content, timestamp} dicts
+            conversation_history: List of {role, content, metadata, ...} dicts
+            max_messages: Context window cap (default: 10)
 
         Returns:
-            List of {role, content} dicts ready for LLM (always starts with user turn)
+            List of {role, content} dicts ready for LLM, always starting with a user turn.
         """
         if not conversation_history:
             return []
 
-        # Find the index of the first user message so we start the LLM context there.
-        # Any assistant messages before the first user turn are app-generated preamble
-        # and should not be injected into the LLM conversation.
+        # Enforce context window — keep only the most recent N messages
+        history = conversation_history[-max_messages:]
+
+        # Skip leading assistant-only messages (welcome preamble has no user turn)
         first_user_idx = None
-        for i, msg in enumerate(conversation_history):
+        for i, msg in enumerate(history):
             if msg.get("role") == "user":
                 first_user_idx = i
                 break
 
         if first_user_idx is None:
-            # No user messages at all — history is entirely bot preamble; send nothing.
-            return []
+            return []  # No user messages — only bot preamble, nothing to send
 
         if first_user_idx > 0:
             logger.info(f"[HISTORY] Skipping {first_user_idx} leading assistant-only message(s) from LLM context")
 
         formatted = []
         skipped_external = 0
-        for msg in conversation_history[first_user_idx:]:
-            # ── EXTERNAL SOURCE FILTER ────────────────────────────────────────
-            # Messages imported from the old system (source: "external" or
-            # source: "openai") contain answers generated WITHOUT a real chart
-            # calculation — they are hallucinated by the old chatbot.
-            # Injecting them as LLM context causes the new LLM to treat those
-            # wrong house lords and wrong dignities as established facts and
-            # repeat them.  Strip assistant messages from external sources;
-            # keep user messages so conversation flow is preserved.
+        skipped_app = 0
+        for msg in history[first_user_idx:]:
             if msg.get("role") == "assistant":
-                src = msg.get("metadata", {}).get("source", "")
+                src = (msg.get("metadata") or {}).get("source", "")
+                # Drop messages from old system — they contain hallucinated chart data
                 if src in ("external", "openai"):
                     skipped_external += 1
-                    continue  # Drop this message from LLM context
+                    continue
+                # Drop app-generated assistant messages (welcome messages, user detail
+                # confirmations, etc. injected by the mobile backend at /initialize time)
+                if src == "app":
+                    skipped_app += 1
+                    continue
 
             formatted.append({
                 "role": msg.get("role"),
-                "content": msg.get("content")
+                "content": msg.get("content") or "",
             })
 
         if skipped_external:
-            logger.info(f"[HISTORY] Filtered {skipped_external} external/openai assistant message(s) from LLM context (stale data)")
+            logger.info(f"[HISTORY] Filtered {skipped_external} old-system assistant message(s) from LLM context")
+        if skipped_app:
+            logger.info(f"[HISTORY] Filtered {skipped_app} app-generated assistant message(s) from LLM context")
 
+        logger.info(f"[HISTORY] {len(formatted)} message(s) passed to LLM (cap={max_messages}, total_in_redis={len(conversation_history)})")
         return formatted
 
     def _format_enhanced_analysis(
@@ -5992,14 +6098,16 @@ Provide a concise, clear answer:"""
         
         # Build upcoming antardashas timeline
         upcoming_ads = dasha_data.get('upcoming_antardashas', [])
-        # Filter out any Antardasha that has already STARTED (only future windows)
+        # Keep any antardasha that has NOT YET ENDED — this includes the currently
+        # active one (started <= today but end > today) so the model can see the
+        # full span of the ongoing period and plan timing correctly.
         upcoming_ads_filtered = [
             ad for ad in upcoming_ads
-            if ad.get('start', '9999') > _today_str
+            if ad.get('end', '9999') > _today_str
         ]
         skipped_past_ads = len(upcoming_ads) - len(upcoming_ads_filtered)
         if skipped_past_ads > 0:
-            logger.info(f"[DASHA FILTER] Removed {skipped_past_ads} non-future antardasha(s) from prompt (start <= today).")
+            logger.info(f"[DASHA FILTER] Removed {skipped_past_ads} fully-elapsed antardasha(s) from prompt (end <= today).")
 
         upcoming_ads_str = ""
         if upcoming_ads_filtered:
@@ -7513,10 +7621,32 @@ substituting a training-knowledge default.
         
         # Run through graph
         final_state = self.graph.invoke(initial_state)
-        
+
         # Calculate processing time
         final_state['processing_time'] = (datetime.now() - start_time).total_seconds()
-        
+
+        # Attach structured timing metadata so the API can store it without
+        # relying on regex-parsing the response text later.
+        # Only include windows starting within 30 months of today — distant
+        # windows are irrelevant for cross-topic / coherence tracking.
+        try:
+            _now = datetime.utcnow()
+            _cutoff_month = ((_now.month - 1 + 30) % 12) + 1
+            _cutoff_year = _now.year + ((_now.month - 1 + 30) // 12)
+            _cutoff_ym = f"{_cutoff_year:04d}-{_cutoff_month:02d}"
+            _all_cand = self._collect_future_candidate_window_keys(final_state.get('dasha_data', {}))
+            _near_cand = {
+                k for k in _all_cand
+                if "|" in k and k.split("|")[0] <= _cutoff_ym
+            }
+            final_state['response_timing_windows'] = sorted(_near_cand)
+        except Exception:
+            final_state['response_timing_windows'] = []
+
+        final_state['response_topic'] = (
+            (final_state.get('conversation_phase') or {}).get('topic') or ''
+        )
+
         return final_state
     
     def process_query_stream(

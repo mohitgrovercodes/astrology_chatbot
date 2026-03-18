@@ -146,27 +146,27 @@ We can always look at a different aspect of your chart, or if you prefer to end 
 
 DISCLAIMER_HEALTH = """
 
-[HEALTH] **Important Disclaimer**: The astrological insights I provide are for educational and self-reflection purposes only. Astrology indicates *tendencies* and *areas of focus*, not medical diagnoses. Always consult qualified healthcare providers for health concerns, diagnoses, or treatment decisions."""
+These astrological insights are for self-reflection and timing awareness only — not medical advice. For any health concerns, please consult a qualified doctor."""
 
 DISCLAIMER_FINANCIAL = """
 
-[FINANCIAL] **Important Disclaimer**: Astrological insights about finances and career are for guidance and timing awareness only. They should not be your sole basis for major financial decisions. Always consult financial advisors and make practical assessments before significant investments or career changes."""
+Astrological timing is one lens among many for financial decisions — not the only one. For significant investments or career moves, practical assessment and expert advice matter just as much."""
 
 DISCLAIMER_RELATIONSHIP = """
 
-[RELATIONSHIP] **Important Reminder**: Astrological compatibility is one factor among many in relationships. Real-world communication, shared values, mutual respect, and effort are far more important than chart compatibility. Use these insights as a tool for understanding, not as a relationship verdict."""
+Chart compatibility is a lens, not a verdict. Communication, shared values, and effort shape relationships far more than any planetary alignment."""
 
 DISCLAIMER_CHILDREN = """
 
-[CHILDREN] **Important Note**: Questions about children and fertility are deeply personal. While astrology can indicate favorable periods, it cannot predict specific outcomes. Medical consultation is essential for fertility and family planning decisions. These astrological insights are for timing awareness only."""
+Astrology can point to favorable periods, but cannot predict specific outcomes with certainty. For fertility and family planning, medical guidance is essential alongside any astrological timing."""
 
 DISCLAIMER_CAREER = """
 
-[CAREER] **Important Reminder**: Career decisions should be based on practical factors—skills, market conditions, financial stability, and personal circumstances. Astrological timing is one input among many. Use this guidance to inform your decision-making, not replace it."""
+Astrological timing is a useful input for career decisions, but skills, market conditions, and your personal circumstances matter just as much in practice."""
 
 DISCLAIMER_GENERAL = """
 
-[ASTROLOGY] **Important Reminder**: Astrological insights are for self-reflection and timing awareness. They show tendencies and potentials, not fixed destinies. Your free will, choices, and circumstances all play crucial roles in shaping outcomes."""
+Astrology shows tendencies and favorable timing — not fixed destinies. Your choices, effort, and circumstances are what truly shape outcomes."""
 
 
 # ============================================================================
@@ -561,55 +561,54 @@ def get_disclaimer(disclaimer_type: str, language: str = 'en', llm=None) -> str:
     _LOCALIZED_DISCLAIMERS = {
         "hi-lat": {
             "DISCLAIMER_HEALTH": (
-                "[HEALTH] **Mahatvapurn Suchna**: Jo health-related astrological insights diye ja rahe hain, "
-                "wo sirf educational aur self-reflection ke liye hain. Astrology tendencies dikhata hai, diagnosis nahi. "
-                "Kisi bhi health concern, diagnosis ya treatment ke liye qualified doctor se zaroor salah lein."
+                "Ye astrological insights sirf timing awareness aur self-reflection ke liye hain — medical advice nahi. "
+                "Kisi bhi health concern ke liye qualified doctor se zaroor milein."
             ),
             "DISCLAIMER_FINANCIAL": (
-                "[FINANCIAL] **Mahatvapurn Suchna**: Finance aur career ke astrological insights guidance aur timing awareness ke liye hain. "
-                "Bade financial decisions ke liye inhe akela base mat banaiye. Practical assessment aur financial advisor ki salah zaroor lein."
+                "Financial decisions mein astrological timing ek helpful lens hai, akela base nahi. "
+                "Bade investments ya career moves ke liye practical assessment aur expert ki ray zaroor lein."
             ),
             "DISCLAIMER_RELATIONSHIP": (
-                "[RELATIONSHIP] **Mahatvapurn Yaad**: Relationship compatibility mein astrology ek factor hai, lekin communication, mutual respect, "
-                "shared values aur effort zyada maayne rakhte hain. In insights ko samajhne ka tool samjhein, final verdict nahi."
+                "Chart compatibility ek perspective hai, final verdict nahi. "
+                "Communication, mutual respect aur effort kisi bhi planetary alignment se zyada maayne rakhte hain."
             ),
             "DISCLAIMER_CHILDREN": (
-                "[CHILDREN] **Mahatvapurn Note**: Bacchon aur fertility se jude sawal bahut personal hote hain. Astrology favorable periods dikha sakta hai, "
-                "lekin exact outcomes predict nahi karta. Fertility ya family planning ke liye medical consultation zaroori hai."
+                "Jyotish favorable periods dikha sakta hai, lekin exact outcomes nahi bata sakta. "
+                "Fertility ya family planning ke liye medical guidance equally important hai."
             ),
             "DISCLAIMER_CAREER": (
-                "[CAREER] **Mahatvapurn Yaad**: Career decisions practical factors par hone chahiye - skills, market conditions, financial stability aur personal circumstances. "
-                "Astrological timing ek input hai, poora decision system nahi."
+                "Astrological timing career decisions mein ek useful input hai, lekin skills, market conditions "
+                "aur aapke personal circumstances equally important hain."
             ),
             "DISCLAIMER_GENERAL": (
-                "[ASTROLOGY] **Mahatvapurn Yaad**: Astrological insights self-reflection aur timing awareness ke liye hain. "
-                "Ye fixed destiny nahi, tendencies aur possibilities dikhate hain. Aapki choices, effort aur circumstances final result banate hain."
+                "Jyotish tendencies aur favorable timing dikhata hai — fixed destiny nahi. "
+                "Aapke choices, mehnat aur circumstances hi ultimately result banate hain."
             ),
         },
         "hi": {
             "DISCLAIMER_HEALTH": (
-                "[HEALTH] **महत्वपूर्ण सूचना**: स्वास्थ्य से जुड़ी ज्योतिषीय जानकारी केवल शैक्षिक और आत्म-चिंतन के लिए है। "
-                "ज्योतिष प्रवृत्तियां बताता है, मेडिकल डायग्नोसिस नहीं। स्वास्थ्य संबंधी किसी भी निर्णय के लिए योग्य डॉक्टर से सलाह लें।"
+                "ये ज्योतिषीय संकेत केवल आत्म-चिंतन और समय-जागरूकता के लिए हैं — चिकित्सा सलाह नहीं। "
+                "किसी भी स्वास्थ्य समस्या के लिए योग्य डॉक्टर से ज़रूर मिलें।"
             ),
             "DISCLAIMER_FINANCIAL": (
-                "[FINANCIAL] **महत्वपूर्ण सूचना**: वित्त और करियर संबंधी ज्योतिषीय संकेत केवल मार्गदर्शन और समय-जागरूकता के लिए हैं। "
-                "बड़े आर्थिक निर्णयों का एकमात्र आधार इन्हें न बनाएं। व्यावहारिक आकलन और वित्तीय सलाहकार की सलाह लें।"
+                "आर्थिक निर्णयों में ज्योतिषीय समय एक उपयोगी दृष्टिकोण है, एकमात्र आधार नहीं। "
+                "बड़े निवेश या करियर बदलाव के लिए व्यावहारिक आकलन और विशेषज्ञ की सलाह भी उतनी ही ज़रूरी है।"
             ),
             "DISCLAIMER_RELATIONSHIP": (
-                "[RELATIONSHIP] **महत्वपूर्ण याद**: रिश्तों में ज्योतिष एक कारक है, लेकिन संवाद, परस्पर सम्मान, साझा मूल्य और प्रयास अधिक महत्वपूर्ण हैं। "
-                "इन संकेतों को समझने का उपकरण मानें, अंतिम फैसला नहीं।"
+                "कुंडली मिलान एक नज़रिया है, अंतिम फैसला नहीं। "
+                "संवाद, आपसी सम्मान और प्रयास किसी भी ग्रह योग से कहीं ज़्यादा मायने रखते हैं।"
             ),
             "DISCLAIMER_CHILDREN": (
-                "[CHILDREN] **महत्वपूर्ण नोट**: बच्चों और प्रजनन से जुड़े प्रश्न बहुत व्यक्तिगत होते हैं। "
-                "ज्योतिष अनुकूल समय दिखा सकता है, लेकिन निश्चित परिणाम नहीं बताता। परिवार नियोजन के लिए मेडिकल सलाह आवश्यक है।"
+                "ज्योतिष अनुकूल समय दिखा सकता है, लेकिन निश्चित परिणाम नहीं बता सकता। "
+                "परिवार नियोजन के लिए चिकित्सा मार्गदर्शन उतना ही आवश्यक है।"
             ),
             "DISCLAIMER_CAREER": (
-                "[CAREER] **महत्वपूर्ण याद**: करियर निर्णय व्यावहारिक कारकों पर आधारित होने चाहिए - कौशल, बाजार स्थिति, आर्थिक स्थिरता और व्यक्तिगत परिस्थितियां। "
-                "ज्योतिषीय समय एक इनपुट है, पूरा निर्णय नहीं।"
+                "ज्योतिषीय समय करियर निर्णयों में एक सहायक संकेत है, लेकिन कौशल, बाज़ार की स्थिति "
+                "और आपकी व्यक्तिगत परिस्थितियां भी उतनी ही महत्वपूर्ण हैं।"
             ),
             "DISCLAIMER_GENERAL": (
-                "[ASTROLOGY] **महत्वपूर्ण याद**: ज्योतिषीय संकेत आत्म-चिंतन और समय-जागरूकता के लिए हैं। "
-                "ये निश्चित भाग्य नहीं, बल्कि संभावनाएं और प्रवृत्तियां दिखाते हैं। अंतिम परिणाम आपके चुनाव, प्रयास और परिस्थितियों से तय होता है।"
+                "ज्योतिष प्रवृत्तियां और अनुकूल समय दिखाता है — निश्चित भाग्य नहीं। "
+                "आपके चुनाव, मेहनत और परिस्थितियां ही अंततः परिणाम तय करती हैं।"
             ),
         },
     }

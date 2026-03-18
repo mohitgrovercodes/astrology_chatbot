@@ -1,289 +1,120 @@
 <!-- src\safety\README.md -->
-# Astrology Chatbot Safety System
+# Safety System
 
-A comprehensive, production-ready safety classification system for AI astrology chatbots.
+A production-ready, LLM-unified safety classification system for the NakshatraAI astrology chatbot.
 
-## 🎯 What This Is
+## Architecture
 
-A multi-gate safety classifier that:
-- **Blocks harmful queries** (death predictions, medical diagnosis, gambling)
-- **Enforces ethical boundaries** (privacy violations, scope limitations)
-- **Adds appropriate disclaimers** (health, financial, relationship advice)
-- **Reframes poor questions** into astrologically appropriate ones
-- **Provides empathetic responses** when declining queries
-
-## ✨ Key Features
-
-- ✅ **Multi-gate filtering**: Fast pattern matching + LLM classification
-- ✅ **60+ pre-written templates**: Block messages, disclaimers, empathy responses
-- ✅ **5 classification categories**: HARD_BLOCK, SOFT_BLOCK, CONDITIONAL, REFRAME, SAFE
-- ✅ **Performance optimized**: Pattern matching caches ~70% of queries (< 1ms)
-- ✅ **Production-ready**: Full error handling, logging, type safety
-- ✅ **Well-tested**: 20+ unit tests with comprehensive coverage
-- ✅ **LangChain integration**: Ready for LangGraph orchestration
-
-## 📦 Package Contents
+The classifier uses a **3-gate pipeline** that prioritizes accuracy over pattern-matching speed. All language and phrasing variants — Hinglish, romanized Indian scripts, mixed-script queries — are handled correctly by the LLM without regex.
 
 ```
-safety_system/
-├── src/safety/
-│   ├── __init__.py           # Clean exports
-│   ├── models.py             # Pydantic models (240 lines)
-│   ├── templates.py          # Response templates (380 lines)
-│   ├── classifier.py         # Classifier logic (480 lines)
-│   └── README.md             # Detailed documentation
-├── tests/
-│   └── test_safety_classifier.py  # Unit tests (420 lines)
-├── examples/
-│   └── safety_classifier_example.py  # Demo script (180 lines)
-├── requirements.txt          # Dependencies
-├── SAFETY_IMPLEMENTATION_SUMMARY.md  # Full implementation docs
-└── README.md                 # This file
+Query
+  │
+  ▼
+Gate 1 — Keyword Vulgar Block
+  │  Fast keyword scan for explicit vulgar/abusive content.
+  │  Hard-blocks immediately (< 1ms). No LLM call.
+  │
+  ▼
+Gate 2 — LLM Vulgarity Check
+  │  LLM-based vulgarity check.
+  │  Automatically skipped for queries that are clearly astrological.
+  │
+  ▼
+Gate 3 — Unified LLM Classifier
+     Single LLM call with ~17 few-shot examples covering
+     first-person vs. third-party, all domains, multilingual phrasing.
+     Returns: category + sub_category + disclaimer_type + confidence
 ```
 
-## 🚀 Quick Start
+## Classification Categories
 
-### 1. Install
+| Category | Description | Example |
+|---|---|---|
+| `HARD_BLOCK` | Never answer | "When will I die?", "Do I have cancer?" |
+| `SOFT_BLOCK` | Polite decline | "Mere dost ki shaadi kab hogi?" (third-party chart) |
+| `CONDITIONAL` | Answer with disclaimer | "Meri shaadi kab hogi?", "Should I invest now?" |
+| `REFRAME` | Transform question | "Will I get rich?" → "What periods support wealth?" |
+| `SAFE` | Answer normally | "What does Jupiter in 7th house mean?" |
 
-```bash
-pip install -r requirements.txt
+### Key Classification Rules
+
+- **First-person identification**: `Mera/Meri/Main` always = personal query (never third-party)
+- **"paida hoga" rule**: "Mera bachha kab paida hoga?" = personal children timing → CONDITIONAL, not SOFT_BLOCK
+- **Third-party**: any query about a named or implied third person's chart → SOFT_BLOCK
+- **Meta-questions**: "What did I ask last time?" → SAFE
+
+## Disclaimer Templates
+
+Disclaimers are natural prose — no bracket labels, no bold headers. Language variants:
+- English, Hindi (`hi`), Hinglish (`hi-lat`) have hardcoded templates
+- All other languages are LLM-translated from the English base
+
+Disclaimers are **only appended to DETAILED responses**, not to the short INITIAL answer.
+
+## Package Contents
+
+```
+src/safety/
+├── __init__.py        # Clean exports
+├── models.py          # Pydantic models
+├── templates.py       # Disclaimer + response templates (natural prose)
+├── classifier.py      # 3-gate classifier logic
+├── constitution.py    # System constitution injected into every LLM prompt
+├── input_validator.py # Input sanitization
+└── README.md          # This file
 ```
 
-### 2. Set Environment
-
-```bash
-export OPENAI_API_KEY=your_api_key_here
-```
-
-### 3. Basic Usage
+## Quick Start
 
 ```python
-from src.safety import create_safety_classifier, get_template
+from src.safety import create_safety_classifier, get_disclaimer
 
-# Create classifier
-classifier = create_safety_classifier()
+classifier = create_safety_classifier(llm=your_llm, fast_llm=your_fast_llm)
 
-# Classify a query
-result = classifier.classify("When will I die?")
+result = classifier.classify("Meri shaadi kab hogi?")
+print(result.decision.category)   # CONDITIONAL
+print(result.decision.sub_category)  # relationship
 
-# Check the decision
-print(f"Category: {result.decision.category}")
-print(f"Should answer: {result.should_proceed}")
-
-# Get appropriate response
-if result.is_blocked:
-    response = get_template(result.get_template_key())
-    print(response)
+if result.needs_disclaimer:
+    disclaimer = get_disclaimer(result.decision.disclaimer_type, language="hi-lat")
+    # append to DETAILED response only
 ```
 
-### 4. Run Examples
-
-```bash
-# See it in action
-python examples/safety_classifier_example.py
-
-# Run tests
-pytest tests/test_safety_classifier.py -v
-```
-
-## 📊 Classification Categories
-
-### HARD_BLOCK (Never Answer)
-- Death predictions: "When will I die?"
-- Medical diagnosis: "Do I have cancer?"
-- Gambling predictions: "Which lottery numbers?"
-- Legal advice: "Will I win my case?"
-- Harmful intent: "When should I harm someone?"
-
-### SOFT_BLOCK (Decline Politely)
-- Fortune-telling: "Tell me my exact future"
-- Privacy violations: "Is my boss getting fired?"
-- Out of scope: "Are aliens controlling my chart?"
-
-### CONDITIONAL (Answer with Disclaimer)
-- Health tendencies: "What health issues might I face?" + ⚕️ disclaimer
-- Financial trends: "Should I invest now?" + 💼 disclaimer
-- Relationship questions: "Are we compatible?" + 💕 disclaimer
-
-### REFRAME (Transform Question)
-- "Will I get rich?" → "What periods support wealth accumulation?"
-- "Why is God punishing me?" → "What growth opportunities exist?"
-
-### SAFE (Answer Normally)
-- Educational: "What does Jupiter in 7th house mean?"
-- Calculations: "When does my Venus Mahadasha start?"
-- Chart interpretation: "What's my rising sign?"
-
-## 🔧 Integration Examples
-
-### With LangGraph
+## Integration with LangGraph
 
 ```python
-from langgraph.graph import StateGraph
-from src.safety import create_safety_classifier, get_template
-
 def safety_check_node(state):
-    classifier = create_safety_classifier()
     result = classifier.classify(state["query"])
-    
     state["safety_result"] = result
+
     if result.is_blocked:
-        state["response"] = get_template(result.get_template_key())
-    
+        from src.safety import get_template
+        state["answer"] = get_template(result.get_template_key(), language=state.get("detected_language", "en"))
+        state["early_exit"] = True
+
+    if result.needs_disclaimer:
+        state["disclaimer_type"] = result.decision.disclaimer_type
+
     return state
-
-# Add to your graph
-graph = StateGraph()
-graph.add_node("safety_check", safety_check_node)
 ```
 
-### With FastAPI
+## Extending the Classifier
 
-```python
-from fastapi import FastAPI
-from src.safety import create_safety_classifier
+### Add Few-Shot Examples
 
-app = FastAPI()
-classifier = create_safety_classifier()
-
-@app.post("/chat")
-async def chat(query: str):
-    result = classifier.classify(query)
-    
-    if result.is_blocked:
-        return {"blocked": True, "response": get_template(...)}
-    
-    # Continue processing...
+Edit the few-shot example block in `classifier.py`. Each example follows the format:
+```
+User: <query>
+Output: {"category": "...", "sub_category": "...", "disclaimer_type": "...", "confidence": 0.95}
 ```
 
-## 📈 Performance
+### Add New Disclaimer Templates
 
-| Metric | Value |
-|--------|-------|
-| Pattern matching | < 1ms per query |
-| LLM classification | ~200-500ms |
-| Cache hit rate | ~70% (pattern matching) |
-| Classification accuracy | ~90% (on test set) |
+In `templates.py`, add your template to the appropriate language block. Keep it natural prose — no bracket labels or bold headers.
 
-## 📚 Documentation
+## Notes
 
-- **`SAFETY_IMPLEMENTATION_SUMMARY.md`**: Complete implementation guide
-- **`src/safety/README.md`**: Detailed module documentation
-- **`examples/safety_classifier_example.py`**: Live demonstrations
-- **`tests/test_safety_classifier.py`**: Test suite with examples
-
-## 🧪 Testing
-
-```bash
-# Run all tests
-pytest tests/ -v
-
-# Run with coverage
-pytest tests/ --cov=src.safety --cov-report=html
-
-# Run specific test
-pytest tests/test_safety_classifier.py::test_hard_block_classification -v
-```
-
-## 🔍 Key Design Decisions
-
-### Why Multi-Gate?
-- **Gate 1 (Pattern matching)**: Catches obvious cases instantly (< 1ms)
-- **Gate 2 (LLM)**: Handles nuanced/ambiguous queries (~200-500ms)
-- **Result**: 70% of queries bypass LLM, saving time and cost
-
-### Why Conservative Defaults?
-- Better to over-block initially, then loosen based on data
-- Low-confidence decisions flagged for human review
-- Safety > convenience in early deployment
-
-### Why Pre-written Templates?
-- Consistent messaging across all blocked queries
-- Vetted for empathy, clarity, legal compliance
-- Easy to update once vs. LLM generating each time
-
-## 🎨 Customization
-
-### Add New Patterns
-
-```python
-# In src/safety/classifier.py
-KEYWORD_PATTERNS[BlockReasons.YOUR_REASON] = {
-    "patterns": [r"your_regex_pattern"],
-    "keywords": ["keyword1", "keyword2"]
-}
-```
-
-### Add New Templates
-
-```python
-# In src/safety/templates.py
-YOUR_TEMPLATE = """Your message here..."""
-RESPONSE_TEMPLATES["YOUR_KEY"] = YOUR_TEMPLATE
-```
-
-### Adjust Confidence Threshold
-
-```python
-# More conservative (more human reviews)
-classifier = create_safety_classifier(confidence_threshold=0.8)
-```
-
-## 🤝 Contributing
-
-To extend this system:
-
-1. Add test cases to `tests/test_safety_classifier.py`
-2. Update patterns in `classifier.py`
-3. Add templates to `templates.py`
-4. Update documentation
-5. Run tests to verify
-
-## 📄 License
-
-Part of the Astrology Chatbot project.
-
-## 🆘 Support
-
-For questions or issues:
-1. Check `SAFETY_IMPLEMENTATION_SUMMARY.md` for detailed docs
-2. Review `src/safety/README.md` for API reference
-3. See `examples/` for usage patterns
-4. Check `tests/` for edge case handling
-
-## ⚠️ Important Notes
-
-- **Safety checks are non-negotiable**: Do not disable in production
-- **Templates are legally reviewed**: Modify with care
-- **Confidence thresholds**: Start conservative, adjust with data
-- **Human review**: Flag low-confidence decisions for expert review
-- **Cultural sensitivity**: Customize templates for your audience
-
-## 🎯 Quick Reference
-
-```python
-# Import
-from src.safety import create_safety_classifier, get_template
-
-# Create
-classifier = create_safety_classifier()
-
-# Use
-result = classifier.classify("your query")
-
-# Check
-if result.is_blocked:
-    print(get_template(result.get_template_key()))
-elif result.needs_disclaimer:
-    print(answer + get_disclaimer(result.decision.disclaimer_type))
-else:
-    print(answer)
-```
-
----
-
-**Total Lines of Code**: ~2,100+ (production-ready, tested, documented)
-
-**Coverage**: Hard blocks, soft blocks, conditionals, reframes, safe queries
-
-**Ready for**: Integration with LangGraph, FastAPI, production deployment
+- Safety checks are non-negotiable — do not disable `ENABLE_SAFETY_CHECKS` in production
+- The classifier requires a `fast_llm` (gpt-4o-mini) instance; falls back to `llm` if not provided
+- All classification decisions are logged at INFO level for auditing

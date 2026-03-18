@@ -50,9 +50,10 @@ Welcome to the NakshatraAI documentation. This index links to all project docs.
 | Metric | Value |
 |---|---|
 | Python source files | 103 (src/) · 148 total (incl. tests & scripts) |
-| Orchestrator size | 3,100+ lines |
-| Validation rules | 750+ |
+| Orchestrator size | 7,000+ lines |
+| Validation rules | 16,500+ (80 evaluated per live request) |
 | RAG knowledge chunks | 14,000+ |
 | Supported language codes | 13 (native + romanized Indian languages + English) |
-| Safety gates | 4 |
+| Safety gates | 3 (LLM-unified classifier) |
 | Test files | 20 |
+| LLM split | GPT-4o (synthesis/validation) + GPT-4o-mini (classification/safety) |

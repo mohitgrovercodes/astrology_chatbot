@@ -2,8 +2,8 @@
 # NakshatraAI — API Reference
 
 > **Last Updated:** March 2026
-> **Base URL:** `http://localhost:8000` (default) or your deployed host
-> **Note:** The default port is `8000`. The `.env` variable `API_PORT` overrides this (the project's own `.env` uses `6262`).
+> **Base URL:** `http://localhost:6262` (default) or your deployed host
+> **Note:** The server port is set via `API_PORT` in `.env` (default: `6262`).
 
 ---
 
@@ -41,11 +41,11 @@ cp .env.example .env
 
 # Start Redis and API server
 redis-server &
-uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn src.api.main:app --reload --host 0.0.0.0 --port 6262
 
 # Interactive docs:
-# http://localhost:8000/api/docs   (Swagger UI)
-# http://localhost:8000/api/redoc  (ReDoc)
+# http://localhost:6262/api/docs   (Swagger UI)
+# http://localhost:6262/api/redoc  (ReDoc)
 ```
 
 ### Docker
@@ -92,7 +92,8 @@ INTERNAL_SERVICE_SECRET=super-secret-string
 
 ```env
 LLM_PROVIDER=openai
-LLM_MODEL=gpt-4o-mini
+LLM_MODEL=gpt-4o               # Primary: synthesis, validation, rewrites
+FAST_LLM_MODEL=gpt-4o-mini     # Fast: classification, safety, follow-up
 OPENAI_API_KEY=sk-your-openai-key
 ```
 
@@ -352,7 +353,8 @@ On exceeding the limit, the server returns `HTTP 429 Too Many Requests`.
 - **Language/script lock:** Responses mirror the user's language/script per turn (for example, Hinglish in Roman script stays Romanized).
 - **Detailed responses:** Detailed follow-up responses are designed to include multiple astrological factors (house/lord logic, dasha windows, yogas, and divisional support) and avoid repeating the same timing label as a separate heading.
 - **Future-only timing windows:** All timing windows in responses must start after today's date. Active-now windows are reframed to future-starting windows. Unless the user explicitly requests urgent/immediate timing, the system prefers windows that begin at least ~2 months in the future.
-- **Timeline diversity:** Short-answer (INITIAL) responses always include two distinct timing windows from different horizons (near/mid/broad) to avoid repetitive pratyantar-only slices across consecutive queries.
+- **Single timing window:** INITIAL responses include exactly ONE timing window. Multiple windows are given only in DETAILED responses. Cross-topic timing coherence is enforced — e.g., children timing cannot fall before 12 months after the marriage window end.
+- **Disclaimer placement:** Domain disclaimers (health, finance, relationship) are appended only to DETAILED responses, not to the short INITIAL answer.
 
 ---
 
@@ -398,7 +400,8 @@ Key `.env` variables affecting API behavior:
 | `ALLOWED_ORIGINS` | `*` | CORS origins (restrict in production) |
 | `RATE_LIMIT_PER_MINUTE` | `10` | Rate limit per API key |
 | `LLM_PROVIDER` | `openai` | `openai` or `ollama` |
-| `LLM_MODEL` | `gpt-4o-mini` | LLM model name |
+| `LLM_MODEL` | `gpt-4o` | Primary LLM model (synthesis, validation) |
+| `FAST_LLM_MODEL` | `gpt-4o-mini` | Fast LLM model (classification, safety) |
 | `OPENAI_API_KEY` | — | OpenAI API key |
 
 ---
@@ -407,9 +410,9 @@ Key `.env` variables affecting API behavior:
 
 When the server is running:
 
-- **Swagger UI:** `http://localhost:8000/api/docs`
-- **ReDoc:** `http://localhost:8000/api/redoc`
-- **OpenAPI JSON:** `http://localhost:8000/api/openapi.json`
+- **Swagger UI:** `http://localhost:6262/api/docs`
+- **ReDoc:** `http://localhost:6262/api/redoc`
+- **OpenAPI JSON:** `http://localhost:6262/api/openapi.json`
 
 ---
 

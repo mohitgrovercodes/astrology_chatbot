@@ -57,8 +57,9 @@ User Query from Mobile App
 |  LangGraph Orchestrator                     |
 |  (src/orchestration/orchestrator.py)        |
 |  - Language detection                       |
-|  - Intent classification (embeddings)       |
-|  - Safety gates (-1, 0, 1, 2)              |
+|  - Intent classification (LLM-based)        |
+|  - Safety gates (keyword / LLM vulgarity /  |
+|    unified LLM classifier)                  |
 |  - Route: CHITCHAT / RAG / CALC / HYBRID   |
 +---+---------+----------+--------------------+
     |         |          |
@@ -70,10 +71,14 @@ User Query from Mobile App
 +---+---+ +---+----+ +---+-------------------+
     |         |          |
 +---v---------v----------v-------------------+
-|  LLM Synthesis (GPT-4o-mini)               |
+|  LLM Synthesis                             |
+|  - GPT-4o: predictions, RAG synthesis,     |
+|    rewrites, validation                    |
+|  - GPT-4o-mini: safety, classification,    |
+|    follow-up questions, YES/NO checks      |
 |  - Chart data + RAG chunks + rules         |
 |  - Conversation history (last 10 msgs)     |
-|  - Append domain disclaimers               |
+|  - Domain disclaimers (DETAILED+ only)     |
 |  - Localize output (EN/HI/TA/PA)          |
 +---+-----------------------------------------+
     |
@@ -170,9 +175,9 @@ NakshatraAI uses LangGraph to construct a deterministic state machine for all co
 
   | Phase | Trigger | Bot behaviour | Next phase |
   |---|---|---|---|
-  | `INITIAL` | New topic / fresh question | Short answer (~150–200 words, no jargon). Ends with a standard detail-offer closing line (language-matched). | → `AWAITING_DETAIL` |
-  | `AWAITING_DETAIL` | User affirms (`yes`, `haan`, `batao`) | Detailed numbered analysis (5+ points, house lords, dasha windows, yogas). Ends with a **cross-domain follow-up question** whose domain is different from the current topic and not in the session’s `visited_domains`. | → `FOLLOWUP_LOOP` |
-  | `FOLLOWUP_LOOP` | User affirms the follow-up | Treated as a new topic: short answer (~150–200 words) answering exactly the offered follow-up question. Phase resets to a fresh `AWAITING_DETAIL` cycle for that new topic. | → `AWAITING_DETAIL` |
+  | `INITIAL` | New topic / fresh question | Short answer (~100-130 words, no emoji, exactly ONE timing window, no disclaimer appended). Ends with a detail-offer closing line. | → `AWAITING_DETAIL` |
+  | `AWAITING_DETAIL` | User affirms (`yes`, `haan`, `batao`) | Detailed analysis (5+ points, house lords, dasha windows, yogas, divisional charts). Disclaimer appended if applicable. Ends with a **cross-domain follow-up question** not in the session’s `visited_domains`. | → `FOLLOWUP_LOOP` |
+  | `FOLLOWUP_LOOP` | User affirms the follow-up | Treated as a new topic: short answer (~100-130 words) answering exactly the offered follow-up question. Phase resets to a fresh `AWAITING_DETAIL` cycle. | → `AWAITING_DETAIL` |
 
   **Negative responses** (`no`, `nahi`, `mat batao`) are handled gracefully at every phase — the bot offers an alternative topic from the follow-up bank and stays in `FOLLOWUP_LOOP`.
 
@@ -180,7 +185,7 @@ NakshatraAI uses LangGraph to construct a deterministic state machine for all co
 
 - **Horizon hint system (INITIAL responses):** For each new-topic (`INITIAL`) answer the orchestrator selects a pair of timing horizons — `NEAR` (pratyantar-level), `MID` (antardasha-level), or `BROAD` (transit/macro layer) — from a topic-specific family table (career, finance, health, marriage, children, foreign, general). The horizon pair is seeded deterministically (user ID + topic + query) and injected as a prompt instruction so that consecutive answers naturally vary between short, medium, and long windows instead of always defaulting to the same pratyantar slice.
 
-- **Window reuse prevention:** After each turn the orchestrator inspects conversation history for recently-used month-year windows across all topics. A "avoid these recently-used windows" hint is injected into the next INITIAL prompt. If LLM rewrites still produce insufficient window diversity, a deterministic fallback (`_inject_deterministic_initial_timeline_diversity`) appends distinct future dasha windows to satisfy quality checks.
+- **Window reuse prevention & cross-topic coherence:** After each turn the orchestrator stores structured timing metadata (`response_timing_windows` as `YYYY-MM|YYYY-MM` keys, `response_topic`) in the Redis assistant message rather than parsing free-text. A "avoid these recently-used windows" hint is injected into the next INITIAL prompt using this metadata. A coherence hint prevents logically impossible cross-topic dates (e.g. children timing cannot precede marriage timing end by < 12 months). If LLM rewrites still produce insufficient window diversity, a deterministic fallback appends distinct future dasha windows.
 
 - **Future-only timing:** All timing windows in LLM-generated and validator-revised answers must begin in the future (after `TODAY`). Active-now windows are reframed as future-starting windows. Unless the user explicitly requests immediate timing, windows starting within the same or next month are avoided; the validator prefers a lead-time of at least ~2 months.
 
@@ -204,32 +209,37 @@ NakshatraAI uses LangGraph to construct a deterministic state machine for all co
   - **Hard-halt** is reserved exclusively for `category == "data_integrity"` / `"astronomical_constraint"` (e.g., Sun cannot be retrograde, impossible elongation)
 - Returns a **strength score (0–10)** for each prediction domain
 - **Age validator** (`src/validation/age_validator.py`) gates timing predictions based on the user's current age
-- **INITIAL response quality checks** — the post-processing validator evaluates short-answer timeline quality with these additional issue codes:
-  - `short_answer_too_brief_for_rich_timeline` — answer lacks enough content to support meaningful windows
-  - `insufficient_explicit_month_year_windows_in_short_answer` — fewer than 2 explicit month-year ranges present
-  - `insufficient_distinct_month_year_windows_in_short_answer` — windows are not clearly different time periods
-  - `timeline_windows_lack_duration_variation_in_short_answer` — both windows are the same duration band (e.g., both 2-month pratayantar slices)
-  - `timeline_windows_start_too_close_in_short_answer` — both windows start within weeks of each other
-  - `reused_cross_topic_timeline_window_despite_available_alternatives` — window already used in a different-topic answer in this session
-  - `contains_past_year_timeline_reference` — a prediction window references a date that has already passed
+- **INITIAL response quality checks** — the post-processing validator evaluates short-answer timeline quality with these issue codes:
+  - `short_answer_too_brief_for_rich_timeline` — answer lacks enough content to support a meaningful window
+  - `insufficient_explicit_month_year_windows_in_short_answer` — no explicit month-year range present
+  - `reused_cross_topic_timeline_window_despite_available_alternatives` — window already used in a different-topic answer this session
+  - `contains_past_year_timeline_reference` — prediction window references a date that has already passed
   - `duration_only_timeline_without_explicit_month_year_ranges` — timing expressed only as "6 months" without explicit month-year labels
+
+  Note: INITIAL responses now target ONE timing window only. Validators checking for "two distinct windows" are no longer enforced on the INITIAL response.
 
 ---
 
 ## Safety Framework
 
-A multi-gate safety system (`src/safety/`) prevents harmful or unethical astrological responses.
+A 3-gate LLM-first safety system (`src/safety/`) prevents harmful or unethical astrological responses. Pattern-based gates have been replaced with a single unified LLM classifier that handles all languages and phrasings correctly.
 
 | Gate | Name | Description |
 |---|---|---|
-| Gate -1 | Own-Data Detection | Confirms the user is asking about their own chart, not fabricated data |
-| Gate 0 | Third-Party Soft-Block | Blocks inquiries about specific third parties ("When will my friend die?") |
-| Gate 1 | Semantic Routing | Hard-blocks medical diagnoses, legal advice, death/suicide predictions |
-| Gate 2 | LLM Classifier | Nuanced handling — pivots harmful framing to empowering alternatives (e.g., "Will I divorce?" → "What do planetary periods indicate about relationship dynamics?") |
+| Gate 1 | Keyword Vulgar Block | Fast keyword scan — hard-blocks explicit vulgar/abusive content (< 1ms, no LLM call) |
+| Gate 2 | LLM Vulgarity Check | LLM-based vulgarity check — skipped automatically for clearly astrological queries |
+| Gate 3 | Unified LLM Classifier | Single LLM call with ~17 few-shot examples classifies into: HARD_BLOCK / SOFT_BLOCK (third-party) / CONDITIONAL (with disclaimer) / REFRAME / SAFE. Handles Hinglish, romanized Indian languages, and mixed-script queries without regex. |
+
+**Classification outcomes:**
+- `HARD_BLOCK` — death predictions, medical diagnosis, gambling, harmful intent
+- `SOFT_BLOCK` — third-party queries about others' charts ("Mere dost ki shaadi kab hogi?")
+- `CONDITIONAL` — health, finance, relationship questions answered with a natural prose disclaimer (appended only on DETAILED responses, not INITIAL)
+- `REFRAME` — harmful framing pivoted to empowering alternative ("Will I get rich?" → "What periods support wealth accumulation?")
+- `SAFE` — educational, chart calculation, standard prediction queries
 
 Additional components:
 - **Input validator** (`src/safety/input_validator.py`) — sanitizes and validates all inputs
-- **Output disclaimers** (`src/safety/disclaimers.py`) — domain-specific (health, finance, relationships)
+- **Output disclaimers** (`src/safety/templates.py`) — domain-specific natural prose (no bracket labels, no bold headers)
 - **System constitution** (`src/safety/constitution.py`) — injected into every LLM prompt
 
 ---

@@ -2245,7 +2245,10 @@ def send_message(request: SendMessageRequest):
                 "context_intent": intent_analysis['intent_type'],
                 "resolution_action": resolution_result['action'],
                 "ambiguity_score": resolution_result['ambiguity_score'],
-                "processed_query": processed_query if processed_query != question else None
+                "processed_query": processed_query if processed_query != question else None,
+                # Structured timing metadata — avoids regex-parsing response text later
+                "timing_windows": result.get('response_timing_windows') or [],
+                "topic": result.get('response_topic') or "",
             }
         )
         
