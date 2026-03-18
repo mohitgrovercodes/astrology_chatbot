@@ -25,6 +25,11 @@ from .models import (
 
 
 from src.routing import SemanticRouter
+from .vulgarity import (
+    contains_vulgar_keyword,
+    is_clearly_astrological_query,
+    llm_vulgarity_check,
+)
 
 # ============================================================================
 # SEMANTIC ROUTES CONFIGURATION
@@ -458,17 +463,6 @@ class SafetyClassifier:
             logger.warning(f"[SAFETY] could not initialize semantic routes: {e}")
         self._safety_routes_initialized = True
     
-    # ── Astrological safe-words: queries containing these skip the LLM vulgarity gate ──
-    _ASTRO_SAFE_WORDS = frozenset([
-        'kundli', 'kundali', 'horoscope', 'rashi', 'lagna', 'nakshatra', 'dasha',
-        'antardasha', 'mahadasha', 'graha', 'planet', 'saturn', 'jupiter', 'venus',
-        'mars', 'mercury', 'moon', 'sun', 'rahu', 'ketu', 'shani', 'mangal',
-        'budh', 'brihaspati', 'shukra', 'surya', 'chandra', 'transit', 'gochar',
-        'chart', 'birth chart', 'vedic', 'jyotish', 'yoga', 'bhava', 'house',
-        'marriage', 'shaadi', 'career', 'naukri', 'health', 'money', 'dhan',
-        'foreign', 'videsh', 'child', 'bachha', 'santan', 'property', 'ghar',
-    ])
-
     def _llm_vulgarity_check(self, query: str) -> bool:
         """
         Lightweight LLM gate for vulgarity/explicit content not caught by keywords.
@@ -477,17 +471,7 @@ class SafetyClassifier:
         Only called for queries that are not clearly astrological or chitchat.
         """
         try:
-            prompt = (
-                "You are a content moderator for a professional astrology chatbot. "
-                "Decide ONLY whether the user message below contains: profanity, sexual explicitness, "
-                "verbal abuse, sexual harassment, or vulgar insults — in ANY language "
-                "(English, Hindi, Tamil, Telugu, Marathi, Punjabi, Malayalam, Urdu, Hinglish, or any mix).\n\n"
-                f'User message: "{query}"\n\n'
-                "Reply with exactly one word: YES (if vulgar/abusive/explicit) or NO (if not)."
-            )
-            response = self.llm.invoke(prompt)
-            answer = response.content.strip().upper()
-            is_vulgar = answer.startswith("YES")
+            is_vulgar = llm_vulgarity_check(query=query, llm=self.llm, strict_prompt=False)
             if is_vulgar:
                 logger.info(f"[SAFETY] LLM vulgarity check: VULGAR — '{query[:60]}'")
             return is_vulgar
@@ -508,40 +492,7 @@ class SafetyClassifier:
         """
         # Gate 1: Keyword hard-block — covers all major Indian + English profanity.
         # No LLM call. Runs first for zero latency on obvious cases.
-        _VULGAR_KEYWORDS = {
-            # ── English ──────────────────────────────────────────────────────
-            'fuck', 'shit', 'bitch', 'asshole', 'bastard', 'motherfucker',
-            'dick', 'pussy', 'cock', 'cunt', 'whore', 'slut', 'nude', 'porn',
-            'pornography', 'masturbat', 'sex position', 'sexual position',
-            # ── Hindi / Hinglish (transliterated) ────────────────────────────
-            'chutiya', 'madarchod', 'bhosdike', 'bhosdika', 'randi', 'harami',
-            'gaandu', 'gandu', 'lund', 'chut', 'bhenchod', 'behenchod',
-            'maderchod', 'saala', 'kamina', 'kutte', 'kamine', 'haramzada',
-            'haramkhor', 'madarjaat', 'lavde', 'lavda',
-            # ── Tamil (transliterated) ────────────────────────────────────────
-            'punda', 'pundai', 'sunni', 'thevidiya', 'ootha', 'koothi',
-            'baadu', 'paiyan', 'oombu',
-            # ── Telugu (transliterated) ───────────────────────────────────────
-            'dengey', 'dengudi', 'pukku', 'modda', 'lanja', 'lanjakodaka',
-            'pooku', 'gudda',
-            # ── Marathi (transliterated) ──────────────────────────────────────
-            'zavnya', 'zavad', 'bhadva', 'aai zavadya', 'ghanta', 'zadya',
-            # ── Punjabi (transliterated) ──────────────────────────────────────
-            'bhen di', 'teri maa', 'phudu', 'phuddu', 'maa di',
-            # ── Malayalam (transliterated) ────────────────────────────────────
-            'theetta', 'myre', 'kunna', 'pooru', 'poori', 'ammaye',
-            # ── Urdu (transliterated) ─────────────────────────────────────────
-            'haraamzada', 'gaand', 'khanki', 'madar', 'sala kutta',
-            # ── Native Unicode script (common high-frequency slurs) ───────────
-            'चुतिया', 'मादरचोद', 'भड़वा', 'रंडी', 'हरामी', 'लंड', 'भोसड़ी',
-            'புண்டை', 'சுன்னி', 'தேவிடியா',
-            'పుక్కు', 'మొద్ద', 'లంజ',
-            'झवाड', 'भडवा', 'लवडा',
-            'ਭੈਣ ਦੀ', 'ਫੁੱਡੂ',
-            'കുണ്ണ', 'പൂറ്',
-        }
-        query_lower_vg = query.lower()
-        if any(kw in query_lower_vg for kw in _VULGAR_KEYWORDS):
+        if contains_vulgar_keyword(query):
             logger.info(f"[SAFETY] Vulgar keyword detected — hard blocking")
             decision = SafetyDecision(
                 category="HARD_BLOCK",
@@ -557,8 +508,7 @@ class SafetyClassifier:
         # euphemisms, and mixed-language abuse missed by keywords.
         # Skipped for clearly astrological queries (no latency overhead on the
         # majority of real traffic).
-        query_words = set(query_lower_vg.split())
-        is_clearly_astro = bool(query_words & self._ASTRO_SAFE_WORDS)
+        is_clearly_astro = is_clearly_astrological_query(query)
         if not is_clearly_astro and self._llm_vulgarity_check(query):
             decision = SafetyDecision(
                 category="HARD_BLOCK",
