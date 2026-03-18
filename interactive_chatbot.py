@@ -154,7 +154,7 @@ def initialize_session(user_id: str, user_profile: dict) -> bool:
     
     except requests.exceptions.ConnectionError:
         print(f"{Colors.RED}✗ Cannot connect to API. Is it running on port 6262?{Colors.ENDC}")
-        print(f"{Colors.YELLOW}Start it with: uvicorn src.api.main:app --reload --host 0.0.0.0 --port 6262{Colors.ENDC}")
+        print(f"{Colors.YELLOW}Start it with: C{Colors.ENDC}")
         return False
     except Exception as e:
         print(f"{Colors.RED}✗ Error: {e}{Colors.ENDC}")

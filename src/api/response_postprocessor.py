@@ -146,7 +146,24 @@ def validate_and_sanitize_response(
     )
 
     if not should_validate:
+        logger.debug(
+            "[VALIDATOR] skip: "
+            f"likely_sensitive={likely_sensitive}, likely_overconfident={likely_overconfident}, "
+            f"likely_short_or_generic={likely_short_or_generic}, likely_repetition={likely_repetition}, "
+            f"needs_numbering_enforcement={needs_numbering_enforcement}"
+        )
         return draft_answer
+
+    logger.info(
+        "[VALIDATOR] run semantic validator: "
+        f"likely_sensitive={likely_sensitive}, "
+        f"likely_overconfident={likely_overconfident}, "
+        f"likely_short_or_generic={likely_short_or_generic}, "
+        f"likely_repetition={likely_repetition}, "
+        f"needs_numbering_enforcement={needs_numbering_enforcement}, "
+        f"min_numbered_points={min_numbered_points}, "
+        f"detected_language={detected_language!r}"
+    )
 
     def _count_numbered_points(text: str) -> int:
         """
@@ -598,6 +615,16 @@ Respond in STRICT JSON ONLY, no extra text, like this:
         raw = getattr(resp, "content", str(resp))
         data = _json.loads(raw)
 
+        if isinstance(data, dict):
+            logger.debug(
+                "[VALIDATOR] model verdict: "
+                f"needs_revision={data.get('needs_revision')}, "
+                f"repetition_risk_score={data.get('repetition_risk_score')}, "
+                f"human_warmth_score={data.get('human_warmth_score')}, "
+                f"authentic_astrologer_voice_score={data.get('authentic_astrologer_voice_score')}, "
+                f"min_numbered_points={data.get('min_numbered_points')}"
+            )
+
         final_answer = draft_answer
         if isinstance(data, dict) and data.get("needs_revision") and data.get("revised_answer"):
             candidate = str(data.get("revised_answer", "")).strip()
@@ -606,6 +633,8 @@ Respond in STRICT JSON ONLY, no extra text, like this:
             else:
                 logger.info("[VALIDATOR] Accepted revised answer from validator.")
                 final_answer = candidate
+        else:
+            logger.debug("[VALIDATOR] no LLM revision accepted (keeping draft unless deterministic fixes trigger).")
 
         # Secondary style gate: enforce warmth/authenticity/repetition quality
         # even when the model marks the draft as coherent.
