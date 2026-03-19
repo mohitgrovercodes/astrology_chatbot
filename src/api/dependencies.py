@@ -57,7 +57,8 @@ def get_llm():
     Uses Centralized LLM Factory to support switching providers.
     """
     from src.llm.factory import LLMFactory
-    return LLMFactory.create(purpose="general")
+    # Lower temperature for more consistent prose and fewer QA-triggered rewrites.
+    return LLMFactory.create(purpose="general", temperature=0.2)
 
 
 def get_fast_llm():
@@ -65,7 +66,8 @@ def get_fast_llm():
     Get fast LLM for classification tasks.
     """
     from src.llm.factory import LLMFactory
-    return LLMFactory.create(purpose="classification")
+    # Keep fast/classification deterministic to reduce routing variance.
+    return LLMFactory.create(purpose="classification", temperature=0.1)
 
 
 def get_embeddings():
