@@ -85,7 +85,7 @@ The `docker-compose.yml` spins up:
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `LLM_PROVIDER` | Yes | `openai` | `openai` or `ollama` |
-| `LLM_MODEL` | No | `gpt-4o` | Primary LLM (synthesis, validation, rewrites) |
+| `LLM_MODEL` | No | `gpt-4o-mini` | Primary LLM (synthesis, validation, rewrites) |
 | `FAST_LLM_MODEL` | No | `gpt-4o-mini` | Fast LLM (classification, safety, follow-up, YES/NO checks) |
 | `OPENAI_API_KEY` | Yes | — | OpenAI API key (LLM + embeddings) |
 | `VALID_API_KEYS` | Yes | — | Comma-separated public API keys |
@@ -95,7 +95,7 @@ The `docker-compose.yml` spins up:
 | `REDIS_PASSWORD` | No | — | Redis password (if set) |
 | `SESSION_EXPIRY_HOURS` | No | `0` | `0` = permanent (recommended) |
 | `TRANSIT_REFRESH_HOURS` | No | `24` | How often transits are recomputed |
-| `DASHA_REFRESH_DAYS` | No | `30` | How often Dashas are recomputed |
+| `DASHA_REFRESH_DAYS` | No | `30` | Baseline refresh cadence for Dashas. Additionally, the orchestrator will force an immediate recompute if cached `antardasha.end` / `pratyantardasha.end` is already earlier than `TODAY` (stale dasha defense-in-depth). |
 | `RATE_LIMIT_PER_MINUTE` | No | `10` | API rate limit per key |
 | `MAX_CONVERSATION_HISTORY` | No | `10` | Max messages kept in context |
 | `ALLOWED_ORIGINS` | No | `*` | CORS origins (restrict in production) |

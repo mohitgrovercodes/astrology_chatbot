@@ -92,7 +92,7 @@ INTERNAL_SERVICE_SECRET=super-secret-string
 
 ```env
 LLM_PROVIDER=openai
-LLM_MODEL=gpt-4o               # Primary: synthesis, validation, rewrites
+LLM_MODEL=gpt-4o-mini         # Primary: synthesis, validation, rewrites
 FAST_LLM_MODEL=gpt-4o-mini     # Fast: classification, safety, follow-up
 OPENAI_API_KEY=sk-your-openai-key
 ```
@@ -353,6 +353,7 @@ On exceeding the limit, the server returns `HTTP 429 Too Many Requests`.
 - **Language/script lock:** Responses mirror the user's language/script per turn (for example, Hinglish in Roman script stays Romanized).
 - **Detailed responses:** Detailed follow-up responses are designed to include multiple astrological factors (house/lord logic, dasha windows, yogas, and divisional support) and avoid repeating the same timing label as a separate heading.
 - **Future-only timing windows:** All timing windows in responses must start after today's date. Active-now windows are reframed to future-starting windows. Unless the user explicitly requests urgent/immediate timing, the system prefers windows that begin at least ~2 months in the future.
+- **Stale dasha defense-in-depth:** If cached `dasha_data` has `antardasha.end` / `pratyantardasha.end` earlier than `TODAY`, the orchestrator clears cached dasha and recomputes; the Step 2 prompt also suppresses month-year range text for ended dasha periods to prevent past-month leakage.
 - **Single timing window:** INITIAL responses include exactly ONE timing window. Multiple windows are given only in DETAILED responses. Cross-topic timing coherence is enforced — e.g., children timing cannot fall before 12 months after the marriage window end.
 - **Disclaimer placement:** Domain disclaimers (health, finance, relationship) are appended only to DETAILED responses, not to the short INITIAL answer.
 
@@ -366,7 +367,7 @@ On exceeding the limit, the server returns `HTTP 429 Too Many Requests`.
 | Birth Chart | Redis (permanent) | No TTL — birth geometry never changes |
 | Conversation History | Redis (permanent) | Sliding window of last **10** messages |
 | Transits | Redis | Refreshed when `stored_at` is older than `TRANSIT_REFRESH_HOURS` (default: 24h) |
-| Dashas | Redis | Refreshed when `stored_at` is older than `DASHA_REFRESH_DAYS` (default: 30d) |
+| Dashas | Redis | Refreshed when `stored_at` is older than `DASHA_REFRESH_DAYS` (default: 30d); also may be forced to recompute by stale dasha defense-in-depth when cached end-date is earlier than `TODAY` |
 
 All user data persists indefinitely — users returning after months of inactivity retain their full session context.
 
@@ -400,7 +401,7 @@ Key `.env` variables affecting API behavior:
 | `ALLOWED_ORIGINS` | `*` | CORS origins (restrict in production) |
 | `RATE_LIMIT_PER_MINUTE` | `10` | Rate limit per API key |
 | `LLM_PROVIDER` | `openai` | `openai` or `ollama` |
-| `LLM_MODEL` | `gpt-4o` | Primary LLM model (synthesis, validation) |
+| `LLM_MODEL` | `gpt-4o-mini` | Primary LLM model (synthesis, validation) |
 | `FAST_LLM_MODEL` | `gpt-4o-mini` | Fast LLM model (classification, safety) |
 | `OPENAI_API_KEY` | — | OpenAI API key |
 
