@@ -23,8 +23,8 @@ wheels/
 # Virtual environments
 venv/
 ENV/
-env/
-.venv/
+astroenv/
+.astroenv/
 
 # IDE
 .idea/
@@ -75,3 +75,4 @@ tiered_rules.json
 *.pdf
 
 .cursor/
+.claude/
