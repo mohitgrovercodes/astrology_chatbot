@@ -36,7 +36,8 @@ pip install -r requirements.txt
 # Configure environment
 cp .env.example .env
 # Set at minimum:
-#   OPENAI_API_KEY=sk-...
+#   GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+#   GOOGLE_APPLICATION_CREDENTIALS=google_credentials.json
 #   VALID_API_KEYS=my-dev-key
 
 # Start Redis and API server
@@ -88,19 +89,20 @@ INTERNAL_SERVICE_SECRET=super-secret-string
 
 ### LLM Configuration
 
-**Option 1 — OpenAI (recommended)**
+**Option 1 — Google Gemini via Vertex AI (recommended)**
 
 ```env
-LLM_PROVIDER=openai
-LLM_MODEL=gpt-4o-mini         # Primary: synthesis, validation, rewrites
-FAST_LLM_MODEL=gpt-4o-mini     # Fast: classification, safety, follow-up
-OPENAI_API_KEY=sk-your-openai-key
+LLM_PROVIDER=google
+LLM_MODEL=gemini-2.5-pro           # Primary: synthesis, validation, rewrites
+FAST_LLM_MODEL=gemini-2.5-flash    # Fast: classification, safety, follow-up
+GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+GOOGLE_APPLICATION_CREDENTIALS=google_credentials.json
 ```
 
 **Option 2 — Ollama (local, free)**
 
 ```env
-LLM_PROVIDER=ollama
+LLM_PROVIDER=free
 LLM_MODEL=qwen2.5:7b
 ```
 
@@ -211,7 +213,7 @@ Content-Type: application/json
   "user_id": "unique-user-or-session-id",
   "question": "When will my career improve?",
   "answer": "Based on your birth chart, your current Jupiter Mahadasha suggests...",
-  "source": "openai",
+  "source": "gemini",
   "evidence": {
     "domain": "career",
     "signals": [
@@ -313,7 +315,7 @@ On exceeding the limit, the server returns `HTTP 429 Too Many Requests`.
   "user_id": "unique-user-or-session-id",
   "question": "When will I get married?",
   "answer": "Based on your 7th house...",
-  "source": "openai",
+  "source": "gemini",
   "evidence": null
 }
 ```
@@ -400,10 +402,13 @@ Key `.env` variables affecting API behavior:
 | `INTERNAL_SERVICE_SECRET` | — | Backend-to-backend auth secret |
 | `ALLOWED_ORIGINS` | `*` | CORS origins (restrict in production) |
 | `RATE_LIMIT_PER_MINUTE` | `10` | Rate limit per API key |
-| `LLM_PROVIDER` | `openai` | `openai` or `ollama` |
-| `LLM_MODEL` | `gpt-4o-mini` | Primary LLM model (synthesis, validation) |
-| `FAST_LLM_MODEL` | `gpt-4o-mini` | Fast LLM model (classification, safety) |
-| `OPENAI_API_KEY` | — | OpenAI API key |
+| `GOOGLE_CLOUD_PROJECT` | — | Google Cloud project ID (required) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | — | Path to service account JSON |
+| `LLM_PROVIDER` | `google` | `google` or `free` (Ollama) |
+| `LLM_MODEL` | `gemini-2.5-pro` | Primary LLM model (synthesis, validation) |
+| `FAST_LLM_MODEL` | `gemini-2.5-flash` | Fast LLM model (classification, safety) |
+| `EMBEDDING_MODEL` | `gemini-embedding-001` | Vertex AI embedding model |
+| `EMBEDDING_DIMENSIONS` | `1536` | Embedding vector dimensions |
 
 ---
 

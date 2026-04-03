@@ -152,7 +152,7 @@ class AstrologyRetriever:
             return []
             
         if not self.embedder.client:
-            logger.error("Retrieval unavailable: Embedder client not initialized (Check OPENAI_API_KEY).")
+            logger.error("Retrieval unavailable: Embedder client not initialized (Check GOOGLE_CLOUD_PROJECT).")
             return []
         
         # Adjust top_k based on intent if provided

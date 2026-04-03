@@ -3,12 +3,12 @@
 LLM Factory for NakshatraAI - Two Provider Support
 
 This factory supports two LLM providers:
-1. OpenAI (GPT-4o-mini) - Production deployment (default)
+1. Google Vertex AI (Gemini 2.5 Pro/Flash) - Production deployment (default)
 2. Free (Llama 3.2 via Ollama) - Local testing and fallback
 
 Provider Selection:
-- Set via LLM_PROVIDER environment variable ("openai" | "free")
-- Defaults to "openai" if not set
+- Set via LLM_PROVIDER environment variable ("google" | "free")
+- Defaults to "google" if not set
 - Automatic model selection based on purpose (general vs classification)
 
 Rate Limiting:
@@ -134,12 +134,11 @@ class LLMFactory:
     Provider Decision Tree:
     1. Check LLM_PROVIDER environment variable
     2. If not set, use config.yaml default
-    3. If no config, default to "openai"
+    3. If no config, default to "google"
 
     Model Selection:
-    - Purpose "general": Use best model for quality responses
-    - Purpose "classification": Use fast model for routing/validation
-    - Purpose "validation": Use model suitable for rule evaluation
+    - Purpose "general"/"prediction"/"rag"/"validation": gemini-2.5-pro (heavy lifting)
+    - Purpose "classification"/"chitchat": gemini-2.5-flash (fast & light)
     """
 
     @classmethod
@@ -158,7 +157,7 @@ class LLMFactory:
         Create an LLM instance with automatic provider and model selection.
 
         Args:
-            provider: "openai" | "free" (overrides env and config)
+            provider: "google" | "free" (overrides env and config)
             model: Specific model name (overrides automatic selection)
             temperature: Sampling temperature (0.0-1.0)
             max_tokens: Maximum output tokens
@@ -171,8 +170,10 @@ class LLMFactory:
             Configured LLM instance (optionally rate-limited)
 
         Environment Variables Required by Provider:
-            OpenAI:
-                - OPENAI_API_KEY
+            Google (Vertex AI):
+                - GOOGLE_CLOUD_PROJECT
+                - GOOGLE_CLOUD_LOCATION (optional, default: us-central1)
+                - GOOGLE_APPLICATION_CREDENTIALS (path to service account JSON)
 
             Free (Ollama):
                 - OLLAMA_BASE_URL (optional, default: http://localhost:11434)
@@ -209,8 +210,8 @@ class LLMFactory:
         )
 
         # Step 4: Create Provider-Specific LLM
-        if provider == "openai":
-            llm = cls._create_openai_llm(model, temperature, max_tokens, **kwargs)
+        if provider == "google":
+            llm = cls._create_google_llm(model, temperature, max_tokens, **kwargs)
 
         elif provider == "free":
             llm = cls._create_free_llm(model, temperature, max_tokens, **kwargs)
@@ -218,7 +219,7 @@ class LLMFactory:
         else:
             raise ValueError(
                 f"Unknown provider: '{provider}'. "
-                f"Must be 'openai' or 'free'. "
+                f"Must be 'google' or 'free'. "
                 f"Set LLM_PROVIDER env variable accordingly."
             )
 
@@ -241,24 +242,24 @@ class LLMFactory:
         1. Function argument (override)
         2. Environment variable LLM_PROVIDER
         3. Config file default
-        4. Hardcoded default ("openai")
+        4. Hardcoded default ("google")
         """
         if override:
             return override.lower()
 
         # Check environment variable
         env_provider = os.getenv("LLM_PROVIDER", "").lower()
-        if env_provider in ["openai", "free"]:
+        if env_provider in ["google", "free"]:
             return env_provider
 
         # Check config file
         if CONFIG_AVAILABLE:
             config_provider = get_config().llm.default_provider
-            if config_provider and config_provider.lower() in ["openai", "free"]:
+            if config_provider and config_provider.lower() in ["google", "free"]:
                 return config_provider.lower()
 
-        # Default to OpenAI (production-ready)
-        return "openai"
+        # Default to Google Vertex AI (production-ready)
+        return "google"
 
     @classmethod
     def _select_model_for_provider(cls, provider: str, purpose: str) -> str:
@@ -266,27 +267,24 @@ class LLMFactory:
         Select appropriate model based on provider and purpose.
 
         Model Selection Strategy:
-        - OpenAI: LLM_MODEL env var for general/prediction/rag/validation purposes;
-                  FAST_LLM_MODEL for classification/chitchat purposes (speed-sensitive)
+        - Google: gemini-2.5-pro for heavy lifting (general/prediction/rag/validation)
+                  gemini-2.5-flash for fast tasks (classification/chitchat)
         - Free: llama3.2:3b (decent quality, runs locally)
         """
-        if provider == "openai":
-            # Read from pydantic settings (which correctly loads .env).
-            # os.getenv() won't work here because pydantic-settings does NOT
-            # write .env values back into os.environ.
+        if provider == "google":
             _fast_purposes = {"classification", "chitchat"}
             try:
                 from src.api.config import settings as _settings
                 if purpose in _fast_purposes:
-                    return _settings.FAST_LLM_MODEL or "gpt-4o-mini"
+                    return _settings.FAST_LLM_MODEL or "gemini-2.5-flash"
                 else:
-                    return _settings.LLM_MODEL or "gpt-4o-mini"
+                    return _settings.LLM_MODEL or "gemini-2.5-pro"
             except Exception:
                 # Fallback if config not available (e.g., standalone factory usage)
                 if purpose in _fast_purposes:
-                    return os.getenv("FAST_LLM_MODEL", "gpt-4o-mini")
+                    return os.getenv("FAST_LLM_MODEL", "gemini-2.5-flash")
                 else:
-                    return os.getenv("LLM_MODEL", "gpt-4o-mini")
+                    return os.getenv("LLM_MODEL", "gemini-2.5-pro")
 
         elif provider == "free":
             # Ollama local models
@@ -299,11 +297,11 @@ class LLMFactory:
             raise ValueError(f"Unknown provider: '{provider}'")
 
     # ------------------------------------------------------------------------
-    # OPENAI LLM CREATION
+    # GOOGLE VERTEX AI LLM CREATION
     # ------------------------------------------------------------------------
 
     @classmethod
-    def _create_openai_llm(
+    def _create_google_llm(
         cls,
         model: str,
         temperature: float,
@@ -311,35 +309,40 @@ class LLMFactory:
         **kwargs
     ) -> BaseChatModel:
         """
-        Create OpenAI LLM.
+        Create Google Vertex AI LLM (Gemini).
 
         Requires:
-            - OPENAI_API_KEY environment variable
-            - langchain-openai package installed
+            - GOOGLE_CLOUD_PROJECT environment variable
+            - GOOGLE_APPLICATION_CREDENTIALS environment variable (service account JSON path)
+            - langchain-google-vertexai package installed
         """
         try:
-            from langchain_openai import ChatOpenAI
+            from langchain_google_vertexai import ChatVertexAI
         except ImportError:
             raise ImportError(
-                "OpenAI not available. Install with:\n"
-                "pip install langchain-openai"
+                "Google Vertex AI not available. Install with:\n"
+                "pip install langchain-google-vertexai google-cloud-aiplatform"
             )
 
-        # Get API key
-        api_key = kwargs.pop("api_key", None) or os.getenv("OPENAI_API_KEY")
-        if not api_key:
+        # Get project and location
+        project = kwargs.pop("project", None) or os.getenv("GOOGLE_CLOUD_PROJECT")
+        location = kwargs.pop("location", None) or os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+
+        if not project:
             raise ValueError(
-                "OPENAI_API_KEY not found in environment or kwargs"
+                "GOOGLE_CLOUD_PROJECT not found in environment or kwargs. "
+                "Set it in your .env file."
             )
 
-        logger.info(f"Initializing OpenAI: model={model}")
+        logger.info(f"Initializing Vertex AI: model={model}, project={project}, location={location}")
 
-        # Create OpenAI LLM
-        llm = ChatOpenAI(
-            model=model,
+        # Create Vertex AI LLM
+        llm = ChatVertexAI(
+            model_name=model,
             temperature=temperature,
-            max_tokens=max_tokens,
-            api_key=api_key,
+            max_output_tokens=max_tokens,
+            project=project,
+            location=location,
             **kwargs
         )
 
@@ -418,14 +421,14 @@ def create_llm(
     Convenience function for creating LLMs.
 
     Usage:
-        # Use default provider and model (OpenAI gpt-4o-mini)
+        # Use default provider and model (Vertex AI gemini-2.5-pro)
         llm = create_llm()
 
         # Use Ollama locally
         llm = create_llm(provider="free")
 
         # Use specific model
-        llm = create_llm(provider="openai", model="gpt-4o-mini")
+        llm = create_llm(provider="google", model="gemini-2.5-flash")
 
         # Fast LLM for classification
         fast_llm = create_llm(purpose="classification")
@@ -483,7 +486,7 @@ if __name__ == "__main__":
 
     # Test model selection
     print("2. Model Selection Test:")
-    for provider in ["openai", "free"]:
+    for provider in ["google", "free"]:
         for purpose in ["general", "classification"]:
             model = LLMFactory._select_model_for_provider(provider, purpose)
             print(f"   {provider}/{purpose}: {model}")

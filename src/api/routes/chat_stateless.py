@@ -645,7 +645,7 @@ class SendMessageResponse(BaseModel):
     user_id: str
     question: str
     answer: str
-    source: str = "openai"
+    source: str = "gemini"
     evidence: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
 
@@ -1440,7 +1440,7 @@ def send_message(request: SendMessageRequest):
             metadata={
                 "intent": intent,
                 "confidence": confidence,
-                "source": "chatbot",   # "chatbot" = generated this session; "external"/"openai" = old imported history
+                "source": "chatbot",   # "chatbot" = generated this session; "external"/"gemini" = old imported history
                 "context_intent": intent_analysis['intent_type'],
                 "resolution_action": resolution_result['action'],
                 "ambiguity_score": resolution_result['ambiguity_score'],
@@ -1527,7 +1527,7 @@ def send_message(request: SendMessageRequest):
             user_id=user_id,
             question=question,
             answer=answer,
-            source="openai",
+            source="gemini",
             evidence=result.get("astro_evidence") if isinstance(result, dict) else None,
             metadata=response_metadata or None,
         )

@@ -56,4 +56,4 @@ Welcome to the NakshatraAI documentation. This index links to all project docs.
 | Supported language codes | 13 (native + romanized Indian languages + English) |
 | Safety gates | 3 (LLM-unified classifier) |
 | Test files | 20 |
-| LLM split | GPT-4o (synthesis/validation) + GPT-4o-mini (classification/safety) |
+| LLM split | Gemini 2.5 Pro (synthesis/validation) + Gemini 2.5 Flash (classification/safety) |

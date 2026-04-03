@@ -65,7 +65,7 @@ conda activate venv/
 python tests/test_multilingual_rag.py
 ```
 
-- Requires: ChromaDB at `data/vectordb` (or path in config), collection `vedic_astrology_books_knowledge`, and OpenAI API key for embeddings.
+- Requires: ChromaDB at `data/vectordb` (or path in config), collection `vedic_astrology_books_knowledge`, and Google Cloud credentials for Vertex AI embeddings.
 - Writes: `multilingual_rag_test_results.json` with scores and topic coverage per query.
 
 ### 2. Hybrid retrieval test (production path)
@@ -107,7 +107,7 @@ User message
    If language ≠ English, the query is **translated to English** via a small LLM call so the vector store (indexed in English) is searched in English.
 
 3. **Three retrieval signals (all over the same Chroma collection)**  
-   - **Semantic**: Embed query with OpenAI `text-embedding-3-large`, run vector similarity search in ChromaDB (e.g. 2× top_k candidates).  
+   - **Semantic**: Embed query with Vertex AI `gemini-embedding-001` (1536 dims), run vector similarity search in ChromaDB (e.g. 2× top_k candidates).  
    - **Keyword (BM25)**: Tokenize query, score all documents in the in-memory BM25 index built from the same collection, take top 2× top_k.  
    - **HyDE**: One LLM call to generate a short “ideal answer passage” in the style of the corpus; embed that passage and run semantic search with it. Gives a third ranking.
 
@@ -128,7 +128,7 @@ User message
 
 ### Data sources
 
-- **Vector store**: ChromaDB, persistent path (e.g. `data/vectordb`), collection `vedic_astrology_books_knowledge`. Embeddings from OpenAI.
+- **Vector store**: ChromaDB, persistent path (e.g. `data/vectordb`), collection `vedic_astrology_books_knowledge`. Embeddings from Vertex AI (`gemini-embedding-001`).
 - **BM25**: Same documents as in Chroma, loaded once and kept in memory; used only for keyword scoring.
 - **Memory** (optional): Separate Chroma collection (e.g. `conversation_memories`), keyed by `user_id`, for previous conversation snippets.
 

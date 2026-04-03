@@ -70,11 +70,11 @@ class PageAnalyzer:
         self.is_vertex_ai = False
         self.embedding_model = None
         
-        # Initialize OpenAI Embedder for semantic continuity
+        # Initialize Vertex AI Embedder for semantic continuity
         try:
             from src.rag.preprocessing.embedder import Embedder
             self.embedding_model = Embedder()
-            print("[[DONE]] OpenAI Embedder initialized for semantic continuity")
+            print("[[DONE]] Vertex AI Embedder initialized for semantic continuity")
         except ImportError:
             print("[WARN] Embedder not found. Semantic checks will be skipped.")
         except Exception as e:

@@ -116,5 +116,5 @@ In `templates.py`, add your template to the appropriate language block. Keep it 
 ## Notes
 
 - Safety checks are non-negotiable — do not disable `ENABLE_SAFETY_CHECKS` in production
-- The classifier requires a `fast_llm` (gpt-4o-mini) instance; falls back to `llm` if not provided
+- The classifier requires a `fast_llm` (gemini-2.5-flash) instance; falls back to `llm` if not provided
 - All classification decisions are logged at INFO level for auditing

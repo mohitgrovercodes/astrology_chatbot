@@ -27,16 +27,20 @@ services:
       - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-10}
       - RATE_LIMIT_PER_HOUR=${RATE_LIMIT_PER_HOUR:-100}
 
-      # ── LLM Provider ──────────────────────────────────────────────────────
-      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
-      - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
-      - FAST_LLM_PROVIDER=${FAST_LLM_PROVIDER:-openai}
-      - FAST_LLM_MODEL=${FAST_LLM_MODEL:-gpt-4o-mini}
+      # ── Google Cloud / Vertex AI (required) ────────────────────────────────
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
+      - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/google_credentials.json
 
-      # ── OpenAI (required when LLM_PROVIDER=openai) ────────────────────────
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL:-text-embedding-3-large}
-      - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS:-3072}
+      # ── LLM Provider ──────────────────────────────────────────────────────
+      - LLM_PROVIDER=${LLM_PROVIDER:-google}
+      - LLM_MODEL=${LLM_MODEL:-gemini-2.5-pro}
+      - FAST_LLM_PROVIDER=${FAST_LLM_PROVIDER:-google}
+      - FAST_LLM_MODEL=${FAST_LLM_MODEL:-gemini-2.5-flash}
+
+      # ── Embeddings (Vertex AI) ────────────────────────────────────────────
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-gemini-embedding-001}
+      - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS:-1536}
 
       # ── Ollama (required when LLM_PROVIDER=free) ──────────────────────────
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}
@@ -98,6 +102,7 @@ services:
 
     volumes:
       - ./data:/app/data
+      - ./google_credentials.json:/app/google_credentials.json:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

@@ -4,18 +4,19 @@
 # LLM Configuration
 # ============================================
 llm:
-  default_provider: openai
-  default_model: "gpt-4o-mini"
-  fast_model: "gpt-4o-mini"
-  
+  default_provider: google
+  default_model: "gemini-2.5-pro"
+  fast_model: "gemini-2.5-flash"
+
   temperature: 0.3
   max_tokens: 2048
-  
+
   providers:
-    openai:
+    google:
       models:
-        - gpt-4o-mini
-        - gpt-4o
+        - gemini-2.5-pro
+        - gemini-2.5-flash
+        - gemini-2.0-flash
     ollama:
       models:
         - qwen2.5:7b
@@ -23,12 +24,12 @@ llm:
         - phi4
 
 # ============================================
-# Embeddings Configuration (OpenAI - for embeddings only)
+# Embeddings Configuration (Vertex AI)
 # ============================================
 embeddings:
-  provider: openai
-  model: text-embedding-3-large
-  dimensions: 3072
+  provider: google
+  model: gemini-embedding-001
+  dimensions: 1536
 
 # ============================================
 # RAG Configuration
@@ -55,7 +56,7 @@ safety:
     - gambling_advice
     - lottery_prediction
     - legal_advice
-  
+
   disclaimer_topics:
     health:
       message: "Please consult a qualified medical professional for health concerns."

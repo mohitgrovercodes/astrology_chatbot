@@ -1,6 +1,6 @@
 import asyncio
 from src.orchestration.orchestrator import EnhancedLangGraphOrchestrator
-from langchain_openai import ChatOpenAI
+from langchain_google_vertexai import ChatVertexAI
 
 def test_continuation_guard():
     print("Testing Continuation Guard...")

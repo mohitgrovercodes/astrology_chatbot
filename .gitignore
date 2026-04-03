@@ -73,6 +73,7 @@ consolidated_final.json
 indexed_rules.json
 tiered_rules.json
 *.pdf
+google_credentials.json
 
 .cursor/
 .claude/

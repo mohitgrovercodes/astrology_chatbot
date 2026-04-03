@@ -19,9 +19,18 @@
 2. **Configure Environment**
    Copy `.env.example` to `.env`. Minimum required variables:
    ```env
+   # Google Cloud / Vertex AI (required for LLM + embeddings)
+   GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+   GOOGLE_APPLICATION_CREDENTIALS=google_credentials.json
+
    # LLM (required)
-   LLM_PROVIDER=openai
-   OPENAI_API_KEY=sk-...
+   LLM_PROVIDER=google
+   LLM_MODEL=gemini-2.5-pro
+   FAST_LLM_MODEL=gemini-2.5-flash
+
+   # Embeddings
+   EMBEDDING_MODEL=gemini-embedding-001
+   EMBEDDING_DIMENSIONS=1536
 
    # API security (required)
    VALID_API_KEYS=key1,key2
@@ -30,11 +39,9 @@
    # Session storage (required)
    REDIS_HOST=localhost
    REDIS_PORT=6379
-
-   # Optional: PDF extraction via Gemini Vision
-   GOOGLE_CREDENTIALS_PATH=/path/to/service-account.json
-   GOOGLE_PROJECT_ID=your-project-id
    ```
+
+   Place your Google Cloud service account JSON as `google_credentials.json` in the project root.
 
 3. **Initialize Storage**
    ```bash
@@ -84,10 +91,14 @@ The `docker-compose.yml` spins up:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `LLM_PROVIDER` | Yes | `openai` | `openai` or `ollama` |
-| `LLM_MODEL` | No | `gpt-4o-mini` | Primary LLM (synthesis, validation, rewrites) |
-| `FAST_LLM_MODEL` | No | `gpt-4o-mini` | Fast LLM (classification, safety, follow-up, YES/NO checks) |
-| `OPENAI_API_KEY` | Yes | — | OpenAI API key (LLM + embeddings) |
+| `GOOGLE_CLOUD_PROJECT` | Yes | — | Google Cloud project ID (for Vertex AI LLM + embeddings) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Yes | — | Path to service account JSON (e.g. `google_credentials.json`) |
+| `GOOGLE_CLOUD_LOCATION` | No | `us-central1` | Vertex AI region |
+| `LLM_PROVIDER` | Yes | `google` | `google` or `free` (Ollama) |
+| `LLM_MODEL` | No | `gemini-2.5-pro` | Primary LLM (synthesis, validation, rewrites) |
+| `FAST_LLM_MODEL` | No | `gemini-2.5-flash` | Fast LLM (classification, safety, follow-up, YES/NO checks) |
+| `EMBEDDING_MODEL` | No | `gemini-embedding-001` | Vertex AI embedding model |
+| `EMBEDDING_DIMENSIONS` | No | `1536` | Embedding vector dimensions |
 | `VALID_API_KEYS` | Yes | — | Comma-separated public API keys |
 | `INTERNAL_SERVICE_SECRET` | Yes | — | Backend-to-backend shared secret |
 | `REDIS_HOST` | Yes | `localhost` | Redis server host |
@@ -102,9 +113,6 @@ The `docker-compose.yml` spins up:
 | `DEBUG` | No | `false` | Enable debug logging |
 | `HOST` | No | `0.0.0.0` | Server bind address |
 | `PORT` | No | `6262` | Server port |
-| `COST_TRACKING_ENABLED` | No | `true` | Enable SQLite cost tracking |
-| `GOOGLE_CREDENTIALS_PATH` | No | — | Service account JSON for Gemini Vision |
-| `GOOGLE_PROJECT_ID` | No | — | Google Cloud project ID |
 
 ---
 
@@ -247,6 +255,8 @@ NakshatraAI processes astrology books from PDFs into the ChromaDB vector store.
    ```
 
 **Performance note**: The pipeline uses `gemini-2.5-flash-lite` for speed (2× faster, ~60% cheaper). Pages that fail quality validation are automatically re-processed with `gemini-2.5-pro`.
+
+**Important**: If you change the embedding model or dimensions, you **must rebuild the ChromaDB vector store**. Old embeddings (e.g. from OpenAI `text-embedding-3-large`) are incompatible with the new Gemini embeddings — they occupy different vector spaces.
 
 ### Retrieval Configuration
 

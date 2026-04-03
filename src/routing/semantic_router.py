@@ -37,7 +37,7 @@ class RouteResult(BaseModel):
 
 class SemanticRouter:
     """
-    Semantic router backed by OpenAI embeddings.
+    Semantic router backed by Vertex AI embeddings.
 
     Startup optimisations:
     - add_routes_batch() embeds ALL routes in a SINGLE API call, reducing the
@@ -46,13 +46,13 @@ class SemanticRouter:
 
     _instance = None
 
-    def __new__(cls, model_name: str = 'text-embedding-3-large'):
+    def __new__(cls, model_name: str = 'gemini-embedding-001'):
         if cls._instance is None:
             cls._instance = super(SemanticRouter, cls).__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, model_name: str = 'text-embedding-3-large'):
+    def __init__(self, model_name: str = 'gemini-embedding-001'):
         if self._initialized:
             return
 
@@ -62,7 +62,7 @@ class SemanticRouter:
 
         if Embedder:
             try:
-                logger.info(f"Loading semantic routing model (OpenAI): {model_name}")
+                logger.info(f"Loading semantic routing model (Vertex AI): {model_name}")
                 self.embedder = Embedder(model=model_name)
                 self.model = True
                 self._initialized = True

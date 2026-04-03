@@ -3,7 +3,7 @@
 
 ## Purpose
 
-Test your **current OpenAI embeddings** to see if they handle multilingual queries well enough, or if you need to upgrade to Cohere/Voyage multilingual embeddings.
+Test your **current Vertex AI embeddings** (`gemini-embedding-001`) to see if they handle multilingual queries well enough, or if you need to upgrade to Cohere/Voyage multilingual embeddings.
 
 ## What This Tests
 
@@ -67,7 +67,7 @@ QUALITY ASSESSMENT:
 ## What to Do After
 
 ### If Grade is A or B:
-✅ Keep current OpenAI embeddings
+✅ Keep current Gemini embeddings
 - They work well enough for your use case
 - Save time and money
 - No migration needed
@@ -111,7 +111,7 @@ RESULTS SUMMARY:
 - Check `data/vectordb/` exists with chunks
 
 **Error: "Retriever not initialized"**
-- Set `OPENAI_API_KEY` environment variable
+- Set `GOOGLE_CLOUD_PROJECT` and `GOOGLE_APPLICATION_CREDENTIALS` environment variables
 - Check embedder is working: `python -c "from src.rag.preprocessing.embedder import Embedder; e = Embedder(); print('OK')"`
 
 **Error: "No chunks retrieved"**

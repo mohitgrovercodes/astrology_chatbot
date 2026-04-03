@@ -72,9 +72,9 @@ User Query from Mobile App
     |         |          |
 +---v---------v----------v-------------------+
 |  LLM Synthesis                             |
-|  - GPT-4o: predictions, RAG synthesis,     |
-|    rewrites, validation                    |
-|  - GPT-4o-mini: safety, classification,    |
+|  - Gemini 2.5 Pro: predictions, RAG        |
+|    synthesis, rewrites, validation         |
+|  - Gemini 2.5 Flash: safety, classif.,     |
 |    follow-up questions, YES/NO checks      |
 |  - Chart data + RAG chunks + rules         |
 |  - Conversation history (last 10 msgs)     |
@@ -132,7 +132,7 @@ The RAG system prevents hallucinations on astrology philosophy, classical rules,
    - Named entity extraction (Planets, Houses, Signs)
 
 4. **Vector Store**
-   - 14,000+ chunks embedded with OpenAI `text-embedding-3-large` (3072 dimensions)
+   - 14,000+ chunks embedded with Vertex AI `gemini-embedding-001` (1536 dimensions)
    - Stored in ChromaDB at `data/vectordb/`
    - Collection: `vedic_astrology_books_knowledge`
 
@@ -282,7 +282,7 @@ src/
 │   └── western/            Western engine: Houses, Aspects, Dignities
 ├── orchestration/          LangGraph state machine (~3,100 lines)
 ├── rag/                    Extraction, preprocessing, retrieval, reranking
-├── llm/                    LLM factory (OpenAI primary, Ollama fallback)
+├── llm/                    LLM factory (Gemini/Vertex AI primary, Ollama fallback)
 ├── safety/                 4-gate safety framework
 ├── validation/             750+ rule validation + age validator + synthesis
 ├── session/                Redis session lifecycle manager
