@@ -16,10 +16,10 @@ print()
 
 try:
     from langchain_chroma import Chroma
-    from langchain_openai import OpenAIEmbeddings
-    
+    from langchain_google_vertexai import VertexAIEmbeddings
+
     print("Initializing embeddings...")
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-large", dimensions=3072)
+    embeddings = VertexAIEmbeddings(model_name="gemini-embedding-001", output_dimensionality=1536)
     
     print("Connecting to vector store...")
     vector_store = Chroma(

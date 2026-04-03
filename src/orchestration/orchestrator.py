@@ -3868,7 +3868,7 @@ Retain the astrological data but remove the violating content (e.g., remove deat
     def _get_json_llm(self):
         """
         Return a JSON-mode LLM instance (cached).  Uses .bind() on the
-        underlying ChatOpenAI to set response_format=json_object.
+        underlying ChatVertexAI to set response_format=json_object.
         Falls back to None if the provider does not support JSON mode.
         """
         if self.llm_json is None:
@@ -5717,7 +5717,7 @@ Provide a concise, clear answer:"""
           chat_stateless.py pre-slices before calling the orchestrator, but this
           ensures the cap is respected even if the orchestrator is called directly.
         - Skips leading assistant-only messages (e.g. app welcome/greeting preamble).
-        - Drops assistant messages sourced from the old system ("external"/"openai")
+        - Drops assistant messages sourced from the old system ("external"/"gemini"/"openai")
           to prevent hallucinated house lords from polluting the new LLM's context.
 
         Args:
@@ -5753,7 +5753,7 @@ Provide a concise, clear answer:"""
             if msg.get("role") == "assistant":
                 src = (msg.get("metadata") or {}).get("source", "")
                 # Drop messages from old system — they contain hallucinated chart data
-                if src in ("external", "openai"):
+                if src in ("external", "openai", "gemini"):
                     skipped_external += 1
                     continue
                 # Drop app-generated assistant messages (welcome messages, user detail

@@ -1,7 +1,7 @@
 <!-- src\rag\extraction\README.md -->
 # Vision LLM Extraction Pipeline for Astrology Texts
 
-A production-ready extraction system for scanned Vedic and Western astrology texts using Google Gemini 1.5 Pro Vision.
+A production-ready extraction system for scanned Vedic and Western astrology texts using Google Gemini Vision (Vertex AI).
 
 ## Why Vision LLM?
 
@@ -11,7 +11,7 @@ Traditional OCR (Tesseract, Document AI, PaddleOCR) struggles with:
 - ❌ Context preservation (what text relates to what table?)
 - ❌ Astrological terminology
 
-Vision LLMs (Gemini 1.5 Pro) excel at:
+Vision LLMs (Gemini 2.5 Flash/Pro) excel at:
 - ✅ Understanding document layout and structure
 - ✅ Recognizing patterns even in borderless tables
 - ✅ Preserving semantic relationships
@@ -31,15 +31,16 @@ Vision LLMs (Gemini 1.5 Pro) excel at:
 # 1. Clone/copy the rag_extraction folder to your project
 
 # 2. Install dependencies
-pip install google-generativeai pdf2image pillow pydantic numpy
+pip install google-cloud-aiplatform langchain-google-vertexai pdf2image pillow pydantic numpy
 
 # 3. Install Poppler (for PDF conversion)
 # Windows: Download from https://github.com/oschwartz10612/poppler-windows/releases
 # Linux: apt-get install poppler-utils
 # Mac: brew install poppler
 
-# 4. Set your API key
-export GOOGLE_API_KEY="your-gemini-api-key"
+# 4. Set your Google Cloud credentials
+export GOOGLE_CLOUD_PROJECT="your-gcp-project-id"
+export GOOGLE_APPLICATION_CREDENTIALS="google_credentials.json"
 ```
 
 ## Quick Start
@@ -160,23 +161,17 @@ if detected_tables:
 
 ## Cost Estimation
 
-Gemini 1.5 Pro pricing (as of 2024):
-- ~$1.25 per 1M input tokens
-- ~$5.00 per 1M output tokens
-- Images: ~250-500 tokens per image (depending on resolution)
+The pipeline uses `gemini-2.5-flash-lite` by default (fast, low cost) with auto-upgrade to `gemini-2.5-pro` on low-confidence pages. See Google Cloud Vertex AI pricing for current rates.
 
 For a 500-page book at 200 DPI:
-- Estimated cost: $5-15 total
 - Processing time: ~25-50 minutes (with rate limiting)
-
-For lower cost, use `gemini-1.5-flash` (8x cheaper, still good quality).
 
 ## Next Steps: Chunking for RAG
 
 The RAG chunks from this pipeline can be directly used with:
 
 ```python
-from langchain_openai import OpenAIEmbeddings
+from langchain_google_vertexai import VertexAIEmbeddings
 from langchain_chroma import Chroma
 
 # Load chunks
@@ -201,7 +196,10 @@ documents = [
 ]
 
 # Embed and store
-embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+embeddings = VertexAIEmbeddings(
+    model_name="gemini-embedding-001",
+    output_dimensionality=1536,
+)
 vectorstore = Chroma.from_documents(
     documents=documents,
     embedding=embeddings,

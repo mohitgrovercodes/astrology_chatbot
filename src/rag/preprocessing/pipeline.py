@@ -358,7 +358,7 @@ class PreprocessingPipeline:
             return enriched_doc
         
         if not self.embedder.client:
-            print("  [SKIP] No OpenAI API key, skipping embedding")
+            print("  [SKIP] No Vertex AI client, skipping embedding")
             return enriched_doc
         
         embedded_doc = self.embedder.embed_document(enriched_doc)

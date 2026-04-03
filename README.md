@@ -51,12 +51,12 @@
 |---|---|
 | **API Framework** | FastAPI + Uvicorn (ASGI) |
 | **Orchestration** | LangGraph state machine |
-| **LLM (primary)** | OpenAI GPT-4o-mini |
-| **LLM (fast)** | OpenAI GPT-4o-mini (classification, safety, follow-up) |
-| **Embeddings** | OpenAI text-embedding-3-large |
+| **LLM (primary)** | Google Gemini 2.5 Pro (Vertex AI) |
+| **LLM (fast)** | Google Gemini 2.5 Flash (classification, safety, follow-up) |
+| **Embeddings** | Gemini Embedding 001 (Vertex AI, 1536 dims) |
 | **Astro Calculations** | PySwissEph (Swiss Ephemeris) |
 | **Vector Store** | ChromaDB |
-| **Hybrid Retrieval** | Intent-weighted Semantic + BM25 + HyDE with optional reranking |
+| **Hybrid Retrieval** | Intent-weighted Semantic + BM25 + HyDE with cross-encoder reranking |
 | **Reranking** | Sentence-Transformers cross-encoder |
 | **Session Storage** | Redis (permanent, no TTL) |
 | **PDF Extraction** | Gemini Vision (gemini-2.5-flash / gemini-2.5-pro fallback) |
@@ -71,15 +71,15 @@
 
 - Python 3.10 or 3.11
 - Redis server
-- OpenAI API key (required for LLM + embeddings)
-- Google Cloud credentials (required for PDF extraction pipeline only)
+- Google Cloud project with Vertex AI API enabled
+- Service account credentials JSON (`google_credentials.json` in project root)
 
 ### Local Setup
 
 ```bash
 # Clone repository
-git clone <repository-url>
-cd astro_chatbot
+git clone https://github.com/mohitgrovercodes/astrology_chatbot.git
+cd astrology_chatbot
 
 # Create and activate virtual environment
 python -m venv venv
@@ -92,14 +92,11 @@ pip install -r requirements.txt
 # Configure environment
 cp .env.example .env
 # Edit .env — minimum required vars:
-# OPENAI_API_KEY=sk-...
+# GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+# GOOGLE_APPLICATION_CREDENTIALS=google_credentials.json
 # VALID_API_KEYS=your-key-here
 # INTERNAL_SERVICE_SECRET=your-secret-here
 # REDIS_HOST=localhost
-# Style validator thresholds (optional):
-# style_min_human_warmth_score=7
-# style_min_authentic_astrologer_voice_score=7
-# style_max_repetition_risk_score=4
 ```
 
 ### Docker Deployment
@@ -201,7 +198,7 @@ Content-Type: application/json
   "user_id": "unique-uuid",
   "question": "When will my career improve?",
   "answer": "...",
-  "source": "openai",
+  "source": "gemini",
   "evidence": {
     "domain": "career",
     "signals": [],
@@ -226,7 +223,7 @@ astro_chatbot/
 │   │   └── western/      # Western calculation engine (Houses, Aspects)
 │   ├── orchestration/    # LangGraph state machine (3,100+ line orchestrator)
 │   ├── rag/              # Retrieval pipeline (extraction, chunking, retrieval)
-│   ├── llm/              # LLM factory (OpenAI / Ollama)
+│   ├── llm/              # LLM factory (Gemini / Ollama)
 │   ├── safety/           # 4-gate safety framework
 │   ├── validation/       # 750+ rule validation engine
 │   ├── session/          # Redis session manager

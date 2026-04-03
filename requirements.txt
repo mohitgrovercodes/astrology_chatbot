@@ -1,8 +1,8 @@
 # requirements.txt
 # ============================================================================
-# ASTROLOGY AI CHATBOT - COMPLETE RAG SYSTEM (JAN 2026)
+# ASTROLOGY AI CHATBOT - COMPLETE RAG SYSTEM
 # Python: 3.10–3.11
-# Model: gpt-4o-mini (OpenAI) + Ollama (local) + OpenAI (embeddings)
+# Model: Gemini 2.5 Pro/Flash (Vertex AI) + Ollama (local) + Vertex AI (embeddings)
 # ============================================================================
 
 # ----------------------------------------------------------------------------
@@ -26,13 +26,13 @@ langchain-core>=0.3.0,<0.4.0
 langchain-community>=0.3.0,<0.4.0
 langchain-chroma>=0.2.0,<0.3.0
 langgraph>=0.2.0,<0.3.0
-langchain-openai>=0.2.0,<0.3.0
+langchain-google-vertexai>=2.0.0,<3.0.0
 langchain-ollama>=0.2.0,<0.3.0
 
 # ----------------------------------------------------------------------------
-# OPENAI (For Embeddings in RAG Pipeline)
+# GOOGLE CLOUD AI PLATFORM (Vertex AI for LLM & Embeddings)
 # ----------------------------------------------------------------------------
-openai>=1.50.0,<2.0.0
+google-cloud-aiplatform>=1.60.0
 
 # ----------------------------------------------------------------------------
 # VECTOR DATABASE

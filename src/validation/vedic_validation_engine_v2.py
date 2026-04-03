@@ -2,12 +2,12 @@
 """
 vedic_validation_engine_v2.py
 ------------------------------
-LLM-guided validation engine using OpenAI (via LLMFactory).
+LLM-guided validation engine using Gemini/Vertex AI (via LLMFactory).
 Reads check_logic from tiered_rules.json and evaluates each rule
 against chart data using the LLM.
 
-Provider is configured via LLM_PROVIDER env var (default: openai).
-    LLM_PROVIDER=openai  -> uses gpt-4o-mini
+Provider is configured via LLM_PROVIDER env var (default: google).
+    LLM_PROVIDER=google  -> uses gemini-2.5-pro
     LLM_PROVIDER=free    -> uses Ollama llama3.2:3b
 
 Usage:
@@ -35,7 +35,7 @@ from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 load_dotenv()
 
-# ── LLM: via LLMFactory (OpenAI or Ollama) ──────────────────────────────────
+# ── LLM: via LLMFactory (Vertex AI or Ollama) ────────────────────────────────
 from langchain_core.prompts import ChatPromptTemplate
 try:
     from src.llm.factory import LLMFactory, get_validation_llm

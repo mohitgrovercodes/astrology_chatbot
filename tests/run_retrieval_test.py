@@ -2,11 +2,11 @@
 """
 Retrieval test using the production HybridRetriever path.
 
-Run with conda env active and OPENAI_API_KEY set:
+Run with conda env active and GOOGLE_CLOUD_PROJECT set:
     conda activate venv/
     python tests/run_retrieval_test.py
 
-No Redis required. Uses ChromaDB (data/vectordb) and OpenAI for embeddings/LLM.
+No Redis required. Uses ChromaDB (data/vectordb) and Vertex AI for embeddings/LLM.
 Uses minimal imports (no orchestrator/swisseph) so it runs without full app deps.
 """
 
@@ -24,24 +24,26 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 def _get_vector_store_and_llm():
     """Build vector store and LLM with minimal deps (no orchestrator/config)."""
     from langchain_chroma import Chroma
-    from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+    from langchain_google_vertexai import VertexAIEmbeddings, ChatVertexAI
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY not set")
+    project = os.getenv("GOOGLE_CLOUD_PROJECT")
+    if not project:
+        raise RuntimeError("GOOGLE_CLOUD_PROJECT not set")
+
+    location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
 
     persist_dir = os.getenv("CHROMA_PERSIST_DIR", os.path.join(os.path.dirname(__file__), "..", "data", "vectordb"))
     persist_dir = os.path.abspath(persist_dir)
     if not os.path.isdir(persist_dir):
         raise FileNotFoundError(f"ChromaDB directory not found: {persist_dir}")
 
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-large", openai_api_key=api_key)
+    embeddings = VertexAIEmbeddings(model_name="gemini-embedding-001", project=project, location=location, output_dimensionality=1536)
     vector_store = Chroma(
         collection_name="vedic_astrology_books_knowledge",
         embedding_function=embeddings,
         persist_directory=persist_dir,
     )
-    llm = ChatOpenAI(model="gpt-4o-mini", openai_api_key=api_key, temperature=0)
+    llm = ChatVertexAI(model_name="gemini-2.5-flash", project=project, location=location, temperature=0)
     return vector_store, llm
 
 
@@ -57,7 +59,7 @@ def main():
         vector_store, llm = _get_vector_store_and_llm()
     except Exception as e:
         print(f"   [FAIL] {e}")
-        print("   Ensure OPENAI_API_KEY is set and ChromaDB exists at data/vectordb (or set CHROMA_PERSIST_DIR).")
+        print("   Ensure GOOGLE_CLOUD_PROJECT is set and ChromaDB exists at data/vectordb (or set CHROMA_PERSIST_DIR).")
         return 1
 
     print("   [OK] Vector store and LLM ready.")

@@ -71,12 +71,13 @@ def get_fast_llm():
 
 
 def get_embeddings():
-    """Get embeddings model."""
-    from langchain_openai import OpenAIEmbeddings
-    
-    return OpenAIEmbeddings(
-        model=settings.OPENAI_EMBEDDING_MODEL,
-        openai_api_key=settings.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")
+    """Get embeddings model (Vertex AI)."""
+    from langchain_google_vertexai import VertexAIEmbeddings
+
+    return VertexAIEmbeddings(
+        model_name=settings.EMBEDDING_MODEL,
+        project=settings.GOOGLE_CLOUD_PROJECT or os.getenv("GOOGLE_CLOUD_PROJECT"),
+        location=settings.GOOGLE_CLOUD_LOCATION or os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
     )
 
 
