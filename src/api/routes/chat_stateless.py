@@ -36,6 +36,14 @@ from src.api.dependencies import (
     get_session_manager as get_shared_session_manager,
 )
 from src.ai.context_manager import ContextManager as SharedContextManager
+from src.ai.semantic_frame import (
+    SemanticFrame,
+    get_semantic_frame_builder,
+    ROUTE_AMBIGUOUS,
+    INTENT_CONTINUATION,
+    INTENT_CLARIFICATION,
+    INTENT_NEW_TOPIC,
+)
 
 
 router = APIRouter()
@@ -902,19 +910,49 @@ def send_message(request: SendMessageRequest):
             logger.debug(f"{'='*80}")
         
         # ====================================================================
-        # STEP 2: ANALYZE MESSAGE INTENT (LLM-Based)
+        # STEP 2: UNIFIED SEMANTIC FRAME (single LLM call producing
+        #          route + intent_type + domain + question_mode + polarity)
         # ====================================================================
-        logger.info(f"[STEP 1: INTENT ANALYSIS]")
+        # Replaces the old separate analyze_message_intent call. Fast paths
+        # (pattern cache, keyword pre-router, semantic chitchat router) skip
+        # the LLM entirely. The full frame is propagated downstream so the
+        # orchestrator does NOT re-run intent classification or detect_query_type.
+        logger.info(f"[STEP 1: SEMANTIC FRAME]")
         logger.debug(f"Analyzing: '{question}'")
-        
-        intent_analysis = context_manager.analyze_message_intent(
-            current_query=question,
-            conversation_history=full_history[-10:],  # Last 10 messages for context
-            conversation_summary=conversation_summary
+
+        # SemanticRouter is a singleton; the orchestrator pre-warmed it with chitchat
+        # routes at startup, so reusing it here gets correct subtype matches for free.
+        try:
+            from src.routing import SemanticRouter
+            _shared_router = SemanticRouter()
+        except Exception:
+            _shared_router = None
+
+        frame_builder = get_semantic_frame_builder(
+            fast_llm=context_manager.fast_llm,
+            semantic_router=_shared_router,
+        )
+        semantic_frame: SemanticFrame = frame_builder.build(
+            query=question,
+            conversation_history=full_history[-10:],
+            conversation_summary=conversation_summary,
+            user_profile=user_profile,
+        )
+
+        # Derive the legacy intent_analysis dict so existing consumers in the
+        # orchestrator and post-processor keep working without an in-place rewrite.
+        # New code paths should read session_data["semantic_frame"] directly.
+        intent_analysis = semantic_frame.to_legacy_intent_analysis()
+
+        logger.info(
+            f"[FRAME] route={semantic_frame.route} domain={semantic_frame.domain} "
+            f"intent_type={semantic_frame.intent_type} qmode={semantic_frame.question_mode} "
+            f"polarity={semantic_frame.polarity} source={semantic_frame.source} "
+            f"conf={semantic_frame.confidence:.2f}"
         )
 
         # ── Reset conversation phase on NEW_TOPIC ────────────────────────
-        if intent_analysis.get('intent_type') == 'NEW_TOPIC':
+        if semantic_frame.intent_type == INTENT_NEW_TOPIC:
             conv_phase_check = session_manager.get_conversation_phase(user_id)
             if conv_phase_check.get('phase') != 'INITIAL':
                 logger.info(f"[PHASE] NEW_TOPIC detected → resetting phase from {conv_phase_check.get('phase')} to INITIAL")
@@ -958,7 +996,14 @@ def send_message(request: SendMessageRequest):
             and (_response_type_now in ('AFFIRMATIVE', 'NEGATIVE') or _is_short_phrase)
         )
 
-        if not _skip_expansion and intent_analysis['intent_type'] in ['CONTINUATION', 'CLARIFICATION'] and real_user_messages_in_history:
+        # Use the frame's intent_type + requires_context as the gate. The frame
+        # already saw history during its single LLM call; resolve_contextual_query
+        # just rewrites the query if pronouns/terse follow-ups need expansion.
+        _frame_wants_resolution = (
+            semantic_frame.intent_type in (INTENT_CONTINUATION, INTENT_CLARIFICATION)
+            or semantic_frame.requires_context
+        )
+        if not _skip_expansion and _frame_wants_resolution and real_user_messages_in_history:
             resolution_result = context_manager.resolve_contextual_query(
                 current_query=question,
                 conversation_history=full_history,
@@ -1077,18 +1122,21 @@ def send_message(request: SendMessageRequest):
 
         # Pre-fetch cached validation result so the orchestrator can skip re-running
         # the expensive LLM-based validation (saves ~34s per request for same query_type).
-        # The query_type is derived from intent_analysis domain when available.
-        _ia_domain = (intent_analysis.get('domain') or '').strip().lower() or None
-        if _ia_domain == 'foreign_travel':
-            _ia_domain = 'foreign'
-        _cached_validation = session_manager.get_validation_result(user_id, _ia_domain) if _ia_domain else None
+        # Use the frame's validation_query_type so the cache key matches the engine's
+        # own normalization (e.g. divorce → marriage rules).
+        _validation_qt = semantic_frame.validation_query_type
+        _cached_validation = (
+            session_manager.get_validation_result(user_id, _validation_qt)
+            if _validation_qt and _validation_qt != "general" else None
+        )
 
         orchestrator_session_data = {
             "chart_data": cached_chart,
             "dasha_data": cached_dasha,
             "transit_data": cached_transit,
             "summary": conversation_summary,
-            "intent_analysis": intent_analysis,
+            "intent_analysis": intent_analysis,             # legacy shape, still consumed
+            "semantic_frame": semantic_frame.to_dict(),      # new canonical shape
             "conversation_phase": conv_phase_data,
             "original_user_question": question,  # True original before semantic expansion
             # Pass the previously detected language so _detect_language_node can

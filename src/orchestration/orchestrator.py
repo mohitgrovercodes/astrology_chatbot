@@ -63,6 +63,13 @@ except ImportError:
     logger.info("[ENHANCED_ANALYSIS] chart_analyzer/synthesis_engine not found - using basic analysis")
     ENHANCED_ANALYSIS_AVAILABLE = False
 
+try:
+    from src.prediction.factor_scorer import score_factors, FactorPlan
+    FACTOR_SCORER_AVAILABLE = True
+except ImportError:
+    logger.info("[FACTOR_SCORER] factor_scorer not found - focus-factor block disabled")
+    FACTOR_SCORER_AVAILABLE = False
+
 from src.prompts.few_shot_selector import get_few_shot_block
 from src.orchestration.orchestrator_validation_helpers import (
     detect_query_type,
@@ -814,6 +821,28 @@ class EnhancedLangGraphOrchestrator:
             state['confidence'] = 0.85
             state['intent_reasoning'] = 'Bare continuation query with active conversation'
             state['is_safe'] = True
+            return state
+        # ─────────────────────────────────────────────────────────────────────
+
+        # == UNIFIED SEMANTIC FRAME FAST PATH ==================================
+        # If chat_stateless built a SemanticFrame for this turn, use frame.route
+        # directly. This replaces the keyword-chitchat → semantic-router →
+        # LLMIntentClassifier cascade — the frame already resolved all of that
+        # in ONE call (or one fast-path hit). Phase guards above still get to
+        # override before we reach this point.
+        _frame_dict = (state.get('session_data') or {}).get('semantic_frame')
+        if _frame_dict and _frame_dict.get('route'):
+            _frame_route = _frame_dict.get('route')
+            state['intent'] = _frame_route
+            state['confidence'] = float(_frame_dict.get('route_confidence') or _frame_dict.get('confidence') or 0.85)
+            state['intent_reasoning'] = f"semantic_frame.{_frame_dict.get('source', 'unknown')}: {_frame_dict.get('reasoning', '')[:120]}"
+            state['cached'] = _frame_dict.get('source') in ('cache', 'keyword', 'semantic_router')
+            if _frame_dict.get('chitchat_subtype'):
+                state['chitchat_subtype'] = _frame_dict['chitchat_subtype']
+            logger.info(
+                f"[INTENT] [FRAME] -> {_frame_route} "
+                f"(source={_frame_dict.get('source')}, conf={state['confidence']:.2f})"
+            )
             return state
         # ─────────────────────────────────────────────────────────────────────
 
@@ -1827,12 +1856,36 @@ Provide a concise answer:"""
                                 )
                     except Exception:
                         pass
-                    query_type = detect_query_type(
-                        state['query'],
-                        llm=self.fast_llm if hasattr(self, 'fast_llm') else None,
-                        use_llm_confirmation=True,
-                        intent_domain_hint=_intent_domain,
-                    )
+                    # Prefer the SemanticFrame's validation_query_type — it was
+                    # resolved during the unified LLM call in chat_stateless and
+                    # already accounts for divorce→marriage / foreign_travel→foreign
+                    # normalization. Pivot-aware overrides above (`_intent_domain`)
+                    # still win because they reflect runtime conversation state
+                    # the frame couldn't have known.
+                    _frame_dict_q = (state.get('session_data') or {}).get('semantic_frame') or {}
+                    _frame_qt = _frame_dict_q.get('validation_query_type')
+                    if _intent_domain:
+                        # Pivot/continuation override applied above; route through detect_query_type
+                        # so the override is normalized into the engine's allowed set.
+                        query_type = detect_query_type(
+                            state['query'],
+                            llm=None,                      # no LLM call — just normalization
+                            use_llm_confirmation=False,
+                            intent_domain_hint=_intent_domain,
+                        )
+                        logger.info(f"[QUERY_TYPE] Using pivot-aware override: {query_type}")
+                    elif _frame_qt:
+                        query_type = _frame_qt
+                        logger.info(f"[QUERY_TYPE] Using semantic_frame.validation_query_type={query_type}")
+                    else:
+                        # Frame missing (e.g. orchestrator called directly in tests) — fall
+                        # back to the legacy detector so behaviour is preserved.
+                        query_type = detect_query_type(
+                            state['query'],
+                            llm=self.fast_llm if hasattr(self, 'fast_llm') else None,
+                            use_llm_confirmation=True,
+                            intent_domain_hint=_intent_domain,
+                        )
                     state['validation_query_type'] = query_type
                     
                     # Skip validation for general questions
@@ -1961,20 +2014,29 @@ Provide a concise answer:"""
             # ================================================================
             if ENHANCED_ANALYSIS_AVAILABLE and enhanced_analysis:
                 try:
-                    # Get query_type from validation or detect it (prefer the same
-                    # intent_domain hint used earlier so synthesis, validation and
-                    # astro evidence all agree on the semantic domain).
+                    # Synthesis query_type chain — single source of truth, no extra LLM call.
+                    # 1. Reuse validation_query_type set above (already aligns with frame
+                    #    + pivot override).
+                    # 2. Else fall back to the SemanticFrame's validation_query_type.
+                    # 3. Else fall back to detect_query_type with LLM confirmation
+                    #    (only happens when orchestrator was invoked without a frame).
                     query_type_for_synthesis = state.get('validation_query_type')
                     if not query_type_for_synthesis and state.get('chart_data'):
-                        try:
-                            query_type_for_synthesis = detect_query_type(
-                                state['query'],
-                                llm=self.fast_llm if hasattr(self, 'fast_llm') else None,
-                                use_llm_confirmation=True,
-                                intent_domain_hint=_intent_domain,
-                            )
-                        except:
-                            query_type_for_synthesis = 'general'
+                        _frame_dict_s = (state.get('session_data') or {}).get('semantic_frame') or {}
+                        _frame_qt_s = _frame_dict_s.get('validation_query_type')
+                        if _frame_qt_s:
+                            query_type_for_synthesis = _frame_qt_s
+                            logger.info(f"[SYNTHESIS] Using semantic_frame.validation_query_type={query_type_for_synthesis}")
+                        else:
+                            try:
+                                query_type_for_synthesis = detect_query_type(
+                                    state['query'],
+                                    llm=self.fast_llm if hasattr(self, 'fast_llm') else None,
+                                    use_llm_confirmation=True,
+                                    intent_domain_hint=_intent_domain,
+                                )
+                            except Exception:
+                                query_type_for_synthesis = 'general'
                     
                     if query_type_for_synthesis and query_type_for_synthesis != 'general' and self.synthesis_engine:
                         logger.info(f"[SYNTHESIS] Building rule-based analysis for {query_type_for_synthesis}...")
@@ -5781,14 +5843,47 @@ Provide a concise, clear answer:"""
         synthesis: Dict,
         query_type: str,
         chart_data: Optional[Dict] = None,
+        dasha_data: Optional[Dict] = None,
+        validation_result: Optional[Dict] = None,
+        question_mode: Optional[str] = None,
     ) -> str:
         """
         Format enhanced analysis and synthesis for LLM consumption.
-        
+
         This is the SECRET SAUCE — gives LLM pre-analyzed astrological factors
         instead of making it guess from raw positions.
+
+        The FactorScorer prepends a ranked FOCUS FACTORS block so the LLM sees
+        the 2-3 most relevant factors for THIS domain/question_mode/dasha context
+        before the full detailed dump, steering its attention without removing
+        the detailed section (which serves CoT and quality gates).
         """
         lines = ["ENHANCED CHART ANALYSIS:", ""]
+
+        # ── FOCUS FACTORS block (injected at top) ──────────────────────
+        if FACTOR_SCORER_AVAILABLE and synthesis:
+            try:
+                _domain = (
+                    (validation_result or {}).get("intent_analysis", {}).get("domain")
+                    or query_type
+                    or "general"
+                )
+                _qmode = question_mode or (
+                    (validation_result or {}).get("intent_analysis", {}).get("question_mode")
+                    or "summary"
+                )
+                _plan = score_factors(
+                    synthesis=synthesis,
+                    validation_result=validation_result,
+                    dasha_data=dasha_data,
+                    domain=_domain,
+                    question_mode=_qmode,
+                )
+                _focus = _plan.focus_block
+                if _focus:
+                    lines.append(_focus)
+            except Exception as _e:
+                logger.debug(f"[FACTOR_SCORER] focus block skipped: {_e}")
         
         # Planetary Strengths
         lines.append("PLANETARY STRENGTHS (0-10 scale):")
@@ -7344,6 +7439,9 @@ When user uses "it", "this", "that" or asks "why", "how" -> connect to conversat
                 enhanced_analysis, synthesis,
                 query_type=validation_result.get('query_type', 'general') if validation_result else 'general',
                 chart_data=chart_data,
+                dasha_data=dasha_data,
+                validation_result=validation_result,
+                question_mode=_ia.get('question_mode'),
             )
         deterministic_evidence = format_evidence_for_prompt(astro_evidence or {})
 

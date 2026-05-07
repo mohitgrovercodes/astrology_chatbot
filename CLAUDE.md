@@ -1,0 +1,1 @@
+This folder is the root directory of the AI Astrology chat bot project.
