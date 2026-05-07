@@ -230,13 +230,19 @@ _AMBIGUITY_PERSONAL_MARKERS = (
 )
 
 # Divorce overrides — query phrasing that must override LLM "marriage" classification.
+# Standalone break-verb tokens are included so that natural speech with intervening
+# words (e.g. "shaadi kab tootegi") is still caught even without an adjacent compound.
 _DIVORCE_KEYWORDS = (
     "divorce", "separation", "talaq", "breakup", "break-up",
     "judicial separation", "relationship end", "marriage end",
+    # Compound Hindi/Hinglish phrases
     "shaadi tootegi", "shaadi toot jayegi", "shaadi tootega",
     "shaadi toot jayega", "shaadi khatam",
     "rishta tootega", "rishta toot jayega", "rishta khatam",
     "relationship khatam",
+    # Standalone break-verb tokens (cover "shaadi kab tootegi", "rishta kab tootega" etc.)
+    "tootegi", "tootega", "toot jayegi", "toot jayega",
+    "toot gayi", "toot gaya", "tutegi", "tutega",
 )
 
 
@@ -557,7 +563,13 @@ class SemanticFrameBuilder:
 
         # 8) Fallback (LLM unavailable or failed) — best-effort heuristic.
         logger.info("[FRAME] LLM unavailable / failed → heuristic fallback")
-        return self._heuristic_fallback(q_raw, history)
+        fallback = self._heuristic_fallback(q_raw, history)
+        # Apply domain inference + divorce override to fallback the same way
+        # the LLM path does — otherwise Hinglish divorce queries land on domain="general".
+        if fallback.domain == "general":
+            fallback.domain = self._infer_domain_from_query(q_raw)
+        self._apply_divorce_override(fallback, q_raw)
+        return fallback
 
     # ─── Step helpers ──────────────────────────────────────────────────────
 
@@ -753,7 +765,7 @@ class SemanticFrameBuilder:
         # Divorce overrides marriage when present
         if any(k in q for k in _DIVORCE_KEYWORDS):
             return "divorce"
-        if any(k in q for k in ("marriage", "marry", "shaadi", "shadi", "vivah", "wedding", "spouse",
+        if any(k in q for k in ("marriage", "marr", "shaadi", "shadi", "vivah", "wedding", "spouse",
                                  "partner", "rishta", "love")):
             return "marriage"
         if any(k in q for k in ("career", "job", "naukri", "profession", "business", "kaam", "promotion")):

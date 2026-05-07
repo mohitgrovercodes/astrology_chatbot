@@ -1,5 +1,4 @@
 # src/ai/__init__.py
-# src\ai\__init__.py
 """
 AI components for NakshatraAI V2.
 """
@@ -21,8 +20,18 @@ try:
 except ImportError:
     PromptBuilder = None
 
+try:
+    from .semantic_frame import SemanticFrame, SemanticFrameBuilder, get_semantic_frame_builder
+except ImportError:
+    SemanticFrame = None
+    SemanticFrameBuilder = None
+    get_semantic_frame_builder = None
+
 __all__ = [
     'SimplifiedIntentClassifier',
     'HybridRetriever',
     'PromptBuilder',
+    'SemanticFrame',
+    'SemanticFrameBuilder',
+    'get_semantic_frame_builder',
 ]
