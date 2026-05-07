@@ -63,6 +63,13 @@ except ImportError:
     logger.info("[ENHANCED_ANALYSIS] chart_analyzer/synthesis_engine not found - using basic analysis")
     ENHANCED_ANALYSIS_AVAILABLE = False
 
+try:
+    from src.prediction.factor_scorer import score_factors, FactorPlan
+    FACTOR_SCORER_AVAILABLE = True
+except ImportError:
+    logger.info("[FACTOR_SCORER] factor_scorer not found - focus-factor block disabled")
+    FACTOR_SCORER_AVAILABLE = False
+
 from src.prompts.few_shot_selector import get_few_shot_block
 from src.orchestration.orchestrator_validation_helpers import (
     detect_query_type,
@@ -5836,14 +5843,47 @@ Provide a concise, clear answer:"""
         synthesis: Dict,
         query_type: str,
         chart_data: Optional[Dict] = None,
+        dasha_data: Optional[Dict] = None,
+        validation_result: Optional[Dict] = None,
+        question_mode: Optional[str] = None,
     ) -> str:
         """
         Format enhanced analysis and synthesis for LLM consumption.
-        
+
         This is the SECRET SAUCE — gives LLM pre-analyzed astrological factors
         instead of making it guess from raw positions.
+
+        The FactorScorer prepends a ranked FOCUS FACTORS block so the LLM sees
+        the 2-3 most relevant factors for THIS domain/question_mode/dasha context
+        before the full detailed dump, steering its attention without removing
+        the detailed section (which serves CoT and quality gates).
         """
         lines = ["ENHANCED CHART ANALYSIS:", ""]
+
+        # ── FOCUS FACTORS block (injected at top) ──────────────────────
+        if FACTOR_SCORER_AVAILABLE and synthesis:
+            try:
+                _domain = (
+                    (validation_result or {}).get("intent_analysis", {}).get("domain")
+                    or query_type
+                    or "general"
+                )
+                _qmode = question_mode or (
+                    (validation_result or {}).get("intent_analysis", {}).get("question_mode")
+                    or "summary"
+                )
+                _plan = score_factors(
+                    synthesis=synthesis,
+                    validation_result=validation_result,
+                    dasha_data=dasha_data,
+                    domain=_domain,
+                    question_mode=_qmode,
+                )
+                _focus = _plan.focus_block
+                if _focus:
+                    lines.append(_focus)
+            except Exception as _e:
+                logger.debug(f"[FACTOR_SCORER] focus block skipped: {_e}")
         
         # Planetary Strengths
         lines.append("PLANETARY STRENGTHS (0-10 scale):")
@@ -7399,6 +7439,9 @@ When user uses "it", "this", "that" or asks "why", "how" -> connect to conversat
                 enhanced_analysis, synthesis,
                 query_type=validation_result.get('query_type', 'general') if validation_result else 'general',
                 chart_data=chart_data,
+                dasha_data=dasha_data,
+                validation_result=validation_result,
+                question_mode=_ia.get('question_mode'),
             )
         deterministic_evidence = format_evidence_for_prompt(astro_evidence or {})
 
