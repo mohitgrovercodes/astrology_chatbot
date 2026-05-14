@@ -84,6 +84,13 @@ except ImportError:
     logger.info("[ACCURACY_GATE] accuracy_gate not found - factor accuracy check disabled")
     ACCURACY_GATE_AVAILABLE = False
 
+try:
+    from src.rag.memory_writer import maybe_store_user_facts_async
+    MEMORY_WRITER_AVAILABLE = True
+except ImportError:
+    logger.info("[MEMORY_WRITER] memory_writer not found - user fact storage disabled")
+    MEMORY_WRITER_AVAILABLE = False
+
 from src.prompts.few_shot_selector import get_few_shot_block
 from src.orchestration.orchestrator_validation_helpers import (
     detect_query_type,
@@ -3009,6 +3016,29 @@ Study the STYLE EXAMPLES above for tone and flow only — their chart facts are 
                     state['accuracy_gate'] = _acc_result.to_dict()
                 except Exception as _ag_err:
                     logger.debug("[ACCURACY_GATE] skipped: %s", _ag_err)
+
+            # ── User Memory Write (fire-and-forget) ───────────────────────────
+            # Extract any personal facts the user stated ("I work in finance",
+            # "my wife is named Priya", "I'm 34 years old") and store them in
+            # the memory collection so future turns can personalise follow-ups.
+            # Runs in a daemon thread — zero latency impact on the response.
+            if MEMORY_WRITER_AVAILABLE and state.get('user_id') and state.get('query'):
+                try:
+                    _mem_retriever = getattr(
+                        getattr(self, 'hybrid_retriever', None), 'memory_retriever', None
+                    )
+                    if _mem_retriever:
+                        _mem_frame = (state.get('session_data') or {}).get('semantic_frame') or {}
+                        _mem_domain = _mem_frame.get('domain') or 'general'
+                        maybe_store_user_facts_async(
+                            user_message=state['query'],
+                            user_id=state['user_id'],
+                            memory_retriever=_mem_retriever,
+                            fast_llm=getattr(self, 'fast_llm', None),
+                            domain=_mem_domain,
+                        )
+                except Exception as _mw_err:
+                    logger.debug("[MEMORY_WRITER] skipped: %s", _mw_err)
 
             # Runtime quality gate for initial short responses:
             # enforce practical timeline diversity (present + short + long).
