@@ -137,7 +137,10 @@ The RAG system prevents hallucinations on astrology philosophy, classical rules,
    - Collection: `vedic_astrology_books_knowledge`
 
 5. **Retrieval** (`src/ai/hybrid_retriever.py`)
-   - Hybrid fusion: semantic + BM25 + HyDE (intent-weighted RRF)
+   - Hybrid fusion: semantic + BM25 + HyDE with RRF
+   - **Domain-aware query augmentation**: domain-specific house/planet vocabulary (e.g. `"7th house Venus Jupiter"` for marriage) appended to query before retrieval — lifts both BM25 and semantic relevance without hard filters
+   - **`question_mode`-aware hybrid weights** (`config/rag_config.py:HYBRID_WEIGHTS_BY_QUESTION_MODE`): timing queries get higher BM25 weight (exact dasha/period terms); advice/qualities queries get higher semantic weight (conceptual matches in classical texts)
+   - **Chart-conditioned HyDE**: hypothetical passage is conditioned on `"{lagna} ascendant, {MD} MD / {AD} AD, {domain} domain"` instead of a generic query — produces a chart-specific embedding target
    - Optional cross-encoder reranking (`src/rag/reranker.py`) for high-stakes/low-confidence queries
    - Optional memory retrieval (`src/rag/memory_retriever.py`) blended for user-specific continuity
    - Optional adjacent chunk expansion for contextual completeness
@@ -149,7 +152,7 @@ The RAG system prevents hallucinations on astrology philosophy, classical rules,
 
 ### LangGraph Orchestrator (`src/orchestration/orchestrator.py`)
 
-NakshatraAI uses LangGraph to construct a deterministic state machine for all conversation flows (~3,100 lines).
+NakshatraAI uses LangGraph to construct a deterministic state machine for all conversation flows (~8,000 lines).
 
 **Routing states:**
 - `CHITCHAT` — General conversation; no calculation needed
@@ -195,6 +198,24 @@ NakshatraAI uses LangGraph to construct a deterministic state machine for all co
 - **Validation + Judge merge:** post-processing validator performs semantic coherence checks and tone/voice quality checks in one LLM pass. Enforces that the detailed (`AWAITING_DETAIL → FOLLOWUP_LOOP`) response ends with a single cross-domain follow-up and that `INITIAL`/new-topic short responses end with the standard detail-offer closing line. A final hard guard reverts the answer to the unmodified draft if the validator’s revision looks like reviewer/meta text.
 - **Domain unification & history:** `intent_analysis.domain` is used as hint for `query_type` selection, and the orchestrator maintains a per-session `visited_domains` list (e.g., `["career", "marriage"]`). Automatic follow-up questions are generated with this list passed as `avoid_domains` so the bot never **offers** a follow-up in a life area that has already been a primary topic in the current session (the user can still ask explicitly).
 - **Divisional chart plumbing:** Vedic vargas are exposed via `divisional_charts_simple`; Navamsa is mirrored into validation payload as both `D9` and `navamsa`.
+
+### Intelligence Pipeline (`src/prediction/`, `src/ai/semantic_frame.py`)
+
+A deterministic pre-LLM pipeline that commits the answer structure before the model generates any text. Runs inside `_handle_rag_with_calculation_node` after chart + validation + synthesis are complete.
+
+**1. Semantic Frame** (`src/ai/semantic_frame.py`) — Built once per turn in `chat_stateless`, stored on `session_data['semantic_frame']`. Single source of truth for route, domain, question_mode, polarity, intent_type. Replaces three previously separate detectors (LLMIntentClassifier, ContextManager.analyze_message_intent, detect_query_type). Consumed by tier selection, retrieval, factor scorer, follow-up generation, and answer planner.
+
+**2. Factor Scorer** (`src/prediction/factor_scorer.py`) — Scores every synthesis factor (strengths, challenges, yogas, key houses) on three signals: domain–planet affinity, dasha activation, and validation flags. Returns a `FactorPlan` with the top 2–3 factors and a focus block injected into the prompt preamble.
+
+**3. Answer Planner** (`src/prediction/answer_planner.py`) — Deterministically commits: primary factors (from FactorPlan), the single best timing window (from `astro_evidence.timeline_windows`), the relevant divisional chart (D-9 for marriage, D-10 for career, etc.), tone stance (encouraging/balanced/cautious_honest), and a narrative arc instruction. Injected as a `COMMITTED ANSWER PLAN` block into the reasoning scratchpad before the LLM runs.
+
+**4. Factor Accuracy Gate** (`src/prediction/accuracy_gate.py`) — Post-generation check (no LLM, pure regex + dict lookup). Extracts every planet-house and planet-sign claim from the answer text and cross-checks against `chart_data`. Mismatches logged at WARNING level and stored as `state['accuracy_gate']`. Never rewrites; never blocks.
+
+**5. User Memory Writer** (`src/rag/memory_writer.py`) — Fire-and-forget daemon thread spawned after each RAG_WITH_CALCULATION response. Two-stage extraction: regex patterns catch explicit facts ("I work in finance", "my wife is named Priya", "I'm 34 years old"); fast-LLM fallback (≤2s) for substantive messages with no regex match. Stores facts via `MemoryRetriever.add_memory()` with `{fact_type, domain, timestamp}` metadata. Retrieved in subsequent turns via `_inject_memory_hits()` to personalise follow-up questions.
+
+**6. Tier Selection** (`src/orchestration/orchestrator_validation_helpers.py:determine_validation_tier()`) — Now uses `SemanticFrame.question_mode`, `domain`, and `voice_preferences.detail_level` in addition to query keywords. Frame-based floors: `question_mode ∈ {advice, qualities, timing}` → tier 2; `domain ∈ {health, divorce}` → tier 2 (safety/accuracy risk); `detail_level == 'detailed'` → tier 3.
+
+**7. Follow-up Grounding** (`src/ai/context_manager.py:generate_followup_question()`) — Now receives a `findings_summary` (up to 2 strengths + 1 challenge + 1 yoga from `state['synthesis']`). The follow-up LLM is instructed to pivot to the strongest unused signal from this summary rather than guessing a generic life area.
 
 ### Validation Engine (`src/validation/vedic_validation_engine_v2.py`)
 
