@@ -242,12 +242,18 @@ def generate_followup_question(
     timeout: float = 4.0,
     chart_context: Optional[str] = None,
     avoid_domains: Optional[List[str]] = None,
+    findings_summary: Optional[str] = None,
 ) -> str:
     """Generate a personalized, chart-specific follow-up question using the fast LLM.
 
     Uses actual planetary placements from the user's chart so questions are specific
     ("Jupiter in your 3rd house shapes your partner's nature -- what does it reveal?")
     rather than generic ("agar koi planet hai toh...").
+
+    findings_summary: compact bullet list of the strongest signals from synthesis
+    (strengths, challenges, yogas) that haven't been explored yet. When present,
+    the LLM anchors the pivot question on the highest-signal unused finding rather
+    than guessing a generic life area.
 
     Falls back to `fallback` on any error or timeout -- never blocks the pipeline.
     """
@@ -276,6 +282,10 @@ def generate_followup_question(
     }.get(language, 'match the exact language and script of the last answer')
 
     chart_block = f"USER'S ACTUAL CHART PLACEMENTS:\n{chart_context}" if chart_context else "No chart data available."
+    findings_block = (
+        f"\nSTRONGEST UNUSED SIGNALS IN THIS CHART (good pivot candidates — pick the most interesting one):\n{findings_summary}"
+        if findings_summary else ""
+    )
     avoid_list = [d.strip().lower() for d in (avoid_domains or []) if d]
     if avoid_list:
         avoid_str = ", ".join(sorted(set(avoid_list)))
@@ -288,7 +298,7 @@ def generate_followup_question(
 
     prompt = f"""You are a perceptive Vedic astrologer delivering a personalised reading.
 
-{chart_block}
+{chart_block}{findings_block}
 
 Topic just discussed: {topic}
 Last answer (do NOT repeat anything from here): "{last_answer[:200]}"
@@ -299,9 +309,10 @@ CRITICAL RULE — DO NOT OFFER MORE DETAIL ON '{topic}'. The detailed answer on 
 Instead, find a natural bridge to a DIFFERENT area: career, finances, health, children, marriage, foreign travel, or similar.
 
 HOW TO BUILD IT:
-  1. Choose a life area that is DIFFERENT from '{topic}' and naturally connected to the user's current life stage. If avoid-domains are listed above, you MUST NOT select any of those domains.
-  2. Identify ONE specific planet or house placement in the chart above that is relevant to that different area.
-  3. Tease what is interesting or revealing about it — without giving the answer. Close with a formal invitation.
+  1. If "STRONGEST UNUSED SIGNALS" are listed above, pick the signal from a DIFFERENT domain than '{topic}' with the strongest finding and build the question around it.
+  2. Otherwise, choose a life area DIFFERENT from '{topic}' and naturally connected to the user's current life stage. If avoid-domains are listed, you MUST NOT select any of those.
+  3. Identify ONE specific planet or house placement in the chart above that is relevant to that area.
+  4. Tease what is interesting or revealing about it — without giving the answer. Close with a formal invitation.
 
 RULES:
   - NEVER ask for more detail, a deeper breakdown, or further explanation of '{topic}'.

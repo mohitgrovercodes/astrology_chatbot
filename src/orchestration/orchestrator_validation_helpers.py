@@ -205,30 +205,55 @@ def detect_query_type(
 # VALIDATION TIER SELECTION (OPTIMIZED FOR LIVE CHAT)
 # ============================================================================
 
-def determine_validation_tier(query: str, user_preferences: Optional[Dict] = None) -> int:
+def determine_validation_tier(
+    query: str,
+    user_preferences: Optional[Dict] = None,
+    question_mode: str = "summary",
+    domain: str = "general",
+    detail_level: str = "balanced",
+) -> int:
     """
     Determine validation tier - OPTIMIZED FOR LIVE CHAT (defaults to Tier 1).
-    
+
     Tier 1 (Fast, ~750 rules, <5s): DEFAULT for live chat
-    Tier 2 (Standard, ~2500 rules, <15s): Explicit request or complex query
+    Tier 2 (Standard, ~2500 rules, <15s): Explicit request, complex query, or
+            frame signals (advice/qualities/timing modes; high-risk domains)
     Tier 3 (Detailed, ~5000+ rules, <45s): Explicit "detailed/comprehensive" request
+            or user voice_preferences.detail_level == 'detailed'
+
+    Priority (highest → lowest):
+      1. Keywords in query → explicit user signal, wins unconditionally
+      2. detail_level == 'detailed' from voice_preferences → tier 3
+      3. domain in {health, divorce} or question_mode in {advice, qualities, timing} → tier 2 floor
+      4. Default → tier 1
     """
     query_lower = query.lower()
-    
-    # Explicit tier 3 request (must be very clear)
+
+    # ── Tier 3: explicit user request or stored detail preference ────────────
     detailed_keywords = ['detailed', 'comprehensive', 'thorough', 'complete analysis', 'in-depth', 'everything']
     if any(keyword in query_lower for keyword in detailed_keywords):
         return 3
-    
-    # Explicit tier 2 request or moderate complexity
+    if detail_level == 'detailed':
+        return 3
+
+    # ── Tier 2: explicit moderate request or frame signals ───────────────────
     moderate_keywords = ['explain', 'analyze', 'what does', 'how does']
     question_count = query_lower.count('?')
     and_count = query_lower.count(' and ')
-    
+
     if any(keyword in query_lower for keyword in moderate_keywords) or (question_count >= 2 and and_count >= 1):
         return 2
-    
-    # DEFAULT: Tier 1 for live chat speed
+
+    # Frame-based tier 2 floor: high-risk domains need more rules for safety/accuracy;
+    # advice/qualities/timing modes benefit from deeper validation signal.
+    _HIGH_RISK_DOMAINS = {'health', 'divorce'}
+    _ANALYSIS_MODES = {'advice', 'qualities', 'timing'}
+    if (domain or 'general').lower() in _HIGH_RISK_DOMAINS:
+        return 2
+    if (question_mode or 'summary').lower() in _ANALYSIS_MODES:
+        return 2
+
+    # ── Default: tier 1 for live chat speed ─────────────────────────────────
     return 1
 
 

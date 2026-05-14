@@ -1889,8 +1889,15 @@ Provide a concise answer:"""
                     if query_type == 'general':
                         logger.info(f"[VALIDATION] Skipping validation for general question")
                     else:
-                        # Determine tier (optimized for live chat)
-                        tier = determine_validation_tier(state['query'])
+                        # Determine tier using semantic frame + voice_preferences (not just keywords)
+                        _frame_for_tier = (state.get('session_data') or {}).get('semantic_frame') or {}
+                        _vp_for_tier = state.get('voice_preferences') or {}
+                        tier = determine_validation_tier(
+                            state['query'],
+                            question_mode=_frame_for_tier.get('question_mode', 'summary'),
+                            domain=_frame_for_tier.get('domain', 'general'),
+                            detail_level=(_vp_for_tier.get('detail_level') or 'balanced'),
+                        )
                         live_rule_cap = determine_live_chat_rule_cap(tier, state.get('query', ''))
                         include_yoga_live = True  # always include yoga rules for richer analysis
                         logger.info(
@@ -2446,6 +2453,26 @@ Provide a concise answer:"""
                         _chart_ctx = '\n'.join(_ctx_lines)
                 except Exception:
                     pass
+            # Build a compact findings summary from synthesis so the follow-up can pivot
+            # to the strongest unused chart signal rather than guessing a generic area.
+            _findings_summary = None
+            _syn_for_fq = state.get('synthesis') or {}
+            if _syn_for_fq:
+                try:
+                    _ff_lines = []
+                    for _s in (_syn_for_fq.get('chart_strengths') or [])[:2]:
+                        _ff_lines.append(f"• [STRENGTH] {_s}")
+                    for _c in (_syn_for_fq.get('chart_challenges') or [])[:1]:
+                        _ff_lines.append(f"• [CHALLENGE] {_c}")
+                    for _y in (_syn_for_fq.get('yogas_detected') or [])[:1]:
+                        _y_text = _y.get('name', '') if isinstance(_y, dict) else str(_y)
+                        if _y_text:
+                            _ff_lines.append(f"• [YOGA] {_y_text}")
+                    if _ff_lines:
+                        _findings_summary = '\n'.join(_ff_lines)
+                except Exception:
+                    pass
+
             # Only generate a cross-domain follow-up question for phases that actually use it.
             # INITIAL phase no longer shows a follow-up question, so skip the LLM call.
             _needs_followup_question = current_phase != PHASE_INITIAL
@@ -2458,6 +2485,7 @@ Provide a concise answer:"""
                     fast_llm=getattr(self, 'fast_llm', None),
                     fallback=_static_followup,
                     chart_context=_chart_ctx,
+                    findings_summary=_findings_summary,
                     timeout=4.0
                 )
                 logger.info(f"[PHASE] Follow-up question ready: {_suggested_followup[:80]}")
