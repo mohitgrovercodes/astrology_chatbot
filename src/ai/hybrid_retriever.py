@@ -113,6 +113,7 @@ class HybridRetriever:
         content_type: Optional[str] = None,
         user_id: Optional[str] = None,
         hyde_context: Optional[str] = None,
+        question_mode: str = "",
     ) -> List[Document]:
         if top_k is None:
             top_k = RAGConfig.get_top_k(content_type=content_type)
@@ -123,7 +124,8 @@ class HybridRetriever:
 
         self._ensure_bm25_built()
 
-        sem_w, key_w, hyde_w = RAGConfig.get_hybrid_weights(intent)
+        # question_mode-aware weights: timing → higher BM25, advice/qualities → higher semantic
+        sem_w, key_w, hyde_w = RAGConfig.get_hybrid_weights(intent, question_mode=question_mode)
         semantic = self._semantic_search(search_query, k=candidate_k, filters=filters)
         keyword = self._keyword_search(search_query, k=candidate_k)
         hyde = self._hyde_search(search_query, k=candidate_k, filters=filters, hyde_context=hyde_context) if RAGConfig.USE_HYDE else []
