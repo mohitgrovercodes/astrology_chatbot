@@ -103,6 +103,13 @@ from src.orchestration.orchestrator_validation_helpers import (
     build_validation_disclaimer,
     format_validation_for_prompt
 )
+from src.orchestration.phase_resolver import (
+    get_phase,
+    get_phase_data,
+    resolve_response_type,
+    resolve_phase_transition,
+    make_phase_data as make_phase_data_dict,
+)
 from src.prediction.astro_intelligence_layer import (
     build_astro_evidence,
     format_evidence_for_prompt,
@@ -589,32 +596,23 @@ class EnhancedLangGraphOrchestrator:
         conversation_history = state.get('conversation_history', [])
 
         # ── Progressive Disclosure Phase Bypass ──────────────────────────────
-        # When the bot asked "want more details?" or a follow-up question, any
-        # short affirmative/negative response ("Hmm karo", "haan", "samjhao")
-        # must be let through without safety analysis.  The safety classifier
-        # sees these in isolation (without the bot's previous question as context)
-        # and wrongly flags them as out-of-scope or ambiguous queries.
-        from src.ai.context_manager import (
-            detect_user_response_type, detect_response_type_with_llm_fallback,
-            PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP
-        )
-        _safety_phase = (state.get('session_data') or {}).get('conversation_phase', {}).get('phase', 'INITIAL')
+        # Short affirmative/negative responses to a bot's follow-up question must
+        # bypass the safety classifier (it sees them without the prior bot question
+        # and wrongly flags "haan" / "samjhao" as out-of-scope).
+        from src.ai.context_manager import PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP
+        _safety_phase = get_phase(state)
         _safety_orig_q = (state.get('session_data') or {}).get('original_user_question') or query
-        _safety_resp_type = detect_user_response_type(_safety_orig_q)
         _is_short = len(_safety_orig_q.strip().split()) <= 5
-        # LLM fallback: if pattern matching returned OTHER and not a short phrase,
-        # try LLM classification before sending through the full safety pipeline
-        if (_safety_resp_type == 'OTHER' and not _is_short
-                and _safety_phase in (PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP)):
-            _last_bot = next(
-                (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
-                 if m.get('role') == 'assistant'), ''
-            )
-            _safety_resp_type = detect_response_type_with_llm_fallback(
-                _safety_orig_q, _last_bot, getattr(self, 'fast_llm', None), _safety_phase
-            )
-            if _safety_resp_type != 'OTHER':
-                logger.info(f"[SAFETY] LLM fallback classified: {_safety_resp_type}")
+        _last_bot_safety = next(
+            (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
+             if m.get('role') == 'assistant'), ''
+        )
+        _safety_resp_type = resolve_response_type(
+            _safety_orig_q, _safety_phase,
+            last_bot_msg=_last_bot_safety,
+            fast_llm=getattr(self, 'fast_llm', None),
+            log=logger,
+        )
         if _safety_phase in (PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP) and (
             _safety_resp_type in ('AFFIRMATIVE', 'NEGATIVE') or _is_short
         ):
@@ -786,36 +784,25 @@ class EnhancedLangGraphOrchestrator:
         # When the bot asked "Want more details?" or asked a follow-up question,
         # short affirmative/negative responses must be routed to RAG_WITH_CALCULATION
         # (not CHITCHAT) so the progressive disclosure flow continues.
-        from src.ai.context_manager import (
-            detect_user_response_type, detect_response_type_with_llm_fallback,
-            PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP
-        )
-        conv_phase_data = (state.get('session_data') or {}).get('conversation_phase', {})
-        current_phase = conv_phase_data.get('phase', 'INITIAL')
+        from src.ai.context_manager import PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP
+        current_phase = get_phase(state)
 
         if current_phase in (PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP):
             _original_q = (state.get('session_data') or {}).get('original_user_question') or state['query']
-            user_response = detect_user_response_type(_original_q)
             _intent_analysis = (state.get('session_data') or {}).get('intent_analysis', {})
-            _is_short_continuation = (
-                current_phase == PHASE_FOLLOWUP_LOOP
-                and len(_original_q.strip().split()) <= 6
-                and _intent_analysis.get('intent_type') in ('CONTINUATION', 'CLARIFICATION')
-                and user_response == 'OTHER'
+            _last_bot_intent = next(
+                (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
+                 if m.get('role') == 'assistant'), ''
             )
-            # LLM fallback for longer phrases that pattern matching missed
-            if user_response == 'OTHER' and not _is_short_continuation:
-                _last_bot = next(
-                    (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
-                     if m.get('role') == 'assistant'), ''
-                )
-                user_response = detect_response_type_with_llm_fallback(
-                    _original_q, _last_bot, getattr(self, 'fast_llm', None), current_phase
-                )
-                if user_response != 'OTHER':
-                    logger.info(f"[INTENT] [PHASE_GUARD] LLM fallback classified: {user_response}")
-            logger.info(f"[INTENT] [PHASE_GUARD] original='{_original_q[:40]}' -> response_type={user_response}, short_cont={_is_short_continuation}")
-            if user_response in ('AFFIRMATIVE', 'NEGATIVE') or _is_short_continuation:
+            user_response = resolve_response_type(
+                _original_q, current_phase,
+                intent_info=_intent_analysis,
+                last_bot_msg=_last_bot_intent,
+                fast_llm=getattr(self, 'fast_llm', None),
+                log=logger,
+            )
+            logger.info(f"[INTENT] [PHASE_GUARD] original='{_original_q[:40]}' -> response_type={user_response}")
+            if user_response in ('AFFIRMATIVE', 'NEGATIVE'):
                 logger.info(f"[INTENT] [PHASE_GUARD] Phase={current_phase}, response={user_response} -> RAG_WITH_CALCULATION")
                 state['intent'] = 'RAG_WITH_CALCULATION'
                 state['confidence'] = 0.95
@@ -1813,11 +1800,11 @@ Provide a concise answer:"""
                     # (query_type, dasha filtering, synthesis) aligns to the pivot topic.
                     try:
                         from src.ai.context_manager import (
-                            detect_user_response_type as _resp_detect,
                             PHASE_AWAITING_DETAIL as _PAD_PREVAL,
                             PHASE_FOLLOWUP_LOOP as _PFL_PREVAL,
                         )
-                        _phase_data_preval = (state.get('session_data') or {}).get('conversation_phase', {})
+                        from src.ai.context_manager import detect_user_response_type as _resp_detect
+                        _phase_data_preval = get_phase_data(state)
                         _phase_now_preval = _phase_data_preval.get('phase', 'INITIAL')
                         _topic_now_preval = (_phase_data_preval.get('topic') or '').lower()
                         _orig_q_preval = (state.get('session_data') or {}).get('original_user_question') or state.get('query', '')
@@ -2168,13 +2155,17 @@ Provide a concise answer:"""
             # (suppresses "Next Favorable Window" for the INITIAL short response)
             from src.ai.context_manager import (
                 PHASE_INITIAL as _PI, PHASE_AWAITING_DETAIL as _PAD, PHASE_FOLLOWUP_LOOP as _PFL,
-                detect_user_response_type as _durt, detect_response_type_with_llm_fallback as _durt_llm
             )
-            _pre_phase_data = (state.get('session_data') or {}).get('conversation_phase', {})
+            _pre_phase_data = get_phase_data(state)
             _pre_phase = _pre_phase_data.get('phase', _PI)
             _pre_orig_q = (state.get('session_data') or {}).get('original_user_question') or state['query']
-            _pre_resp = _durt(_pre_orig_q)
             _pre_intent_info = (state.get('session_data') or {}).get('intent_analysis', {})
+            _pre_resp = resolve_response_type(
+                _pre_orig_q, _pre_phase,
+                intent_info=_pre_intent_info,
+                fast_llm=getattr(self, 'fast_llm', None),
+                log=logger,
+            )
             _pre_current_topic = (_pre_phase_data.get('topic') or '').lower()
 
             def _extract_followup_target_from_last_bot(last_bot_msg: str) -> Tuple[str, Optional[str]]:
@@ -2359,12 +2350,11 @@ Provide a concise answer:"""
             # STEP 3.5: PROGRESSIVE DISCLOSURE — Phase-Aware Prompt Injection
             # ================================================================
             from src.ai.context_manager import (
-                detect_user_response_type, detect_response_type_with_llm_fallback,
                 PHASE_INITIAL, PHASE_AWAITING_DETAIL,
                 PHASE_FOLLOWUP_LOOP, FOLLOWUP_QUESTION_BANK,
                 generate_followup_question
             )
-            conv_phase_data = (state.get('session_data') or {}).get('conversation_phase', {})
+            conv_phase_data = get_phase_data(state)
             _intent_info = (state.get('session_data') or {}).get('intent_analysis', {})
             current_phase = conv_phase_data.get('phase', PHASE_INITIAL)
             # When user intent is NEW_TOPIC, always treat as INITIAL so we give short response + offer detail
@@ -2373,49 +2363,25 @@ Provide a concise answer:"""
                 logger.info(f"[PHASE] intent_type=NEW_TOPIC → forcing phase to INITIAL (short response + offer detail)")
             current_topic = conv_phase_data.get('topic')
             followup_count = conv_phase_data.get('followup_count', 0)
-            # Use the true original question (before semantic expansion) for detection
             _orig_q = (state.get('session_data') or {}).get('original_user_question') or state['query']
-            user_response_type = detect_user_response_type(_orig_q)
-            _oq_lower = _orig_q.lower().strip()
-            _fresh_question_tokens = ('kab', 'kya', 'kaise', 'kyun', 'where', 'when', 'what', 'how', 'who')
-            _is_likely_fresh_question = (
-                len(_orig_q.strip().split()) >= 4
-                and ('?' in _orig_q or any(tok in _oq_lower.split() for tok in _fresh_question_tokens))
+            _last_bot_for_resp = next(
+                (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
+                 if m.get('role') == 'assistant'), ''
             )
-            _is_short_cont = (
-                current_phase == PHASE_FOLLOWUP_LOOP
-                and len(_orig_q.strip().split()) <= 6
-                and _intent_info.get('intent_type') in ('CONTINUATION', 'CLARIFICATION')
-                and user_response_type == 'OTHER'
+            user_response_type = resolve_response_type(
+                _orig_q, current_phase,
+                intent_info=_intent_info,
+                last_bot_msg=_last_bot_for_resp,
+                fast_llm=getattr(self, 'fast_llm', None),
+                log=logger,
             )
-            if _is_short_cont:
-                user_response_type = 'AFFIRMATIVE'
-                logger.info(f"[PHASE] Short CONTINUATION in FOLLOWUP_LOOP → treating as AFFIRMATIVE")
-            # LLM fallback for remaining OTHER cases in active phases
-            elif user_response_type == 'OTHER' and current_phase in (PHASE_AWAITING_DETAIL, PHASE_FOLLOWUP_LOOP):
-                if _is_likely_fresh_question:
-                    logger.info("[PHASE] Fresh-question signal in active phase -> skipping response-type LLM fallback")
-                else:
-                    _last_bot = next(
-                        (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
-                         if m.get('role') == 'assistant'), ''
-                    )
-                    user_response_type = detect_response_type_with_llm_fallback(
-                        _orig_q, _last_bot, getattr(self, 'fast_llm', None), current_phase
-                    )
-                    if user_response_type != 'OTHER':
-                        logger.info(f"[PHASE] LLM fallback classified: {user_response_type}")
             logger.info(f"[PHASE] user_response_type={user_response_type} (from original: '{_orig_q[:40]}')")
 
             # Robust pivot guard:
             # If the last assistant turn ended with a cross-domain follow-up question and
             # user now gives an affirmative, force handling as "yes to pivot question" even
             # when stored phase is stale/misaligned.
-            _last_bot_for_phase = next(
-                (m.get('content', '') for m in reversed(state.get('conversation_history') or [])
-                 if m.get('role') == 'assistant'), ''
-            )
-            _pivot_question, _pivot_topic = _extract_followup_target_from_last_bot(_last_bot_for_phase)
+            _pivot_question, _pivot_topic = _extract_followup_target_from_last_bot(_last_bot_for_resp)
             _current_topic_norm = (current_topic or '').lower()
             _is_affirmative_to_pivot = (
                 user_response_type == 'AFFIRMATIVE'
@@ -2572,12 +2538,11 @@ Provide a concise answer:"""
                 state['answer'] = (
                     f"No problem! Here's something interesting from your chart though — {alt_followup}"
                 )
-                new_phase_data = {
-                    "phase": PHASE_FOLLOWUP_LOOP,
-                    "topic": _topic,
-                    "last_query": conv_phase_data.get('last_query', state['query']),
-                    "followup_count": followup_count + 1
-                }
+                new_phase_data = make_phase_data_dict(
+                    PHASE_FOLLOWUP_LOOP, _topic,
+                    conv_phase_data.get('last_query', state['query']),
+                    followup_count + 1,
+                )
                 state['conversation_phase'] = new_phase_data
                 return state  # Skip LLM call — direct response
 
@@ -2632,12 +2597,11 @@ Study the STYLE EXAMPLES above. For a detailed response, expand the 5-part struc
 { _voice_charter }
 { self._build_coherence_hint(state.get("conversation_history", []), (_topic or "general").lower(), current_query=state.get('query', '')) }
 """
-                new_phase_data = {
-                    "phase": PHASE_FOLLOWUP_LOOP,
-                    "topic": _topic,
-                    "last_query": conv_phase_data.get('last_query', state['query']),
-                    "followup_count": followup_count + 1
-                }
+                new_phase_data = make_phase_data_dict(
+                    PHASE_FOLLOWUP_LOOP, _topic,
+                    conv_phase_data.get('last_query', state['query']),
+                    followup_count + 1,
+                )
                 # So we can append the related follow-up if the LLM omits it
                 state['_detailed_followup'] = _suggested_followup
 
@@ -2716,12 +2680,11 @@ ANSWER THIS SPECIFIC QUESTION: {_answer_topic}
 9. {_flow_policy}
 """
                 # Start a fresh AWAITING_DETAIL cycle for the new topic.
-                new_phase_data = {
-                    "phase": PHASE_AWAITING_DETAIL,
-                    "topic": _new_topic,
-                    "last_query": _last_question or conv_phase_data.get('last_query', state['query']),
-                    "followup_count": 0
-                }
+                new_phase_data = make_phase_data_dict(
+                    PHASE_AWAITING_DETAIL, _new_topic,
+                    _last_question or conv_phase_data.get('last_query', state['query']),
+                    0,
+                )
 
 
             elif current_phase == PHASE_FOLLOWUP_LOOP and user_response_type == 'NEGATIVE':
@@ -2730,12 +2693,11 @@ ANSWER THIS SPECIFIC QUESTION: {_answer_topic}
                 _alt_idx = (followup_count + 2) % len(_followup_bank) if _followup_bank else 0
                 alt_followup = _followup_bank[_alt_idx] if _followup_bank else "Your chart has more to reveal — what else are you curious about?"
                 state['answer'] = f"Sure! Here's something else interesting from your chart — {alt_followup}"
-                new_phase_data = {
-                    "phase": PHASE_FOLLOWUP_LOOP,
-                    "topic": _topic,
-                    "last_query": conv_phase_data.get('last_query', state['query']),
-                    "followup_count": followup_count + 1
-                }
+                new_phase_data = make_phase_data_dict(
+                    PHASE_FOLLOWUP_LOOP, _topic,
+                    conv_phase_data.get('last_query', state['query']),
+                    followup_count + 1,
+                )
                 state['conversation_phase'] = new_phase_data
                 return state  # Skip LLM call — direct response
 
@@ -2900,12 +2862,9 @@ Study the STYLE EXAMPLES above for tone and flow only — their chart facts are 
                 # BUG FIX #4: Store the true original question (pre-semantic-expansion)
                 # as last_query so that future AFFIRMATIVE turns have domain keywords.
                 _orig_user_q = (state.get('session_data') or {}).get('original_user_question') or state['query']
-                new_phase_data = {
-                    "phase": PHASE_AWAITING_DETAIL,
-                    "topic": _topic,
-                    "last_query": _orig_user_q,
-                    "followup_count": 0
-                }
+                new_phase_data = make_phase_data_dict(
+                    PHASE_AWAITING_DETAIL, _topic, _orig_user_q, 0,
+                )
                 state['_was_initial_response'] = True
 
             state['conversation_phase'] = new_phase_data
