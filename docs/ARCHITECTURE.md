@@ -1,6 +1,6 @@
 # NakshatraAI — Master System Architecture
 
-> **Last Updated:** March 2026
+> **Last Updated:** May 2026
 > **Status:** Production Architecture
 
 ---
@@ -301,11 +301,26 @@ src/
 │   ├── core/               Swiss Ephemeris wrapper, coordinates, datetime utils
 │   ├── vedic/              Vedic engine: D1-D60, Dasha, Yogas, Aspects
 │   └── western/            Western engine: Houses, Aspects, Dignities
-├── orchestration/          LangGraph state machine (~3,100 lines)
-├── rag/                    Extraction, preprocessing, retrieval, reranking
+├── ai/
+│   ├── semantic_frame.py   Unified intent frame — route/domain/question_mode/polarity (built once per turn)
+│   ├── hybrid_retriever.py Hybrid retrieval: semantic + BM25 + chart-conditioned HyDE + memory injection
+│   ├── context_manager.py  Phase state, follow-up generation (findings-grounded), response-type detection
+│   └── ...
+├── orchestration/          LangGraph state machine (~8,000 lines)
+├── prediction/
+│   ├── factor_scorer.py    Ranks synthesis factors by domain × dasha × validation → FactorPlan
+│   ├── answer_planner.py   Commits tone/timing/divisional chart/narrative before LLM → AnswerPlan
+│   ├── accuracy_gate.py    Post-generation planet-house/sign claim verifier (no LLM, pure regex)
+│   ├── astro_intelligence_layer.py  Astro evidence builder (timeline windows, transits)
+│   └── timeline_reasoner.py        PAD window ranking and dasha timeline logic
+├── rag/
+│   ├── memory_retriever.py User-specific fact retrieval from ChromaDB conversation_memories collection
+│   ├── memory_writer.py    Fire-and-forget user fact extractor + writer (regex + LLM fallback)
+│   ├── reranker.py         Cross-encoder reranker for high-stakes queries
+│   └── preprocessing/      Extraction, segmentation, enrichment, vector DB builder
 ├── llm/                    LLM factory (Gemini/Vertex AI primary, Ollama fallback)
 ├── safety/                 4-gate safety framework
-├── validation/             750+ rule validation + age validator + synthesis
+├── validation/             750+ rule validation + age validator + synthesis engine
 ├── session/                Redis session lifecycle manager
 ├── routing/                Embedding-based semantic intent router
 ├── utils/                  Logging, schemas, validators, serializers, localization

@@ -87,49 +87,71 @@ End-to-end flow:
 
 ```
 User message
+    → SemanticFrame (built once — route/domain/question_mode/polarity)
     → Orchestrator (LangGraph)
-        → Intent classification (LLMIntentClassifier)
-            → 1) Exact pattern cache (e.g. "hi" → CHITCHAT)
-            → 2) Keyword pre-route (e.g. "what is my lagna" → CALCULATION_ONLY)
-            → 3) Semantic routing (embedding vs reference phrases)
-            → 4) LLM classification (if none of the above)
         → Route: CHITCHAT | CALCULATION_ONLY | RAG_ONLY | RAG_WITH_CALCULATION
     → For RAG_ONLY / RAG_WITH_CALCULATION:
-        → HybridRetriever.retrieve(...)
+        → Build enriched retrieval query (domain hint + chart suffix)
+        → Build HyDE context (lagna + dasha lords + domain)
+        → HybridRetriever.retrieve(question_mode=..., hyde_context=...)
 ```
 
 ### HybridRetriever.retrieve(...) — step by step
 
 1. **Inputs**  
-   Query, intent (e.g. RAG_WITH_CALCULATION), optional `top_k`, language, `content_type`, `user_id`.
+   Query, intent, optional `top_k`, language, `content_type`, `user_id`, `hyde_context`, `question_mode`.
 
-2. **Query for retrieval**  
-   If language ≠ English, the query is **translated to English** via a small LLM call so the vector store (indexed in English) is searched in English.
+2. **Query enrichment (before retrieval)**  
+   The orchestrator appends two hints to the raw query string before calling `retrieve()`:
+   - **Domain vocabulary**: e.g. `[7th house Venus Jupiter 2nd 5th house relationship partner]` for marriage, `[10th house Saturn Sun 6th house profession Dashamsha]` for career. Expands the BM25 token pool and shifts the semantic embedding toward domain-relevant chunks without hard filtering.
+   - **Chart suffix**: `(Lagna: Cancer, Rashi: Scorpio)` so the embedding is personalised to the user's configuration.
+
+   If language ≠ English, the enriched query is **translated to English** via a small LLM call.
 
 3. **Three retrieval signals (all over the same Chroma collection)**  
-   - **Semantic**: Embed query with Vertex AI `gemini-embedding-001` (1536 dims), run vector similarity search in ChromaDB (e.g. 2× top_k candidates).  
-   - **Keyword (BM25)**: Tokenize query, score all documents in the in-memory BM25 index built from the same collection, take top 2× top_k.  
-   - **HyDE**: One LLM call to generate a short “ideal answer passage” in the style of the corpus; embed that passage and run semantic search with it. Gives a third ranking.
+   - **Semantic**: Embed enriched query with Vertex AI `gemini-embedding-001` (1536 dims), run vector similarity search in ChromaDB (2× top_k candidates).  
+   - **Keyword (BM25)**: Tokenize enriched query, score all documents in the in-memory BM25 index, take top 2× top_k. Domain vocabulary terms boost relevant house/planet chunks here.  
+   - **Chart-conditioned HyDE**: LLM generates a hypothetical classical-text passage conditioned on the full chart context — `”Cancer ascendant (Punarvasu), Saturn MD / Mercury AD, marriage domain”` — instead of a generic query rephrasing. The conditioned passage produces a much more specific embedding target, pulling chunks about the exact planet/ascendant/period combination.
 
-4. **Fusion**  
-   **Reciprocal Rank Fusion (RRF)** with intent-based weights from `RAGConfig` (e.g. semantic 0.5, keyword 0.3, HyDE 0.2). Combined ranking is produced from the three lists.
+4. **Fusion — question_mode-aware weights**  
+   **Reciprocal Rank Fusion (RRF)** with weights from `RAGConfig.HYBRID_WEIGHTS_BY_QUESTION_MODE` (takes priority over intent-based weights):
 
-5. **Optional: memory**  
-   If `user_id` is set and `MemoryRetriever` is enabled, a separate Chroma collection of conversation memories is queried by semantic similarity; a few memory snippets are merged into the fused list (and deduped).
+   | `question_mode` | Semantic | BM25 | HyDE | Rationale |
+   |---|---|---|---|---|
+   | `timing` | 0.40 | **0.35** | 0.25 | Exact dasha/period terminology is diagnostic |
+   | `advice` | **0.55** | 0.20 | 0.25 | Remedy guidance matches conceptually across varied phrasings |
+   | `qualities` | **0.55** | 0.20 | 0.25 | Quality descriptions in classical texts vary widely in wording |
+   | `summary` | 0.50 | 0.30 | 0.20 | Balanced default |
+
+5. **Optional: memory injection**  
+   If `user_id` is set and `MemoryRetriever` is enabled, the `conversation_memories` Chroma collection is queried by semantic similarity; up to 2 memory snippets (user-stated facts: “user works in finance”, “user has 2 children”) are merged into the fused list. Written by `src/rag/memory_writer.py` on each turn.
 
 6. **Optional: rerank**  
-   If `RAGConfig.should_rerank(...)` is true (e.g. content_type interpretation, or top score &lt; threshold), a **cross-encoder** (e.g. `ms-marco-MiniLM-L6-v2`) reranks the fused list and the top `top_k` are kept.
+   If `RAGConfig.should_rerank(...)` is true (e.g. `content_type == 'interpretation'`, or top score < 0.75), a **cross-encoder** (`ms-marco-MiniLM-L6-v2`) reranks the fused list and the top `top_k` are kept.
 
 7. **Optional: context expansion**  
-   If `RAGConfig.should_expand(...)` is true, **adjacent chunks** (same book/chapter, chunk_index ± 1) are fetched from Chroma and appended so that surrounding sentences are available.
+   Adjacent chunks (same book/chapter, chunk_index ± N) fetched and appended when `RAGConfig.should_expand(...)` is true.
 
 8. **Output**  
-   Deduplicated list of documents (LangChain `Document`), up to `top_k`, returned to the orchestrator. The orchestrator then passes these to the prompt builder as “knowledge chunks” and the LLM generates the answer.
+   Deduplicated list of `Document` objects, up to `top_k`, returned to the orchestrator for prompt injection.
 
 ### Data sources
 
-- **Vector store**: ChromaDB, persistent path (e.g. `data/vectordb`), collection `vedic_astrology_books_knowledge`. Embeddings from Vertex AI (`gemini-embedding-001`).
-- **BM25**: Same documents as in Chroma, loaded once and kept in memory; used only for keyword scoring.
-- **Memory** (optional): Separate Chroma collection (e.g. `conversation_memories`), keyed by `user_id`, for previous conversation snippets.
+- **Vector store**: ChromaDB at `data/vectordb`, collection `vedic_astrology_books_knowledge`. Chunk metadata includes `planets`, `houses`, `signs`, `nakshatras`, `yogas` as comma-separated flat strings (filterable).
+- **BM25**: Same documents, in-memory index built lazily on first retrieval call.
+- **Memory**: Separate Chroma collection `conversation_memories`, keyed by `user_id`. Written asynchronously by `MemoryWriter`; read by `MemoryRetriever`.
 
-So: **retrieval is hybrid (semantic + BM25 + HyDE), then optionally reranked and expanded**, and the intent that drove the route (e.g. RAG_WITH_CALCULATION) is the same one used to choose weights and whether to rerank/expand.
+### Validation tier selection
+
+Tier determines how many rules the validation engine evaluates (80 / 120 / 150 rule cap for tiers 1–3). Now driven by `SemanticFrame` + `voice_preferences` rather than query keywords alone:
+
+| Signal | Effect |
+|---|---|
+| Query contains “detailed” / “comprehensive” | → Tier 3 (keyword wins unconditionally) |
+| `voice_preferences.detail_level == 'detailed'` | → Tier 3 |
+| Query contains “explain” / “analyze” | → Tier 2 |
+| `question_mode ∈ {advice, qualities, timing}` | → Tier 2 floor |
+| `domain ∈ {health, divorce}` | → Tier 2 floor (risk domains need more rules) |
+| Default | → Tier 1 (fast path for live chat) |
+
+See `src/orchestration/orchestrator_validation_helpers.py:determine_validation_tier()`.
