@@ -70,6 +70,20 @@ except ImportError:
     logger.info("[FACTOR_SCORER] factor_scorer not found - focus-factor block disabled")
     FACTOR_SCORER_AVAILABLE = False
 
+try:
+    from src.prediction.answer_planner import build_answer_plan, AnswerPlan
+    ANSWER_PLANNER_AVAILABLE = True
+except ImportError:
+    logger.info("[ANSWER_PLANNER] answer_planner not found - committed plan disabled")
+    ANSWER_PLANNER_AVAILABLE = False
+
+try:
+    from src.prediction.accuracy_gate import check_factor_accuracy
+    ACCURACY_GATE_AVAILABLE = True
+except ImportError:
+    logger.info("[ACCURACY_GATE] accuracy_gate not found - factor accuracy check disabled")
+    ACCURACY_GATE_AVAILABLE = False
+
 from src.prompts.few_shot_selector import get_few_shot_block
 from src.orchestration.orchestrator_validation_helpers import (
     detect_query_type,
@@ -86,6 +100,13 @@ from src.prediction.astro_intelligence_layer import (
     build_astro_evidence,
     format_evidence_for_prompt,
 )
+
+# Module-level chitchat keyword map — single source of truth shared with SemanticFrame.
+# _classify_intent_node uses this instead of a copy-pasted inline dict.
+try:
+    from src.ai.semantic_frame import _CHITCHAT_KEYWORD_ROUTES as _MODULE_CHITCHAT_KW_ROUTES
+except ImportError:
+    _MODULE_CHITCHAT_KW_ROUTES = None
 
 class NakshatraState(TypedDict):
     """Enhanced state with calculation results."""
@@ -850,32 +871,15 @@ class EnhancedLangGraphOrchestrator:
         # Short single-word / common phrases (especially multilingual ones) often fall
         # below the 0.7 embedding threshold because the mean route vector is diluted
         # across many diverse examples. Exact keyword matching bypasses this reliably.
-        _CHITCHAT_KEYWORD_ROUTES = {
-            # greeting
+        #
+        # SINGLE SOURCE OF TRUTH: uses module-level import from semantic_frame.
+        # If that import failed at startup, falls back to a minimal inline dict so
+        # the node never crashes.
+        _CHITCHAT_KEYWORD_ROUTES = _MODULE_CHITCHAT_KW_ROUTES or {
             'hi': 'greeting', 'hello': 'greeting', 'hey': 'greeting',
-            'namaste': 'greeting', 'namaskaram': 'greeting', 'vanakkam': 'greeting',
-            'hola': 'greeting', 'howdy': 'greeting', 'wassup': 'greeting',
-            'sup': 'greeting', 'yo': 'greeting', 'greetings': 'greeting',
-            'salaam': 'greeting', 'bonjour': 'greeting',
-            'good morning': 'greeting', 'good evening': 'greeting', 'good afternoon': 'greeting',
-            # gratitude
-            'thanks': 'gratitude', 'thank you': 'gratitude', 'thankyou': 'gratitude',
-            'appreciate it': 'gratitude', 'grateful': 'gratitude',
-            'dhanyavad': 'gratitude', 'shukriya': 'gratitude',
-            'dhanyawad': 'gratitude', 'shukriya-ji': 'gratitude',
-            # wellbeing
-            'how are you': 'wellbeing', "how's it going": 'wellbeing',
-            "what's up": 'wellbeing', 'how do you do': 'wellbeing',
-            'kaise ho': 'wellbeing', 'kya haal hai': 'wellbeing', 'all good': 'wellbeing',
-            # farewell
-            'bye': 'farewell', 'goodbye': 'farewell', 'see you': 'farewell',
-            'talk later': 'farewell', 'take care': 'farewell',
-            'alvida': 'farewell', 'khuda hafiz': 'farewell', 'catch you later': 'farewell',
-            # closure
+            'namaste': 'greeting', 'bye': 'farewell', 'goodbye': 'farewell',
+            'thanks': 'gratitude', 'thank you': 'gratitude',
             'ok': 'closure', 'okay': 'closure', 'got it': 'closure',
-            'understood': 'closure', 'alright': 'closure', 'sure': 'closure',
-            'theek hai': 'closure', 'samajh gaya': 'closure', 'thik hai': 'closure',
-            'achha': 'closure', 'fine': 'closure', 'makes sense': 'closure',
         }
         q_normalized = state['query'].lower().strip().rstrip('!.')
         _kw_route = _CHITCHAT_KEYWORD_ROUTES.get(q_normalized)
@@ -1892,8 +1896,15 @@ Provide a concise answer:"""
                     if query_type == 'general':
                         logger.info(f"[VALIDATION] Skipping validation for general question")
                     else:
-                        # Determine tier (optimized for live chat)
-                        tier = determine_validation_tier(state['query'])
+                        # Determine tier using semantic frame + voice_preferences (not just keywords)
+                        _frame_for_tier = (state.get('session_data') or {}).get('semantic_frame') or {}
+                        _vp_for_tier = state.get('voice_preferences') or {}
+                        tier = determine_validation_tier(
+                            state['query'],
+                            question_mode=_frame_for_tier.get('question_mode', 'summary'),
+                            domain=_frame_for_tier.get('domain', 'general'),
+                            detail_level=(_vp_for_tier.get('detail_level') or 'balanced'),
+                        )
                         live_rule_cap = determine_live_chat_rule_cap(tier, state.get('query', ''))
                         include_yoga_live = True  # always include yoga rules for richer analysis
                         logger.info(
@@ -2029,10 +2040,15 @@ Provide a concise answer:"""
                             logger.info(f"[SYNTHESIS] Using semantic_frame.validation_query_type={query_type_for_synthesis}")
                         else:
                             try:
+                                # SemanticFrame was absent — use pattern-only detection.
+                                # LLM confirmation is intentionally disabled here: an
+                                # extra classify call at synthesis time adds ~300ms and
+                                # is not reliable because the synthesis path only runs
+                                # when the frame is already missing.
                                 query_type_for_synthesis = detect_query_type(
                                     state['query'],
                                     llm=self.fast_llm if hasattr(self, 'fast_llm') else None,
-                                    use_llm_confirmation=True,
+                                    use_llm_confirmation=False,
                                     intent_domain_hint=_intent_domain,
                                 )
                             except Exception:
@@ -2070,21 +2086,67 @@ Provide a concise answer:"""
             knowledge_chunks = state.get('knowledge_chunks') or []
 
             if not knowledge_chunks and self.hybrid_retriever:
-                # Enhance query for better retrieval if we have chart data
+                # Domain-aware query augmentation: inject house/planet vocabulary so BM25
+                # and semantic search find chunks from the right astrological domain.
+                _DOMAIN_RETRIEVAL_HINTS = {
+                    "marriage":    "7th house Venus Jupiter 2nd 5th house relationship partner",
+                    "divorce":     "7th house 6th house Mars Saturn 8th house separation conflict",
+                    "career":      "10th house Saturn Sun 6th house profession Dashamsha",
+                    "finance":     "2nd house 11th house Jupiter Venus wealth gains Hora",
+                    "health":      "1st house 6th house 8th house 12th Mars Saturn disease recovery",
+                    "children":    "5th house Jupiter Moon progeny Saptamsha fertility",
+                    "foreign":     "12th house 9th house Rahu 3rd house foreign travel settlement",
+                    "education":   "4th house 5th house Mercury Jupiter learning Chaturvimshamsha",
+                    "home":        "4th house Moon Mars property Chaturthamsha",
+                    "spirituality":"9th house 12th house Ketu Jupiter moksha Vimshamsha",
+                }
+
                 retrieval_query = state['query']
+                _hyde_ctx = None
+                _frame_r = (state.get('session_data') or {}).get('semantic_frame') or {}
+                _domain_r = _frame_r.get('domain') or 'general'
+                _qmode_r = _frame_r.get('question_mode') or 'summary'
+
+                # Append domain hint (extends both BM25 token pool and semantic embedding)
+                _domain_hint = _DOMAIN_RETRIEVAL_HINTS.get(_domain_r, '')
+                if _domain_hint:
+                    retrieval_query += f" [{_domain_hint}]"
+
                 if state.get('chart_data'):
                     c = state['chart_data']
                     lagna = c.get('lagna', {}).get('sign') or c.get('ascendant', {}).get('sign', 'Unknown')
+                    lagna_nak = c.get('lagna', {}).get('nakshatra', '')
                     moon_sign = c.get('moon_sign') or c.get('planets', {}).get('MOON', {}).get('sign', 'Unknown')
                     retrieval_query += f" (Lagna: {lagna}, Rashi: {moon_sign})"
 
+                    # Build chart-conditioned HyDE context: ascendant + active dasha + domain
+                    _dd = state.get('dasha_data') or {}
+                    _md = _dd.get('mahadasha') or {}
+                    _ad = _dd.get('antardasha') or {}
+                    _md_planet = (_md.get('planet') or _md.get('lord') or '') if isinstance(_md, dict) else str(_md)
+                    _ad_planet = (_ad.get('planet') or _ad.get('lord') or '') if isinstance(_ad, dict) else str(_ad)
+                    _hyde_parts = [f"{lagna} ascendant"]
+                    if lagna_nak:
+                        _hyde_parts[0] += f" ({lagna_nak})"
+                    if _md_planet:
+                        dasha_str = f"{_md_planet} MD"
+                        if _ad_planet and _ad_planet != _md_planet:
+                            dasha_str += f" / {_ad_planet} AD"
+                        _hyde_parts.append(dasha_str)
+                    _hyde_parts.append(f"{_domain_r} domain")
+                    _hyde_ctx = ", ".join(_hyde_parts)
+                    logger.debug(f"[HYDE] chart context: {_hyde_ctx}")
+
+                logger.debug(f"[RETRIEVAL] domain={_domain_r} qmode={_qmode_r} query_len={len(retrieval_query)}")
                 knowledge_chunks = self.hybrid_retriever.retrieve(
                     query=retrieval_query,
                     intent="RAG_WITH_CALCULATION",
                     top_k=RAGConfig.get_top_k(content_type='interpretation'),
                     language=state.get('detected_language', 'en'),
                     content_type='interpretation',
-                    user_id=state.get('user_id')
+                    user_id=state.get('user_id'),
+                    hyde_context=_hyde_ctx,
+                    question_mode=_qmode_r,
                 )
             elif not knowledge_chunks:
                 logger.info("[RAG_WITH_CALCULATION] No retriever - proceeding with zero knowledge")
@@ -2444,6 +2506,26 @@ Provide a concise answer:"""
                         _chart_ctx = '\n'.join(_ctx_lines)
                 except Exception:
                     pass
+            # Build a compact findings summary from synthesis so the follow-up can pivot
+            # to the strongest unused chart signal rather than guessing a generic area.
+            _findings_summary = None
+            _syn_for_fq = state.get('synthesis') or {}
+            if _syn_for_fq:
+                try:
+                    _ff_lines = []
+                    for _s in (_syn_for_fq.get('chart_strengths') or [])[:2]:
+                        _ff_lines.append(f"• [STRENGTH] {_s}")
+                    for _c in (_syn_for_fq.get('chart_challenges') or [])[:1]:
+                        _ff_lines.append(f"• [CHALLENGE] {_c}")
+                    for _y in (_syn_for_fq.get('yogas_detected') or [])[:1]:
+                        _y_text = _y.get('name', '') if isinstance(_y, dict) else str(_y)
+                        if _y_text:
+                            _ff_lines.append(f"• [YOGA] {_y_text}")
+                    if _ff_lines:
+                        _findings_summary = '\n'.join(_ff_lines)
+                except Exception:
+                    pass
+
             # Only generate a cross-domain follow-up question for phases that actually use it.
             # INITIAL phase no longer shows a follow-up question, so skip the LLM call.
             _needs_followup_question = current_phase != PHASE_INITIAL
@@ -2456,6 +2538,7 @@ Provide a concise answer:"""
                     fast_llm=getattr(self, 'fast_llm', None),
                     fallback=_static_followup,
                     chart_context=_chart_ctx,
+                    findings_summary=_findings_summary,
                     timeout=4.0
                 )
                 logger.info(f"[PHASE] Follow-up question ready: {_suggested_followup[:80]}")
@@ -2912,6 +2995,20 @@ Study the STYLE EXAMPLES above for tone and flow only — their chart facts are 
                     t = t[3:-3].strip()
                 return t
             state['answer'] = _strip_llm_wrapper(state.get('answer', ''))
+
+            # ── Factor Accuracy Gate ──────────────────────────────────────────
+            # Cross-check every planet-house and planet-sign claim in the answer
+            # against chart_data. Violations are logged and stored on state for
+            # observability; the gate never rewrites the answer.
+            if ACCURACY_GATE_AVAILABLE and state.get('chart_data'):
+                try:
+                    _acc_result = check_factor_accuracy(
+                        answer=state.get('answer', ''),
+                        chart_data=state.get('chart_data'),
+                    )
+                    state['accuracy_gate'] = _acc_result.to_dict()
+                except Exception as _ag_err:
+                    logger.debug("[ACCURACY_GATE] skipped: %s", _ag_err)
 
             # Runtime quality gate for initial short responses:
             # enforce practical timeline diversity (present + short + long).
@@ -7287,6 +7384,29 @@ EARLY CONVERSATION:
         # LLM-classified intent/domain/polarity are passed in via validation_result when available.
         _ia = (validation_result or {}).get('intent_analysis', {}) if validation_result else {}
         analysis_only_mode = is_analysis_only_request(query, _ia.get('question_mode'))
+
+        # ── DETERMINISTIC ANSWER PLAN ──────────────────────────────────────────
+        # Build once, inject into reasoning scratchpad so the LLM works within
+        # a committed plan rather than improvising structure from raw data.
+        _answer_plan = None
+        if FACTOR_SCORER_AVAILABLE and ANSWER_PLANNER_AVAILABLE and synthesis:
+            try:
+                _fp_for_plan = score_factors(
+                    synthesis=synthesis,
+                    validation_result=validation_result,
+                    dasha_data=dasha_data,
+                    domain=_ia.get('domain') or 'general',
+                    question_mode=_ia.get('question_mode') or 'summary',
+                )
+                _answer_plan = build_answer_plan(
+                    factor_plan=_fp_for_plan,
+                    astro_evidence=astro_evidence,
+                    synthesis=synthesis,
+                    validation_result=validation_result,
+                    intent_analysis=_ia,
+                )
+            except Exception as _ap_err:
+                logger.debug(f"[ANSWER_PLANNER] skipped: {_ap_err}")
         instructions = self._build_response_instructions(
             query=query,
             lang_name=lang_name,
@@ -7482,9 +7602,15 @@ When user uses "it", "this", "that" or asks "why", "how" -> connect to conversat
         # We explicitly ask the model to reason step-by-step using a scratchpad
         # BEFORE writing the final user-facing answer. The scratchpad is purely
         # internal; the assistant must not expose it verbatim to the user.
-        reasoning_scratchpad_block = f"""
-
+        #
+        # The COMMITTED ANSWER PLAN (from AnswerPlanner) is prepended so the LLM
+        # reasons WITHIN the plan, not around it.  The plan commits primary factors,
+        # timing window, divisional chart, tone, and response arc deterministically
+        # before any free-form reasoning begins.
+        _committed_plan_prefix = (_answer_plan.plan_block if _answer_plan else "")
+        reasoning_scratchpad_block = f"""{_committed_plan_prefix}
 REASONING SCRATCHPAD (INTERNAL - DO NOT SHOW TO USER):
+- The COMMITTED ANSWER PLAN above is your reasoning scaffold — follow it.
 - First, silently reason step by step about this specific question using the chart data, dasha, transits and the ASTRO INTELLIGENCE evidence above.
 - Use a mental checklist like:
   1) Identify the key houses and lords for this domain (for example: 7th for marriage, 10th for career, 4th for home, 5th for children, etc.).

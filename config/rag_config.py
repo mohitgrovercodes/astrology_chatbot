@@ -94,6 +94,17 @@ class RAGConfig:
         "LEARNING": (0.5, 0.3, 0.2),
         "DEFAULT": (0.5, 0.3, 0.2)
     }
+    # Weights tuned per question_mode (overrides intent-based weights when question_mode is set).
+    # timing   → higher BM25: exact dasha/period terminology is diagnostic
+    # advice   → higher semantic: remedy/guidance chunks match conceptually, not by exact phrase
+    # qualities→ higher semantic: planet-quality descriptions are phrased diversely in classical texts
+    # summary  → balanced default
+    HYBRID_WEIGHTS_BY_QUESTION_MODE = {
+        "timing":    (0.40, 0.35, 0.25),
+        "advice":    (0.55, 0.20, 0.25),
+        "qualities": (0.55, 0.20, 0.25),
+        "summary":   (0.50, 0.30, 0.20),
+    }
     
     # Retrieval strategies
     USE_HYBRID_SEARCH = True
@@ -265,13 +276,23 @@ class RAGConfig:
         return False
     
     @classmethod
-    def get_hybrid_weights(cls, intent: str = "DEFAULT") -> tuple:
+    def get_hybrid_weights(cls, intent: str = "DEFAULT", question_mode: str = "") -> tuple:
         """
-        Get hybrid search weights for given intent
-        
+        Get hybrid search weights for given intent and question_mode.
+
+        question_mode (from SemanticFrame) takes priority over intent when set:
+          timing   → higher BM25 (exact period/dasha terms are diagnostic)
+          advice   → higher semantic (remedy guidance matches conceptually)
+          qualities→ higher semantic (planet-quality descriptions vary in phrasing)
+          summary  → balanced default
+
         Returns:
             (semantic_weight, keyword_weight, hyde_weight)
         """
+        if question_mode:
+            weights = cls.HYBRID_WEIGHTS_BY_QUESTION_MODE.get(question_mode.lower())
+            if weights:
+                return weights
         return cls.HYBRID_WEIGHTS_BY_INTENT.get(
             intent.upper(),
             cls.HYBRID_WEIGHTS_DEFAULT
