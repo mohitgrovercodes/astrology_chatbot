@@ -2081,11 +2081,35 @@ Provide a concise answer:"""
             if not knowledge_chunks and self.hybrid_retriever:
                 # Enhance query for better retrieval if we have chart data
                 retrieval_query = state['query']
+                _hyde_ctx = None
                 if state.get('chart_data'):
                     c = state['chart_data']
                     lagna = c.get('lagna', {}).get('sign') or c.get('ascendant', {}).get('sign', 'Unknown')
+                    lagna_nak = c.get('lagna', {}).get('nakshatra', '')
                     moon_sign = c.get('moon_sign') or c.get('planets', {}).get('MOON', {}).get('sign', 'Unknown')
                     retrieval_query += f" (Lagna: {lagna}, Rashi: {moon_sign})"
+
+                    # Build chart-conditioned HyDE context: ascendant + active dasha + domain
+                    # so the hypothetical passage targets this specific configuration instead
+                    # of a generic "marriage/career" passage.
+                    _dd = state.get('dasha_data') or {}
+                    _md = _dd.get('mahadasha') or {}
+                    _ad = _dd.get('antardasha') or {}
+                    _md_planet = (_md.get('planet') or _md.get('lord') or '') if isinstance(_md, dict) else str(_md)
+                    _ad_planet = (_ad.get('planet') or _ad.get('lord') or '') if isinstance(_ad, dict) else str(_ad)
+                    _frame_r = (state.get('session_data') or {}).get('semantic_frame') or {}
+                    _domain_r = _frame_r.get('domain') or 'general'
+                    _hyde_parts = [f"{lagna} ascendant"]
+                    if lagna_nak:
+                        _hyde_parts[0] += f" ({lagna_nak})"
+                    if _md_planet:
+                        dasha_str = f"{_md_planet} MD"
+                        if _ad_planet and _ad_planet != _md_planet:
+                            dasha_str += f" / {_ad_planet} AD"
+                        _hyde_parts.append(dasha_str)
+                    _hyde_parts.append(f"{_domain_r} domain")
+                    _hyde_ctx = ", ".join(_hyde_parts)
+                    logger.debug(f"[HYDE] chart context: {_hyde_ctx}")
 
                 knowledge_chunks = self.hybrid_retriever.retrieve(
                     query=retrieval_query,
@@ -2093,7 +2117,8 @@ Provide a concise answer:"""
                     top_k=RAGConfig.get_top_k(content_type='interpretation'),
                     language=state.get('detected_language', 'en'),
                     content_type='interpretation',
-                    user_id=state.get('user_id')
+                    user_id=state.get('user_id'),
+                    hyde_context=_hyde_ctx,
                 )
             elif not knowledge_chunks:
                 logger.info("[RAG_WITH_CALCULATION] No retriever - proceeding with zero knowledge")

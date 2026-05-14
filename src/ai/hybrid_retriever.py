@@ -112,6 +112,7 @@ class HybridRetriever:
         language: str = "en",
         content_type: Optional[str] = None,
         user_id: Optional[str] = None,
+        hyde_context: Optional[str] = None,
     ) -> List[Document]:
         if top_k is None:
             top_k = RAGConfig.get_top_k(content_type=content_type)
@@ -125,7 +126,7 @@ class HybridRetriever:
         sem_w, key_w, hyde_w = RAGConfig.get_hybrid_weights(intent)
         semantic = self._semantic_search(search_query, k=candidate_k, filters=filters)
         keyword = self._keyword_search(search_query, k=candidate_k)
-        hyde = self._hyde_search(search_query, k=candidate_k, filters=filters) if RAGConfig.USE_HYDE else []
+        hyde = self._hyde_search(search_query, k=candidate_k, filters=filters, hyde_context=hyde_context) if RAGConfig.USE_HYDE else []
 
         fused_docs, fused_scores = self._reciprocal_rank_fusion(
             [semantic, keyword, hyde],
@@ -196,28 +197,37 @@ class HybridRetriever:
             logger.warning(f"[KEYWORD] Error: {exc}")
             return []
 
-    def _hyde_search(self, query: str, k: int, filters: Optional[Dict]) -> List[Document]:
+    def _hyde_search(self, query: str, k: int, filters: Optional[Dict], hyde_context: Optional[str] = None) -> List[Document]:
         try:
-            hypo = self._generate_hypothetical_answer(query)
+            hypo = self._generate_hypothetical_answer(query, hyde_context=hyde_context)
             if hypo:
                 return self.vector_store.similarity_search(hypo, k=k, filter=filters)
         except Exception as exc:
             logger.warning(f"[HYDE] Error: {exc}")
         return []
 
-    def _generate_hypothetical_answer(self, query: str) -> Optional[str]:
+    def _generate_hypothetical_answer(self, query: str, hyde_context: Optional[str] = None) -> Optional[str]:
         try:
+            if hyde_context:
+                chart_line = (
+                    f"Chart context: {hyde_context}\n\n"
+                    "Write the passage as if drawn from a classical text discussing this specific "
+                    "chart configuration — reference the relevant ascendant, dasha lord, and domain explicitly.\n\n"
+                )
+            else:
+                chart_line = ""
             prompt = (
                 "You are producing a passage for a Vedic astrology reference database.\n"
                 "Write a short (3-5 sentence), factual paragraph that an astrology text\n"
                 "would contain to answer the following question. Use precise terminology\n"
                 "(houses, planets, dasha, yoga names). Avoid first-person wording.\n\n"
+                f"{chart_line}"
                 f"Question: {query}\n\n"
                 "Classical text passage:"
             )
             response = self.llm.invoke(prompt)
             raw = (response.content if hasattr(response, "content") else str(response)).strip()
-            return raw[:450]
+            return raw[:500]
         except Exception:
             return None
 
