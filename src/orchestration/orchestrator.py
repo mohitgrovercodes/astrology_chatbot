@@ -70,6 +70,13 @@ except ImportError:
     logger.info("[FACTOR_SCORER] factor_scorer not found - focus-factor block disabled")
     FACTOR_SCORER_AVAILABLE = False
 
+try:
+    from src.prediction.answer_planner import build_answer_plan, AnswerPlan
+    ANSWER_PLANNER_AVAILABLE = True
+except ImportError:
+    logger.info("[ANSWER_PLANNER] answer_planner not found - committed plan disabled")
+    ANSWER_PLANNER_AVAILABLE = False
+
 from src.prompts.few_shot_selector import get_few_shot_block
 from src.orchestration.orchestrator_validation_helpers import (
     detect_query_type,
@@ -86,6 +93,13 @@ from src.prediction.astro_intelligence_layer import (
     build_astro_evidence,
     format_evidence_for_prompt,
 )
+
+# Module-level chitchat keyword map — single source of truth shared with SemanticFrame.
+# _classify_intent_node uses this instead of a copy-pasted inline dict.
+try:
+    from src.ai.semantic_frame import _CHITCHAT_KEYWORD_ROUTES as _MODULE_CHITCHAT_KW_ROUTES
+except ImportError:
+    _MODULE_CHITCHAT_KW_ROUTES = None
 
 class NakshatraState(TypedDict):
     """Enhanced state with calculation results."""
@@ -850,32 +864,15 @@ class EnhancedLangGraphOrchestrator:
         # Short single-word / common phrases (especially multilingual ones) often fall
         # below the 0.7 embedding threshold because the mean route vector is diluted
         # across many diverse examples. Exact keyword matching bypasses this reliably.
-        _CHITCHAT_KEYWORD_ROUTES = {
-            # greeting
+        #
+        # SINGLE SOURCE OF TRUTH: uses module-level import from semantic_frame.
+        # If that import failed at startup, falls back to a minimal inline dict so
+        # the node never crashes.
+        _CHITCHAT_KEYWORD_ROUTES = _MODULE_CHITCHAT_KW_ROUTES or {
             'hi': 'greeting', 'hello': 'greeting', 'hey': 'greeting',
-            'namaste': 'greeting', 'namaskaram': 'greeting', 'vanakkam': 'greeting',
-            'hola': 'greeting', 'howdy': 'greeting', 'wassup': 'greeting',
-            'sup': 'greeting', 'yo': 'greeting', 'greetings': 'greeting',
-            'salaam': 'greeting', 'bonjour': 'greeting',
-            'good morning': 'greeting', 'good evening': 'greeting', 'good afternoon': 'greeting',
-            # gratitude
-            'thanks': 'gratitude', 'thank you': 'gratitude', 'thankyou': 'gratitude',
-            'appreciate it': 'gratitude', 'grateful': 'gratitude',
-            'dhanyavad': 'gratitude', 'shukriya': 'gratitude',
-            'dhanyawad': 'gratitude', 'shukriya-ji': 'gratitude',
-            # wellbeing
-            'how are you': 'wellbeing', "how's it going": 'wellbeing',
-            "what's up": 'wellbeing', 'how do you do': 'wellbeing',
-            'kaise ho': 'wellbeing', 'kya haal hai': 'wellbeing', 'all good': 'wellbeing',
-            # farewell
-            'bye': 'farewell', 'goodbye': 'farewell', 'see you': 'farewell',
-            'talk later': 'farewell', 'take care': 'farewell',
-            'alvida': 'farewell', 'khuda hafiz': 'farewell', 'catch you later': 'farewell',
-            # closure
+            'namaste': 'greeting', 'bye': 'farewell', 'goodbye': 'farewell',
+            'thanks': 'gratitude', 'thank you': 'gratitude',
             'ok': 'closure', 'okay': 'closure', 'got it': 'closure',
-            'understood': 'closure', 'alright': 'closure', 'sure': 'closure',
-            'theek hai': 'closure', 'samajh gaya': 'closure', 'thik hai': 'closure',
-            'achha': 'closure', 'fine': 'closure', 'makes sense': 'closure',
         }
         q_normalized = state['query'].lower().strip().rstrip('!.')
         _kw_route = _CHITCHAT_KEYWORD_ROUTES.get(q_normalized)
@@ -2029,10 +2026,15 @@ Provide a concise answer:"""
                             logger.info(f"[SYNTHESIS] Using semantic_frame.validation_query_type={query_type_for_synthesis}")
                         else:
                             try:
+                                # SemanticFrame was absent — use pattern-only detection.
+                                # LLM confirmation is intentionally disabled here: an
+                                # extra classify call at synthesis time adds ~300ms and
+                                # is not reliable because the synthesis path only runs
+                                # when the frame is already missing.
                                 query_type_for_synthesis = detect_query_type(
                                     state['query'],
                                     llm=self.fast_llm if hasattr(self, 'fast_llm') else None,
-                                    use_llm_confirmation=True,
+                                    use_llm_confirmation=False,
                                     intent_domain_hint=_intent_domain,
                                 )
                             except Exception:
@@ -7287,6 +7289,29 @@ EARLY CONVERSATION:
         # LLM-classified intent/domain/polarity are passed in via validation_result when available.
         _ia = (validation_result or {}).get('intent_analysis', {}) if validation_result else {}
         analysis_only_mode = is_analysis_only_request(query, _ia.get('question_mode'))
+
+        # ── DETERMINISTIC ANSWER PLAN ──────────────────────────────────────────
+        # Build once, inject into reasoning scratchpad so the LLM works within
+        # a committed plan rather than improvising structure from raw data.
+        _answer_plan = None
+        if FACTOR_SCORER_AVAILABLE and ANSWER_PLANNER_AVAILABLE and synthesis:
+            try:
+                _fp_for_plan = score_factors(
+                    synthesis=synthesis,
+                    validation_result=validation_result,
+                    dasha_data=dasha_data,
+                    domain=_ia.get('domain') or 'general',
+                    question_mode=_ia.get('question_mode') or 'summary',
+                )
+                _answer_plan = build_answer_plan(
+                    factor_plan=_fp_for_plan,
+                    astro_evidence=astro_evidence,
+                    synthesis=synthesis,
+                    validation_result=validation_result,
+                    intent_analysis=_ia,
+                )
+            except Exception as _ap_err:
+                logger.debug(f"[ANSWER_PLANNER] skipped: {_ap_err}")
         instructions = self._build_response_instructions(
             query=query,
             lang_name=lang_name,
@@ -7482,9 +7507,15 @@ When user uses "it", "this", "that" or asks "why", "how" -> connect to conversat
         # We explicitly ask the model to reason step-by-step using a scratchpad
         # BEFORE writing the final user-facing answer. The scratchpad is purely
         # internal; the assistant must not expose it verbatim to the user.
-        reasoning_scratchpad_block = f"""
-
+        #
+        # The COMMITTED ANSWER PLAN (from AnswerPlanner) is prepended so the LLM
+        # reasons WITHIN the plan, not around it.  The plan commits primary factors,
+        # timing window, divisional chart, tone, and response arc deterministically
+        # before any free-form reasoning begins.
+        _committed_plan_prefix = (_answer_plan.plan_block if _answer_plan else "")
+        reasoning_scratchpad_block = f"""{_committed_plan_prefix}
 REASONING SCRATCHPAD (INTERNAL - DO NOT SHOW TO USER):
+- The COMMITTED ANSWER PLAN above is your reasoning scaffold — follow it.
 - First, silently reason step by step about this specific question using the chart data, dasha, transits and the ASTRO INTELLIGENCE evidence above.
 - Use a mental checklist like:
   1) Identify the key houses and lords for this domain (for example: 7th for marriage, 10th for career, 4th for home, 5th for children, etc.).

@@ -218,6 +218,29 @@ _AMBIGUOUS_PATTERNS: List[str] = [
     r"\b(jupiter|venus|mars|saturn|mercury|sun|moon|rahu|ketu) in astrology\b",
     r"\btell me about (the )?(1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|11th|12th) house\b",
 ]
+# Bare single-term mentions — a query that is JUST a planet name or JUST a
+# house number with no other meaningful content. These are inherently
+# ambiguous (theory or personalised reading) when birth data is on file.
+_BARE_TERM_PATTERN = re.compile(
+    r"^\s*(jupiter|venus|mars|saturn|mercury|sun|moon|rahu|ketu|"
+    r"(?:1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|11th|12th)\s+house)"
+    r"\s*[?.!]*\s*$",
+    re.IGNORECASE,
+)
+
+# Divorce phrasing: relationship-noun PAIRED with end-verb anywhere in the query.
+# This is more robust than substring matching (handles "rishta kab khatam hoga"
+# where "kab" intervenes between noun and verb). Mirrors the pattern used in
+# src/prediction/astro_intelligence_layer.py:infer_query_domain so both paths
+# agree on what counts as a divorce query.
+_DIVORCE_RELATIONSHIP_WORDS = (
+    "shaadi", "shadi", "rishta", "relationship", "marriage", "vivaah", "vivah",
+)
+_DIVORCE_END_WORDS = (
+    "toot", "tut", "tootegi", "tootega", "tutegi", "tutega",
+    "toot jayegi", "toot jayega", "khatam", "khatam hogi", "khatam hoga",
+    "tod du", "tod doon", "tod dungi", "todunga", "end", "ending", "over",
+)
 _AMBIGUITY_THEORY_MARKERS = (
     "in general", "generally", "what is", "what are", "define",
     "meaning of", "significance of", "in vedic astrology",
@@ -586,6 +609,11 @@ class SemanticFrameBuilder:
 
     @staticmethod
     def _is_ambiguous(query_lower: str) -> bool:
+        # Bare single-term mentions (e.g. just "Jupiter", "7th house") are
+        # inherently ambiguous when a chart is on file. Check this first
+        # because the longer regex patterns below require leading verbs.
+        if _BARE_TERM_PATTERN.match(query_lower):
+            return True
         for pat in _AMBIGUOUS_PATTERNS:
             if re.search(pat, query_lower):
                 if any(m in query_lower for m in _AMBIGUITY_THEORY_MARKERS):
@@ -799,13 +827,28 @@ class SemanticFrameBuilder:
 
     @staticmethod
     def _apply_divorce_override(frame: SemanticFrame, query: str) -> None:
-        """If query literally mentions divorce/separation, force domain=divorce."""
+        """If the query literally describes ending a marriage/relationship,
+        force domain=divorce.
+
+        Two ways this can fire:
+          (a) Direct divorce vocab anywhere in the query (talaq, divorce, etc.).
+          (b) A relationship noun (shaadi/rishta/marriage) co-occurring with an
+              end-verb (tootegi/khatam/end) — even when other words intervene.
+              This mirrors the pattern used in
+              src/prediction/astro_intelligence_layer.py:infer_query_domain so
+              the orchestrator's domain decision agrees with astro evidence.
+        """
         q = query.lower()
-        if any(k in q for k in _DIVORCE_KEYWORDS):
+        hit_direct = any(k in q for k in _DIVORCE_KEYWORDS)
+        hit_compound = (
+            any(w in q for w in _DIVORCE_RELATIONSHIP_WORDS)
+            and any(w in q for w in _DIVORCE_END_WORDS)
+        )
+        if hit_direct or hit_compound:
             if frame.domain != "divorce":
                 logger.info(
                     f"[FRAME] divorce override: {frame.domain} → divorce "
-                    f"(matched literal divorce/separation phrasing)"
+                    f"(direct={hit_direct}, compound={hit_compound})"
                 )
                 frame.domain = "divorce"
                 # Treat as a fresh topic shift rather than continuation of generic marriage talk
