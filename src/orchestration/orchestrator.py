@@ -77,6 +77,13 @@ except ImportError:
     logger.info("[ANSWER_PLANNER] answer_planner not found - committed plan disabled")
     ANSWER_PLANNER_AVAILABLE = False
 
+try:
+    from src.prediction.accuracy_gate import check_factor_accuracy
+    ACCURACY_GATE_AVAILABLE = True
+except ImportError:
+    logger.info("[ACCURACY_GATE] accuracy_gate not found - factor accuracy check disabled")
+    ACCURACY_GATE_AVAILABLE = False
+
 from src.prompts.few_shot_selector import get_few_shot_block
 from src.orchestration.orchestrator_validation_helpers import (
     detect_query_type,
@@ -2988,6 +2995,20 @@ Study the STYLE EXAMPLES above for tone and flow only — their chart facts are 
                     t = t[3:-3].strip()
                 return t
             state['answer'] = _strip_llm_wrapper(state.get('answer', ''))
+
+            # ── Factor Accuracy Gate ──────────────────────────────────────────
+            # Cross-check every planet-house and planet-sign claim in the answer
+            # against chart_data. Violations are logged and stored on state for
+            # observability; the gate never rewrites the answer.
+            if ACCURACY_GATE_AVAILABLE and state.get('chart_data'):
+                try:
+                    _acc_result = check_factor_accuracy(
+                        answer=state.get('answer', ''),
+                        chart_data=state.get('chart_data'),
+                    )
+                    state['accuracy_gate'] = _acc_result.to_dict()
+                except Exception as _ag_err:
+                    logger.debug("[ACCURACY_GATE] skipped: %s", _ag_err)
 
             # Runtime quality gate for initial short responses:
             # enforce practical timeline diversity (present + short + long).
