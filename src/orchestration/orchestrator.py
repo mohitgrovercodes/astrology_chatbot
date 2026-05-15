@@ -110,6 +110,25 @@ from src.orchestration.phase_resolver import (
     resolve_phase_transition,
     make_phase_data as make_phase_data_dict,
 )
+from src.orchestration.response_quality import (
+    assess_initial_timeline_quality,
+    assess_detailed_answer_quality,
+    build_initial_timeline_rewrite_prompt,
+    build_detailed_quality_rewrite_prompt,
+    build_coherence_hint,
+    analyze_query_context,
+    inject_deterministic_initial_timeline_diversity,
+    collect_recent_cross_topic_window_keys,
+    collect_recent_planet_factors,
+    collect_future_candidate_window_keys,
+    collect_future_timing_years,
+    extract_month_year_range_keys,
+    filter_non_ended_range_keys,
+    infer_topic_from_text,
+    assess_timeline_layer_coverage,
+    analyze_timeline_overlap,
+    llm_check_future_favorable,
+)
 from src.prediction.astro_intelligence_layer import (
     build_astro_evidence,
     format_evidence_for_prompt,
@@ -4055,30 +4074,7 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         return result
 
     def _llm_check_future_favorable(self, text: str) -> bool:
-        """
-        Language-agnostic fallback: ask the LLM whether the response contains
-        a future favorable period AND a reason for it.  Called only when the
-        regex markers in _assess_timeline_layer_coverage return False, so it
-        fires at most once per QA pass and only adds ~0.5 s.
-        Fails open (returns True) on any error to avoid penalising the response.
-        """
-        try:
-            prompt = (
-                "Does the following astrological response mention:\n"
-                "1. A FUTURE favorable or positive time period (e.g. an upcoming month, year, or dasha period), AND\n"
-                "2. At least one REASON why that period is favorable (e.g. a planet, dasha lord, transit, or yoga)?\n\n"
-                "Answer only YES or NO — nothing else.\n\n"
-                f"Response:\n\"\"\"\n{text[:1500]}\n\"\"\""
-            )
-            _qa_llm = getattr(self, "fast_llm", self.llm)
-            result = _qa_llm.invoke(prompt)
-            answer = (result.content if hasattr(result, "content") else str(result)).strip().upper()
-            verdict = answer.startswith("Y")
-            logger.info(f"[LLM_QA] future_favorable check: {verdict} (raw='{answer[:10]}')")
-            return verdict
-        except Exception as e:
-            logger.info(f"[LLM_QA] future_favorable check skipped due to error: {e}")
-            return True  # fail open — don't penalise on LLM error
+        return llm_check_future_favorable(text, fast_llm=getattr(self, "fast_llm", self.llm))
 
     def _assess_detailed_answer_quality(
         self,
@@ -4086,268 +4082,13 @@ Retain the astrological data but remove the violating content (e.g., remove deat
         factor_profile: Optional[Dict[str, Any]] = None,
         language: str = "en",
     ) -> Tuple[bool, Dict[str, Any]]:
-        """
-        Lightweight structural QA for detailed responses.
-        Requirements checked:
-        - depth: near-750 answer (soft minimum via word count)
-        - 7+ numbered astrological points
-        - richer timing: at least two range markers + multiple year mentions
-        - factor coverage: uses available computed categories including underutilized layers
-        """
-        import re
-
-        text = answer or ""
-        word_count = len(re.findall(r"\S+", text))
-        numbered_points = len(re.findall(r"(?m)^\s*\d{1,2}\s*[\).:-]", text))
-
-        year_mentions = len(re.findall(r"\b(?:19|20)\d{2}\b", text))
-        _current_year = datetime.utcnow().year
-        _all_years = [int(y) for y in re.findall(r"\b((?:19|20)\d{2})\b", text)]
-        # Allow the previous calendar year as valid contextual reference (e.g. "Antardasha
-        # started in October 2025 and runs until...").  Only flag years ≥ 2 years in the
-        # past as problematic backward-looking timeline references.
-        past_year_mentions = len([y for y in _all_years if y < _current_year - 1])
-        month_year_mentions = len(
-            re.findall(
-                r"(?i)\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
-                r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|"
-                r"dec(?:ember)?)\s+(?:19|20)\d{2}\b",
-                text,
-            )
+        return assess_detailed_answer_quality(
+            answer, factor_profile, language,
+            fast_llm=getattr(self, "fast_llm", self.llm),
         )
-        duration_only_mentions = len(
-            re.findall(r"(?i)\b\d{1,2}\s*-\s*\d{1,2}\s*(?:months?|mahine|saal|years?)\b", text)
-        )
-        timing_range_markers = len(
-            re.findall(
-                r"(?i)\b(from|between|until|through|to|se|tak)\b|के बीच|से लेकर|तक",
-                text,
-            )
-        )
-
-        timeline_layers = self._assess_timeline_layer_coverage(text)
-        timeline_overlap = self._analyze_timeline_overlap(text)
-
-        # Detect robotic structural labels that should never appear in user-facing text
-        _forbidden_labels = [
-            r"(?i)\bcross[- ]year window\b",
-            r"(?i)\bshort trigger (?:window|phase)\b",
-            r"(?i)\blong supportive (?:window|phase)\b",
-            r"(?i)\bmaturation horizon\b",
-            r"(?i)\btimeline ladder\b",
-        ]
-        _style_leak_detected = any(re.search(pat, text) for pat in _forbidden_labels)
-
-        # Non-English responses (Hindi, Tamil, Bengali, Urdu, etc.) are naturally denser
-        # than English — more information per word — so apply lower word-count minimums
-        # to avoid perpetual rewrite loops.  English ("en") keeps full thresholds;
-        # everything else gets the reduced threshold.
-        _min_detail_words = 280   # gpt-4o writes dense prose; 360 was too aggressive
-        _max_detail_words = 520
-
-        issues: List[str] = []
-        if _style_leak_detected:
-            issues.append("structural_label_style_leak_in_user_facing_text")
-        if word_count < _min_detail_words:
-            issues.append("answer_too_short_for_detailed_mode")
-        if word_count > _max_detail_words:
-            issues.append("answer_too_long_for_detailed_mode")
-        # fewer_than_7_numbered_points REMOVED — prose mode always has 0 numbered points.
-        if year_mentions < 3:
-            issues.append("too_few_year_mentions_for_long_short_timelines")
-        if timing_range_markers < 2 and month_year_mentions < 4:
-            issues.append("missing_clear_long_and_short_timeline_ranges")
-        if duration_only_mentions > 0 and month_year_mentions < 3:
-            issues.append("duration_only_timeline_without_explicit_month_year_ranges")
-        if past_year_mentions > 0:
-            issues.append("contains_past_year_timeline_reference")
-        if not timeline_layers.get("has_present_layer"):
-            issues.append("missing_present_trend_layer")
-        if not timeline_layers.get("has_short_trigger_layer"):
-            issues.append("missing_short_trigger_layer")
-        if not timeline_layers.get("has_long_supportive_layer"):
-            issues.append("missing_long_supportive_layer")
-        if not timeline_layers.get("has_future_favorable_with_reason"):
-            # Regex missed it — use LLM as language-agnostic fallback before flagging
-            if not self._llm_check_future_favorable(text):
-                issues.append("missing_future_favorable_timeline_reason")
-        if (
-            timeline_layers.get("timeline_expression_count", 0) < 3
-            or timeline_layers.get("distinct_year_count", 0) < 2
-        ):
-            issues.append("timeline_not_varied_enough")
-        if timeline_overlap.get("collapsed_overlap_detected"):
-            issues.append("multiple_major_claims_collapsed_into_same_short_window")
-            if len(timeline_overlap.get("distinct_range_years", [])) < 2:
-                issues.append("missing_distinct_cross_year_secondary_window")
-
-        # Factor coverage checks (when profile is provided)
-        available_categories = (factor_profile or {}).get("available_categories", []) or []
-        underutilized_available = (factor_profile or {}).get("underutilized_available", []) or []
-
-        category_patterns = {
-            "house_lords": r"(?i)\b(?:house\s+lord|lagnesh|lord of the|1st house|2nd house|3rd house|4th house|5th house|6th house|7th house|8th house|9th house|10th house|11th house|12th house)\b",
-            "dasha_stack": r"(?i)\b(?:mahadasha|antardasha|dasha)\b",
-            "pratyantar_windows": r"(?i)\b(?:pratyantar|pratyantardasha)\b",
-            "gochara_transits": r"(?i)\b(?:gochar|gochara|transit|transiting)\b",
-            "yogas": r"(?i)\byoga\b",
-            "divisional_confirmation": r"(?i)\b(?:navamsa|dashamsa|dasamsa|divisional chart|d9|d10)\b",
-            "planetary_conditions": r"(?i)\b(?:retrograde|combust|deeply combust|stationary)\b",
-            "vargottama": r"(?i)\bvargottama\b",
-            "vimshopaka": r"(?i)\b(?:vimshopaka|bala)\b",
-            "planetary_wars": r"(?i)\b(?:graha yuddha|planetary war)\b",
-            "house_occupancy": r"(?i)\b(?:house occupancy|planets in (?:the )?\d+(?:st|nd|rd|th) house)\b",
-            "aspects": r"(?i)\baspect\b",
-            "validation_findings": r"(?i)\b(?:validation|overall strength|critical failure|can proceed)\b",
-            "synthesis_strengths_challenges": r"(?i)\b(?:chart strengths|chart challenges)\b",
-        }
-
-        mentioned_categories = []
-        for cat in available_categories:
-            pat = category_patterns.get(cat)
-            if pat and re.search(pat, text):
-                mentioned_categories.append(cat)
-
-        underutilized_mentioned = [c for c in underutilized_available if c in mentioned_categories]
-
-        # Coverage thresholds scale by what is actually available
-        if available_categories:
-            min_required_coverage = min(6, max(4, len(available_categories) // 2))
-            if len(mentioned_categories) < min_required_coverage:
-                issues.append("insufficient_factor_coverage_from_available_data")
-
-        if len(underutilized_available) >= 2 and len(underutilized_mentioned) < 2:
-            issues.append("underutilized_factors_not_reflected_enough")
-
-        missing_available_categories = [
-            c for c in available_categories if c not in mentioned_categories
-        ]
-
-        quality = {
-            "word_count": word_count,
-            "min_words_threshold": _min_detail_words,
-            "numbered_points": numbered_points,
-            "year_mentions": year_mentions,
-            "past_year_mentions": past_year_mentions,
-            "month_year_mentions": month_year_mentions,
-            "duration_only_mentions": duration_only_mentions,
-            "timing_range_markers": timing_range_markers,
-            "timeline_layers": timeline_layers,
-            "timeline_overlap": timeline_overlap,
-            "available_factor_count": len(available_categories),
-            "factor_coverage_count": len(mentioned_categories),
-            "available_categories": available_categories,
-            "mentioned_categories": mentioned_categories,
-            "missing_available_categories": missing_available_categories,
-            "underutilized_available_count": len(underutilized_available),
-            "underutilized_mentioned_count": len(underutilized_mentioned),
-            "underutilized_available": underutilized_available,
-            "underutilized_mentioned": underutilized_mentioned,
-            "issues": issues,
-        }
-        return (len(issues) == 0), quality
 
     def _assess_timeline_layer_coverage(self, answer: str) -> Dict[str, Any]:
-        """
-        Detect whether response uses a realistic multi-layer timeline:
-        present trend + short trigger + longer supportive phase + future favorable reason.
-        """
-        import re
-
-        text = answer or ""
-        lower = text.lower()
-
-        present_markers = re.findall(
-            r"(?i)\b(currently|right now|at present|ongoing|"
-            r"is samay|abhi|filhaal|vartaman|iss waqt|"
-            r"aaj kal|is waqt|is period|is dauran|is dasha|is pratyantar|"
-            r"at this time|in this period|during this|in this phase)\b",
-            lower,
-        )
-        short_markers = re.findall(
-            r"(?i)\b(trigger|sub[-\s]?window|next\s+\d{1,2}\s*(?:week|weeks|month|months)|"
-            r"coming\s+(?:few\s+)?months|aane wale kuch mahino|agle\s+\d{1,2}\s+mahine|"
-            r"short(?:-|\s)?term|near[-\s]?term|q[1-4]\s*(?:20\d{2})?|"
-            r"ke dauran|is mahine|agle mahine|pehle\s+\d{1,2}|first\s+\d{1,2}\s*months|"
-            r"coming\s+quarter|iss period|iss pratyantar|near future|jald[iy])\b",
-            lower,
-        )
-        long_markers = re.findall(
-            r"(?i)\b(supportive phase|broader phase|long[-\s]?range|long[-\s]?term|"
-            r"next\s+\d{1,2}\s*(?:year|years)|\d{1,2}\s*-\s*\d{1,2}\s*months|"
-            r"saalon|aane wale\s+\d{1,2}\s+saal|maturation|stabilization|"
-            r"iske baad|baad mein|second half|doosri half|agle saal|baad ke|"
-            r"broader|extended|longer|over the next|multi-year|year[-\s]?long)\b",
-            lower,
-        )
-        # Hinglish month names for month_year matching (used in fallback logic below)
-        _month_year_count = len(re.findall(
-            r"(?i)\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
-            r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|"
-            r"dec(?:ember)?)\s+(?:19|20)\d{2}\b",
-            text,
-        ))
-        future_markers = re.findall(
-            r"(?i)\b(future|aane wale|upcoming|second half|first half|early|mid|late|"
-            r"(?:19|20)\d{2})\b",
-            lower,
-        )
-        favorable_markers = re.findall(
-            r"(?i)\b(favorable|supportive|positive|opportunity|anukul|shubh|behtar|sahayak)\b",
-            lower,
-        )
-        reason_markers = re.findall(
-            r"(?i)\b(because|due to|as|since|therefore|isliye|kyunki|kaaran|vajah)\b",
-            lower,
-        )
-
-        # Distinct timeline expressions: explicit ranges + month-year + relative periods
-        timeline_expr = 0
-        timeline_expr += len(
-            re.findall(
-                r"(?i)\b(?:from|between|se|tak|to)\b.{0,30}\b(?:19|20)\d{2}\b",
-                text,
-            )
-        )
-        timeline_expr += len(
-            re.findall(
-                r"(?i)\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(?:19|20)\d{2}\b",
-                text,
-            )
-        )
-        timeline_expr += len(
-            re.findall(
-                r"(?i)\b(?:next|coming|upcoming|aane wale|agle)\s+\d{1,2}\s*(?:week|weeks|month|months|year|years|mahine|saal)\b",
-                text,
-            )
-        )
-
-        years = re.findall(r"\b(?:19|20)\d{2}\b", text)
-        distinct_year_count = len(set(years))
-
-        has_future_favorable_with_reason = bool(future_markers) and bool(favorable_markers) and bool(reason_markers)
-
-        # Fallback: if the response has explicit month-year windows, treat the
-        # first as the "short trigger" layer and the second+ as "long supportive".
-        # This handles natural Hinglish phrasing ("April 2026 se June 2026 tak...")
-        # that doesn't use English structural keywords.
-        _has_short_trigger = bool(short_markers) or _month_year_count >= 1
-        _has_long_supportive = bool(long_markers) or _month_year_count >= 2
-
-        return {
-            "has_present_layer": bool(present_markers),
-            "has_short_trigger_layer": _has_short_trigger,
-            "has_long_supportive_layer": _has_long_supportive,
-            "has_future_favorable_with_reason": has_future_favorable_with_reason,
-            "present_marker_count": len(present_markers),
-            "short_marker_count": len(short_markers),
-            "long_marker_count": len(long_markers),
-            "future_marker_count": len(future_markers),
-            "favorable_marker_count": len(favorable_markers),
-            "reason_marker_count": len(reason_markers),
-            "timeline_expression_count": timeline_expr,
-            "distinct_year_count": distinct_year_count,
-        }
+        return assess_timeline_layer_coverage(answer)
 
     def _analyze_timeline_overlap(self, answer: str) -> Dict[str, Any]:
         """
