@@ -6183,22 +6183,28 @@ EARLY CONVERSATION:
         # Build once, inject into reasoning scratchpad so the LLM works within
         # a committed plan rather than improvising structure from raw data.
         _answer_plan = None
-        if FACTOR_SCORER_AVAILABLE and ANSWER_PLANNER_AVAILABLE and synthesis:
+        if ANSWER_PLANNER_AVAILABLE and synthesis:
             try:
-                _fp_for_plan = score_factors(
-                    synthesis=synthesis,
-                    validation_result=validation_result,
-                    dasha_data=dasha_data,
-                    domain=_ia.get('domain') or 'general',
-                    question_mode=_ia.get('question_mode') or 'summary',
-                )
-                _answer_plan = build_answer_plan(
-                    factor_plan=_fp_for_plan,
-                    astro_evidence=astro_evidence,
-                    synthesis=synthesis,
-                    validation_result=validation_result,
-                    intent_analysis=_ia,
-                )
+                # Reuse the FactorPlan pre-built before retrieval (Step 1.5) when available.
+                # Falling back to a fresh score_factors() call only when not provided
+                # (e.g. tests, direct calls to this method).
+                _fp_for_plan = prebuilt_factor_plan
+                if _fp_for_plan is None and FACTOR_SCORER_AVAILABLE:
+                    _fp_for_plan = score_factors(
+                        synthesis=synthesis,
+                        validation_result=validation_result,
+                        dasha_data=dasha_data,
+                        domain=_ia.get('domain') or 'general',
+                        question_mode=_ia.get('question_mode') or 'summary',
+                    )
+                if _fp_for_plan is not None:
+                    _answer_plan = build_answer_plan(
+                        factor_plan=_fp_for_plan,
+                        astro_evidence=astro_evidence,
+                        synthesis=synthesis,
+                        validation_result=validation_result,
+                        intent_analysis=_ia,
+                    )
             except Exception as _ap_err:
                 logger.debug(f"[ANSWER_PLANNER] skipped: {_ap_err}")
         instructions = self._build_response_instructions(
