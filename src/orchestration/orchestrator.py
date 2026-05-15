@@ -2092,80 +2092,61 @@ Provide a concise answer:"""
                     traceback.print_exc()
 
             # ================================================================
-            # STEP 2: Retrieve Relevant Knowledge
+            # STEP 1.5: Pre-build FactorPlan for agent-guided retrieval
             # ================================================================
-            logger.info("[RAG_WITH_CALCULATION] Step 2: Retrieving knowledge...")
-            
+            # FactorPlan was previously built inside _build_prediction_prompt (Step 3),
+            # so retrieval had no knowledge of ranked factors. Building it here lets
+            # the agent use factor scores to craft targeted retrieval queries.
+            _fp_prebuilt = None
+            if FACTOR_SCORER_AVAILABLE:
+                try:
+                    _ia_for_fp = (state.get('session_data') or {}).get('intent_analysis', {}) or {}
+                    _fp_prebuilt = score_factors(
+                        synthesis=state.get('synthesis'),
+                        validation_result=state.get('validation_result'),
+                        dasha_data=state.get('dasha_data'),
+                        domain=_ia_for_fp.get('domain') or 'general',
+                        question_mode=_ia_for_fp.get('question_mode') or 'summary',
+                    )
+                    logger.debug("[AGENT_LOOP] FactorPlan pre-built: %d factors", len(getattr(_fp_prebuilt, 'top_factors', []) or []))
+                except Exception as _fp_err:
+                    logger.debug("[AGENT_LOOP] FactorPlan pre-build skipped: %s", _fp_err)
+
+            # ================================================================
+            # STEP 2: Agentic Retrieval Loop
+            # ================================================================
+            # The agent decides which tools to call (retrieve_knowledge up to 2×,
+            # get_chart_snapshot, get_dasha_snapshot) using FactorPlan + SemanticFrame
+            # as grounding context. Falls back gracefully to empty chunks on error.
+            logger.info("[RAG_WITH_CALCULATION] Step 2: Agentic retrieval...")
+
             knowledge_chunks = state.get('knowledge_chunks') or []
 
             if not knowledge_chunks and self.hybrid_retriever:
-                # Domain-aware query augmentation: inject house/planet vocabulary so BM25
-                # and semantic search find chunks from the right astrological domain.
-                _DOMAIN_RETRIEVAL_HINTS = {
-                    "marriage":    "7th house Venus Jupiter 2nd 5th house relationship partner",
-                    "divorce":     "7th house 6th house Mars Saturn 8th house separation conflict",
-                    "career":      "10th house Saturn Sun 6th house profession Dashamsha",
-                    "finance":     "2nd house 11th house Jupiter Venus wealth gains Hora",
-                    "health":      "1st house 6th house 8th house 12th Mars Saturn disease recovery",
-                    "children":    "5th house Jupiter Moon progeny Saptamsha fertility",
-                    "foreign":     "12th house 9th house Rahu 3rd house foreign travel settlement",
-                    "education":   "4th house 5th house Mercury Jupiter learning Chaturvimshamsha",
-                    "home":        "4th house Moon Mars property Chaturthamsha",
-                    "spirituality":"9th house 12th house Ketu Jupiter moksha Vimshamsha",
-                }
-
-                retrieval_query = state['query']
-                _hyde_ctx = None
-                _frame_r = (state.get('session_data') or {}).get('semantic_frame') or {}
-                _domain_r = _frame_r.get('domain') or 'general'
-                _qmode_r = _frame_r.get('question_mode') or 'summary'
-
-                # Append domain hint (extends both BM25 token pool and semantic embedding)
-                _domain_hint = _DOMAIN_RETRIEVAL_HINTS.get(_domain_r, '')
-                if _domain_hint:
-                    retrieval_query += f" [{_domain_hint}]"
-
-                if state.get('chart_data'):
-                    c = state['chart_data']
-                    lagna = c.get('lagna', {}).get('sign') or c.get('ascendant', {}).get('sign', 'Unknown')
-                    lagna_nak = c.get('lagna', {}).get('nakshatra', '')
-                    moon_sign = c.get('moon_sign') or c.get('planets', {}).get('MOON', {}).get('sign', 'Unknown')
-                    retrieval_query += f" (Lagna: {lagna}, Rashi: {moon_sign})"
-
-                    # Build chart-conditioned HyDE context: ascendant + active dasha + domain
-                    _dd = state.get('dasha_data') or {}
-                    _md = _dd.get('mahadasha') or {}
-                    _ad = _dd.get('antardasha') or {}
-                    _md_planet = (_md.get('planet') or _md.get('lord') or '') if isinstance(_md, dict) else str(_md)
-                    _ad_planet = (_ad.get('planet') or _ad.get('lord') or '') if isinstance(_ad, dict) else str(_ad)
-                    _hyde_parts = [f"{lagna} ascendant"]
-                    if lagna_nak:
-                        _hyde_parts[0] += f" ({lagna_nak})"
-                    if _md_planet:
-                        dasha_str = f"{_md_planet} MD"
-                        if _ad_planet and _ad_planet != _md_planet:
-                            dasha_str += f" / {_ad_planet} AD"
-                        _hyde_parts.append(dasha_str)
-                    _hyde_parts.append(f"{_domain_r} domain")
-                    _hyde_ctx = ", ".join(_hyde_parts)
-                    logger.debug(f"[HYDE] chart context: {_hyde_ctx}")
-
-                logger.debug(f"[RETRIEVAL] domain={_domain_r} qmode={_qmode_r} query_len={len(retrieval_query)}")
-                knowledge_chunks = self.hybrid_retriever.retrieve(
-                    query=retrieval_query,
-                    intent="RAG_WITH_CALCULATION",
-                    top_k=RAGConfig.get_top_k(content_type='interpretation'),
-                    language=state.get('detected_language', 'en'),
-                    content_type='interpretation',
-                    user_id=state.get('user_id'),
-                    hyde_context=_hyde_ctx,
-                    question_mode=_qmode_r,
+                from src.orchestration.agent_loop import run_agent_loop
+                _frame_for_agent = (state.get('session_data') or {}).get('semantic_frame') or {}
+                _agent_result = run_agent_loop(
+                    query=state['query'],
+                    frame=_frame_for_agent,
+                    factor_plan=_fp_prebuilt,
+                    state=state,
+                    retriever=self.hybrid_retriever,
+                    llm=getattr(self, 'fast_llm', self.llm),
+                    max_retrievals=2,
+                    max_iters=3,
+                    log=logger,
                 )
+                knowledge_chunks = _agent_result.retrieval_chunks
+                if _agent_result.chart_context:
+                    state['_agent_chart_context'] = _agent_result.chart_context
+                if _agent_result.dasha_context:
+                    state['_agent_dasha_context'] = _agent_result.dasha_context
             elif not knowledge_chunks:
                 logger.info("[RAG_WITH_CALCULATION] No retriever - proceeding with zero knowledge")
-            
+
             state['knowledge_chunks'] = knowledge_chunks
-            logger.info(f"[RAG_WITH_CALCULATION] Retrieved {len(knowledge_chunks)} chunks")
+            state['_fp_prebuilt'] = _fp_prebuilt  # passed to prompt builder to avoid re-computation
+            logger.info("[RAG_WITH_CALCULATION] Retrieved %d chunks", len(knowledge_chunks))
             
             # ================================================================
             # STEP 3: Build Prompt (with validation constraints)
@@ -2321,12 +2302,13 @@ Provide a concise answer:"""
                     conversation_history=state.get('conversation_history', []),
                     language=state.get('detected_language', 'en'),
                     validation_result=state.get('validation_result'),
-                    enhanced_analysis=state.get('enhanced_analysis'),  # NEW
-                    synthesis=state.get('synthesis'),  # NEW
+                    enhanced_analysis=state.get('enhanced_analysis'),
+                    synthesis=state.get('synthesis'),
                     response_mode=_prompt_response_mode,
                     astro_evidence=state.get("astro_evidence"),
                     voice_preferences=state.get("voice_preferences"),
                     validation_disclaimer=state.get("validation_disclaimer"),
+                    prebuilt_factor_plan=state.get('_fp_prebuilt'),
                 )
             else:
                 # Chart calculation failed — do NOT hallucinate chart-specific details.
@@ -5023,6 +5005,7 @@ Provide a concise, clear answer:"""
         astro_evidence: Optional[Dict] = None,
         voice_preferences: Optional[Dict] = None,
         validation_disclaimer: Optional[str] = None,
+        prebuilt_factor_plan: Optional[Any] = None,
     ) -> str:
         # Build USER PREFERENCES block for prompt (long-term consultation style memory)
         user_preferences_block = ""
