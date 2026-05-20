@@ -1569,7 +1569,69 @@ def send_message(request: SendMessageRequest):
                     "critical_failures_count": len(vr.get("critical_failures") or []),
                     "debug_stats": vdbg,
                 }
-        
+
+            # Eval telemetry — only emitted when EVAL_TELEMETRY=1 is set, so
+            # production responses stay lean. The eval harness reads these fields
+            # to score each turn against per-stage metrics.
+            if os.getenv("EVAL_TELEMETRY", "0") == "1":
+                _eval_meta: Dict[str, Any] = {
+                    "processing_time_s": round(processing_time, 3),
+                    "orchestrator_intent": intent,
+                    "context_intent_type": intent_analysis.get("intent_type"),
+                    "resolution_action": resolution_result.get("action"),
+                }
+                # SemanticFrame (route, domain, intent_type, etc.)
+                _sf = (result.get("session_data") or {}).get("semantic_frame") if isinstance(result, dict) else None
+                if not _sf:
+                    # Fall back to the frame we built earlier in this turn
+                    try:
+                        _sf = semantic_frame.to_dict()
+                    except Exception:
+                        _sf = None
+                if _sf:
+                    _eval_meta["semantic_frame"] = {
+                        k: _sf.get(k) for k in (
+                            "route", "route_confidence", "domain", "intent_type",
+                            "question_mode", "polarity", "source", "confidence",
+                            "validation_query_type",
+                        ) if k in _sf
+                    }
+                # Accuracy gate
+                _ag = result.get("accuracy_gate") if isinstance(result, dict) else None
+                if _ag:
+                    response_metadata["accuracy_gate"] = _ag
+                    _eval_meta["accuracy_gate_fired"] = bool(
+                        _ag.get("mismatched_claims") or _ag.get("mismatches")
+                    )
+                # Factor plan / focus factors
+                _fp = result.get("_fp_prebuilt") if isinstance(result, dict) else None
+                if _fp:
+                    # Serialise compactly — only the names + scores
+                    try:
+                        top = []
+                        for item in (getattr(_fp, "top_factors", []) or [])[:5]:
+                            top.append({
+                                "type": getattr(item, "factor_type", None),
+                                "name": getattr(item, "name", None),
+                                "score": getattr(item, "score", None),
+                            })
+                        if top:
+                            _eval_meta["focus_factors"] = top
+                    except Exception:
+                        pass
+                # Conversation phase (after this turn)
+                _cp = result.get("conversation_phase") if isinstance(result, dict) else None
+                if _cp:
+                    _eval_meta["conversation_phase"] = _cp
+                # Timing windows extracted from the response
+                _tw = result.get("response_timing_windows") if isinstance(result, dict) else None
+                if _tw:
+                    _eval_meta["response_timing_windows"] = _tw
+                _rt = result.get("response_topic") if isinstance(result, dict) else None
+                if _rt:
+                    _eval_meta["response_topic"] = _rt
+                response_metadata["eval"] = _eval_meta
+
         # Return response
         return SendMessageResponse(
             user_id=user_id,
