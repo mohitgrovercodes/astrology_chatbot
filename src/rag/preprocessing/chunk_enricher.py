@@ -29,6 +29,8 @@ try:
         AstrologicalEntities,
         UnitType,
     )
+    from .yoga_catalog import extract_yogas
+    from .planet_catalog import extract_planets
 except ImportError:
     from schemas import (
         SemanticUnit,
@@ -39,6 +41,8 @@ except ImportError:
         AstrologicalEntities,
         UnitType,
     )
+    from yoga_catalog import extract_yogas
+    from planet_catalog import extract_planets
 
 try:
     from src.llm.factory import create_llm
@@ -141,22 +145,35 @@ class ChunkEnricher:
         """
         text_lower = text.lower()
         
-        planets = [p for p in self.PLANETS if p.lower() in text_lower]
+        # Planets go through planet_catalog: it canonicalizes every Sanskrit
+        # alias (Surya, Chandra, Mangal, Kuja, Shani, Bṛhaspati, ...) back to
+        # the English canonical (Sun, Moon, Mars, Jupiter, Saturn, ...) and
+        # uses word-boundary regex so author names like "Suryanarain" and
+        # adjectives like "Manda" don't generate false positives.
+        planets = extract_planets(text)
+
         houses = [h for h in self.HOUSES if h.lower() in text_lower]
         signs = [s for s in self.SIGNS if s.lower() in text_lower]
         nakshatras = [n for n in self.NAKSHATRAS if n.lower() in text_lower]
         concepts = [c for c in self.CONCEPTS if c.lower() in text_lower]
-        
+
         # Deduplicate (e.g., "1st House" and "First House" are same)
         houses = list(set(houses))
-        planets = list(set(planets))
-        
+
+        # Yogas use a dedicated catalog (yoga_catalog.py) because the naming
+        # is much more specific than the substring matching above can handle —
+        # generic Sanskrit words like "mala", "gada", "raja" only count as a
+        # yoga when followed by a "Yoga"/"Yog"/"Yogas" qualifier, and compound
+        # yogas like "Kala Sarpa" or "Vipreet Raja Yoga" need to suppress the
+        # generic single-word match they would otherwise also trigger.
+        yogas = extract_yogas(text)
+
         return AstrologicalEntities(
             planets=planets,
             houses=houses,
             signs=signs,
             nakshatras=nakshatras,
-            yogas=[],  # Would need more sophisticated extraction
+            yogas=yogas,
             concepts=concepts,
         )
     
