@@ -128,13 +128,18 @@ The RAG system prevents hallucinations on astrology philosophy, classical rules,
    - LLM-assisted intelligent book profiling
 
 3. **Enrichment**
-   - Each chunk generates a summary
-   - Named entity extraction (Planets, Houses, Signs)
+   - Each chunk generates an LLM English summary that is prepended to `text_for_embedding` (carries the semantic load even when the body is pure Sanskrit)
+   - **Canonicalised Named Entity Recognition** (`src/rag/preprocessing/planet_catalog.py`, `yoga_catalog.py`):
+     - **Planets** — 11 canonicals (Sun … Mandi). Latin word-boundary regex + Devanagari Unicode-range lookbehind handles English (`Saturn`), IAST (`Śani`), Sanskrit (`Shani`), and Devanagari case-inflected forms (`शनेः`, `शनैश्चरस्य`) all collapse to one canonical English string.
+     - **Yogas** — 94 canonicals across 9 categories with `requires_qualifier` precision guards and `subsumes` (more-specific yogas suppress generic siblings, e.g. *Kala Sarpa* silences *Sarpa Yoga*).
+     - **Houses, Signs, Nakshatras, Concepts** — literal substring lists kept from the legacy enricher.
+   - Reference: `docs/NER_CATALOGS.md`.
 
 4. **Vector Store**
-   - 14,000+ chunks embedded with Vertex AI `gemini-embedding-001` (1536 dimensions)
-   - Stored in ChromaDB at `data/vectordb/`
-   - Collection: `vedic_astrology_books_knowledge`
+   - 14,475 enriched chunks across 16 books, ready to embed with Vertex AI `gemini-embedding-001` (1536 dimensions, multilingual)
+   - Stored in ChromaDB at `data/vectordb/`, collection `vedic_astrology_books_knowledge`
+   - Metadata convention (set by `vector_db_builder._prepare_metadata`): entity lists are comma-joined strings (e.g. `metadata["planets"] = "Sun,Saturn,Moon"`); the retriever's `$contains` filter relies on this exact shape. (Do **not** ingest via `src/rag/ingest_local.py` — its `entity_planets` / `", "` separator convention does not match the retriever.)
+   - Reference: `docs/INGESTION.md` (runbook), `docs/EMBEDDING_STRATEGY.md` (retrieval-fitness analysis).
 
 5. **Retrieval** (`src/ai/hybrid_retriever.py`)
    - Hybrid fusion: semantic + BM25 + HyDE with RRF
