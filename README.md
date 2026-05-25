@@ -31,7 +31,7 @@
 | **Dual-Engine Calculations** | Vedic (Parasara/Sidereal) + Western (Tropical) via Swiss Ephemeris |
 | **Divisional Charts** | Full D1–D60 varga chart computation |
 | **Dasha System** | Vimshottari Dasha with Mahadasha, Antardasha & Pratyantardasha |
-| **RAG Knowledge Base** | 14,000+ chunks from classical texts (BPHS, etc.) in ChromaDB |
+| **RAG Knowledge Base** | 14,475 enriched chunks from 16 classical texts (BPHS, Phaladeepika, Saravali, Jataka Parijata, Varahmihira Horasastram, …) in ChromaDB. Canonicalised NER on 11 planets and 94 yogas across English/IAST/Devanagari. See [docs/INGESTION.md](docs/INGESTION.md), [docs/NER_CATALOGS.md](docs/NER_CATALOGS.md), [docs/EMBEDDING_STRATEGY.md](docs/EMBEDDING_STRATEGY.md). |
 | **750+ Validation Rules** | JSON-configured rules that score and gate predictions |
 | **LangGraph Orchestration** | Deterministic state machine routing all conversation flows |
 | **Permanent Session Persistence** | Redis-backed, lifetime context with no TTL for user data |

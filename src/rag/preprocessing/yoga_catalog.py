@@ -35,38 +35,52 @@ class YogaEntry:
     """One yoga + every surface form we want to recognise for it."""
 
     canonical: str                  # Name written to metadata.entities.yogas
-    aliases: List[str]              # Surface forms found in the books
+    aliases: List[str]              # Latin-script surface forms (English + IAST)
     category: str                   # raja | dhana | pancha_mahapurusha | lunar |
                                     # solar | nabhasa | dosha | special | misc
     requires_qualifier: bool = False  # If True, " yoga" must appear after the name
     subsumes: List[str] = field(default_factory=list)
     # ^ canonicals to suppress from the final output when *this* one matches.
     #   Lets "Kala Sarpa" silence the generic "Sarpa Yoga" in the same text.
+    devanagari_roots: List[str] = field(default_factory=list)
+    # ^ Devanagari word stems. Same Unicode-range lookbehind trick as
+    #   planet_catalog: a single root "पारिजात" catches all case-inflected
+    #   forms (पारिजातं, पारिजाते, पारिजातस्थे, ...) but rejects
+    #   "बहुपारिजात" (preceded by Devanagari). Only populated for yogas
+    #   that actually appear in the corpus in Devanagari.
     _compiled: List[Pattern] = field(default_factory=list, repr=False)
+    _compiled_dev: List[Pattern] = field(default_factory=list, repr=False)
 
     def compile(self) -> None:
-        """Pre-compile every alias into a flexible regex."""
+        """Pre-compile every alias (Latin) and every Devanagari root."""
+        # Latin / IAST path
         patterns: List[Pattern] = []
         for alias in self.aliases:
-            # Split on any run of whitespace/hyphen, escape the parts individually,
-            # then re-join with a flexible separator. This avoids the trap of
-            # running multiple .replace() passes over the same escaped string.
             parts = [re.escape(p) for p in re.split(r"[\s\-]+", alias) if p]
             flexible = r"[\s\-]+".join(parts)
 
             if self.requires_qualifier:
-                # Generic name -> must be followed by "yoga"/"yog"/"yogas".
                 pattern = rf"\b{flexible}[\s\-]+yog(?:a|as|am|āḥ|ah)?\b"
             else:
-                # Specific name -> "Yoga" suffix is optional.
                 pattern = rf"\b{flexible}(?:[\s\-]+yog(?:a|as|am|āḥ|ah)?)?\b"
             patterns.append(re.compile(pattern, re.IGNORECASE))
         self._compiled = patterns
 
+        # Devanagari path. We don't enforce a trailing "yoga" requirement
+        # here because Devanagari yoga compounds typically embed योग into
+        # the root itself (राजयोग) — and Sanskrit case endings come after.
+        patterns_dev: List[Pattern] = []
+        for root in self.devanagari_roots:
+            patterns_dev.append(
+                re.compile(rf"(?<![ऀ-ॿ]){re.escape(root)}[ऀ-ॿ]*")
+            )
+        self._compiled_dev = patterns_dev
+
     def search(self, text: str) -> bool:
-        for p in self._compiled:
-            if p.search(text):
-                return True
+        if any(p.search(text) for p in self._compiled):
+            return True
+        if self._compiled_dev and any(p.search(text) for p in self._compiled_dev):
+            return True
         return False
 
 
@@ -88,18 +102,25 @@ _ENTRIES: List[YogaEntry] = [
     # Pancha Mahapurusha Yogas (the "five great person" yogas)
     # Each formed when a specific planet sits in own/exalted sign in kendra
     # -----------------------------------------------------------------
-    YogaEntry("Ruchaka",  ["Ruchaka", "Rucaka"],                          "pancha_mahapurusha"),
-    YogaEntry("Bhadra",   ["Bhadra"],                                     "pancha_mahapurusha"),
-    YogaEntry("Hamsa",    ["Hamsa", "Hansa"],                             "pancha_mahapurusha"),
-    YogaEntry("Malavya",  ["Malavya", "Malavaya", "Maalavya"],            "pancha_mahapurusha"),
-    YogaEntry("Shasha",   ["Shasha", "Sasa", "Sasha"],                    "pancha_mahapurusha"),
+    YogaEntry("Ruchaka",  ["Ruchaka", "Rucaka"],                          "pancha_mahapurusha",
+              devanagari_roots=["रुचक"]),
+    YogaEntry("Bhadra",   ["Bhadra"],                                     "pancha_mahapurusha",
+              devanagari_roots=["भद्रयोग"]),  # bare भद्र is too generic
+    YogaEntry("Hamsa",    ["Hamsa", "Hansa"],                             "pancha_mahapurusha",
+              devanagari_roots=["हंसयोग", "हंसयोगः"]),  # bare हंस means swan
+    YogaEntry("Malavya",  ["Malavya", "Malavaya", "Maalavya"],            "pancha_mahapurusha",
+              devanagari_roots=["मालव्य"]),
+    YogaEntry("Shasha",   ["Shasha", "Sasa", "Sasha"],                    "pancha_mahapurusha",
+              devanagari_roots=["शशयोग"]),  # bare शश = hare
     YogaEntry("Pancha Mahapurusha", ["Pancha Mahapurusha", "Panch Mahapurusha", "Mahapurusha"],
-                                                                          "pancha_mahapurusha"),
+                                                                          "pancha_mahapurusha",
+              devanagari_roots=["पञ्चमहापुरुष", "पंचमहापुरुष", "महापुरुष"]),
 
     # -----------------------------------------------------------------
     # Raja yogas (power/authority)
     # -----------------------------------------------------------------
-    YogaEntry("Raja Yoga",            ["Raja"],                            "raja", requires_qualifier=True),
+    YogaEntry("Raja Yoga",            ["Raja"],                            "raja", requires_qualifier=True,
+              devanagari_roots=["राजयोग"]),
     YogaEntry("Kendra Trikona",       ["Kendra Trikona", "Kendra-Kona", "Trikona Kendra"],
                                                                             "raja"),
     YogaEntry("Viparita Raja Yoga",   ["Viparita Raja", "Vipreet Raja",
@@ -114,14 +135,16 @@ _ENTRIES: List[YogaEntry] = [
                                        "Neecha-Bhanga Raja"],               "raja",
               subsumes=["Raja Yoga", "Neecha Bhanga"]),
     YogaEntry("Neecha Bhanga",        ["Neecha Bhanga", "Neechabhanga",
-                                       "Neecha-Bhanga"],                    "raja"),
+                                       "Neecha-Bhanga"],                    "raja",
+              devanagari_roots=["नीचभंग", "नीचभङ्ग"]),
     YogaEntry("Dharma Karmadhipati",  ["Dharma Karmadhipati", "Dharma-Karmadhipati",
                                        "Dharmakarmadhipati"],               "raja"),
 
     # -----------------------------------------------------------------
     # Dhana yogas (wealth)
     # -----------------------------------------------------------------
-    YogaEntry("Dhana Yoga",           ["Dhana"],                            "dhana", requires_qualifier=True),
+    YogaEntry("Dhana Yoga",           ["Dhana"],                            "dhana", requires_qualifier=True,
+              devanagari_roots=["धनयोग"]),
     YogaEntry("Lakshmi",              ["Lakshmi", "Laxmi"],                 "dhana", requires_qualifier=True),
     YogaEntry("Kubera",               ["Kubera"],                           "dhana", requires_qualifier=True),
     YogaEntry("Chandra Mangal",       ["Chandra Mangal", "Chandra-Mangal",
@@ -133,13 +156,18 @@ _ENTRIES: List[YogaEntry] = [
     # Lunar yogas (relative to Moon)
     # -----------------------------------------------------------------
     YogaEntry("Gajakesari",           ["Gajakesari", "Gaja Kesari",
-                                       "Gaja-Kesari", "Gajakeshari"],       "lunar"),
-    YogaEntry("Anapha",               ["Anapha", "Anaphaa"],                "lunar"),
-    YogaEntry("Sunapha",              ["Sunapha", "Sunaphaa"],              "lunar"),
+                                       "Gaja-Kesari", "Gajakeshari"],       "lunar",
+              devanagari_roots=["गजकेसरी", "गजकेसरि"]),
+    YogaEntry("Anapha",               ["Anapha", "Anaphaa"],                "lunar",
+              devanagari_roots=["अनफा", "अनाफा"]),
+    YogaEntry("Sunapha",              ["Sunapha", "Sunaphaa"],              "lunar",
+              devanagari_roots=["सुनफा", "सुनाफा"]),
     YogaEntry("Durudhura",            ["Durudhura", "Durdhura", "Durdhara",
-                                       "Duradhara"],                        "lunar"),
+                                       "Duradhara"],                        "lunar",
+              devanagari_roots=["दुरुधर", "दुरुधरा", "दुरधरा"]),
     YogaEntry("Kemadruma",            ["Kemadruma", "Kema Druma",
-                                       "Kemadrum"],                         "lunar"),
+                                       "Kemadrum"],                         "lunar",
+              devanagari_roots=["केमद्रुम"]),
     YogaEntry("Adhi Yoga",            ["Adhi"],                             "lunar", requires_qualifier=True),
     YogaEntry("Shakata",              ["Shakata", "Sakata", "Shakat"],      "lunar", requires_qualifier=True),
 
@@ -186,7 +214,8 @@ _ENTRIES: List[YogaEntry] = [
     YogaEntry("Kala Sarpa",           ["Kala Sarpa", "Kaal Sarpa",
                                        "Kalsarpa", "Kala-Sarpa",
                                        "Kalasarpa", "Kalsarp"],             "dosha",
-              subsumes=["Sarpa Yoga"]),
+              subsumes=["Sarpa Yoga"],
+              devanagari_roots=["कालसर्प", "कालसर्पयोग"]),
     YogaEntry("Kala Amrita",          ["Kala Amrita", "Kala-Amrita",
                                        "Kalamrita"],                        "dosha"),
     YogaEntry("Guru Chandala",        ["Guru Chandala", "Guru-Chandala",
@@ -198,7 +227,8 @@ _ENTRIES: List[YogaEntry] = [
     YogaEntry("Mangal Dosha",         ["Mangal Dosha", "Mangalik",
                                        "Manglik", "Mangaldosha",
                                        "Kuja Dosha", "Kuja-Dosha",
-                                       "Mars Dosha"],                       "dosha"),
+                                       "Mars Dosha"],                       "dosha",
+              devanagari_roots=["मंगलदोष", "कुजदोष", "मांगलिक"]),
     YogaEntry("Pitra Dosha",          ["Pitra Dosha", "Pitru Dosha",
                                        "Pitri Dosha", "Pitra-Dosha"],       "dosha"),
     YogaEntry("Grahan",               ["Grahan", "Grahana"],                "dosha", requires_qualifier=True),
@@ -227,7 +257,8 @@ _ENTRIES: List[YogaEntry] = [
     # -----------------------------------------------------------------
     YogaEntry("Saraswati",            ["Saraswati", "Sarasvati"],           "special"),
     YogaEntry("Sarada",               ["Sarada", "Saarada"],                "special", requires_qualifier=True),
-    YogaEntry("Parijata",             ["Parijata", "Paarijata"],            "special"),
+    YogaEntry("Parijata",             ["Parijata", "Paarijata"],            "special",
+              devanagari_roots=["पारिजात"]),
     YogaEntry("Pushkala",             ["Pushkala", "Pushkal"],              "special"),
     YogaEntry("Sankha",               ["Sankha", "Shankha"],                "special", requires_qualifier=True),
     YogaEntry("Bheri",                ["Bheri"],                            "special", requires_qualifier=True),
@@ -322,10 +353,14 @@ def extract_yogas(text: str) -> List[str]:
     if not text:
         return []
 
-    # Fast prefilter: if no yoga trigger appears at all, skip the catalog scan.
+    # Fast prefilter: if no Latin yoga trigger appears at all, fall back to
+    # the full catalog scan only when the text contains Devanagari (the
+    # Latin triggers can't fire on pure Sanskrit chunks). Pure-ASCII chunks
+    # with zero triggers are safe to skip entirely.
     text_lower = text.lower()
     if not any(tok in text_lower for tok in _FAST_TRIGGERS):
-        return []
+        if text.isascii():
+            return []
 
     matched: List[str] = []
     seen: Set[str] = set()
@@ -365,6 +400,44 @@ __all__ = [
     "extract_yogas",
     "extract_yogas_with_categories",
 ]
+
+
+def extract_yogas_with_categories(text: str) -> Dict[str, List[str]]:
+    """
+    Same as `extract_yogas` but groups results by category. Useful for stats
+    and for downstream filters that want e.g. "any raja yoga". Honors the
+    `subsumes` field, so generic names are dropped when a more specific one
+    matched.
+    """
+    out: Dict[str, List[str]] = {}
+    if not text:
+        return out
+    keep = set(extract_yogas(text))
+    for entry in _ENTRIES:
+        if entry.canonical in keep:
+            out.setdefault(entry.category, []).append(entry.canonical)
+    return out
+
+
+__all__ = [
+    "YogaEntry",
+    "get_catalog",
+    "list_canonical_names",
+    "extract_yogas",
+    "extract_yogas_with_categories",
+]
+ns Devanagari (the
+    # Latin triggers can't fire on pure Sanskrit chunks). Pure-ASCII chunks
+    # with zero triggers are safe to skip entirely.
+    text_lower = text.lower()
+    if not any(tok in text_lower for tok in _FAST_TRIGGERS):
+        if text.isascii():
+            return []
+
+    matched: List[str] = []
+    seen: Set[str] = set()
+    subsumed: Set[str] = set()
+    for entry in _ENTRIES:
         if entry.canonical in seen:
             continue
         if entry.search(text):

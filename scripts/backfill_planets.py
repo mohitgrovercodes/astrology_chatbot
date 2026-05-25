@@ -59,7 +59,7 @@ def backfill_file(path: Path, dry_run: bool = False) -> Dict:
     planet_counts: Counter = Counter()
     chunks_with_planets = 0
     canonicalised_only = 0  # chunks where text scan returned [] but the
-                            # existing aliases still mapped to something
+                            # legacy substring metadata had values (now dropped)
     previously_had = 0
 
     for chunk in chunks:
@@ -80,26 +80,17 @@ def backfill_file(path: Path, dry_run: bool = False) -> Dict:
         if existing:
             previously_had += 1
 
-        # Primary: re-scan the chunk text with word-boundary regex.
-        from_text = extract_planets(_chunk_text(chunk))
+        # Re-scan the chunk text with word-boundary regex. We deliberately
+        # do NOT preserve legacy `existing` entries: the old enricher used a
+        # naive substring matcher that produced false positives like "Surya"
+        # firing inside the author name "Suryanarain". Trusting only the new
+        # scan gives a small coverage drop in exchange for a meaningful
+        # precision lift.
+        merged: List[str] = extract_planets(_chunk_text(chunk))
 
-        # Secondary: salvage existing aliases like "Surya" or "Chandra" that
-        # the legacy substring matcher recorded but the new regex sweep might
-        # have missed (e.g. a chunk where the only planet name is in a
-        # pure-Devanagari verse but the old enricher tagged it from the
-        # transliterated header).
-        from_existing = canonicalize_planet_list(existing) if existing else []
-
-        # Merge stable-ordered: scan results first, then any existing
-        # canonicals not already present.
-        merged: List[str] = list(from_text)
-        seen = set(merged)
-        for p in from_existing:
-            if p not in seen:
-                merged.append(p)
-                seen.add(p)
-
-        if not from_text and merged:
+        if not merged and existing:
+            # Bookkeeping: how many chunks had legacy planet metadata that
+            # the new scan dropped. Worth knowing in the report.
             canonicalised_only += 1
 
         entities["planets"] = merged
@@ -149,7 +140,7 @@ def print_report(all_stats: List[Dict]) -> None:
         pct = (s['chunks_with_planets'] / s['chunks_total']) * 100 if s['chunks_total'] else 0
         print(f"  chunks with planets  : {s['chunks_with_planets']}  ({pct:.1f}%)")
         print(f"  previously had set   : {s['previously_had_planets']}")
-        print(f"  rescued via canon.   : {s['canonicalised_only']}")
+        print(f"  legacy-only dropped  : {s['canonicalised_only']}")
         for name, count in list(s["planet_counts"].items())[:11]:
             print(f"      {count:>5}  {name}")
         grand_total_chunks += s["chunks_total"]
