@@ -71,13 +71,22 @@ def get_fast_llm():
 
 
 def get_embeddings():
-    """Get embeddings model (Vertex AI)."""
+    """
+    Get embeddings model (Vertex AI).
+
+    IMPORTANT: `output_dimensionality` MUST be passed. Without it the Vertex
+    wrapper defaults to the model's native output size (768 for
+    `gemini-embedding-001`), while the rest of the pipeline ingests and
+    queries at `settings.EMBEDDING_DIMENSIONS` (default 1536). A mismatch
+    here makes every ChromaDB query at runtime fail with a dimension error.
+    """
     from langchain_google_vertexai import VertexAIEmbeddings
 
     return VertexAIEmbeddings(
         model_name=settings.EMBEDDING_MODEL,
         project=settings.GOOGLE_CLOUD_PROJECT or os.getenv("GOOGLE_CLOUD_PROJECT"),
         location=settings.GOOGLE_CLOUD_LOCATION or os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
+        output_dimensionality=settings.EMBEDDING_DIMENSIONS,
     )
 
 
