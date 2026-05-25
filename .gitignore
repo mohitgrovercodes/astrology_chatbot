@@ -25,6 +25,7 @@ venv/
 ENV/
 astroenv/
 .astroenv/
+raw/
 
 # IDE
 .idea/
