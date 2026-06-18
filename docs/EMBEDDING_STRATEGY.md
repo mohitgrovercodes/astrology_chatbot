@@ -112,15 +112,16 @@ The orchestrator's intelligence pipeline (FactorScorer → AnswerPlanner → LLM
 
 ## 4. Where the strategy has gaps
 
-| Gap | Symptom | Mitigation |
-|---|---|---|
-| **BM25 over Sanskrit** | `"शनेः साढ़े साती"` returns zero BM25 hits because tokenisation strips Devanagari without normalising. | Bump `semantic_weight` to 0.9 when the query is non-ASCII (cheap, defensible default). Long-term, a Devanagari-aware tokenizer. |
-| **HyDE adds an LLM hop** | One extra Gemini call per query — measurable in p95. | Already on the latency-reduction backlog (#42). Gate HyDE behind an intent / confidence trigger rather than always-on. |
-| **No `content_type` / `language` metadata** on current chunks | The intent-conditioned content filter (`PREDICTION` → `interpretation` chunks) is a no-op. Retriever silently skips when the field is absent — defensive, but the feature isn't real yet. | Backfill `content_type` during the next enrichment pass. Add `language="en"/"sa"/"mixed"` based on script ratio. |
-| **`expand_context` needs `chunk_index`** | The adjacent-chunk expansion fetches by `(source_book, chapter, chunk_index)`. Most current chunks lack `chunk_index`. | Easy retrofit during the next vector_db_builder run. |
-| **Summary dominates the vector** | When the LLM summariser drifts, every retrieval of that chunk drifts with it. No re-summarisation pass is wired. | Spot-check sample summaries during eval. Periodic re-summarisation (cheap, parallelisable). |
+| Gap | Symptom | Mitigation | Status |
+|---|---|---|---|
+| **Embedding-dimension mismatch** | `gemini-embedding-001` returns 768-d unless `output_dimensionality` is passed explicitly. `src/api/dependencies.py:get_embeddings()` previously omitted it, so the API path built 768-d query vectors while ingestion produced 1536-d chunk vectors — every ChromaDB query would have failed. | Pass `output_dimensionality=settings.EMBEDDING_DIMENSIONS` at every `VertexAIEmbeddings(...)` site; have all sites read from the same `.env`-backed setting. | ✅ Closed (May 2026, task #39) |
+| **BM25 over Sanskrit** | `"शनेः साढ़े साती"` returns zero BM25 hits because tokenisation strips Devanagari without normalising. | Bump `semantic_weight` to 0.9 when the query is non-ASCII (cheap, defensible default). Long-term, a Devanagari-aware tokenizer. | ⏳ Open |
+| **HyDE adds an LLM hop** | One extra Gemini call per query — measurable in p95. | Already on the latency-reduction backlog (#42). Gate HyDE behind an intent / confidence trigger rather than always-on. | ⏳ Open |
+| **No `content_type` / `language` metadata** on current chunks | The intent-conditioned content filter (`PREDICTION` → `interpretation` chunks) is a no-op. Retriever silently skips when the field is absent — defensive, but the feature isn't real yet. | Backfill `content_type` during the next enrichment pass. Add `language="en"/"sa"/"mixed"` based on script ratio. | ⏳ Open |
+| **`expand_context` needs `chunk_index`** | The adjacent-chunk expansion fetches by `(source_book, chapter, chunk_index)`. Most current chunks lack `chunk_index`. | Easy retrofit during the next vector_db_builder run. | ⏳ Open |
+| **Summary dominates the vector** | When the LLM summariser drifts, every retrieval of that chunk drifts with it. No re-summarisation pass is wired. | Spot-check sample summaries during eval. Periodic re-summarisation (cheap, parallelisable). | ⏳ Open |
 
-None of these block first ingestion. They are the natural follow-up backlog after the corpus is live.
+None of the open items block first ingestion — they are the natural follow-up backlog after the corpus is live.
 
 ---
 

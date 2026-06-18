@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional
 from langchain_chroma import Chroma
 from langchain_google_vertexai import VertexAIEmbeddings
 
+from src.api.config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,7 +20,13 @@ class MemoryRetriever:
         collection_name: str = "conversation_memories",
         embeddings=None,
     ):
-        self.embeddings = embeddings or VertexAIEmbeddings(model_name="gemini-embedding-001", output_dimensionality=1536)
+        # Pull model + dimension from the same settings source as the rest of
+        # the pipeline so a future change to 3072 or a model swap is a one-line
+        # edit in .env, not a multi-file hunt.
+        self.embeddings = embeddings or VertexAIEmbeddings(
+            model_name=settings.EMBEDDING_MODEL,
+            output_dimensionality=settings.EMBEDDING_DIMENSIONS,
+        )
         self.vector_store = Chroma(
             collection_name=collection_name,
             embedding_function=self.embeddings,

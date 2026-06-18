@@ -5,6 +5,19 @@
 
 ---
 
+## Status (May 2026)
+
+| Step | State |
+|---|---|
+| Enriched JSONs on disk | ✅ 16 books, 14,475 chunks, NER-canonicalised across English / IAST / Devanagari |
+| Mislabeled Phaladeepika duplicate | ✅ Removed (was labelled `source_book="Saravali_Vol1"` but contained Phaladeepika content) |
+| Embedder dimension consistency | ✅ All seven construction sites now resolve to `settings.EMBEDDING_DIMENSIONS` (default 1536). The `src/api/dependencies.py:get_embeddings()` 768/1536 mismatch is fixed; `src/rag/memory_retriever.py` no longer hardcodes 1536 |
+| Phase 6 (embed) | ⏳ Not started — corpus has `embedding=null` on every chunk |
+| Phase 7 (ingest) | ⏳ Not started — `data/vectordb/` contains an empty Chroma sqlite + segment folder |
+| ChromaDB collection `vedic_astrology_books_knowledge` | ⏳ Empty (0 chunks) — pending Phase 6 + 7 |
+
+---
+
 ## Pipeline shape
 
 ```
@@ -168,6 +181,7 @@ The `cleared` counter is how many chunks were stripped of a stale value (e.g. a 
 - **Sandbox/Windows timeout strands a `.tmp` file** in `data/raw/`. The backfill scripts atomically rename `*.json.tmp → *.json`; a strand means the rename was killed mid-flight. Re-run the script on the affected file (or delete the orphan `.tmp` manually) and continue.
 - **Wrong `source_book` label** — duplicate-content files with mismatched `source_book` labels (the Phaladeepika / Saravali bug) will not deduplicate by `chunk_id` because the IDs are derived per-file. Catch with the pre-ingest check above before embedding.
 - **Devanagari coverage gap** — the planet/yoga catalogs ship Devanagari roots for the high-volume cases. Pure Devanagari shlokas with no transliteration still go through the Latin-script fast prefilter; that path is bypassed on non-ASCII text via an `isascii()` check. If you see a Devanagari book with surprisingly low NER coverage, see `docs/NER_CATALOGS.md#how-to-extend-the-catalog`.
+- **Embedding-dimension mismatch (the 768-vs-1536 trap)** — `gemini-embedding-001` returns 768-d vectors *unless* `output_dimensionality` is explicitly passed. Every site that constructs `VertexAIEmbeddings(...)` MUST pass `output_dimensionality=settings.EMBEDDING_DIMENSIONS`, otherwise the API's query path embeds at 768-d while the ChromaDB index is at 1536-d and every query fails. As of May 2026 this is fixed in `src/api/dependencies.py:get_embeddings()` and `src/rag/memory_retriever.py`; the higher-level `Embedder` wrapper (`src/rag/preprocessing/embedder.py`) reads the same setting. If you add a new embedding site, do not hardcode the dimension — pull from `settings.EMBEDDING_DIMENSIONS` so an `.env` change is a one-line edit.
 
 ---
 
